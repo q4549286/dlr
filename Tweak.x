@@ -9,22 +9,25 @@
         return;
     }
 
-    // 同时检查"通類"和我们之前修改过的"我的分类"
     if ([text isEqualToString:@"通類"] || [text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"]) {
         
         NSString *newString = @"Echo定制";
 
-        // --- 核心！使用从Flex找到的精确字体名称 ---
-        NSString *fontNameToUse = @".SFUI-Heavy";
-        // --- 这是我们之前调试好的、能放得下文本的尺寸 ---
-        CGFloat fontSizeToUse = 14.0; // 如果需要微调，可以修改这个值
+        // --- 核心修改！我们不再使用 self.textColor，而是通过名字创建这个智能颜色 ---
+        UIColor *currentColor = [UIColor colorNamed:@"银灰五"];
+        
+        // 如果因为某些原因（比如App更新后名字变了）找不到这个颜色，我们提供一个备用方案，保证不崩溃
+        if (!currentColor) {
+            currentColor = self.textColor ?: [UIColor whiteColor];
+        }
 
+        // --- 这是我们之前调试好的字体和尺寸 ---
+        NSString *fontNameToUse = @".SFUI-Heavy";
+        CGFloat fontSizeToUse = 14.0; 
         UIFont *newFont = [UIFont fontWithName:fontNameToUse size:fontSizeToUse];
 
-        // 保留原始的颜色和对齐方式
-        UIColor *currentColor = self.textColor;
+        // --- 组装属性 ---
         NSTextAlignment alignment = self.textAlignment;
-        
         NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
         if (newFont) attributes[NSFontAttributeName] = newFont;
         if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
@@ -56,21 +59,25 @@
     
     if ([originalString isEqualToString:@"通類"] || [originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"]) {
 
-        // --- 核心！同样使用精确的字体名称和尺寸 ---
+        // --- 核心修改！同样使用名字来获取智能颜色 ---
+        UIColor *currentColor = [UIColor colorNamed:@"银灰五"];
+        
         NSString *fontNameToUse = @".SFUI-Heavy";
         CGFloat fontSizeToUse = 14.0;
         UIFont *newFont = [UIFont fontWithName:fontNameToUse size:fontSizeToUse];
 
-        // 创建一个可修改的副本，这样可以保留颜色、阴影等所有其他样式
         NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-        // 替换文本
         [newAttributedText.mutableString setString:@"Echo定制"];
         
-        // 只更新字体属性，覆盖掉原来的大字体
-        if (newFont) {
-            [newAttributedText addAttribute:NSFontAttributeName value:newFont range:NSMakeRange(0, newAttributedText.length)];
-        }
-
+        // 创建一个属性字典来覆盖
+        NSMutableDictionary *newAttributes = [NSMutableDictionary dictionary];
+        if (newFont) newAttributes[NSFontAttributeName] = newFont;
+        if (currentColor) newAttributes[NSForegroundColorAttributeName] = currentColor;
+        
+        // 清除旧属性并应用新属性，以确保字体和颜色被完全替换
+        [newAttributedText setAttributes:@{} range:NSMakeRange(0, newAttributedText.length)];
+        [newAttributedText addAttributes:newAttributes range:NSMakeRange(0, newAttributedText.length)];
+        
         %orig(newAttributedText);
         return;
     }
