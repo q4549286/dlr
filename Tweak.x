@@ -1,42 +1,63 @@
 #import <UIKit/UIKit.h>
+#import <objc/runtime.h> // 引入运行时库，用于添加属性
 
-// 声明一个我们可能会用到的私有类，如果它存在的话
-@interface UIView (Private)
-- (UIViewController *)_viewControllerForAncestor;
-@end
+// 定义一个独一无二的 key，用于关联我们的标记
+static void * const kShouldRecenterKey = (void *)&kShouldRecenterKey;
 
 %hook UILabel
 
+// 我们需要一个地方来存放“是否需要重新居中”这个状态
+// Objective-C 的 Category 不能直接加属性，但可以用“关联对象”这个黑魔法来模拟
+- (void)setShouldRecenter:(BOOL)shouldRecenter {
+    objc_setAssociatedObject(self, kShouldRecenterKey, @(shouldRecenter), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (BOOL)shouldRecenter {
+    NSNumber *value = objc_getAssociatedObject(self, kShouldRecenterKey);
+    return [value boolValue];
+}
+
+
+// 第一步：在 setText: 中只改文字，并打上标记
 - (void)setText:(NSString *)text {
-    // 先调用原始方法，让 Label 完成它自己的所有初始设置
     %orig;
 
-    // --- 繁转简的逻辑 ---
-    // 注意：我们这里操作 self.text，因为 %orig 已经执行过了
     if (!self.text) {
         return;
     }
+
     NSMutableString *newText = [self.text mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)newText, NULL, CFSTR("Hant-Hans"), false);
     
-    // --- 特殊替换逻辑 ---
-    if ([newText isEqualToString:@"通类"]) { // 注意：这里判断的是简体字
-        // 1. 设置新的文本
-        self.text = @"Echo定制";
+    // 我们只在文本匹配时打标记
+    if ([newText isEqualToString:@"通类"]) {
+        self.text = @"我的分类";
+        // 打上“需要重新居中”的标记
+        [self setShouldRecenter:YES];
+    } else {
+        self.text = newText;
+        // 其他情况确保标记为 NO
+        [self setShouldRecenter:NO];
+    }
+}
 
-        // 2. 关键步骤：让 Label 根据新内容自动调整大小
+// 第二步：在最合适的时机 layoutSubviews 中执行布局修改
+- (void)layoutSubviews {
+    // 必须先调用原始的 layoutSubviews，让系统完成它的布局
+    %orig;
+
+    // 检查我们之前打的标记
+    if ([self shouldRecenter]) {
+        // 在这里调整大小和居中
         [self sizeToFit];
-
-        // 3. 重新居中（这是一个非常重要的技巧）
-        // 获取它所在的父视图 (superview)
+        
         UIView *superview = self.superview;
         if (superview) {
-            // 将自己的中心点 X 坐标设置为父视图中心点的 X 坐标
             self.center = CGPointMake(superview.bounds.size.width / 2, self.center.y);
         }
-    } else {
-        // 对于其他不需要特殊处理的文本，直接设置转换后的简体文本
-        self.text = newText;
+        
+        // 重要：执行完一次后，把标记清除，防止不必要的重复操作
+        [self setShouldRecenter:NO];
     }
 }
 
