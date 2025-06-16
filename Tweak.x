@@ -19,17 +19,20 @@
         }
 
         NSString *fontNameToUse = @".SFUI-Heavy";
-        CGFloat fontSizeToUse = 14.0; 
+        
+        // --- 在这里调整字体大小！---
+        // 尝试从 14.0 增加到 16.0，可以根据需要改成 15.0, 17.0 等。
+        CGFloat fontSizeToUse = 16.0; 
+        
         UIFont *newFont = [UIFont fontWithName:fontNameToUse size:fontSizeToUse];
 
-        // --- 核心修改！我们不再复制原始对齐，而是强制居中对齐 ---
         NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
         paragraphStyle.alignment = NSTextAlignmentCenter;
 
         NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
         if (newFont) attributes[NSFontAttributeName] = newFont;
         if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
-        attributes[NSParagraphStyleAttributeName] = paragraphStyle; // 应用居中对齐
+        attributes[NSParagraphStyleAttributeName] = paragraphStyle;
 
         NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes];
 
@@ -56,22 +59,21 @@
 
         UIColor *currentColor = [UIColor colorNamed:@"银灰五"];
         NSString *fontNameToUse = @".SFUI-Heavy";
+        
+        // --- 同样，在这里调整字体大小！确保和上面的一致 ---
         CGFloat fontSizeToUse = 17.0;
+        
         UIFont *newFont = [UIFont fontWithName:fontNameToUse size:fontSizeToUse];
 
         NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
         [newAttributedText.mutableString setString:@"Echo定制"];
         
-        // --- 核心修改！同样强制居中对齐 ---
-        // 1. 获取原始段落样式（如果有的话），并创建可修改的副本
         NSMutableParagraphStyle *paragraphStyle = [[attributedText attribute:NSParagraphStyleAttributeName atIndex:0 effectiveRange:NULL] mutableCopy];
         if (!paragraphStyle) {
             paragraphStyle = [[NSMutableParagraphStyle alloc] init];
         }
-        // 2. 强制设为居中
         paragraphStyle.alignment = NSTextAlignmentCenter;
 
-        // 3. 应用所有我们需要的属性
         if (newFont) [newAttributedText addAttribute:NSFontAttributeName value:newFont range:NSMakeRange(0, newAttributedText.length)];
         if (currentColor) [newAttributedText addAttribute:NSForegroundColorAttributeName value:currentColor range:NSMakeRange(0, newAttributedText.length)];
         [newAttributedText addAttribute:NSParagraphStyleAttributeName value:paragraphStyle range:NSMakeRange(0, newAttributedText.length)];
