@@ -21,6 +21,10 @@
     else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) {
         newString = @"定制";
     }
+    // 案例三: "法诀" (简体) 或 "法訣" (繁体) -> "毕法"
+    else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
 
     // --- 如果匹配到了任何一个案例，就执行样式保留并替换 ---
     if (newString) {
@@ -70,6 +74,11 @@
     else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) {
         newString = @"定制";
     }
+    // 案例三: "法诀" (简体) 或 "法訣" (繁体) -> "毕法"
+    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
+
 
     if (newString) {
         // 直接在富文本副本上修改字符串内容，保留所有样式
