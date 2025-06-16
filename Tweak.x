@@ -9,22 +9,24 @@
         return;
     }
 
-    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
+    // 同时检查"通類"和我们之前修改过的"我的分类"
+    if ([text isEqualToString:@"通類"] || [text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"]) {
         
         NSString *newString = @"Echo定制";
 
-        // --- 核心修改在这里 ---
-        // 我们不再依赖自动缩放，而是直接创建一个新的、更小的字体。
-        // 原始大小是 23.98，我们从 14.0 开始尝试。
-        // self.font.fontName 可以确保字体类型（比如萍方-中黑体）保持不变。
-        UIFont *newFont = [UIFont fontWithName:self.font.fontName size:14.0]; // <--- 如果还是太大，就改小这个数字（比如12.0）；如果太小，就改大（比如16.0）
+        // --- 核心！使用从Flex找到的精确字体名称 ---
+        NSString *fontNameToUse = @".SFUI-Heavy";
+        // --- 这是我们之前调试好的、能放得下文本的尺寸 ---
+        CGFloat fontSizeToUse = 14.0; // 如果需要微调，可以修改这个值
 
-        // --- 下面的代码负责保留颜色和对齐 ---
+        UIFont *newFont = [UIFont fontWithName:fontNameToUse size:fontSizeToUse];
+
+        // 保留原始的颜色和对齐方式
         UIColor *currentColor = self.textColor;
         NSTextAlignment alignment = self.textAlignment;
         
         NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
-        if (newFont) attributes[NSFontAttributeName] = newFont; // 使用我们创建的新字体
+        if (newFont) attributes[NSFontAttributeName] = newFont;
         if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
         
         NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
@@ -37,13 +39,13 @@
         return;
     }
 
-    // --- 其他文本，照常进行繁转简 ---
+    // --- 其他所有文本，照常进行繁转简 ---
     NSMutableString *simplifiedText = [text mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
     %orig(simplifiedText);
 }
 
-// 同样为了健壮性，也修改 setAttributedText:
+// 同时 hook setAttributedText: 以确保万无一失
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     if (!attributedText) {
         %orig;
@@ -52,20 +54,19 @@
 
     NSString *originalString = attributedText.string;
     
-    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
+    if ([originalString isEqualToString:@"通類"] || [originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"]) {
 
-        // --- 核心修改在这里 ---
-        // 从原始富文本中获取字体名称
-        NSDictionary *originalAttributes = [attributedText attributesAtIndex:0 effectiveRange:NULL];
-        UIFont *originalFont = originalAttributes[NSFontAttributeName];
-        NSString *fontName = originalFont.fontName ?: self.font.fontName;
+        // --- 核心！同样使用精确的字体名称和尺寸 ---
+        NSString *fontNameToUse = @".SFUI-Heavy";
+        CGFloat fontSizeToUse = 14.0;
+        UIFont *newFont = [UIFont fontWithName:fontNameToUse size:fontSizeToUse];
 
-        // 创建新字体
-        UIFont *newFont = [UIFont fontWithName:fontName size:14.0]; // <--- 同样，在这里调整大小
-
-        // 创建一个可修改的富文本副本，并设置新字体
+        // 创建一个可修改的副本，这样可以保留颜色、阴影等所有其他样式
         NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
+        // 替换文本
         [newAttributedText.mutableString setString:@"Echo定制"];
+        
+        // 只更新字体属性，覆盖掉原来的大字体
         if (newFont) {
             [newAttributedText addAttribute:NSFontAttributeName value:newFont range:NSMakeRange(0, newAttributedText.length)];
         }
@@ -74,7 +75,7 @@
         return;
     }
     
-    // --- 其他文本，照常进行繁转简 ---
+    // --- 其他所有文本，照常进行繁转简 ---
     NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
     %orig(newAttributedText);
