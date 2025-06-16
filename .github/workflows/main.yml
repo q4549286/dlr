@@ -19,22 +19,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 第 2 步：手动安装 Theos
+      # 第 2 步 (全新)：自动转换换行符格式
+      - name: Fix Line Endings
+        run: |
+          dos2unix control
+          dos2unix Makefile
+          dos2unix Tweak.x
+          # 如果 MyTweak.plist 也可能是 Windows 格式，也加上它
+          if [ -f MyTweak.plist ]; then dos2unix MyTweak.plist; fi
+
+      # 第 3 步：手动安装 Theos
       - name: Install Theos
         run: |
           echo "THEOS=~/theos" >> $GITHUB_ENV
           git clone --recursive https://github.com/theos/theos.git ~/theos
 
-      # 第 3 步 (全新)：安装 ldid 依赖
-      # 这是解决 "ldid: command not found" 错误的关键
+      # 第 4 步：安装 ldid 依赖
       - name: Install Dependencies
-        run: brew install ldid
+        run: brew install ldid dos2unix # 我们在这里顺便安装 dos2unix 工具
 
-      # 第 4 步：运行 make package 命令进行编译和打包
+      # 第 5 步：运行 make package 命令进行编译和打包
       - name: Build Package
         run: make package
 
-      # 第 5 步：上传编译产物 (.deb 文件)
+      # 第 6 步：上传编译产物 (.deb 文件)
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
