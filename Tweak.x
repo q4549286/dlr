@@ -3,8 +3,9 @@
 
 %hook UILabel
 
-// 将帮助方法定义在 %hook 内部，这样它就成为 UILabel 的一部分（在 hook 的上下文中）
-// 你可以给它起一个不容易冲突的名字，比如加个前缀
+// 使用 %new 来声明和定义一个我们添加到 UILabel 上的新方法
+// 注意 %new 后面直接跟方法签名和实现体
+%new
 - (NSString *)myTweak_processedTextForOriginalText:(NSString *)originalText {
     if (!originalText || originalText.length == 0) {
         return originalText;
@@ -22,11 +23,12 @@
     return textToReturn;
 }
 
+// 现在我们 hook setText:
 - (void)setText:(NSString *)text {
     NSLog(@"[MyTweak_UILabel] setText: Original = '%@' for label: %@ (isMainThread: %d)", text, self, [NSThread isMainThread]);
 
-    // 调用上面定义的帮助方法
-    NSString *processedText = [self myTweak_processedTextForOriginalText:text];
+    // 调用上面用 %new 定义的新方法
+    NSString *processedText = [self myTweak_processedTextForOriginalText:text]; // 现在编译器应该能找到它了
 
     NSLog(@"[MyTweak_UILabel] setText: Processed = '%@' for label: %@ (isMainThread: %d)", processedText, self, [NSThread isMainThread]);
 
@@ -40,7 +42,7 @@
     }
 }
 
-// 如果需要 hook setAttributedText，也类似处理
+// Hook setAttributedText:
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     if (!attributedText || attributedText.string.length == 0) {
         %orig;
@@ -50,7 +52,7 @@
     NSLog(@"[MyTweak_UILabel] setAttributedText: Original String = '%@' for label: %@ (isMainThread: %d)", attributedText.string, self, [NSThread isMainThread]);
 
     NSString *originalString = attributedText.string;
-    // 调用帮助方法处理字符串部分
+    // 调用上面用 %new 定义的新方法
     NSString *processedString = [self myTweak_processedTextForOriginalText:originalString];
 
     if (![processedString isEqualToString:originalString]) {
