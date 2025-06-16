@@ -27,7 +27,7 @@ static void * const kShouldRecenterKey = (void *)&kShouldRecenterKey;
     CFStringTransform((__bridge CFMutableStringRef)newText, NULL, CFSTR("Hant-Hans"), false);
     
     if ([newText isEqualToString:@"通类"]) {
-        self.text = @"我的分类";
+        self.text = @"Echo定制";
         [self setShouldRecenter:YES];
         // 请求系统在下一个周期更新布局，而不是立即
         [self setNeedsLayout];
