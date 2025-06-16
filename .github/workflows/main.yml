@@ -19,24 +19,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 第 2 步 (全新)：自动转换换行符格式
+      # 第 2 步：安装所有依赖工具 (ldid 和 dos2unix)
+      # 必须在使用它们之前安装！
+      - name: Install Dependencies
+        run: brew install ldid dos2unix
+
+      # 第 3 步：使用 dos2unix 修复换行符格式
       - name: Fix Line Endings
         run: |
-          dos2unix control
-          dos2unix Makefile
-          dos2unix Tweak.x
-          # 如果 MyTweak.plist 也可能是 Windows 格式，也加上它
-          if [ -f MyTweak.plist ]; then dos2unix MyTweak.plist; fi
+          find . -type f -name 'control' -exec dos2unix {} \;
+          find . -type f -name 'Makefile' -exec dos2unix {} \;
+          find . -type f -name 'Tweak.x' -exec dos2unix {} \;
+          find . -type f -name '*.plist' -exec dos2unix {} \;
 
-      # 第 3 步：手动安装 Theos
+      # 第 4 步：手动安装 Theos
       - name: Install Theos
         run: |
           echo "THEOS=~/theos" >> $GITHUB_ENV
           git clone --recursive https://github.com/theos/theos.git ~/theos
-
-      # 第 4 步：安装 ldid 依赖
-      - name: Install Dependencies
-        run: brew install ldid dos2unix # 我们在这里顺便安装 dos2unix 工具
 
       # 第 5 步：运行 make package 命令进行编译和打包
       - name: Build Package
