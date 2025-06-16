@@ -1,0 +1,35 @@
+# 工作流的名称
+name: Build Tweak
+
+# 触发条件：每当有代码被 push 到 main 分支时
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: # 允许手动触发
+
+# 任务列表
+jobs:
+  build:
+    # 运行环境：使用最新的 macOS 系统
+    runs-on: macos-latest
+
+    # 任务步骤
+    steps:
+      # 第一步：检出你的代码
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # 第二步：安装 Theos 环境
+      - name: Setup Theos
+        uses: kabiroberai/setup-theos-action@v2
+
+      # 第三步：运行 make package 命令进行编译和打包
+      - name: Build Package
+        run: make package
+
+      # 第四步：上传编译产物 (.deb 文件)
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Tweak-Deb-Package # 上传后文件的名字
+          path: packages/*.deb    # 要上传的文件的路径
