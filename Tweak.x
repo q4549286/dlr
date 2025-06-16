@@ -1,64 +1,66 @@
 #import <UIKit/UIKit.h>
-#import <objc/runtime.h>
-
-// --- 声明部分 ---
-static void * const kIsEchoLabelKey = (void *)&kIsEchoLabelKey;
-
-@interface UILabel (MyTweak)
-- (void)setIsEchoLabel:(BOOL)isEcho;
-- (BOOL)isEchoLabel;
-@end
-
 
 %hook UILabel
 
-// --- 关联对象实现 ---
-- (void)setIsEchoLabel:(BOOL)isEcho {
-    objc_setAssociatedObject(self, kIsEchoLabelKey, @(isEcho), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
-- (BOOL)isEchoLabel {
-    NSNumber *value = objc_getAssociatedObject(self, kIsEchoLabelKey);
-    return [value boolValue];
-}
-
-
-// --- 核心逻辑 ---
-
-// 第一步：在 setText 中只改文字，并打标记
 - (void)setText:(NSString *)text {
     if (!text) {
         %orig;
         return;
     }
 
+    // --- 第一步：常规的繁转简 ---
     NSMutableString *newText = [text mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)newText, NULL, CFSTR("Hant-Hans"), false);
 
-    // 判断是否是我们需要特殊处理的情况
+
+    // --- 第二步：判断是否是我们的特殊情况 ---
     if ([newText isEqualToString:@"通类"]) {
-        // 1. 替换文字为“Echo定制”
-        [newText replaceOccurrencesOfString:@"通类" withString:@"Echo定制" options:NSLiteralSearch range:NSMakeRange(0, [newText length])];
-        // 2. 打上“特殊处理”标记
-        [self setIsEchoLabel:YES];
-    } else {
-        // 3. 对于其他 Label，确保没有标记
-        [self setIsEchoLabel:NO];
-    }
-    
-    // 调用原始方法，把修改后的文本传进去
-    %orig(newText);
-}
+        // 是特殊情况，我们将构建一个富文本字符串
 
+        // 1. 设置最终的文本内容
+        NSString *finalString = @"Echo定制";
 
-// 第二步：拦截 setTextAlignment:，强制居中
-- (void)setTextAlignment:(NSTextAlignment)alignment {
-    // 如果是我们的特殊 Label，就忽略原始的 alignment，强制设为居中
-    if ([self isEchoLabel]) {
-        %orig(NSTextAlignmentCenter);
+        // 2. 创建一个“段落样式” (Paragraph Style) 对象
+        NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+        // 3. 在这个样式对象里，设置文本对齐方式为“居中”
+        paragraphStyle.alignment = NSTextAlignmentCenter;
+        
+        // 4. 获取 Label 当前的字体，保证样式统一
+        UIFont *font = self.font;
+        // 获取 Label 当前的文本颜色
+        UIColor *textColor = self.textColor;
+
+        // 5. 创建一个属性字典，把我们想附加的样式都放进去
+        NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
+        
+        // 添加“段落样式”（包含居中信息）
+        if (paragraphStyle) {
+            [attributes setObject:paragraphStyle forKey:NSParagraphStyleAttributeName];
+        }
+        // 添加“字体信息”
+        if (font) {
+            [attributes setObject:font forKey:NSFontAttributeName];
+        }
+        // 添加“文本颜色信息”
+        if (textColor) {
+            [attributes setObject:textColor forKey:NSForegroundColorAttributeName];
+        }
+
+        // 6. 使用最终文本和属性字典，创建一个富文本字符串
+        NSAttributedString *attributedString = [[NSAttributedString alloc] initWithString:finalString attributes:attributes];
+        
+        // 7. 调用 UILabel 的 setAttributedText: 方法，而不是 setText:
+        // 注意：这里我们不能用 %orig，因为原始调用的是 setText:
+        // 我们需要直接调用 UILabel 的另一个 setter 方法
+        self.attributedText = attributedString;
+
+        // 因为我们已经手动设置了内容，所以这里直接返回，不再执行后续的 %orig
+        return;
+
     } else {
-        // 否则，保持系统原来的设定
-        %orig;
+        // --- 对于所有其他情况 ---
+        // 走原始的 setText: 流程
+        %orig(newText);
     }
 }
 
