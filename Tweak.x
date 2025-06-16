@@ -15,7 +15,7 @@
     // --- 我们的特殊处理分支 ---
     if ([newText isEqualToString:@"通类"]) {
         // 将文本替换为最终内容
-        newText = [@"我的分类" mutableCopy];
+        newText = [@"Echo定制" mutableCopy];
 
         // --- 关键的布局调整策略 ---
         // 在调用 %orig 之前，修改 self 的属性，让它为接下来的布局做准备
