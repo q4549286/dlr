@@ -1,0 +1,26 @@
+name: Build Tweak
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: macos-latest # 使用云端的 macOS 环境
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Install Theos
+      run: |
+        git clone --recursive https://github.com/theos/theos.git ~/theos
+        echo "THEOS=~/theos" >> $GITHUB_ENV
+        echo "~/theos/bin" >> $GITHUB_PATH
+
+    - name: Build Package
+      run: |
+        make package -j$(sysctl -n hw.ncpu)
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: debs
+        path: ./packages/*.deb
