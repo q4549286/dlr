@@ -2,7 +2,7 @@
 
 %hook UILabel
 
-// 我们主要 hook setText:，因为 App 很可能用的是这个方法
+// 主要 hook setText:，因为 App 很可能用的是这个方法
 - (void)setText:(NSString *)text {
     if (!text) {
         %orig;
@@ -13,47 +13,41 @@
     // 同时检查简体和繁体，更保险
     if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
         
-        NSString *newString = @"";
-        if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"]) {
-            newString = @"Echo定制";
-        } else if ([text isEqualToString:@"通類"]) {
-            // 这里我保留了你最初的需求
-            newString = @"Echo定制"; 
-        }
+        // 【核心代码】开启字体自动缩放，让文本适应UILabel的宽度
+        self.adjustsFontSizeToFitWidth = YES;
+        // 设置一个最小缩放比例，防止文本变得太小。0.5代表最多缩小到原字体的一半。
+        // 如果觉得缩得太小了，可以改成 0.7；如果还是放不下，可以改成 0.4。
+        self.minimumScaleFactor = 0.5;
 
-        // 从 Label 自身获取当前正在使用的字体、颜色和对齐方式
+        // --- 下面的代码负责保留原有样式 ---
+        NSString *newString = @"Echo定制";
+
         UIFont *currentFont = self.font;
         UIColor *currentColor = self.textColor;
         NSTextAlignment alignment = self.textAlignment;
         
-        // 创建一个属性字典来保存这些样式
         NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
         if (currentFont) attributes[NSFontAttributeName] = currentFont;
         if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
         
-        // 创建并设置段落样式以保留对齐
         NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
         paragraphStyle.alignment = alignment;
         attributes[NSParagraphStyleAttributeName] = paragraphStyle;
 
-        // 使用新文本和旧样式，创建一个新的富文本字符串
         NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes];
 
-        // 调用 setAttributedText: 来应用我们的新富文本并直接返回
         [self setAttributedText:newAttributedText];
-        return; // 处理完毕，必须 return，防止后面的代码再次处理
+        return; // 处理完毕，必须 return
     }
 
     // --- 第 2 步：处理所有其他文本，进行通用的繁体转简体 ---
     NSMutableString *simplifiedText = [text mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
 
-    // 调用原始方法，传入转换后的字符串
     %orig(simplifiedText);
 }
 
 // 为了代码健壮性，我们也 hook setAttributedText:
-// 这样即使 App 调用的是这个方法，我们的逻辑也能覆盖到
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     if (!attributedText) {
         %orig;
@@ -65,20 +59,17 @@
     // --- 同样，先处理特殊文本 ---
     if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
         
-        NSString *newString = @"";
-        if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"]) {
-            newString = @"Echo定制";
-        } else if ([originalString isEqualToString:@"通類"]) {
-            newString = @"Echo定制";
-        }
+        // 【核心代码】同样需要在这里开启自动缩放
+        self.adjustsFontSizeToFitWidth = YES;
+        self.minimumScaleFactor = 0.5;
 
-        // 创建一个可修改的富文本副本，这样可以保留所有原始样式
+        // 创建一个可修改的富文本副本，保留所有原始样式
         NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-        // 替换文本内容
-        [newAttributedText.mutableString setString:newString];
+        // 仅替换文本内容
+        [newAttributedText.mutableString setString:@"Echo定制"];
 
         %orig(newAttributedText);
-        return;
+        return; // 处理完毕，必须 return
     }
     
     // --- 再处理通用繁转简 ---
