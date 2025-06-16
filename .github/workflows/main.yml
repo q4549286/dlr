@@ -15,24 +15,26 @@ jobs:
 
     # 任务步骤
     steps:
-      # 第一步：检出你的代码
+      # 第 1 步：检出你的代码
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 第二步：手动安装 Theos (最稳定的方法)
+      # 第 2 步：手动安装 Theos
       - name: Install Theos
         run: |
-          # 将 THEOS 环境变量写入 GitHub 的环境变量文件，让后续步骤也能使用
           echo "THEOS=~/theos" >> $GITHUB_ENV
-          # 使用 git 克隆 Theos 仓库到指定目录
           git clone --recursive https://github.com/theos/theos.git ~/theos
 
-      # 第三步：运行 make package 命令进行编译和打包
-      # 这一步会自动使用上面设置的 $THEOS 环境变量
+      # 第 3 步 (全新)：安装 ldid 依赖
+      # 这是解决 "ldid: command not found" 错误的关键
+      - name: Install Dependencies
+        run: brew install ldid
+
+      # 第 4 步：运行 make package 命令进行编译和打包
       - name: Build Package
         run: make package
 
-      # 第四步：上传编译产物 (.deb 文件)
+      # 第 5 步：上传编译产物 (.deb 文件)
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
