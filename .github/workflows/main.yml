@@ -1,11 +1,11 @@
 # 工作流的名称
 name: Build Tweak
 
-# 触发条件：每当有代码被 push 到 main 分支时
+# 触发条件
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch:
 
 # 任务列表
 jobs:
@@ -17,11 +17,11 @@ jobs:
     steps:
       # 第一步：检出你的代码
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # <-- 已更新
 
-      # 第二步：安装 Theos 环境
+      # 第二步：安装 Theos 环境 (使用官方维护的 Action)
       - name: Setup Theos
-        uses: kabiroberai/setup-theos-action@v2
+        uses: theos/theos-action@v1 # <-- 已替换为官方版本
 
       # 第三步：运行 make package 命令进行编译和打包
       - name: Build Package
@@ -29,7 +29,7 @@ jobs:
 
       # 第四步：上传编译产物 (.deb 文件)
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # <-- 已更新
         with:
-          name: Tweak-Deb-Package # 上传后文件的名字
-          path: packages/*.deb    # 要上传的文件的路径
+          name: Tweak-Deb-Package
+          path: packages/*.deb
