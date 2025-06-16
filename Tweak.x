@@ -4,6 +4,15 @@
 // 定义一个独一无二的 key，用于关联我们的标记
 static void * const kShouldRecenterKey = (void *)&kShouldRecenterKey;
 
+
+// --- 关键的补充部分：为 UILabel 创建一个分类来声明新方法 ---
+@interface UILabel (MyTweak)
+- (void)setShouldRecenter:(BOOL)shouldRecenter;
+- (BOOL)shouldRecenter;
+@end
+// --- 声明结束 ---
+
+
 %hook UILabel
 
 // 我们需要一个地方来存放“是否需要重新居中”这个状态
