@@ -96,44 +96,53 @@
 }
 
 %end
-#import <UIKit/UIKit.h>
+// ==========================================================
+// 天罗地网状态栏强制显示方案 (V6 - The Final Stand)
+// ==========================================================
 
-// ----------------------
-// 第一部分：在App启动完成后，立即强制显示状态栏
-// ----------------------
-
-%ctor {
-    [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
-                                                      object:nil
-                                                       queue:[NSOperationQueue mainQueue]
-                                                  usingBlock:^(NSNotification *note) {
-        // --- 告诉编译器暂时忽略“方法已弃用”的警告 ---
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        
-        // 我们在这里安全地调用旧方法
-        [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationNone];
-        
-        // --- 恢复编译器的正常警告设置 ---
-        #pragma clang diagnostic pop
-    }];
+// --- 防御第一层：修改“基因” ---
+// 我们Hook NSBundle，从根源上欺骗App，让它以为Info.plist的设置就是显示状态栏
+%hook NSBundle
+- (id)objectForInfoDictionaryKey:(NSString *)key {
+    // 检查App是不是在查询状态栏的初始隐藏设置
+    if ([key isEqualToString:@"UIStatusBarHidden"]) {
+        // 欺骗它！告诉它Info.plist里写的是“不隐藏”
+        return @(NO);
+    }
+    
+    // 检查App是不是在查询“谁来管状态栏”
+    if ([key isEqualToString:@"UIViewControllerBasedStatusBarAppearance"]) {
+        // 欺骗它！告诉它Info.plist里写的是“由UIViewController来管”
+        return @(YES);
+    }
+    
+    // 对于其他所有设置，我们都返回真实的值
+    return %orig(key);
 }
+%end
 
 
-// ----------------------
-// 第二部分：保留运行时防御，防止App后续再次隐藏
-// ----------------------
+// --- 防御第二层：接管“现代”控制权 ---
+// 由于第一层防御已经把控制权交给了UIViewController，我们现在Hook它，确保它永远做出正确的决定
+%hook UIViewController
+- (BOOL)prefersStatusBarHidden {
+    // 告诉系统：“我这个页面，永远不要隐藏状态栏！”
+    return NO;
+}
+%end
+
+
+// --- 防御第三层：堵住“老旧”后门 ---
+// 作为最后的保险，我们保留对UIApplication的Hook，防止有任何老代码绕过前两层防御
 %hook UIApplication
-
 - (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
-    // --- 同样，在这里也加上豁免声明 ---
+    // 加上“豁免声明”防止编译报错
     #pragma clang diagnostic push
     #pragma clang diagnostic ignored "-Wdeprecated-declarations"
     
-    // 强制把任何试图隐藏的动作都改成显示
+    // 不管是谁、想干什么，只要调用这个老方法，就强制设为“不隐藏”
     %orig(NO, animation);
     
     #pragma clang diagnostic pop
 }
-
 %end
