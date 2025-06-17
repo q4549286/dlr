@@ -153,42 +153,43 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %end
 // =========================================================================
-// Section 6: 终极状态栏显示方案 (组合拳)
+// Section 7: 终极状态栏显示方案 v2 (双窗口操作)
 // =========================================================================
-
-// 我们需要同时 Hook UIWindow 和 UIApplication
-
 %hook UIWindow
 
-// Hook setFrame: 来强制为状态栏腾出物理空间
+// 我们只 Hook setFrame:，但这次逻辑更强大
 - (void)setFrame:(CGRect)frame {
-    if (self.windowLevel == UIWindowLevelNormal) {
-        CGFloat statusBarHeight = 59.0; // 适用于带灵动岛的设备
-        CGRect screenBounds = [[UIScreen mainScreen] bounds];
+    
+    // --- 关键的状态栏高度值 ---
+    CGFloat statusBarHeight = 59.0;
+    // -------------------------
 
-        if (CGRectEqualToRect(frame, screenBounds)) {
-            CGRect newFrame = frame;
-            newFrame.origin.y = statusBarHeight;
-            newFrame.size.height -= statusBarHeight;
-            %orig(newFrame);
-            return;
-        }
+    CGRect screenBounds = [[UIScreen mainScreen] bounds];
+
+    // 不再检查 windowLevel，而是直接检查类名和 frame
+    // 无论是 UIWindow 还是 UITextEffectsWindow，只要它想全屏，就把它往下推！
+    if (CGRectEqualToRect(frame, screenBounds)) {
+        CGRect newFrame = frame;
+        newFrame.origin.y = statusBarHeight;
+        newFrame.size.height -= statusBarHeight;
+        %orig(newFrame);
+        return;
     }
+    
+    // 对于其他非全屏的 frame 设置，直接放行
     %orig;
 }
 
 %end
 
 
+// 我们依然需要这个 Hook 来确保逻辑上的可见性
 %hook UIApplication
 
-// Hook setStatusBarHidden: 来强制设置状态栏的逻辑为“可见”
 - (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
-    // 无论 App 传什么进来，我们都强制用 NO (不隐藏) 去调用原始方法
     %orig(NO, animation); 
 }
 
-// Hook isStatusBarHidden 来确保 App 查询状态时也得到“可见”的结果
 - (BOOL)isStatusBarHidden {
     return NO;
 }
