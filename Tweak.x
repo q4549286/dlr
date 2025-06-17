@@ -98,15 +98,21 @@
 %end
 #import <UIKit/UIKit.h>
 
-// 我们Hook应用本身，这是最高层级的控制
-%hook UIApplication
+// 我们Hook所有窗口的基类
+%hook UIWindow
 
-// 这个方法是App用来直接命令系统隐藏/显示状态栏的
-- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
-    // 关键时刻！
-    // 不管App想传入的hidden是YES还是NO，我们都把它改成NO，然后交给系统执行。
-    // 这就相当于我们替App做了决定：“必须显示状态栏！”
-    %orig(NO, animation);
+// 这个方法就是用来设置窗口层级的
+- (void)setWindowLevel:(UIWindowLevel)level {
+    // UIWindowLevelNormal 是普通层级
+    // UIWindowLevelStatusBar 是状态栏的层级
+    // 如果App想把层级设置得比普通层级还高，就可能是在试图覆盖状态栏
+    if (level > UIWindowLevelNormal) {
+        // 我们把它强制按回到普通层级，让它老实待在状态栏下面
+        level = UIWindowLevelNormal;
+    }
+
+    // 调用原始方法，传入我们（可能已经修改过的）层级值
+    %orig(level);
 }
 
 %end
