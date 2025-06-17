@@ -1,7 +1,16 @@
 #import <UIKit/UIKit.h>
+#import <FLEXing/FLEXManager.h>
+
+// 构造函数，在 App 启动时显示 FLEXing 按钮 (如果不需要可以删除或注释掉这部分)
+%ctor {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[FLEXManager sharedManager] showExplorer];
+    });
+}
+
 
 // =========================================================================
-// Section 1: 你原有的文字替换功能 (无需任何改动，直接保留)
+// Section 1: UILabel 文字和样式替换
 // =========================================================================
 %hook UILabel
 
@@ -81,20 +90,33 @@
 
 %end
 
+
 // =========================================================================
-// Section 2 & 5 & 7 合并: 所有 UIWindow 相关的 Hook
+// Section 2: 全局水印 & 状态栏修复
 // =========================================================================
 
-// ... createWatermarkImage 函数的定义在这里 (确保它在 %hook 之前) ...
-static UIImage *createWatermarkImage(...) { ... }
+// 这是创建水印“瓦片”的辅助函数，必须放在 %hook UIWindow 的前面
+static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
+    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2);
+    CGContextRotateCTM(context, angle * M_PI / 180);
+    NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor};
+    CGSize textSize = [text sizeWithAttributes:attributes];
+    CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height);
+    [text drawInRect:textRect withAttributes:attributes];
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return image;
+}
 
 
 %hook UIWindow
 
-// 1. Hook setFrame: 来强制为状态栏腾出物理空间
+// Hook 1: 修改 Frame，为状态栏腾出物理空间
 - (void)setFrame:(CGRect)frame {
     if (self.windowLevel == UIWindowLevelNormal) {
-        CGFloat statusBarHeight = 59.0;
+        CGFloat statusBarHeight = 59.0; // 适用于带灵动岛的设备
         CGRect screenBounds = [[UIScreen mainScreen] bounds];
 
         if (CGRectEqualToRect(frame, screenBounds)) {
@@ -108,8 +130,7 @@ static UIImage *createWatermarkImage(...) { ... }
     %orig;
 }
 
-
-// 2. Hook layoutSubviews: 来添加和管理水印
+// Hook 2: 添加和管理水印
 - (void)layoutSubviews {
     %orig;
 
@@ -117,33 +138,22 @@ static UIImage *createWatermarkImage(...) { ... }
         return;
     }
 
-    // --- 【核心修复1】将所有变量定义移到最前面 ---
     NSInteger watermarkTag = 998877;
     NSString *watermarkText = @"Echo定制";
     UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
     UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
     CGFloat rotationAngle = -30.0;
     CGSize tileSize = CGSizeMake(150, 100);
-    CGFloat statusBarHeight = 59.0;
-    // ---------------------------------------------
 
     UIView *watermarkView = [self viewWithTag:watermarkTag];
 
     if (watermarkView) {
-        // 如果水印已存在，我们只需更新它的 frame
-        CGRect newFrame = self.bounds;
-        newFrame.origin.y = -statusBarHeight;
-        newFrame.size.height += statusBarHeight;
-        watermarkView.frame = newFrame;
+        // 水印已存在，无需操作，因为 autoresizingMask 会自动调整大小
     } else {
-        // 如果水印不存在，就创建它
+        // 水印不存在，创建它
         UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
         
-        CGRect initialFrame = self.bounds;
-        initialFrame.origin.y = -statusBarHeight;
-        initialFrame.size.height += statusBarHeight;
-
-        UIView *newWatermarkView = [[UIView alloc] initWithFrame:initialFrame];
+        UIView *newWatermarkView = [[UIView alloc] initWithFrame:self.bounds]; // 直接使用 self.bounds 即可
         newWatermarkView.tag = watermarkTag;
         newWatermarkView.userInteractionEnabled = NO;
         newWatermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -153,4 +163,19 @@ static UIImage *createWatermarkImage(...) { ... }
     }
 }
 
-%end // UIWindow Hook 结束
+%end
+
+
+%hook UIApplication
+
+// Hook 3: 强制设置状态栏的逻辑为“可见”
+- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
+    %orig(NO, animation); 
+}
+
+// Hook 4: 确保 App 查询状态时也得到“可见”的结果
+- (BOOL)isStatusBarHidden {
+    return NO;
+}
+
+%end
