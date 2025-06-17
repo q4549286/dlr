@@ -96,42 +96,16 @@
 }
 
 %end
-// ==========================================================
-// “巡逻警察”状态栏强制显示方案 (V7 - The Last Resort)
-// ==========================================================
+#import <UIKit/UIKit.h>
 
-// 我们Hook所有视图控制器的基类
 %hook UIViewController
 
-// 第一步：设定法律 - “状态栏不许隐藏”
-// 这是我们希望遵守的规则
 - (BOOL)prefersStatusBarHidden {
     return NO;
 }
 
-// 第二步：派警察巡逻 - “每次界面出现时，都强制执行法律”
-// 这个方法在每个ViewController的视图显示后都会被调用
-- (void)viewDidAppear:(BOOL)animated {
-    // 先让它完成自己该做的事
-    %orig;
-
-    // --- 开始强制执法 ---
-
-    // 执法手段1：现代、文明的方式
-    // 告诉系统：“请根据我上面设定的法律，重新刷新一下状态栏！”
-    // 这会触发上面的prefersStatusBarHidden方法
-    if (@available(iOS 11.0, *)) {
-        [self setNeedsStatusBarAppearanceUpdate];
-    }
-
-    // 执法手段2：老派、强硬的方式 (作为双重保险)
-    // 直接对UIApplication下命令：“我不管你怎么想的，现在立刻把状态栏给我亮出来！”
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    if ([[UIApplication sharedApplication] isStatusBarHidden]) {
-        [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationNone];
-    }
-    #pragma clang diagnostic pop
+- (UIViewController *)childViewControllerForStatusBarHidden {
+    return nil;
 }
 
 %end
