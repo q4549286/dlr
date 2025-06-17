@@ -96,31 +96,51 @@
 }
 
 %end
-#import <UIKit/UIKit.h>
-
 // ==========================================================
-// iOS 13+ 状态栏强制显示“黄金标准”方案 (V9 - The Modern Way)
+// “釜底抽薪”状态栏强制显示方案 (V10 - The Confirmed Solution)
 // ==========================================================
 
-// 我们只Hook所有视图控制器的基类，因为这是现代iOS管理状态栏的唯一地方
+// --- 核心：修改“基因” ---
+// 我们Hook NSBundle，从根源上欺骗App，让它以为Info.plist的设置就是我们想要的
+%hook NSBundle
+
+- (id)objectForInfoDictionaryKey:(NSString *)key {
+    
+    // 当App查询“状态栏要不要隐藏？”时...
+    if ([key isEqualToString:@"UIStatusBarHidden"]) {
+        // ...我们欺骗它！告诉它Info.plist里写的是“不隐藏”。
+        return @(NO);
+    }
+    
+    // 当App查询“我是不是必须全屏？”时...
+    if ([key isEqualToString:@"UIRequiresFullScreen"]) {
+        // ...我们也欺骗它！告诉它“你不需要！”
+        return @(NO);
+    }
+    
+    // 对于其他所有我们不关心的设置，我们都让它去读真实的值
+    return %orig(key);
+}
+
+%end
+
+
+// --- 保险：接管正常模式下的控制权 ---
+// 一旦上面的Hook成功把它从特殊模式中解放出来，它就会回到“普通App”的状态。
+// 在这个状态下，标准的UIViewController Hook就会生效，我们用它来确保万无一失。
 %hook UIViewController
 
-// 第一步：声明“法律”
-// 当系统询问“这个页面的状态栏要不要隐藏？”时，我们斩钉截铁地回答“不！”
+// 声明“法律”
 - (BOOL)prefersStatusBarHidden {
     return NO;
 }
 
-// 第二步：确保我们拥有“最高解释权”
-// 有些容器控制器(如导航栏)会把状态栏的控制权交给它的子页面。
-// 我们返回nil，等于告诉系统：“别问我的手下，直接问我！而我的答案永远是‘不隐藏’。”
+// 确保“最高解释权”
 - (UIViewController *)childViewControllerForStatusBarHidden {
     return nil;
 }
 
-// 第三步：在每次界面出现时，强制刷新“法律”
-// 作为保险，每次界面显示时，我们都主动告诉系统：“请根据我的最新意愿，重新评估一下状态栏该怎么显示！”
-// 这会强制系统再次调用上面的 prefersStatusBarHidden 方法。
+// 持续强制刷新“法律”
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
     if (@available(iOS 11.0, *)) {
