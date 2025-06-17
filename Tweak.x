@@ -153,19 +153,26 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %end
 // =========================================================================
-// Section 3: 新增功能 - 强制显示状态栏
+// Section 4: 新增功能 - 强制显示状态栏 (终极方案)
 // =========================================================================
-%hook UIViewController
+%hook UIApplication
 
-// Hook 这个方法，它返回一个布尔值决定状态栏是否隐藏
-- (BOOL)prefersStatusBarHidden {
-    // 不管 App 原本想返回什么 (YES 或 NO)
-    // 我们都强制它返回 NO，意思就是“不要隐藏状态栏”
-    return NO;
+// Hook 设置状态栏隐藏的最终方法
+// -(void) setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation
+- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
+    
+    // 打印原始值，方便调试 (可选)
+    // HBLogDebug(@"UIApplication setStatusBarHidden called with: %d", hidden);
+
+    // 无论 App 想把 hidden 设置成什么 (YES 或 NO)
+    // 我们都强制把它改成 NO！
+    %orig(NO, animation); 
 }
 
-// 有些 App 可能还会用这个旧的方法，为了保险起见，一起 Hook 了
-- (BOOL)prefersStatusBarHiddenForPopOver {
+// 同时 Hook 另一个相关的 getter 方法，确保一致性
+// -(BOOL) isStatusBarHidden
+- (BOOL)isStatusBarHidden {
+    // 无论真实状态如何，我们都告诉系统“状态栏没有被隐藏”
     return NO;
 }
 
