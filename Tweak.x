@@ -102,29 +102,38 @@
 // 第一部分：在App启动完成后，立即强制显示状态栏
 // ----------------------
 
-// 这是一个特殊的构造函数，它会在Tweak被加载到App时自动运行，比任何App代码都早
 %ctor {
-    // 我们告诉系统的“通知中心”：
-    // “请帮我监听一个叫做 UIApplicationDidFinishLaunchingNotification 的广播”
     [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
                                                       object:nil
                                                        queue:[NSOperationQueue mainQueue]
                                                   usingBlock:^(NSNotification *note) {
-        // 当监听到广播时，就执行下面的代码：
-        // “不管三七二十一，立刻把状态栏给我显示出来！”
+        // --- 告诉编译器暂时忽略“方法已弃用”的警告 ---
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        
+        // 我们在这里安全地调用旧方法
         [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationNone];
+        
+        // --- 恢复编译器的正常警告设置 ---
+        #pragma clang diagnostic pop
     }];
 }
 
 
 // ----------------------
-// 第二部分：保留运行时防御，防止App后续再次隐藏 (这个很重要)
+// 第二部分：保留运行时防御，防止App后续再次隐藏
 // ----------------------
 %hook UIApplication
 
 - (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
+    // --- 同样，在这里也加上豁免声明 ---
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    
     // 强制把任何试图隐藏的动作都改成显示
     %orig(NO, animation);
+    
+    #pragma clang diagnostic pop
 }
 
 %end
