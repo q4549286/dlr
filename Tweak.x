@@ -96,40 +96,36 @@
 }
 
 %end
+#import <UIKit/UIKit.h>
+
 // ==========================================================
-// “化繁为简”状态栏强制显示方案 (V8 - Compile Fix)
+// iOS 13+ 状态栏强制显示“黄金标准”方案 (V9 - The Modern Way)
 // ==========================================================
 
-// 我们只守在最古老、最通用的“产房”门口
-%hook UIWindow
+// 我们只Hook所有视图控制器的基类，因为这是现代iOS管理状态栏的唯一地方
+%hook UIViewController
 
-// 这是所有窗口都必须经过的“出生”方法
-- (id)initWithFrame:(CGRect)frame {
-    // 先让它正常“出生”
-    id window = %orig(frame);
-
-    // --- 开始我们的“出生后干预” ---
-    // 在窗口刚创建时就发出“显示状态栏”的命令，时机完美
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationNone];
-    #pragma clang diagnostic pop
-    
-    return window;
+// 第一步：声明“法律”
+// 当系统询问“这个页面的状态栏要不要隐藏？”时，我们斩钉截铁地回答“不！”
+- (BOOL)prefersStatusBarHidden {
+    return NO;
 }
 
-%end
+// 第二步：确保我们拥有“最高解释权”
+// 有些容器控制器(如导航栏)会把状态栏的控制权交给它的子页面。
+// 我们返回nil，等于告诉系统：“别问我的手下，直接问我！而我的答案永远是‘不隐藏’。”
+- (UIViewController *)childViewControllerForStatusBarHidden {
+    return nil;
+}
 
-
-// --- 同时，我们保留最强的运行时防御 ---
-// 防止App在后续操作中再次隐藏它
-%hook UIApplication
-
-- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    %orig(NO, animation);
-    #pragma clang diagnostic pop
+// 第三步：在每次界面出现时，强制刷新“法律”
+// 作为保险，每次界面显示时，我们都主动告诉系统：“请根据我的最新意愿，重新评估一下状态栏该怎么显示！”
+// 这会强制系统再次调用上面的 prefersStatusBarHidden 方法。
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+    if (@available(iOS 11.0, *)) {
+        [self setNeedsStatusBarAppearanceUpdate];
+    }
 }
 
 %end
