@@ -98,21 +98,33 @@
 %end
 #import <UIKit/UIKit.h>
 
-// 我们Hook所有窗口的基类
-%hook UIWindow
+// ----------------------
+// 第一部分：在App启动完成后，立即强制显示状态栏
+// ----------------------
 
-// 这个方法就是用来设置窗口层级的
-- (void)setWindowLevel:(UIWindowLevel)level {
-    // UIWindowLevelNormal 是普通层级
-    // UIWindowLevelStatusBar 是状态栏的层级
-    // 如果App想把层级设置得比普通层级还高，就可能是在试图覆盖状态栏
-    if (level > UIWindowLevelNormal) {
-        // 我们把它强制按回到普通层级，让它老实待在状态栏下面
-        level = UIWindowLevelNormal;
-    }
+// 这是一个特殊的构造函数，它会在Tweak被加载到App时自动运行，比任何App代码都早
+%ctor {
+    // 我们告诉系统的“通知中心”：
+    // “请帮我监听一个叫做 UIApplicationDidFinishLaunchingNotification 的广播”
+    [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
+                                                      object:nil
+                                                       queue:[NSOperationQueue mainQueue]
+                                                  usingBlock:^(NSNotification *note) {
+        // 当监听到广播时，就执行下面的代码：
+        // “不管三七二十一，立刻把状态栏给我显示出来！”
+        [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationNone];
+    }];
+}
 
-    // 调用原始方法，传入我们（可能已经修改过的）层级值
-    %orig(level);
+
+// ----------------------
+// 第二部分：保留运行时防御，防止App后续再次隐藏 (这个很重要)
+// ----------------------
+%hook UIApplication
+
+- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
+    // 强制把任何试图隐藏的动作都改成显示
+    %orig(NO, animation);
 }
 
 %end
