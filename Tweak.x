@@ -4,7 +4,8 @@
 // Section 1: 文字替换功能 (保持不变)
 // =========================================================================
 %hook UILabel
-
+// ... (您这部分代码是完美的，此处省略以保持简洁，请直接使用您原来的版本) ...
+// 实际使用时，请把您原来的 UILabel Hook 代码完整地放在这里
 - (void)setText:(NSString *)text {
     if (!text) {
         %orig;
@@ -78,7 +79,6 @@
     
     %orig(newAttributedText);
 }
-
 %end
 
 // =========================================================================
@@ -87,77 +87,61 @@
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
     UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
     CGContextRef context = UIGraphicsGetCurrentContext();
-
     CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2);
     CGContextRotateCTM(context, angle * M_PI / 180);
-
     NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor};
     CGSize textSize = [text sizeWithAttributes:attributes];
     CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height);
-    
     [text drawInRect:textRect withAttributes:attributes];
-
     UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
-
     return image;
 }
 
 // =========================================================================
-// Section 3: 修正后的水印和状态栏处理
+// Section 3: 水印功能 Hook (保持不变)
 // =========================================================================
-
 %hook UIWindow
-
-// 我们只 Hook layoutSubviews 来添加水印，这是最安全的方式。
-// 不再需要任何关于 frame 的 Hook。
 - (void)layoutSubviews {
-    %orig; // 必须先调用原始方法
-
-    // 只在主窗口 (UIWindowLevelNormal) 添加水印，避免添加到键盘、弹窗等系统窗口上。
+    %orig; 
     if (self.windowLevel == UIWindowLevelNormal) {
         NSInteger watermarkTag = 998877;
-        
-        // 如果已经存在水印视图，就直接返回，防止重复添加。
         if ([self viewWithTag:watermarkTag]) {
             return;
         }
-
-        // --- 在这里自定义你的水印样式 ---
         NSString *watermarkText = @"Echo定制";
         UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
         UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
         CGFloat rotationAngle = -30.0;
         CGSize tileSize = CGSizeMake(150, 100);
-        // --------------------------------
 
-        // 1. 创建水印瓦片图片
         UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
-
-        // 2. 创建一个和窗口一样大的视图作为水印层
         UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
         watermarkView.tag = watermarkTag;
-        watermarkView.userInteractionEnabled = NO; // 非常重要！让水印不影响下层UI的点击事件
+        watermarkView.userInteractionEnabled = NO;
         watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-
-        // 3. 将瓦片图片设置为水印层的背景色，实现平铺效果
         watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
-        
-        // 4. 将水印层添加到窗口上，并确保它在最顶层，这样能保证水印总是可见
         [self addSubview:watermarkView];
         [self bringSubviewToFront:watermarkView];
     }
 }
-
 %end
 
 
-// 强制让系统知道要显示状态栏。
-// 在移除了错误的 frame 修改后，这个 Hook 会真正生效，作为一道保险。
-%hook UIApplication
+// =========================================================================
+// Section 4: 【核心修正】强制所有视图控制器显示状态栏
+// =========================================================================
+%hook UIViewController
 
-- (BOOL)isStatusBarHidden {
+// 覆盖这个方法，强制返回 NO，意味着“状态栏不隐藏”
+- (BOOL)prefersStatusBarHidden {
     return NO;
+}
+
+// 有些复杂的容器控制器（如UINavigationController）会询问子控制器
+// 我们也覆盖掉，确保它不会把决定权交给一个想要隐藏状态栏的子控制器
+- (UIViewController *)childViewControllerForStatusBarHidden {
+    return nil;
 }
 
 %end
