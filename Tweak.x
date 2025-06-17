@@ -96,3 +96,17 @@
 }
 
 %end
+#import <UIKit/UIKit.h>
+
+// 我们Hook应用本身，这是最高层级的控制
+%hook UIApplication
+
+// 这个方法是App用来直接命令系统隐藏/显示状态栏的
+- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
+    // 关键时刻！
+    // 不管App想传入的hidden是YES还是NO，我们都把它改成NO，然后交给系统执行。
+    // 这就相当于我们替App做了决定：“必须显示状态栏！”
+    %orig(NO, animation);
+}
+
+%end
