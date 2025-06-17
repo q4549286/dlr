@@ -129,7 +129,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     // --- 在这里自定义你的水印样式 ---
     NSString *watermarkText = @"Echo定制";
     UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08]; // 黑色，8%的透明度，效果会很淡
+    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.20]; // 黑色，8%的透明度，效果会很淡
     CGFloat rotationAngle = -30.0; // 倾斜-30度
     CGSize tileSize = CGSizeMake(150, 100); // 每个水印“瓦片”的尺寸，可以调整间距
     // --------------------------------
