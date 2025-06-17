@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 //#import <FLEXing/FLEXManager.h>
 
-// 构造函数，在 App 启动时显示 FLEXing 按钮 (如果调试完成，可以删除或注释掉这部分)
+// 构造函数，用于调试
 //%ctor {
 //    dispatch_async(dispatch_get_main_queue(), ^{
 //        [[FLEXManager sharedManager] showExplorer];
@@ -13,89 +13,15 @@
 // Section 1: UILabel 文字和样式替换 (保持不变)
 // =========================================================================
 %hook UILabel
-
-- (void)setText:(NSString *)text {
-    if (!text) {
-        %orig;
-        return;
-    }
-
-    NSString *newString = nil;
-
-    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
-        newString = @"Echo";
-    } 
-    else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) {
-        newString = @"定制";
-    }
-    else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) {
-        newString = @"毕法";
-    }
-
-    if (newString) {
-        UIFont *currentFont = self.font;
-        UIColor *currentColor = self.textColor;
-        NSTextAlignment alignment = self.textAlignment;
-        
-        NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
-        if (currentFont) attributes[NSFontAttributeName] = currentFont;
-        if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
-        
-        NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
-        paragraphStyle.alignment = alignment;
-        attributes[NSParagraphStyleAttributeName] = paragraphStyle;
-
-        NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes];
-        [self setAttributedText:newAttributedText];
-        return;
-    }
-
-    NSMutableString *simplifiedText = [text mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
-
-    %orig(simplifiedText);
-}
-
-- (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (!attributedText) {
-        %orig;
-        return;
-    }
-
-    NSString *originalString = attributedText.string;
-    NSString *newString = nil;
-
-    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
-        newString = @"Echo";
-    } 
-    else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) {
-        newString = @"定制";
-    }
-    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
-        newString = @"毕法";
-    }
-
-    if (newString) {
-        NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-        [newAttributedText.mutableString setString:newString];
-        %orig(newAttributedText);
-        return;
-    }
-    
-    NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
-    
-    %orig(newAttributedText);
-}
-
+// ... (请在这里保留你完整的、已成功的 UILabel Hook 代码) ...
 %end
 
 
 // =========================================================================
-// Section 2: 全局水印 (保持不变)
+// Section 2: 全局水印 & 状态栏修复的最终组合
 // =========================================================================
 
-// 创建水印“瓦片”的辅助函数
+// 水印瓦片创建函数 (必须放在 %hook 之前)
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
     UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
     CGContextRef context = UIGraphicsGetCurrentContext();
@@ -110,75 +36,75 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     return image;
 }
 
-// 只是在主窗口上添加水印
+
 %hook UIWindow
+
+// Hook 1: 强制为状态栏腾出物理空间
+- (void)setFrame:(CGRect)frame {
+    CGRect screenBounds = [[UIScreen mainScreen] bounds];
+    // 对所有全屏窗口生效
+    if (CGRectEqualToRect(frame, screenBounds)) {
+        CGFloat statusBarHeight = 59.0;
+        
+        CGRect newFrame = frame;
+        if (newFrame.origin.y < statusBarHeight) {
+            newFrame.origin.y = statusBarHeight;
+            newFrame.size.height -= statusBarHeight;
+        }
+        
+        %orig(newFrame);
+        return;
+    }
+    %orig;
+}
+
+// Hook 2: 添加和管理水印
 - (void)layoutSubviews {
     %orig;
-    if (self.windowLevel == UIWindowLevelNormal) {
-        NSInteger watermarkTag = 998877;
-        if (![self viewWithTag:watermarkTag]) {
-            NSString *watermarkText = @"Echo定制";
-            UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-            UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
-            CGFloat rotationAngle = -30.0;
-            CGSize tileSize = CGSizeMake(150, 100);
 
-            UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
-            
-            UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
-            watermarkView.tag = watermarkTag;
-            watermarkView.userInteractionEnabled = NO;
-            watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-            watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
-            
-            [self insertSubview:watermarkView atIndex:0];
-        }
-    }
-}
-%end
-
-
-// =========================================================================
-// Section 3: 终极状态栏修复 (使用新API)
-// =========================================================================
-
-// !!!【非常重要】!!!
-// 请用 FLEXing 找到 App 的 SceneDelegate 真实类名, 然后替换掉下面的 "AppNameSceneDelegate"
-%hook AppNameSceneDelegate
-
-- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
-    %orig;
-
-    if (![scene isKindOfClass:[UIWindowScene class]]) {
+    // 只在主窗口上添加水印
+    if (self.windowLevel != UIWindowLevelNormal) {
         return;
     }
 
-    UIWindowScene *windowScene = (UIWindowScene *)scene;
+    NSInteger watermarkTag = 998877;
+    UIView *watermarkView = [self viewWithTag:watermarkTag];
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    if (!watermarkView) {
+        NSString *watermarkText = @"Echo定制";
+        UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
+        UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
+        CGFloat rotationAngle = -30.0;
+        CGSize tileSize = CGSizeMake(150, 100);
+
+        UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
         
-        // 1. 强制设置 statusBarManager 的属性为可见
-        id statusBarManager = [windowScene performSelector:@selector(statusBarManager)];
-        if (statusBarManager) {
-            [statusBarManager setValue:@(NO) forKey:@"_statusBarHidden"];
-            [statusBarManager performSelector:@selector(updateStatusBarAppearance)];
-        }
+        UIView *newWatermarkView = [[UIView alloc] initWithFrame:self.bounds];
+        newWatermarkView.tag = watermarkTag;
+        newWatermarkView.userInteractionEnabled = NO;
+        newWatermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        newWatermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
+        
+        [self insertSubview:newWatermarkView atIndex:0];
+    }
+    
+    // 确保水印在最底层
+    [self sendSubviewToBack:[self viewWithTag:watermarkTag]];
+}
 
-        // 2. 【核心修复】使用苹果推荐的新 API 遍历窗口
-        for (UIWindow *window in windowScene.windows) {
-            CGRect screenBounds = [[UIScreen mainScreen] bounds];
-            if (CGRectEqualToRect(window.frame, screenBounds)) {
-                CGFloat statusBarHeight = 59.0;
-                CGRect newFrame = window.frame;
+%end
 
-                if (newFrame.origin.y < statusBarHeight) {
-                    newFrame.origin.y = statusBarHeight;
-                    newFrame.size.height -= statusBarHeight;
-                    window.frame = newFrame;
-                }
-            }
-        }
-    });
+
+%hook UIApplication
+
+// Hook 3: 强制设置状态栏的逻辑为“可见”
+- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
+    %orig(NO, animation); 
+}
+
+// Hook 4: 确保 App 查询状态时也得到“可见”的结果
+- (BOOL)isStatusBarHidden {
+    return NO;
 }
 
 %end
