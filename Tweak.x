@@ -1,110 +1,224 @@
 #import <UIKit/UIKit.h>
-//#import <FLEXing/FLEXManager.h>
-
-// 构造函数，用于调试
-//%ctor {
-//    dispatch_async(dispatch_get_main_queue(), ^{
-//        [[FLEXManager sharedManager] showExplorer];
-//    });
-//}
-
 
 // =========================================================================
-// Section 1: UILabel 文字和样式替换 (保持不变)
+// Section 1: 你原有的文字替换功能 (无需任何改动，直接保留)
 // =========================================================================
 %hook UILabel
-// ... (请在这里保留你完整的、已成功的 UILabel Hook 代码) ...
+
+- (void)setText:(NSString *)text {
+    if (!text) {
+        %orig;
+        return;
+    }
+
+    NSString *newString = nil;
+
+    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } 
+    else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) {
+        newString = @"定制";
+    }
+    else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
+
+    if (newString) {
+        UIFont *currentFont = self.font;
+        UIColor *currentColor = self.textColor;
+        NSTextAlignment alignment = self.textAlignment;
+        
+        NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
+        if (currentFont) attributes[NSFontAttributeName] = currentFont;
+        if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
+        
+        NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+        paragraphStyle.alignment = alignment;
+        attributes[NSParagraphStyleAttributeName] = paragraphStyle;
+
+        NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes];
+        [self setAttributedText:newAttributedText];
+        return;
+    }
+
+    NSMutableString *simplifiedText = [text mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
+
+    %orig(simplifiedText);
+}
+
+- (void)setAttributedText:(NSAttributedString *)attributedText {
+    if (!attributedText) {
+        %orig;
+        return;
+    }
+
+    NSString *originalString = attributedText.string;
+    NSString *newString = nil;
+
+    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } 
+    else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) {
+        newString = @"定制";
+    }
+    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
+
+    if (newString) {
+        NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
+        [newAttributedText.mutableString setString:newString];
+        %orig(newAttributedText);
+        return;
+    }
+    
+    NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
+    
+    %orig(newAttributedText);
+}
+
 %end
 
-
 // =========================================================================
-// Section 2: 全局水印 & 状态栏修复的最终组合
+// Section 2: 全新的全局水印功能
 // =========================================================================
 
-// 水印瓦片创建函数 (必须放在 %hook 之前)
+// 定义一个C函数，专门用来创建水印图片的“瓦片”
+// 这样做可以保持代码整洁
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
-    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
+    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); // 使用NO表示背景透明
     CGContextRef context = UIGraphicsGetCurrentContext();
+
+    // 将坐标系原点移动到瓦片中心，方便旋转
     CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2);
+    // 旋转坐标系
     CGContextRotateCTM(context, angle * M_PI / 180);
+
+    // 设置文字属性
     NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor};
+    // 计算文字尺寸，使其在旋转后居中
     CGSize textSize = [text sizeWithAttributes:attributes];
     CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height);
+    
+    // 绘制文字
     [text drawInRect:textRect withAttributes:attributes];
+
+    // 从上下文中获取图片
     UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
+
     return image;
+}
+
+%hook UIWindow
+
+// Hook layoutSubviews 方法，这是一个在窗口布局变化时会被调用的安全时机
+- (void)layoutSubviews {
+    %orig; // 必须先调用原始方法
+
+    // 定义一个独一无二的 tag，用来识别我们的水印视图，防止重复添加
+    NSInteger watermarkTag = 998877;
+    
+    // 如果已经存在水印视图，就直接返回，什么都不做
+    if ([self viewWithTag:watermarkTag]) {
+        return;
+    }
+
+    // --- 在这里自定义你的水印样式 ---
+    NSString *watermarkText = @"Echo定制";
+    UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
+    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08]; // 黑色，8%的透明度，效果会很淡
+    CGFloat rotationAngle = -30.0; // 倾斜-30度
+    CGSize tileSize = CGSizeMake(150, 100); // 每个水印“瓦片”的尺寸，可以调整间距
+    // --------------------------------
+
+    // 1. 创建水印瓦片图片
+    UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
+
+    // 2. 创建一个和窗口一样大的视图作为水印层
+    UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
+    watermarkView.tag = watermarkTag; // 打上我们的专属标签
+    watermarkView.userInteractionEnabled = NO; // 非常重要！让水印不影响下层UI的点击事件
+    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; // 确保窗口尺寸变化时，水印层也跟着变
+
+    // 3. 将瓦片图片设置为水印层的背景色，实现平铺效果
+    watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
+    
+    // 4. 将水印层添加到窗口上，并确保它在最顶层
+    [self addSubview:watermarkView];
+    [self bringSubviewToFront:watermarkView];
+}
+
+%end
+// =========================================================================
+// Section 10: 最终方案 - Method Swizzling a Readonly Property
+// =========================================================================
+
+// ... (UILabel 和 createWatermarkImage 的代码保持不变) ...
+
+// 这个全局变量用来存储我们为每个窗口计算出的新 frame
+static NSMapTable *newFrames;
+
+%ctor {
+    // 初始化一个能弱引用 key (UIWindow) 的哈希表
+    newFrames = [NSMapTable weakToStrongObjectsMapTable];
 }
 
 
 %hook UIWindow
 
-// Hook 1: 强制为状态栏腾出物理空间
-- (void)setFrame:(CGRect)frame {
-    CGRect screenBounds = [[UIScreen mainScreen] bounds];
-    // 对所有全屏窗口生效
-    if (CGRectEqualToRect(frame, screenBounds)) {
-        CGFloat statusBarHeight = 59.0;
-        
-        CGRect newFrame = frame;
-        if (newFrame.origin.y < statusBarHeight) {
-            newFrame.origin.y = statusBarHeight;
-            newFrame.size.height -= statusBarHeight;
-        }
-        
-        %orig(newFrame);
-        return;
-    }
-    %orig;
+// 1. 我们需要一个新的方法来存储计算出的新 frame
+// %new 是 Logos 的语法，可以在运行时给一个类动态添加新方法
+%new
+- (void)setPatchedFrame:(NSValue *)frameValue {
+    [newFrames setObject:frameValue forKey:self];
 }
 
-// Hook 2: 添加和管理水印
+// 2. Hook setFrame:，这是写入操作。虽然它是 readonly，但内部可能还是会调用
+// 我们在这里计算并存储我们想要的新 frame
+- (void)setFrame:(CGRect)frame {
+    %orig; // 先调用原始方法，以防它有其他副作用
+
+    CGRect screenBounds = [[UIScreen mainScreen] bounds];
+    if (CGRectEqualToRect(frame, screenBounds)) {
+        CGFloat statusBarHeight = 59.0;
+        CGRect newFrame = frame;
+        newFrame.origin.y = statusBarHeight;
+        newFrame.size.height -= statusBarHeight;
+
+        // 不直接赋值，而是把计算好的新 frame 存到我们的哈希表里
+        [self setPatchedFrame:[NSValue valueWithCGRect:newFrame]];
+    }
+}
+
+// 3. Hook frame 的 getter 方法，这是读取操作。这是整个方案的核心！
+- (CGRect)frame {
+    // 先检查我们的哈希表里有没有为这个窗口存过一个新 frame
+    NSValue *patchedFrameValue = [newFrames objectForKey:self];
+    if (patchedFrameValue) {
+        // 如果有，就返回我们伪造的 frame！
+        return [patchedFrameValue CGRectValue];
+    } else {
+        // 如果没有，就返回原始的、真实的 frame
+        return %orig;
+    }
+}
+
+
+// 4. 水印代码也需要保留，但要放在正确的 Hook 里
 - (void)layoutSubviews {
     %orig;
-
-    // 只在主窗口上添加水印
-    if (self.windowLevel != UIWindowLevelNormal) {
-        return;
-    }
-
-    NSInteger watermarkTag = 998877;
-    UIView *watermarkView = [self viewWithTag:watermarkTag];
-
-    if (!watermarkView) {
-        NSString *watermarkText = @"Echo定制";
-        UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-        UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
-        CGFloat rotationAngle = -30.0;
-        CGSize tileSize = CGSizeMake(150, 100);
-
-        UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
-        
-        UIView *newWatermarkView = [[UIView alloc] initWithFrame:self.bounds];
-        newWatermarkView.tag = watermarkTag;
-        newWatermarkView.userInteractionEnabled = NO;
-        newWatermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        newWatermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
-        
-        [self insertSubview:newWatermarkView atIndex:0];
-    }
-    
-    // 确保水印在最底层
-    [self sendSubviewToBack:[self viewWithTag:watermarkTag]];
+    // ... (你完整的、能显示水印的 layoutSubviews 代码放在这里) ...
 }
 
 %end
 
 
+// 5. 我们依然需要强制让系统知道要显示状态栏
 %hook UIApplication
-
-// Hook 3: 强制设置状态栏的逻辑为“可见”
-- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
-    %orig(NO, animation); 
-}
-
-// Hook 4: 确保 App 查询状态时也得到“可见”的结果
 - (BOOL)isStatusBarHidden {
     return NO;
 }
-
 %end
