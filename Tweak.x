@@ -1,12 +1,4 @@
 #import <UIKit/UIKit.h>
-#import <FLEXing/FLEXManager.h>
-
-// 构造函数，在 App 启动时显示 FLEXing 按钮 (如果不需要可以删除或注释掉这部分)
-%ctor {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[FLEXManager sharedManager] showExplorer];
-    });
-}
 
 
 // =========================================================================
