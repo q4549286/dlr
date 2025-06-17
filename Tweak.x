@@ -98,14 +98,15 @@
 %end
 #import <UIKit/UIKit.h>
 
-%hook UIViewController
+%hook UIApplication
 
-- (BOOL)prefersStatusBarHidden {
-    return NO;
-}
-
-- (UIViewController *)childViewControllerForStatusBarHidden {
-    return nil;
+- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    
+    %orig(NO, animation);
+    
+    #pragma clang diagnostic pop
 }
 
 %end
