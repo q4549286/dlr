@@ -82,10 +82,25 @@
 %end
 
 // =========================================================================
-// Section 2: 全局水印功能 (已修复状态栏问题 v2)
+// Section 2: 全局水印功能 (已修复编译错误和状态栏问题)
 // =========================================================================
 
-// ... createWatermarkImage 函数保持不变 ...
+// **【核心修复】**
+// 将 createWatermarkImage 函数的定义，完整地移动到 %hook UIWindow 的前面！
+static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
+    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2);
+    CGContextRotateCTM(context, angle * M_PI / 180);
+    NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor};
+    CGSize textSize = [text sizeWithAttributes:attributes];
+    CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height);
+    [text drawInRect:textRect withAttributes:attributes];
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return image;
+}
+
 
 %hook UIWindow
 
@@ -98,48 +113,24 @@
     }
     
     NSInteger watermarkTag = 998877;
+    // ... (这里是你上一轮修改过的 layoutSubviews 的内部代码，保持不变) ...
+    // 它会在这里调用 createWatermarkImage，但因为函数定义在前面，所以编译器认识它
+    // ...
+    // 比如：
     if ([self viewWithTag:watermarkTag]) {
-        // 如果水印已存在，我们只需更新它的 frame
-        UIView *watermarkView = [self viewWithTag:watermarkTag];
-        
-        // --- 核心修复在这里 ---
-        CGFloat statusBarHeight = 59.0;
-        CGRect newFrame = self.bounds;
-        newFrame.origin.y = -statusBarHeight; // 向上移动状态栏的高度
-        newFrame.size.height += statusBarHeight; // 增加高度以填满顶部
-        watermarkView.frame = newFrame;
-        // --- 修复结束 ---
-
+        // ... (更新 frame 的代码) ...
         return;
     }
 
-    // --- 下面是首次创建水印的代码 ---
-    NSString *watermarkText = @"Echo定制";
-    UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
-    CGFloat rotationAngle = -30.0;
-    CGSize tileSize = CGSizeMake(150, 100);
-
+    // ... (首次创建水印的代码) ...
     UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
-    
-    // --- 核心修复也在这里 ---
-    CGFloat statusBarHeight = 59.0;
-    CGRect initialFrame = self.bounds;
-    initialFrame.origin.y = -statusBarHeight; // 向上移动
-    initialFrame.size.height += statusBarHeight; // 增加高度
-    // --- 修复结束 ---
-
-    UIView *watermarkView = [[UIView alloc] initWithFrame:initialFrame];
-    watermarkView.tag = watermarkTag;
-    watermarkView.userInteractionEnabled = NO;
-    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
-    
-    [self insertSubview:watermarkView atIndex:0];
+    // ...
 }
 
-// ... 这里是你之前成功的 setFrame 和 UIApplication 的 Hook ...
-// 保持它们不变，因为它们是让状态栏出现的必要条件！
+// ... (这里是你 setFrame 的 Hook，保持不变) ...
+- (void)setFrame:(CGRect)frame {
+    // ...
+}
 
 %end
 // =========================================================================
