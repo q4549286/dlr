@@ -13,7 +13,13 @@
 
     NSString *newString = nil;
 
- if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) {
+    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } 
+    else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) {
+        newString = @"定制";
+    }
+    else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) {
         newString = @"毕法";
     }
 
@@ -50,7 +56,13 @@
     NSString *originalString = attributedText.string;
     NSString *newString = nil;
 
-   if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
+    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } 
+    else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) {
+        newString = @"定制";
+    }
+    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
         newString = @"毕法";
     }
 
@@ -115,7 +127,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     }
 
     // --- 在这里自定义你的水印样式 ---
-    NSString *watermarkText = @"贺氏六壬";
+    NSString *watermarkText = @"Echo定制";
     UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
     UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; // 黑色，8%的透明度，效果会很淡
     CGFloat rotationAngle = -30.0; // 倾斜-30度
