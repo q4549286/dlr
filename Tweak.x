@@ -98,14 +98,50 @@
 %end
 #import <UIKit/UIKit.h>
 
+// 我们守在所有窗口的“产房”门口
+%hook UIWindow
+
+// 这是窗口“出生”时调用的方法之一
+- (id)initWithFrame:(CGRect)frame {
+    // 先让它正常“出生”
+    id window = %orig(frame);
+
+    // --- 开始我们的“出生后干预” ---
+
+    // 执法手段1：对UIApplication下达死命令 (这是我们的主要武器)
+    // 我们在窗口刚创建时就发出这个命令，时机非常早
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationNone];
+    #pragma clang diagnostic pop
+    
+    return window;
+}
+
+// 另一个可能的“产房”门口，以防万一
+- (id)initWithWindowScene:(UIWindowScene *)windowScene API_AVAILABLE(ios(13.0)){
+    id window = %orig(windowScene);
+    
+    // --- 同样进行干预 ---
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationNone];
+    #pragma clang diagnostic pop
+    
+    return window;
+}
+
+%end
+
+
+// --- 同时，我们保留最强的运行时防御 ---
+// 防止App在后续操作中再次隐藏它
 %hook UIApplication
 
 - (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
     #pragma clang diagnostic push
     #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    
     %orig(NO, animation);
-    
     #pragma clang diagnostic pop
 }
 
