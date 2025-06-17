@@ -153,46 +153,44 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %end
 // =========================================================================
-// Section 5: 新增功能 - 强制为状态栏腾出空间 (iOS 16+ 方案)
+// Section 6: 终极状态栏显示方案 (组合拳)
 // =========================================================================
+
+// 我们需要同时 Hook UIWindow 和 UIApplication
+
 %hook UIWindow
 
-// Hook setFrame: 方法，这是设置视图位置和大小的核心
-// -(void) setFrame:(CGRect)frame
+// Hook setFrame: 来强制为状态栏腾出物理空间
 - (void)setFrame:(CGRect)frame {
-
-    // 只对主窗口进行操作
     if (self.windowLevel == UIWindowLevelNormal) {
-        
-        // --- 这是需要我们自己确定的状态栏高度 ---
-        // 对于你这种带灵动岛的设备，状态栏高度通常是 59.0
-        // 如果效果不对，可以尝试 54.0 或其他值
-        CGFloat statusBarHeight = 59.0;
-        // ------------------------------------------
-
-        // 获取屏幕的原始尺寸
+        CGFloat statusBarHeight = 59.0; // 适用于带灵动岛的设备
         CGRect screenBounds = [[UIScreen mainScreen] bounds];
 
-        // 检查传入的 frame 是不是几乎和全屏一样大
-        // 这是一个防止误改其他小窗口的保险措施
         if (CGRectEqualToRect(frame, screenBounds)) {
-            
-            // 创建一个新的 frame
             CGRect newFrame = frame;
-            
-            // 把 y 坐标往下移动状态栏的高度
             newFrame.origin.y = statusBarHeight;
-            // 把窗口的高度减去状态栏的高度
             newFrame.size.height -= statusBarHeight;
-            
-            // 用我们修改后的 newFrame 去调用原始方法
             %orig(newFrame);
-            return; // 修改后直接返回，不再执行后续
+            return;
         }
     }
-    
-    // 如果不是主窗口，或者 frame 不是全屏，就直接执行原始方法
     %orig;
+}
+
+%end
+
+
+%hook UIApplication
+
+// Hook setStatusBarHidden: 来强制设置状态栏的逻辑为“可见”
+- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
+    // 无论 App 传什么进来，我们都强制用 NO (不隐藏) 去调用原始方法
+    %orig(NO, animation); 
+}
+
+// Hook isStatusBarHidden 来确保 App 查询状态时也得到“可见”的结果
+- (BOOL)isStatusBarHidden {
+    return NO;
 }
 
 %end
