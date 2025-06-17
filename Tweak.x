@@ -83,8 +83,24 @@
 %end
 
 // =========================================================================
-// Section 8: 最终决战方案
+// Section 2, 7, 8 合并: 最终的 UIWindow & UIApplication 解决方案
 // =========================================================================
+
+// 【修复】将 createWatermarkImage 函数的定义，完整地移动到 %hook UIWindow 的前面
+static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
+    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2);
+    CGContextRotateCTM(context, angle * M_PI / 180);
+    NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor};
+    CGSize textSize = [text sizeWithAttributes:attributes];
+    CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height);
+    [text drawInRect:textRect withAttributes:attributes];
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return image;
+}
+
 
 %hook UIWindow
 
@@ -99,15 +115,13 @@
     if ([NSStringFromClass([self class]) isEqualToString:@"UITextEffectsWindow"]) {
         
         // --- 对付 UITextEffectsWindow ---
-        self.userInteractionEnabled = NO; // 让它不响应触摸，触摸事件可以穿透到下层
-        self.backgroundColor = [UIColor clearColor]; // 让它完全透明
+        self.userInteractionEnabled = NO;
+        self.backgroundColor = [UIColor clearColor];
         
-        // 确保它的 frame 不会盖住状态栏
         CGRect newFrame = screenBounds;
         newFrame.origin.y = statusBarHeight;
         newFrame.size.height -= statusBarHeight;
         
-        // 只有当它的 frame 不对时才去修改，避免无限循环
         if (!CGRectEqualToRect(self.frame, newFrame)) {
             self.frame = newFrame;
         }
@@ -129,9 +143,11 @@
         // 2. 添加水印 (只在主窗口上加)
         NSInteger watermarkTag = 998877;
         if (![self viewWithTag:watermarkTag]) {
-            // ... (这里是你完整的 createWatermarkImage 函数的调用和水印视图的创建代码)
             NSString *watermarkText = @"Echo定制";
-            UIFont *watermarkFont = [UIFont systemFontOf-Size:16.0];
+            
+            // 【修复】修正了 systemFontOf-Size: 的拼写错误
+            UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
+            
             UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
             CGFloat rotationAngle = -30.0;
             CGSize tileSize = CGSizeMake(150, 100);
@@ -151,7 +167,16 @@
 
 %end
 
-// UIApplication 的 Hook 依然需要，它负责逻辑可见性
+
 %hook UIApplication
-// ... (保持 setStatusBarHidden 和 isStatusBarHidden 的 Hook 不变) ...
+
+// 逻辑上强制状态栏可见
+- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
+    %orig(NO, animation); 
+}
+
+- (BOOL)isStatusBarHidden {
+    return NO;
+}
+
 %end
