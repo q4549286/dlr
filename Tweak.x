@@ -83,67 +83,75 @@
 %end
 
 // =========================================================================
-// Section 7: 终极状态栏显示方案 v2 (双窗口操作)
+// Section 8: 最终决战方案
 // =========================================================================
 
 %hook UIWindow
 
-// 我们只 Hook setFrame:，但这次逻辑更强大，能同时处理两个窗口
-- (void)setFrame:(CGRect)frame {
-    
-    // --- 关键的状态栏高度值 ---
-    CGFloat statusBarHeight = 59.0;
-    // -------------------------
-
-    CGRect screenBounds = [[UIScreen mainScreen] bounds];
-
-    // **【核心修复】**
-    // 不再检查 windowLevel，而是直接检查 frame 是否为全屏。
-    // 这样，无论是 level 0 的 UIWindow 还是 level 10 的 UITextEffectsWindow，
-    // 只要它想全屏，就会被我们的 Hook 捕捉到并进行修改！
-    if (CGRectEqualToRect(frame, screenBounds)) {
-        CGRect newFrame = frame;
-        newFrame.origin.y = statusBarHeight;
-        newFrame.size.height -= statusBarHeight;
-        
-        // 用我们计算出的新 frame 去调用原始方法
-        %orig(newFrame);
-        return; // 修改后直接返回
-    }
-    
-    // 对于其他非全屏的 frame 设置，直接放行，不作修改
-    %orig;
-}
-
-// 保留 layoutSubviews Hook，它负责水印
+// 我们只 Hook layoutSubviews，用一个方法解决所有问题
 - (void)layoutSubviews {
     %orig;
 
-    if (self.windowLevel != UIWindowLevelNormal) {
-        return;
-    }
+    CGFloat statusBarHeight = 59.0;
+    CGRect screenBounds = [[UIScreen mainScreen] bounds];
 
-    NSInteger watermarkTag = 998877;
-    // ... (你之前成功的水印代码放在这里，保持不变) ...
-    // 例如:
-    UIView *watermarkView = [self viewWithTag:watermarkTag];
-    if (!watermarkView) {
-        // 创建水印...
+    // 判断当前窗口是不是那个捣乱的 UITextEffectsWindow
+    if ([NSStringFromClass([self class]) isEqualToString:@"UITextEffectsWindow"]) {
+        
+        // --- 对付 UITextEffectsWindow ---
+        self.userInteractionEnabled = NO; // 让它不响应触摸，触摸事件可以穿透到下层
+        self.backgroundColor = [UIColor clearColor]; // 让它完全透明
+        
+        // 确保它的 frame 不会盖住状态栏
+        CGRect newFrame = screenBounds;
+        newFrame.origin.y = statusBarHeight;
+        newFrame.size.height -= statusBarHeight;
+        
+        // 只有当它的 frame 不对时才去修改，避免无限循环
+        if (!CGRectEqualToRect(self.frame, newFrame)) {
+            self.frame = newFrame;
+        }
+
+    } 
+    // 判断当前窗口是不是我们的主窗口
+    else if (self.windowLevel == UIWindowLevelNormal) {
+        
+        // --- 对付主窗口 ---
+
+        // 1. 为状态栏腾出空间
+        CGRect newFrame = screenBounds;
+        newFrame.origin.y = statusBarHeight;
+        newFrame.size.height -= statusBarHeight;
+        if (!CGRectEqualToRect(self.frame, newFrame)) {
+            self.frame = newFrame;
+        }
+
+        // 2. 添加水印 (只在主窗口上加)
+        NSInteger watermarkTag = 998877;
+        if (![self viewWithTag:watermarkTag]) {
+            // ... (这里是你完整的 createWatermarkImage 函数的调用和水印视图的创建代码)
+            NSString *watermarkText = @"Echo定制";
+            UIFont *watermarkFont = [UIFont systemFontOf-Size:16.0];
+            UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
+            CGFloat rotationAngle = -30.0;
+            CGSize tileSize = CGSizeMake(150, 100);
+
+            UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
+            
+            UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
+            watermarkView.tag = watermarkTag;
+            watermarkView.userInteractionEnabled = NO;
+            watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
+            
+            [self insertSubview:watermarkView atIndex:0];
+        }
     }
 }
 
 %end
 
-
-// 我们依然需要这个 Hook 来确保逻辑上的可见性
+// UIApplication 的 Hook 依然需要，它负责逻辑可见性
 %hook UIApplication
-
-- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
-    %orig(NO, animation); 
-}
-
-- (BOOL)isStatusBarHidden {
-    return NO;
-}
-
+// ... (保持 setStatusBarHidden 和 isStatusBarHidden 的 Hook 不变) ...
 %end
