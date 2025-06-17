@@ -153,33 +153,39 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %end
 // =========================================================================
-// Section 10: 最终方案 - Method Swizzling a Readonly Property
+// Section 11: 最终方案 v2 - 使用 Category 和单一 Hook
 // =========================================================================
 
 // ... (UILabel 和 createWatermarkImage 的代码保持不变) ...
 
-// 这个全局变量用来存储我们为每个窗口计算出的新 frame
+// 使用一个 Category 提前声明我们要动态添加的新方法
+// 这会让编译器在检查时知道这个方法的存在
+@interface UIWindow (PatchedFrame)
+- (void)setPatchedFrame:(NSValue *)frameValue;
+@end
+
+// 全局变量用来存储我们为每个窗口计算出的新 frame
 static NSMapTable *newFrames;
 
 %ctor {
-    // 初始化一个能弱引用 key (UIWindow) 的哈希表
     newFrames = [NSMapTable weakToStrongObjectsMapTable];
 }
 
 
+// -------------------------------------------------------------------------
+// 【核心修复】所有对 UIWindow 的操作，都集中在这一个 Hook 块里
+// -------------------------------------------------------------------------
 %hook UIWindow
 
-// 1. 我们需要一个新的方法来存储计算出的新 frame
-// %new 是 Logos 的语法，可以在运行时给一个类动态添加新方法
+// 1. 实现我们用 Category 声明的新方法
 %new
 - (void)setPatchedFrame:(NSValue *)frameValue {
     [newFrames setObject:frameValue forKey:self];
 }
 
-// 2. Hook setFrame:，这是写入操作。虽然它是 readonly，但内部可能还是会调用
-// 我们在这里计算并存储我们想要的新 frame
+// 2. Hook setFrame: 来计算并存储我们想要的新 frame
 - (void)setFrame:(CGRect)frame {
-    %orig; // 先调用原始方法，以防它有其他副作用
+    %orig; 
 
     CGRect screenBounds = [[UIScreen mainScreen] bounds];
     if (CGRectEqualToRect(frame, screenBounds)) {
@@ -188,35 +194,49 @@ static NSMapTable *newFrames;
         newFrame.origin.y = statusBarHeight;
         newFrame.size.height -= statusBarHeight;
 
-        // 不直接赋值，而是把计算好的新 frame 存到我们的哈希表里
         [self setPatchedFrame:[NSValue valueWithCGRect:newFrame]];
     }
 }
 
-// 3. Hook frame 的 getter 方法，这是读取操作。这是整个方案的核心！
+// 3. Hook frame 的 getter 方法，返回我们伪造的 frame
 - (CGRect)frame {
-    // 先检查我们的哈希表里有没有为这个窗口存过一个新 frame
     NSValue *patchedFrameValue = [newFrames objectForKey:self];
     if (patchedFrameValue) {
-        // 如果有，就返回我们伪造的 frame！
         return [patchedFrameValue CGRectValue];
-    } else {
-        // 如果没有，就返回原始的、真实的 frame
-        return %orig;
+    }
+    return %orig;
+}
+
+// 4. 水印代码也放在这个唯一的 Hook 块里
+- (void)layoutSubviews {
+    %orig;
+
+    if (self.windowLevel == UIWindowLevelNormal) {
+        NSInteger watermarkTag = 998877;
+        if (![self viewWithTag:watermarkTag]) {
+            NSString *watermarkText = @"Echo定制";
+            UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
+            UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
+            CGFloat rotationAngle = -30.0;
+            CGSize tileSize = CGSizeMake(150, 100);
+
+            UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
+            
+            UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
+            watermarkView.tag = watermarkTag;
+            watermarkView.userInteractionEnabled = NO;
+            watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
+            
+            [self insertSubview:watermarkView atIndex:0];
+        }
     }
 }
 
-
-// 4. 水印代码也需要保留，但要放在正确的 Hook 里
-- (void)layoutSubviews {
-    %orig;
-    // ... (你完整的、能显示水印的 layoutSubviews 代码放在这里) ...
-}
-
-%end
+%end // UIWindow Hook 结束
 
 
-// 5. 我们依然需要强制让系统知道要显示状态栏
+// 5. 强制让系统知道要显示状态栏
 %hook UIApplication
 - (BOOL)isStatusBarHidden {
     return NO;
