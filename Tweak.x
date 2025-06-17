@@ -79,7 +79,8 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
     CGContextRef ctx = UIGraphicsGetCurrentContext();
     CGContextTranslateCTM(ctx, tileSize.width/2, tileSize.height/2); CGContextRotateCTM(ctx, angle*M_PI/180);
-    [text drawInRect:(CGRect){-tileSize.width/2,-tileSize.height/2,tileSize} withAttributes:@{NSFontAttributeName:font,NSForegroundColorAttributeName:textColor}];
+        CGRect textRect = CGRectMake(-tileSize.width / 2.0, -tileSize.height / 2.0, tileSize.width, tileSize.height);
+    [text drawInRect:textRect withAttributes:@{NSFontAttributeName:font, NSForegroundColorAttributeName:textColor}];
     UIImage *img = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext(); return img;
 }
 
