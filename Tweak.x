@@ -56,13 +56,7 @@
     NSString *originalString = attributedText.string;
     NSString *newString = nil;
 
-    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
-        newString = @"Echo";
-    } 
-    else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) {
-        newString = @"定制";
-    }
-    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
+   if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
         newString = @"毕法";
     }
 
@@ -129,7 +123,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     // --- 在这里自定义你的水印样式 ---
     NSString *watermarkText = @"贺氏六壬";
     UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.20]; // 黑色，8%的透明度，效果会很淡
+    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; // 黑色，8%的透明度，效果会很淡
     CGFloat rotationAngle = -30.0; // 倾斜-30度
     CGSize tileSize = CGSizeMake(150, 100); // 每个水印“瓦片”的尺寸，可以调整间距
     // --------------------------------
