@@ -10,7 +10,7 @@
 
 
 // =========================================================================
-// Section 1: UILabel 文字和样式替换 (这是你已成功的部分)
+// Section 1: UILabel 文字和样式替换 (保持不变)
 // =========================================================================
 %hook UILabel
 
@@ -92,7 +92,7 @@
 
 
 // =========================================================================
-// Section 2: 全局水印 (这是你已成功的部分)
+// Section 2: 全局水印 (保持不变)
 // =========================================================================
 
 // 创建水印“瓦片”的辅助函数
@@ -139,7 +139,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 
 // =========================================================================
-// Section 3: 终极状态栏修复 (直接操控 SceneDelegate 和 Window)
+// Section 3: 终极状态栏修复 (使用新API)
 // =========================================================================
 
 // !!!【非常重要】!!!
@@ -155,29 +155,22 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
     UIWindowScene *windowScene = (UIWindowScene *)scene;
 
-    // 延时执行，确保 App 的所有原生布局代码都已执行完毕
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         
         // 1. 强制设置 statusBarManager 的属性为可见
-        if (@available(iOS 13.0, *)) {
-            id statusBarManager = [windowScene performSelector:@selector(statusBarManager)];
-            if (statusBarManager) {
-                // 直接设置私有属性 _statusBarHidden，比调用方法更强制
-                [statusBarManager setValue:@(NO) forKey:@"_statusBarHidden"];
-                
-                // 触发 statusBarManager 更新其外观
-                [statusBarManager performSelector:@selector(updateStatusBarAppearance)];
-            }
+        id statusBarManager = [windowScene performSelector:@selector(statusBarManager)];
+        if (statusBarManager) {
+            [statusBarManager setValue:@(NO) forKey:@"_statusBarHidden"];
+            [statusBarManager performSelector:@selector(updateStatusBarAppearance)];
         }
 
-        // 2. 遍历所有窗口，强制修改全屏窗口的 frame 为状态栏腾出空间
-        for (UIWindow *window in [UIApplication sharedApplication].windows) {
+        // 2. 【核心修复】使用苹果推荐的新 API 遍历窗口
+        for (UIWindow *window in windowScene.windows) {
             CGRect screenBounds = [[UIScreen mainScreen] bounds];
             if (CGRectEqualToRect(window.frame, screenBounds)) {
                 CGFloat statusBarHeight = 59.0;
                 CGRect newFrame = window.frame;
 
-                // 只有当 frame 的 y 坐标还是 0 时才修改，防止重复执行
                 if (newFrame.origin.y < statusBarHeight) {
                     newFrame.origin.y = statusBarHeight;
                     newFrame.size.height -= statusBarHeight;
