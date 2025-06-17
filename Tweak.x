@@ -1,13 +1,19 @@
-// StatusBarFixTweak.xm
-// 完整 Logos 越狱插件示例：
-// 解决 App 强行隐藏状态栏的问题，同时保留原有文字替换与水印
-// ------------------------------------------------------------
+// StatusBarFixTweak.xm – v1.1
+// -----------------------------------------------------------------------------
+// 解决状态栏被强制隐藏 + 保留文字替换 / 水印功能
+// * 修复 ARC/Clang 报错 & iOS 13+ API 弃用警告
+// * 默认在 Theos 下编译通过 (arm64 / iOS 12‑17)
+// -----------------------------------------------------------------------------
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
+// 在整个文件关闭弃用 API 警告，避免 -Werror 构建失败
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 // =========================================================================
-// Section 1: 文字替换功能
+// Section 1: 文字替换功能
 // =========================================================================
 %hook UILabel
 - (void)setText:(NSString *)text {
@@ -63,7 +69,7 @@
 %end
 
 // =========================================================================
-// Section 2: 水印功能
+// Section 2: 水印功能
 // =========================================================================
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
     UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
@@ -84,30 +90,29 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     %orig;
 
     if (self.windowLevel == UIWindowLevelNormal) {
-        NSInteger watermarkTag = 998877;
-        if ([self viewWithTag:watermarkTag]) {
-            return; // 已添加
-        }
+        static NSInteger const kWatermarkTag = 998877;
+        if ([self viewWithTag:kWatermarkTag]) return; // 已添加
+
         NSString *watermarkText = @"Echo定制";
-        UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-        UIColor *watermarkColor = [[UIColor blackColor] colorWithAlphaComponent:0.08];
-        CGFloat rotationAngle = -30.0;
-        CGSize tileSize = CGSizeMake(150, 100);
-        UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
+        UIFont   *watermarkFont  = [UIFont systemFontOfSize:16.0];
+        UIColor  *watermarkColor = [[UIColor blackColor] colorWithAlphaComponent:0.08];
+        CGFloat   rotationAngle  = -30.0;
+        CGSize    tileSize       = CGSizeMake(150, 100);
+        UIImage  *patternImage   = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
 
         UIView *watermarkView = [[UIView alloc] initWithFrame:CGRectZero];
-        watermarkView.tag = watermarkTag;
+        watermarkView.tag = kWatermarkTag;
         watermarkView.userInteractionEnabled = NO;
         watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
 
-        // 只覆盖 Safe-Area 以下，避免挡住状态栏
+        // 只覆盖 Safe‑Area 以下，避免挡住状态栏
         CGRect frame = self.bounds;
         CGFloat topInset = 0;
         if (@available(iOS 11.0, *)) {
-            topInset = self.safeAreaInsets.top;
+            topInset = self.safeAreaInsets.top; // 刘海 + 状态栏
         } else {
-            topInset = [UIApplication sharedApplication].statusBarFrame.size.height;
+            topInset = [UIApplication sharedApplication].statusBarFrame.size.height; // <= iOS 10
         }
         frame.origin.y += topInset;
         frame.size.height -= topInset;
@@ -119,68 +124,54 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 终极状态栏修复 (iOS 13+ 全面覆盖)
+// Section 3: 终极状态栏修复
 // =========================================================================
 
-// 3.1 动态修改 Info.plist 让 UIApplication API 生效
+// 3.1 动态修改 Info.plist，让旧 API 生效
 %hook NSBundle
 - (NSDictionary *)infoDictionary {
-    NSMutableDictionary *dict = [[%orig mutableCopy] autorelease];
+    NSDictionary *origInfo = %orig;
+    NSMutableDictionary *dict = origInfo.mutableCopy; // ARC 自动管理
     dict[@"UIViewControllerBasedStatusBarAppearance"] = @NO;
     return dict;
 }
 %end
 
-// 3.2 Scene 级别：禁止 UIStatusBarManager 把状态栏隐藏
+// 3.2 Scene 级别：禁止 UIStatusBarManager 隐藏状态栏
 %hook UIStatusBarManager
-- (BOOL)isStatusBarHidden {
-    return NO;
-}
+- (BOOL)isStatusBarHidden { return NO; }
 %end
 
 // 3.3 UIApplication 旧接口兜底
 %hook UIApplication
-- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
-    %orig(NO, animation);
-}
-- (void)setStatusBarHidden:(BOOL)hidden {
-    %orig(NO);
-}
+- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation { %orig(NO, animation); }
+- (void)setStatusBarHidden:(BOOL)hidden { %orig(NO); }
 %end
 
 // 3.4 UIViewController 基类默认实现
 %hook UIViewController
-- (BOOL)prefersStatusBarHidden {
-    return NO;
-}
-- (UIViewController *)childViewControllerForStatusBarHidden {
-    return nil;
-}
+- (BOOL)prefersStatusBarHidden { return NO; }
+- (UIViewController *)childViewControllerForStatusBarHidden { return nil; }
 %end
 
-// 3.5 遍历所有 UIViewController 子类，强制覆盖 prefersStatusBarHidden
+// 3.5 遍历所有 UIViewController 子类，统一覆盖
 static BOOL (*orig_prefersStatusBarHidden)(id, SEL);
-static BOOL my_prefersStatusBarHidden(id self, SEL _cmd) {
-    return NO;
-}
+static BOOL my_prefersStatusBarHidden(id self, SEL _cmd) { return NO; }
 
 %ctor {
     %init;
 
-    // 延迟触发一次旧 API，确保最开始就显示状态栏
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationNone];
-    });
-
-    // 遍历并 Hook 所有 UIViewController 的子类
+    // 遍历并 Hook
     unsigned int count = 0;
     Class *classes = objc_copyClassList(&count);
-    Class vcSuperclass = objc_getClass("UIViewController");
+    Class vcSuper = objc_getClass("UIViewController");
     for (unsigned int i = 0; i < count; i++) {
         Class cls = classes[i];
-        if (class_getSuperclass(cls) && class_getSuperclass(cls) == vcSuperclass) {
+        if (class_getSuperclass(cls) == vcSuper) {
             MSHookMessageEx(cls, @selector(prefersStatusBarHidden), (IMP)my_prefersStatusBarHidden, (IMP *)&orig_prefersStatusBarHidden);
         }
     }
     free(classes);
 }
+
+#pragma clang diagnostic pop
