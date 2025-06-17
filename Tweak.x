@@ -1,4 +1,12 @@
 #import <UIKit/UIKit.h>
+//#import <FLEXing/FLEXManager.h>
+
+// 构造函数，在 App 启动时显示 FLEXing 按钮 (如果调试完成，可以删除或注释掉这部分)
+//%ctor {
+//    dispatch_async(dispatch_get_main_queue(), ^{
+//        [[FLEXManager sharedManager] showExplorer];
+//    });
+//}
 
 
 // =========================================================================
@@ -82,11 +90,12 @@
 
 %end
 
+
 // =========================================================================
-// Section 2, 7, 8 合并: 最终的 UIWindow & UIApplication 解决方案
+// Section 2: 全局水印 & 物理空间调整
 // =========================================================================
 
-// 【修复】将 createWatermarkImage 函数的定义，完整地移动到 %hook UIWindow 的前面
+// 创建水印“瓦片”的辅助函数
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
     UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
     CGContextRef context = UIGraphicsGetCurrentContext();
@@ -104,79 +113,50 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %hook UIWindow
 
-// 我们只 Hook layoutSubviews，用一个方法解决所有问题
+// Hook 1: 强制为状态栏腾出物理空间
+- (void)setFrame:(CGRect)frame {
+    CGRect screenBounds = [[UIScreen mainScreen] bounds];
+    // 检查是否是全屏窗口
+    if (CGRectEqualToRect(frame, screenBounds)) {
+        CGFloat statusBarHeight = 59.0; // 适用于带灵动岛的设备
+        
+        CGRect newFrame = frame;
+        newFrame.origin.y = statusBarHeight;
+        newFrame.size.height -= statusBarHeight;
+        
+        %orig(newFrame);
+        return;
+    }
+    %orig;
+}
+
+// Hook 2: 添加和管理水印
 - (void)layoutSubviews {
     %orig;
 
-    CGFloat statusBarHeight = 59.0;
-    CGRect screenBounds = [[UIScreen mainScreen] bounds];
-
-    // 判断当前窗口是不是那个捣乱的 UITextEffectsWindow
-    if ([NSStringFromClass([self class]) isEqualToString:@"UITextEffectsWindow"]) {
-        
-        // --- 对付 UITextEffectsWindow ---
-        self.userInteractionEnabled = NO;
-        self.backgroundColor = [UIColor clearColor];
-        
-        CGRect newFrame = screenBounds;
-        newFrame.origin.y = statusBarHeight;
-        newFrame.size.height -= statusBarHeight;
-        
-        if (!CGRectEqualToRect(self.frame, newFrame)) {
-            self.frame = newFrame;
-        }
-
-    } 
-    // 判断当前窗口是不是我们的主窗口
-    else if (self.windowLevel == UIWindowLevelNormal) {
-        
-        // --- 对付主窗口 ---
-
-        // 1. 为状态栏腾出空间
-        CGRect newFrame = screenBounds;
-        newFrame.origin.y = statusBarHeight;
-        newFrame.size.height -= statusBarHeight;
-        if (!CGRectEqualToRect(self.frame, newFrame)) {
-            self.frame = newFrame;
-        }
-
-        // 2. 添加水印 (只在主窗口上加)
-        NSInteger watermarkTag = 998877;
-        if (![self viewWithTag:watermarkTag]) {
-            NSString *watermarkText = @"Echo定制";
-            
-            // 【修复】修正了 systemFontOf-Size: 的拼写错误
-            UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-            
-            UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
-            CGFloat rotationAngle = -30.0;
-            CGSize tileSize = CGSizeMake(150, 100);
-
-            UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
-            
-            UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
-            watermarkView.tag = watermarkTag;
-            watermarkView.userInteractionEnabled = NO;
-            watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-            watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
-            
-            [self insertSubview:watermarkView atIndex:0];
-        }
+    // 只在主窗口上添加水印
+    if (self.windowLevel != UIWindowLevelNormal) {
+        return;
     }
-}
 
-%end
+    NSInteger watermarkTag = 998877;
+    if (![self viewWithTag:watermarkTag]) {
+        NSString *watermarkText = @"Echo定制";
+        UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
+        UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
+        CGFloat rotationAngle = -30.0;
+        CGSize tileSize = CGSizeMake(150, 100);
 
-
-%hook UIApplication
-
-// 逻辑上强制状态栏可见
-- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
-    %orig(NO, animation); 
-}
-
-- (BOOL)isStatusBarHidden {
-    return NO;
+        UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
+        
+        UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
+        watermarkView.tag = watermarkTag;
+        watermarkView.userInteractionEnabled = NO;
+        watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
+        
+        [self insertSubview:watermarkView atIndex:0];
+    }
 }
 
 %end
