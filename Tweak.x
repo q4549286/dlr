@@ -82,74 +82,64 @@
 %end
 
 // =========================================================================
-// Section 2: 全新的全局水印功能
+// Section 2: 全局水印功能 (已修复状态栏问题 v2)
 // =========================================================================
 
-// 定义一个C函数，专门用来创建水印图片的“瓦片”
-// 这样做可以保持代码整洁
-static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
-    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); // 使用NO表示背景透明
-    CGContextRef context = UIGraphicsGetCurrentContext();
-
-    // 将坐标系原点移动到瓦片中心，方便旋转
-    CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2);
-    // 旋转坐标系
-    CGContextRotateCTM(context, angle * M_PI / 180);
-
-    // 设置文字属性
-    NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor};
-    // 计算文字尺寸，使其在旋转后居中
-    CGSize textSize = [text sizeWithAttributes:attributes];
-    CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height);
-    
-    // 绘制文字
-    [text drawInRect:textRect withAttributes:attributes];
-
-    // 从上下文中获取图片
-    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-
-    return image;
-}
+// ... createWatermarkImage 函数保持不变 ...
 
 %hook UIWindow
 
-// Hook layoutSubviews 方法，这是一个在窗口布局变化时会被调用的安全时机
+// layoutSubviews Hook - 只负责水印
 - (void)layoutSubviews {
-    %orig; // 必须先调用原始方法
+    %orig;
 
-    // 定义一个独一无二的 tag，用来识别我们的水印视图，防止重复添加
-    NSInteger watermarkTag = 998877;
+    if (self.windowLevel != UIWindowLevelNormal) {
+        return;
+    }
     
-    // 如果已经存在水印视图，就直接返回，什么都不做
+    NSInteger watermarkTag = 998877;
     if ([self viewWithTag:watermarkTag]) {
+        // 如果水印已存在，我们只需更新它的 frame
+        UIView *watermarkView = [self viewWithTag:watermarkTag];
+        
+        // --- 核心修复在这里 ---
+        CGFloat statusBarHeight = 59.0;
+        CGRect newFrame = self.bounds;
+        newFrame.origin.y = -statusBarHeight; // 向上移动状态栏的高度
+        newFrame.size.height += statusBarHeight; // 增加高度以填满顶部
+        watermarkView.frame = newFrame;
+        // --- 修复结束 ---
+
         return;
     }
 
-    // --- 在这里自定义你的水印样式 ---
+    // --- 下面是首次创建水印的代码 ---
     NSString *watermarkText = @"Echo定制";
     UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; // 黑色，8%的透明度，效果会很淡
-    CGFloat rotationAngle = -30.0; // 倾斜-30度
-    CGSize tileSize = CGSizeMake(150, 100); // 每个水印“瓦片”的尺寸，可以调整间距
-    // --------------------------------
+    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
+    CGFloat rotationAngle = -30.0;
+    CGSize tileSize = CGSizeMake(150, 100);
 
-    // 1. 创建水印瓦片图片
     UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
+    
+    // --- 核心修复也在这里 ---
+    CGFloat statusBarHeight = 59.0;
+    CGRect initialFrame = self.bounds;
+    initialFrame.origin.y = -statusBarHeight; // 向上移动
+    initialFrame.size.height += statusBarHeight; // 增加高度
+    // --- 修复结束 ---
 
-    // 2. 创建一个和窗口一样大的视图作为水印层
-    UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
-    watermarkView.tag = watermarkTag; // 打上我们的专属标签
-    watermarkView.userInteractionEnabled = NO; // 非常重要！让水印不影响下层UI的点击事件
-    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; // 确保窗口尺寸变化时，水印层也跟着变
-
-    // 3. 将瓦片图片设置为水印层的背景色，实现平铺效果
+    UIView *watermarkView = [[UIView alloc] initWithFrame:initialFrame];
+    watermarkView.tag = watermarkTag;
+    watermarkView.userInteractionEnabled = NO;
+    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
     
-    // 4. 将水印层添加到窗口上，并确保它在最顶层
-    [self addSubview:watermarkView];
-    [self bringSubviewToFront:watermarkView];
+    [self insertSubview:watermarkView atIndex:0];
 }
+
+// ... 这里是你之前成功的 setFrame 和 UIApplication 的 Hook ...
+// 保持它们不变，因为它们是让状态栏出现的必要条件！
 
 %end
 // =========================================================================
