@@ -127,7 +127,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     }
 
     // --- 在这里自定义你的水印样式 ---
-    NSString *watermarkText = @"Echo定制";
+    NSString *watermarkText = @"贺氏六壬";
     UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
     UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.20]; // 黑色，8%的透明度，效果会很淡
     CGFloat rotationAngle = -30.0; // 倾斜-30度
