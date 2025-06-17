@@ -97,52 +97,41 @@
 
 %end
 // ==========================================================
-// 天罗地网状态栏强制显示方案 (V6 - The Final Stand)
+// “巡逻警察”状态栏强制显示方案 (V7 - The Last Resort)
 // ==========================================================
 
-// --- 防御第一层：修改“基因” ---
-// 我们Hook NSBundle，从根源上欺骗App，让它以为Info.plist的设置就是显示状态栏
-%hook NSBundle
-- (id)objectForInfoDictionaryKey:(NSString *)key {
-    // 检查App是不是在查询状态栏的初始隐藏设置
-    if ([key isEqualToString:@"UIStatusBarHidden"]) {
-        // 欺骗它！告诉它Info.plist里写的是“不隐藏”
-        return @(NO);
-    }
-    
-    // 检查App是不是在查询“谁来管状态栏”
-    if ([key isEqualToString:@"UIViewControllerBasedStatusBarAppearance"]) {
-        // 欺骗它！告诉它Info.plist里写的是“由UIViewController来管”
-        return @(YES);
-    }
-    
-    // 对于其他所有设置，我们都返回真实的值
-    return %orig(key);
-}
-%end
-
-
-// --- 防御第二层：接管“现代”控制权 ---
-// 由于第一层防御已经把控制权交给了UIViewController，我们现在Hook它，确保它永远做出正确的决定
+// 我们Hook所有视图控制器的基类
 %hook UIViewController
+
+// 第一步：设定法律 - “状态栏不许隐藏”
+// 这是我们希望遵守的规则
 - (BOOL)prefersStatusBarHidden {
-    // 告诉系统：“我这个页面，永远不要隐藏状态栏！”
     return NO;
 }
-%end
 
+// 第二步：派警察巡逻 - “每次界面出现时，都强制执行法律”
+// 这个方法在每个ViewController的视图显示后都会被调用
+- (void)viewDidAppear:(BOOL)animated {
+    // 先让它完成自己该做的事
+    %orig;
 
-// --- 防御第三层：堵住“老旧”后门 ---
-// 作为最后的保险，我们保留对UIApplication的Hook，防止有任何老代码绕过前两层防御
-%hook UIApplication
-- (void)setStatusBarHidden:(BOOL)hidden withAnimation:(UIStatusBarAnimation)animation {
-    // 加上“豁免声明”防止编译报错
+    // --- 开始强制执法 ---
+
+    // 执法手段1：现代、文明的方式
+    // 告诉系统：“请根据我上面设定的法律，重新刷新一下状态栏！”
+    // 这会触发上面的prefersStatusBarHidden方法
+    if (@available(iOS 11.0, *)) {
+        [self setNeedsStatusBarAppearanceUpdate];
+    }
+
+    // 执法手段2：老派、强硬的方式 (作为双重保险)
+    // 直接对UIApplication下命令：“我不管你怎么想的，现在立刻把状态栏给我亮出来！”
     #pragma clang diagnostic push
     #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    
-    // 不管是谁、想干什么，只要调用这个老方法，就强制设为“不隐藏”
-    %orig(NO, animation);
-    
+    if ([[UIApplication sharedApplication] isStatusBarHidden]) {
+        [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationNone];
+    }
     #pragma clang diagnostic pop
 }
+
 %end
