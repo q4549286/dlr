@@ -165,4 +165,3 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 }
 
 %end
-%end
