@@ -10,7 +10,7 @@
 
 
 // =========================================================================
-// Section 1: UILabel 文字和样式替换
+// Section 1: UILabel 文字和样式替换 (这是你已成功的部分)
 // =========================================================================
 %hook UILabel
 
@@ -92,7 +92,7 @@
 
 
 // =========================================================================
-// Section 2: 全局水印 & 物理空间调整
+// Section 2: 全局水印 (这是你已成功的部分)
 // =========================================================================
 
 // 创建水印“瓦片”的辅助函数
@@ -110,53 +110,82 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     return image;
 }
 
-
+// 只是在主窗口上添加水印
 %hook UIWindow
-
-// Hook 1: 强制为状态栏腾出物理空间
-- (void)setFrame:(CGRect)frame {
-    CGRect screenBounds = [[UIScreen mainScreen] bounds];
-    // 检查是否是全屏窗口
-    if (CGRectEqualToRect(frame, screenBounds)) {
-        CGFloat statusBarHeight = 59.0; // 适用于带灵动岛的设备
-        
-        CGRect newFrame = frame;
-        newFrame.origin.y = statusBarHeight;
-        newFrame.size.height -= statusBarHeight;
-        
-        %orig(newFrame);
-        return;
-    }
-    %orig;
-}
-
-// Hook 2: 添加和管理水印
 - (void)layoutSubviews {
     %orig;
+    if (self.windowLevel == UIWindowLevelNormal) {
+        NSInteger watermarkTag = 998877;
+        if (![self viewWithTag:watermarkTag]) {
+            NSString *watermarkText = @"Echo定制";
+            UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
+            UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
+            CGFloat rotationAngle = -30.0;
+            CGSize tileSize = CGSizeMake(150, 100);
 
-    // 只在主窗口上添加水印
-    if (self.windowLevel != UIWindowLevelNormal) {
+            UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
+            
+            UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
+            watermarkView.tag = watermarkTag;
+            watermarkView.userInteractionEnabled = NO;
+            watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
+            
+            [self insertSubview:watermarkView atIndex:0];
+        }
+    }
+}
+%end
+
+
+// =========================================================================
+// Section 3: 终极状态栏修复 (直接操控 SceneDelegate 和 Window)
+// =========================================================================
+
+// !!!【非常重要】!!!
+// 请用 FLEXing 找到 App 的 SceneDelegate 真实类名, 然后替换掉下面的 "AppNameSceneDelegate"
+%hook AppNameSceneDelegate
+
+- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
+    %orig;
+
+    if (![scene isKindOfClass:[UIWindowScene class]]) {
         return;
     }
 
-    NSInteger watermarkTag = 998877;
-    if (![self viewWithTag:watermarkTag]) {
-        NSString *watermarkText = @"Echo定制";
-        UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-        UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.08];
-        CGFloat rotationAngle = -30.0;
-        CGSize tileSize = CGSizeMake(150, 100);
+    UIWindowScene *windowScene = (UIWindowScene *)scene;
 
-        UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
+    // 延时执行，确保 App 的所有原生布局代码都已执行完毕
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         
-        UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
-        watermarkView.tag = watermarkTag;
-        watermarkView.userInteractionEnabled = NO;
-        watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
-        
-        [self insertSubview:watermarkView atIndex:0];
-    }
+        // 1. 强制设置 statusBarManager 的属性为可见
+        if (@available(iOS 13.0, *)) {
+            id statusBarManager = [windowScene performSelector:@selector(statusBarManager)];
+            if (statusBarManager) {
+                // 直接设置私有属性 _statusBarHidden，比调用方法更强制
+                [statusBarManager setValue:@(NO) forKey:@"_statusBarHidden"];
+                
+                // 触发 statusBarManager 更新其外观
+                [statusBarManager performSelector:@selector(updateStatusBarAppearance)];
+            }
+        }
+
+        // 2. 遍历所有窗口，强制修改全屏窗口的 frame 为状态栏腾出空间
+        for (UIWindow *window in [UIApplication sharedApplication].windows) {
+            CGRect screenBounds = [[UIScreen mainScreen] bounds];
+            if (CGRectEqualToRect(window.frame, screenBounds)) {
+                CGFloat statusBarHeight = 59.0;
+                CGRect newFrame = window.frame;
+
+                // 只有当 frame 的 y 坐标还是 0 时才修改，防止重复执行
+                if (newFrame.origin.y < statusBarHeight) {
+                    newFrame.origin.y = statusBarHeight;
+                    newFrame.size.height -= statusBarHeight;
+                    window.frame = newFrame;
+                }
+            }
+        }
+    });
 }
 
 %end
