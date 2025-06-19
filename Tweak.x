@@ -1,58 +1,77 @@
-%hook UIView // 我们可以Hook一个通用的父类，比如UIView
+#import <UIKit/UIKit.h> // <-- THE MOST IMPORTANT FIX: Import the UIKit framework
 
-// 当UIView初始化完成后，给它添加一个手势
+%hook UIView
+
+// When UIView initializes, add our custom gesture
 - (id)initWithFrame:(CGRect)frame {
-    id result = %orig; // 调用原始方法
-    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleLongPressForCopy:)];
-    [self addGestureRecognizer:longPress];
-    [longPress release];
+    id result = %orig; // Call the original initWithFrame:
+
+    // We need to check if the view can have user interaction enabled.
+    // Also, only add the gesture to the view itself, not to the recognizer.
+    if (result) {
+        UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleLongPressForCopy:)];
+        [self addGestureRecognizer:longPress];
+        // [longPress release]; // <-- REMOVED: This causes an error in ARC projects.
+    }
+
     return result;
 }
 
-// 新增一个方法来处理手势
+// Our new method to handle the long press
 %new
 - (void)handleLongPressForCopy:(UILongPressGestureRecognizer *)gesture {
     if (gesture.state == UIGestureRecognizerStateBegan) {
         NSMutableString *foundText = [NSMutableString string];
         
-        // 调用一个递归函数来查找并拼接文本
-        [self findAndAppendTextInView:self toString:foundText];
+        // Start the recursive search for text from the view that was pressed
+        [self findAndAppendTextInView:gesture.view toString:foundText];
 
         if (foundText.length > 0) {
-            // 复制到剪贴板
-            [[UIPasteboard generalPasteboard] setString:foundText];
-            
-            // 给用户一个提示（可选，但推荐）
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"复制成功" message:[NSString stringWithFormat:@"已复制 %lu 个字符", (unsigned long)foundText.length] preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
-            
-            // 获取顶层ViewController来弹出提示框
-            UIViewController *rootVC = [UIApplication sharedApplication].keyWindow.rootViewController;
-            [rootVC presentViewController:alert animated:YES completion:nil];
+            // Trim leading/trailing whitespace and newlines
+            NSString *finalText = [foundText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
+            // Copy to the system clipboard
+            [[UIPasteboard generalPasteboard] setString:finalText];
+            
+            // Give the user a visual confirmation
+            // We need to find the top-most view controller to present the alert
+            UIViewController *presentingVC = [UIApplication sharedApplication].keyWindow.rootViewController;
+            while (presentingVC.presentedViewController) {
+                presentingVC = presentingVC.presentedViewController;
+            }
+
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"复制成功"
+                                                                             message:[NSString stringWithFormat:@"已复制 %lu 个字符", (unsigned long)finalText.length]
+                                                                      preferredStyle:UIAlertControllerStyleAlert];
+
+            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+            
+            [presentingVC presentViewController:alert animated:YES completion:nil];
         }
     }
 }
 
-// 新增一个递归函数来遍历视图并提取文本
+// Our new recursive method to find all text in a view and its subviews
 %new
 - (void)findAndAppendTextInView:(UIView *)view toString:(NSMutableString *)text {
-    // 检查当前视图是否是UILabel或UITextView
+    // Check if the current view is a UILabel
     if ([view isKindOfClass:[UILabel class]]) {
         UILabel *label = (UILabel *)view;
-        if (label.text.length > 0) {
+        if (label.text.length > 0 && !label.isHidden) {
             [text appendString:label.text];
-            [text appendString:@"\n"]; // 添加换行符分隔
+            [text appendString:@"\n"]; // Use a newline to separate text from different labels
         }
-    } else if ([view isKindOfClass:[UITextView class]]) {
+    } 
+    // Check if the current view is a UITextView
+    else if ([view isKindOfClass:[UITextView class]]) {
         UITextView *textView = (UITextView *)view;
-        if (textView.text.length > 0) {
+        if (textView.text.length > 0 && !textView.isHidden) {
             [text appendString:textView.text];
             [text appendString:@"\n"];
         }
     }
 
-    // 递归遍历所有子视图
+    // Recursively search in all subviews
     for (UIView *subview in view.subviews) {
         [self findAndAppendTextInView:subview toString:text];
     }
