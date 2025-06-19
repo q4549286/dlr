@@ -1,41 +1,52 @@
-#import <UIKit/UIKit.h> // <-- THE MOST IMPORTANT FIX: Import the UIKit framework
+#import <UIKit/UIKit.h>
+
+// 提前声明我们要给UIView添加的新方法，解决“no visible @interface”报错
+// 这就像一个目录，告诉编译器这些方法是存在的
+@interface UIView (CopyTweak)
+- (void)handleLongPressForCopy:(UILongPressGestureRecognizer *)gesture;
+- (void)findAndAppendTextInView:(UIView *)view toString:(NSMutableString *)text;
+@end
+
 
 %hook UIView
 
-// When UIView initializes, add our custom gesture
+// 当UIView初始化时，添加我们的自定义手势
 - (id)initWithFrame:(CGRect)frame {
-    id result = %orig; // Call the original initWithFrame:
+    id result = %orig;
 
-    // We need to check if the view can have user interaction enabled.
-    // Also, only add the gesture to the view itself, not to the recognizer.
     if (result) {
         UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleLongPressForCopy:)];
         [self addGestureRecognizer:longPress];
-        // [longPress release]; // <-- REMOVED: This causes an error in ARC projects.
     }
-
     return result;
 }
 
-// Our new method to handle the long press
 %new
+// 新增方法：处理长按手势
 - (void)handleLongPressForCopy:(UILongPressGestureRecognizer *)gesture {
     if (gesture.state == UIGestureRecognizerStateBegan) {
         NSMutableString *foundText = [NSMutableString string];
         
-        // Start the recursive search for text from the view that was pressed
+        // 从被长按的视图开始，递归查找文本
         [self findAndAppendTextInView:gesture.view toString:foundText];
 
         if (foundText.length > 0) {
-            // Trim leading/trailing whitespace and newlines
             NSString *finalText = [foundText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-            // Copy to the system clipboard
             [[UIPasteboard generalPasteboard] setString:finalText];
             
-            // Give the user a visual confirmation
-            // We need to find the top-most view controller to present the alert
-            UIViewController *presentingVC = [UIApplication sharedApplication].keyWindow.rootViewController;
+            // --- 这是修复 'keyWindow' is deprecated 警告的部分 ---
+            // 使用现代API获取当前活跃的窗口
+            UIWindow *activeWindow = nil;
+            for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+                if (scene.activationState == UISceneActivationStateForegroundActive) {
+                    activeWindow = scene.windows.firstObject;
+                    break;
+                }
+            }
+
+            // 获取顶层视图控制器来弹出提示框
+            UIViewController *presentingVC = activeWindow.rootViewController;
             while (presentingVC.presentedViewController) {
                 presentingVC = presentingVC.presentedViewController;
             }
@@ -46,24 +57,23 @@
 
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             
-            [presentingVC presentViewController:alert animated:YES completion:nil];
+            if (presentingVC) {
+                [presentingVC presentViewController:alert animated:YES completion:nil];
+            }
         }
     }
 }
 
-// Our new recursive method to find all text in a view and its subviews
 %new
+// 新增方法：递归查找并拼接视图内的文本
 - (void)findAndAppendTextInView:(UIView *)view toString:(NSMutableString *)text {
-    // Check if the current view is a UILabel
     if ([view isKindOfClass:[UILabel class]]) {
         UILabel *label = (UILabel *)view;
         if (label.text.length > 0 && !label.isHidden) {
             [text appendString:label.text];
-            [text appendString:@"\n"]; // Use a newline to separate text from different labels
+            [text appendString:@"\n"];
         }
-    } 
-    // Check if the current view is a UITextView
-    else if ([view isKindOfClass:[UITextView class]]) {
+    } else if ([view isKindOfClass:[UITextView class]]) {
         UITextView *textView = (UITextView *)view;
         if (textView.text.length > 0 && !textView.isHidden) {
             [text appendString:textView.text];
@@ -71,7 +81,6 @@
         }
     }
 
-    // Recursively search in all subviews
     for (UIView *subview in view.subviews) {
         [self findAndAppendTextInView:subview toString:text];
     }
