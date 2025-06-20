@@ -1,144 +1,101 @@
 #import <UIKit/UIKit.h>
 
 // =========================================================================
-// Section 1: 修改后的文字替换功能 (只替换 “设置局式”)
+// Section 1: 修改后的文字替换功能 (覆盖UILabel和UIButton)
 // =========================================================================
+
+// Hook UILabel (用于替换普通的文本标签)
 %hook UILabel
 
 - (void)setText:(NSString *)text {
-    if (!text) {
-        %orig;
-        return;
+    if (text && ([text isEqualToString:@"设置局式"] || [text isEqualToString:@"設置局式"])) {
+        %orig(@"Echo定制");
+    } else {
+        %orig(text);
     }
-
-    NSString *newString = nil;
-
-    // 只保留这一个替换规则
-    if ([text isEqualToString:@"设置局式"] || [text isEqualToString:@"設置局式"]) {
-        newString = @"Echo定制";
-    }
-
-    if (newString) {
-        UIFont *currentFont = self.font;
-        UIColor *currentColor = self.textColor;
-        NSTextAlignment alignment = self.textAlignment;
-        
-        NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
-        if (currentFont) attributes[NSFontAttributeName] = currentFont;
-        if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
-        
-        NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
-        paragraphStyle.alignment = alignment;
-        attributes[NSParagraphStyleAttributeName] = paragraphStyle;
-
-        NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes];
-        [self setAttributedText:newAttributedText];
-        return;
-    }
-
-    // 保留了原有的繁体转简体功能
-    NSMutableString *simplifiedText = [text mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
-
-    %orig(simplifiedText);
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (!attributedText) {
-        %orig;
-        return;
-    }
-
-    NSString *originalString = attributedText.string;
-    NSString *newString = nil;
-
-    // 只保留这一个替换规则
-    if ([originalString isEqualToString:@"设置局式"] || [originalString isEqualToString:@"設置局式"]) {
-        newString = @"Echo定制";
-    }
-
-    if (newString) {
+    if (attributedText && ([attributedText.string isEqualToString:@"设置局式"] || [attributedText.string isEqualToString:@"設置局式"])) {
         NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-        [newAttributedText.mutableString setString:newString];
+        [newAttributedText.mutableString setString:@"Echo定制"];
         %orig(newAttributedText);
-        return;
+    } else {
+        %orig(attributedText);
     }
-    
-    // 保留了原有的繁体转简体功能
-    NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
-    
-    %orig(newAttributedText);
 }
 
 %end
+
+
+// 【新增】Hook UIButton (用于替换按钮上的文字)
+%hook UIButton
+
+- (void)setTitle:(NSString *)title forState:(UIControlState)state {
+    if (title && ([title isEqualToString:@"设置局式"] || [title isEqualToString:@"設置局式"])) {
+        %orig(@"Echo定制", state);
+    } else {
+        %orig(title, state);
+    }
+}
+
+- (void)setAttributedTitle:(NSAttributedString *)title forState:(UIControlState)state {
+    if (title && ([title.string isEqualToString:@"设置局式"] || [title.string isEqualToString:@"設置局式"])) {
+        NSMutableAttributedString *newTitle = [title mutableCopy];
+        [newTitle.mutableString setString:@"Echo定制"];
+        %orig(newTitle, state);
+    } else {
+        %orig(title, state);
+    }
+}
+
+%end
+
 
 // =========================================================================
 // Section 2: 全局水印功能 (无需任何改动，直接保留)
 // =========================================================================
 
 // 定义一个C函数，专门用来创建水印图片的“瓦片”
-// 这样做可以保持代码整洁
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
-    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); // 使用NO表示背景透明
+    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
     CGContextRef context = UIGraphicsGetCurrentContext();
-
-    // 将坐标系原点移动到瓦片中心，方便旋转
     CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2);
-    // 旋转坐标系
     CGContextRotateCTM(context, angle * M_PI / 180);
-
-    // 设置文字属性
     NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor};
-    // 计算文字尺寸，使其在旋转后居中
     CGSize textSize = [text sizeWithAttributes:attributes];
     CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height);
-    
-    // 绘制文字
     [text drawInRect:textRect withAttributes:attributes];
-
-    // 从上下文中获取图片
     UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
-
     return image;
 }
 
 %hook UIWindow
 
-// Hook layoutSubviews 方法，这是一个在窗口布局变化时会被调用的安全时机
 - (void)layoutSubviews {
-    %orig; // 必须先调用原始方法
+    %orig;
 
-    // 定义一个独一无二的 tag，用来识别我们的水印视图，防止重复添加
     NSInteger watermarkTag = 998877;
-    
-    // 如果已经存在水印视图，就直接返回，什么都不做
     if ([self viewWithTag:watermarkTag]) {
         return;
     }
 
-    // --- 在这里自定义你的水印样式 ---
+    // --- 水印样式 ---
     NSString *watermarkText = @"Echo定制";
     UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; // 黑色，12%的透明度
-    CGFloat rotationAngle = -30.0; // 倾斜-30度
-    CGSize tileSize = CGSizeMake(150, 100); // 每个水印“瓦片”的尺寸，可以调整间距
-    // --------------------------------
+    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12];
+    CGFloat rotationAngle = -30.0;
+    CGSize tileSize = CGSizeMake(150, 100);
+    // -----------------
 
-    // 1. 创建水印瓦片图片
     UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
-
-    // 2. 创建一个和窗口一样大的视图作为水印层
     UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
-    watermarkView.tag = watermarkTag; // 打上我们的专属标签
-    watermarkView.userInteractionEnabled = NO; // 非常重要！让水印不影响下层UI的点击事件
-    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; // 确保窗口尺寸变化时，水印层也跟着变
-
-    // 3. 将瓦片图片设置为水印层的背景色，实现平铺效果
+    watermarkView.tag = watermarkTag;
+    watermarkView.userInteractionEnabled = NO;
+    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
     
-    // 4. 将水印层添加到窗口上，并确保它在最顶层
     [self addSubview:watermarkView];
     [self bringSubviewToFront:watermarkView];
 }
