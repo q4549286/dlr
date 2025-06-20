@@ -14,20 +14,27 @@
         return;
     }
     
-    // --- 1. 定义我们要找的UILabel的大概位置 ---
-    //    这里的坐标需要你用FLEX测量并替换！
-    //    我根据之前的截图，填入一个示例值
-    CGRect chartTypeFrame = CGRectMake(60, 5, 100, 40); // “返吟门”的大概位置
+    // --- 1. 定义我们要找的UILabel的精确位置 ---
+    //    坐标来源于您的截图: frame = {{61.9145, 6.80999}, {98.3333, 39}}
+    //    为了保险，我们稍微扩大一点范围
+    CGRect chartTypeFrame = CGRectMake(60, 5, 100, 40); 
 
     // --- 2. 存储找到的文本 ---
     __block NSString *chartTypeText = nil;
 
     // --- 3. 遍历视图，寻找目标UILabel ---
-    //    这是一个简化的内联遍历逻辑
-    void (^findLabel)(UIView *) = ^(UIView *view) {
+    //    这是一个递归函数，可以找到所有层级的UILabel
+    void (^findLabelInView)(UIView *) = ^(UIView *view) {
+        // 如果已经找到了，就没必要继续了
+        if (chartTypeText) return;
+
         if ([view isKindOfClass:[UILabel class]]) {
             UILabel *label = (UILabel *)view;
+            
+            // 获取Label在整个屏幕上的绝对坐标
             CGRect frameInWindow = [label.superview convertRect:label.frame toView:nil];
+            
+            // 计算Label的中心点
             CGPoint centerInWindow = CGPointMake(CGRectGetMidX(frameInWindow), CGRectGetMidY(frameInWindow));
             
             // 检查Label的中心点是否在我们定义的区域内
@@ -35,35 +42,18 @@
                 chartTypeText = label.text;
             }
         }
+        
+        // 递归进入子视图
         for (UIView *subview in view.subviews) {
-            // 递归查找
-            // findLabel(subview); // 这里先不递归，因为目标UILabel可能就在顶层
+            findLabelInView(subview);
         }
     };
     
-    // 从控制器的主视图开始遍历所有子视图
-    for (UIView *subview in self.view.subviews) {
-        // 如果找到了就没必要继续了
-        if(chartTypeText) break;
-        
-        // 这是一个更简单的遍历，只检查第一层子视图里的UILabel
-        if ([subview isKindOfClass:[UILabel class]]) {
-            UILabel *label = (UILabel *)subview;
-            CGRect frameInWindow = [label.superview convertRect:label.frame toView:nil];
-            CGPoint centerInWindow = CGPointMake(CGRectGetMidX(frameInWindow), CGRectGetMidY(frameInWindow));
-
-            if (CGRectContainsPoint(chartTypeFrame, centerInWindow)) {
-                chartTypeText = label.text;
-                break; // 找到就跳出循环
-            }
-        }
-    }
-
+    // 从控制器的主视图开始遍历
+    findLabelInView(self.view);
 
     // --- 4. 检查结果并复制到剪贴板 ---
     if (chartTypeText) {
-        // 假设“课格名称”和“起课方式”是同一个东西，或者我们需要组合
-        // 我们这里就直接用找到的文本
         NSString *resultText = [NSString stringWithFormat:@"课格名称/起课方式: %@", chartTypeText];
 
         // 复制到剪贴板
@@ -81,8 +71,15 @@
         
         // 标记已执行
         objc_setAssociatedObject(self, "hasExportedForTest", @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
     } else {
-        NSLog(@"[测试插件] 未能在指定区域找到UILabel。请检查坐标定义是否正确。");
+        NSLog(@"[测试插件] 未能在指定区域找到UILabel。请检查坐标定义或视图层级。");
+        // 如果没有找到，也弹窗提示，方便调试
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"测试失败" 
+                                                                         message:@"未能在指定区域找到目标文字，请检查插件代码中的坐标定义。"
+                                                                  preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
     }
 }
 
