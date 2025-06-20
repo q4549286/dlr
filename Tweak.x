@@ -1,29 +1,28 @@
 #import <UIKit/UIKit.h>
 
 // =========================================================================
-// Section 1: 新的文字替换功能 (将 “胎元” 替换为 “Echo定制胎元”)
+// Section 1: 修复后的文字替换功能
 // =========================================================================
 %hook UILabel
 
 // 1. 捕获动态设置的文本
 - (void)setText:(NSString *)text {
-    // 检查文本中是否 *包含* "胎元"
-    if (text && [text containsString:@"胎元"]) {
-        // 创建一个新字符串，只把 "胎元" 替换掉，保留其他部分
-        NSString *newText = [text stringByReplacingOccurrencesOfString:@"胎元" withString:@"Echo定制胎元"];
+    // 【核心修复】增加一个判断，如果文本已经包含 "Echo定制版"，就不再替换，防止重复。
+    if (text && [text containsString:@"胎元"] && ![text containsString:@"Echo定制版"]) {
+        // 使用您要求的新文字进行替换
+        NSString *newText = [text stringByReplacingOccurrencesOfString:@"胎元" withString:@"Echo定制版 胎元"];
         %orig(newText);
     } else {
         %orig(text);
     }
 }
 
-// 2. 捕获动态设置的富文本 (Attributed Text)
+// 2. 捕获动态设置的富文本
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (attributedText && [attributedText.string containsString:@"胎元"]) {
+    if (attributedText && [attributedText.string containsString:@"胎元"] && ![attributedText.string containsString:@"Echo定制版"]) {
         NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-        // 在可变富文本中进行替换
         [newAttributedText.mutableString replaceOccurrencesOfString:@"胎元"
-                                                         withString:@"Echo定制胎元"
+                                                         withString:@"Echo定制版 胎元"
                                                             options:0
                                                               range:NSMakeRange(0, newAttributedText.length)];
         %orig(newAttributedText);
@@ -33,20 +32,20 @@
 }
 
 
-// 3. 检查已存在的文本 (解决时机问题，当Label显示时检查)
+// 3. 检查已存在的文本（解决时机问题）
 - (void)didMoveToWindow {
-    %orig; // 必须先调用原始方法
+    %orig; 
 
     // 检查普通文本
-    if (self.text && [self.text containsString:@"胎元"]) {
-        self.text = [self.text stringByReplacingOccurrencesOfString:@"胎元" withString:@"Echo定制胎元"];
+    if (self.text && [self.text containsString:@"胎元"] && ![self.text containsString:@"Echo定制版"]) {
+        self.text = [self.text stringByReplacingOccurrencesOfString:@"胎元" withString:@"Echo定制版 胎元"];
     }
     
     // 检查富文本
-    if (self.attributedText && [self.attributedText.string containsString:@"胎元"]) {
+    if (self.attributedText && [self.attributedText.string containsString:@"胎元"] && ![self.attributedText.string containsString:@"Echo定制版"]) {
         NSMutableAttributedString *newAttributedText = [self.attributedText mutableCopy];
         [newAttributedText.mutableString replaceOccurrencesOfString:@"胎元"
-                                                         withString:@"Echo定制胎元"
+                                                         withString:@"Echo定制版 胎元"
                                                             options:0
                                                               range:NSMakeRange(0, newAttributedText.length)];
         self.attributedText = newAttributedText;
@@ -57,7 +56,7 @@
 
 
 // =========================================================================
-// Section 2: 全局水印功能 (和之前一样，无需改动)
+// Section 2: 全局水印功能 (无需改动)
 // =========================================================================
 
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
@@ -79,7 +78,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 - (void)layoutSubviews {
     %orig;
 
-    // 只在主窗口上添加水印，防止键盘等界面卡死
     if (self.windowLevel != UIWindowLevelNormal) {
         return;
     }
