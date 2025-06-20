@@ -1,44 +1,85 @@
 #import <UIKit/UIKit.h>
 
 // =========================================================================
-// Section 1: 文字替换功能 (此部分已确认工作正常，无需改动)
+// Section 1: 你原有的文字替换功能 (无需任何改动，直接保留)
 // =========================================================================
 %hook UILabel
 
 - (void)setText:(NSString *)text {
-    if (text && ([text isEqualToString:@"设置局式"] || [text isEqualToString:@"設置局式"])) {
-        %orig(@"Echo定制");
-    } else {
-        %orig(text);
+    if (!text) {
+        %orig;
+        return;
     }
+
+    NSString *newString = nil;
+
+    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } 
+    else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) {
+        newString = @"定制";
+    }
+    else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
+
+    if (newString) {
+        UIFont *currentFont = self.font;
+        UIColor *currentColor = self.textColor;
+        NSTextAlignment alignment = self.textAlignment;
+        
+        NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
+        if (currentFont) attributes[NSFontAttributeName] = currentFont;
+        if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
+        
+        NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+        paragraphStyle.alignment = alignment;
+        attributes[NSParagraphStyleAttributeName] = paragraphStyle;
+
+        NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes];
+        [self setAttributedText:newAttributedText];
+        return;
+    }
+
+    NSMutableString *simplifiedText = [text mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
+
+    %orig(simplifiedText);
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (attributedText && ([attributedText.string isEqualToString:@"设置局式"] || [attributedText.string isEqualToString:@"設置局式"])) {
-        NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-        [newAttributedText.mutableString setString:@"Echo定制"];
-        %orig(newAttributedText);
-    } else {
-        %orig(attributedText);
+    if (!attributedText) {
+        %orig;
+        return;
     }
-}
 
-- (void)didMoveToWindow {
-    %orig; 
+    NSString *originalString = attributedText.string;
+    NSString *newString = nil;
 
-    if (self.text && ([self.text isEqualToString:@"设置局式"] || [self.text isEqualToString:@"設置局式"])) {
-        self.text = @"Echo定制";
+    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } 
+    else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) {
+        newString = @"定制";
+    }
+    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
+
+    if (newString) {
+        NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
+        [newAttributedText.mutableString setString:newString];
+        %orig(newAttributedText);
+        return;
     }
     
-    if (self.attributedText && ([self.attributedText.string isEqualToString:@"设置局式"] || [self.attributedText.string isEqualToString:@"設置局式"])) {
-        NSMutableAttributedString *newAttributedText = [self.attributedText mutableCopy];
-        [newAttributedText.mutableString setString:@"Echo定制"];
-        self.attributedText = newAttributedText;
-    }
+    NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
+    
+    %orig(newAttributedText);
 }
 
 %end
-
 
 // =========================================================================
 // Section 2: 全局水印功能 (已修复卡死问题)
@@ -63,9 +104,8 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 - (void)layoutSubviews {
     %orig;
 
-    // 【重要修正】只在主程序窗口上添加水印。
+    // 【重要修正】只在主程序窗口上添加水印，以防止在键盘等系统窗口上添加导致卡死。
     // 主窗口的 windowLevel 是 UIWindowLevelNormal (值为0.0)。
-    // 键盘、状态栏等系统窗口的 level 更高，这样可以把它们过滤掉。
     if (self.windowLevel != UIWindowLevelNormal) {
         return;
     }
@@ -80,7 +120,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12];
     CGFloat rotationAngle = -30.0;
     CGSize tileSize = CGSizeMake(150, 100);
-    
+
     UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
     UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
     watermarkView.tag = watermarkTag;
