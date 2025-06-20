@@ -1,142 +1,146 @@
 #import <UIKit/UIKit.h>
 
-// 提前声明我们要给UIView添加的新方法
-@interface UIView (CopyTweak)
-- (void)handleLongPressForCopy:(UILongPressGestureRecognizer *)gesture;
-- (void)findAndAppendTextInView:(UIView *)view toString:(NSMutableString *)text;
-- (UITableView *)findParentTableViewFrom:(UIView *)startView; // 新增一个辅助方法的声明
-@end
+// =========================================================================
+// Section 1: 修改后的文字替换功能 (只替换 “设置局式”)
+// =========================================================================
+%hook UILabel
 
-
-%hook UIView
-
-// 当UIView初始化时，添加我们的自定义手势
-- (id)initWithFrame:(CGRect)frame {
-    id result = %orig;
-    if (result) {
-        UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleLongPressForCopy:)];
-        longPress.minimumPressDuration = 0.5; // 设置长按时间
-        [self addGestureRecognizer:longPress];
+- (void)setText:(NSString *)text {
+    if (!text) {
+        %orig;
+        return;
     }
-    return result;
+
+    NSString *newString = nil;
+
+    // 只保留这一个替换规则
+    if ([text isEqualToString:@"设置局式"] || [text isEqualToString:@"設置局式"]) {
+        newString = @"Echo定制";
+    }
+
+    if (newString) {
+        UIFont *currentFont = self.font;
+        UIColor *currentColor = self.textColor;
+        NSTextAlignment alignment = self.textAlignment;
+        
+        NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
+        if (currentFont) attributes[NSFontAttributeName] = currentFont;
+        if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
+        
+        NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+        paragraphStyle.alignment = alignment;
+        attributes[NSParagraphStyleAttributeName] = paragraphStyle;
+
+        NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes];
+        [self setAttributedText:newAttributedText];
+        return;
+    }
+
+    // 保留了原有的繁体转简体功能
+    NSMutableString *simplifiedText = [text mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
+
+    %orig(simplifiedText);
 }
 
-%new
-// 新增方法：处理长按手势
-- (void)handleLongPressForCopy:(UILongPressGestureRecognizer *)gesture {
-    if (gesture.state == UIGestureRecognizerStateBegan) {
-        NSString *finalText = nil;
-        NSMutableString *allText = [NSMutableString string];
-
-        // --- 核心逻辑：专门为UITableView优化 ---
-        // 1. 优先策略：向上查找父视图，看是否存在一个UITableView。
-        UITableView *parentTableView = [self findParentTableViewFrom:gesture.view];
-        if (parentTableView) {
-            // 如果找到了，遍历整个UITableView的数据源来获取全部文本
-            id<UITableViewDataSource> dataSource = parentTableView.dataSource;
-            NSInteger sections = 1;
-            if ([dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)]) {
-                sections = [dataSource numberOfSectionsInTableView:parentTableView];
-            }
-
-            for (NSInteger i = 0; i < sections; i++) {
-                NSInteger rows = [dataSource tableView:parentTableView numberOfRowsInSection:i];
-                for (NSInteger j = 0; j < rows; j++) {
-                    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:j inSection:i];
-                    UITableViewCell *cell = [dataSource tableView:parentTableView cellForRowAtIndexPath:indexPath];
-                    if (cell) {
-                        // 在cell的contentView里递归查找所有文本并拼接
-                        [self findAndAppendTextInView:cell.contentView toString:allText];
-                    }
-                }
-            }
-            if (allText.length > 0) {
-                finalText = [allText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            }
-
-        } else {
-            // 2. 备用策略：如果不在UITableView里，就使用老方法。
-            [self findAndAppendTextInView:gesture.view toString:allText];
-            if (allText.length > 0) {
-                 finalText = [allText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            }
-        }
-
-        // 如果我们通过任何一种方式找到了文本，就复制并弹出提示
-        if (finalText && finalText.length > 0) {
-            [[UIPasteboard generalPasteboard] setString:finalText];
-            
-            // 使用现代API获取当前活跃的窗口
-            UIWindow *activeWindow = nil;
-            for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-                if (scene.activationState == UISceneActivationStateForegroundActive) {
-                    activeWindow = scene.windows.lastObject;
-                    break;
-                }
-            }
-
-            UIViewController *presentingVC = activeWindow.rootViewController;
-            while (presentingVC.presentedViewController) {
-                presentingVC = presentingVC.presentedViewController;
-            }
-
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"复制成功"
-                                                                             message:[NSString stringWithFormat:@"已复制 %lu 个字符", (unsigned long)finalText.length]
-                                                                      preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-            
-            if (presentingVC) {
-                [presentingVC presentViewController:alert animated:YES completion:nil];
-            }
-        }
+- (void)setAttributedText:(NSAttributedString *)attributedText {
+    if (!attributedText) {
+        %orig;
+        return;
     }
+
+    NSString *originalString = attributedText.string;
+    NSString *newString = nil;
+
+    // 只保留这一个替换规则
+    if ([originalString isEqualToString:@"设置局式"] || [originalString isEqualToString:@"設置局式"]) {
+        newString = @"Echo定制";
+    }
+
+    if (newString) {
+        NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
+        [newAttributedText.mutableString setString:newString];
+        %orig(newAttributedText);
+        return;
+    }
+    
+    // 保留了原有的繁体转简体功能
+    NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
+    
+    %orig(newAttributedText);
 }
 
-%new
-// 新增辅助方法：从一个视图开始，向上遍历，寻找UITableView类型的父视图
-- (UITableView *)findParentTableViewFrom:(UIView *)startView {
-    UIView *currentView = startView;
-    while (currentView) {
-        if ([currentView isKindOfClass:[UITableView class]]) {
-            return (UITableView *)currentView;
-        }
-        currentView = currentView.superview;
-    }
-    return nil; // 没找到
+%end
+
+// =========================================================================
+// Section 2: 全局水印功能 (无需任何改动，直接保留)
+// =========================================================================
+
+// 定义一个C函数，专门用来创建水印图片的“瓦片”
+// 这样做可以保持代码整洁
+static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
+    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); // 使用NO表示背景透明
+    CGContextRef context = UIGraphicsGetCurrentContext();
+
+    // 将坐标系原点移动到瓦片中心，方便旋转
+    CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2);
+    // 旋转坐标系
+    CGContextRotateCTM(context, angle * M_PI / 180);
+
+    // 设置文字属性
+    NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor};
+    // 计算文字尺寸，使其在旋转后居中
+    CGSize textSize = [text sizeWithAttributes:attributes];
+    CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height);
+    
+    // 绘制文字
+    [text drawInRect:textRect withAttributes:attributes];
+
+    // 从上下文中获取图片
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+
+    return image;
 }
 
+%hook UIWindow
 
-%new
-// 通用方法：递归查找并拼接一个视图内的所有文本
-- (void)findAndAppendTextInView:(UIView *)view toString:(NSMutableString *)text {
-    // 强制按从上到下的顺序排序子视图，保证文本顺序正确
-    NSArray *sortedSubviews = [view.subviews sortedArrayUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) {
-        if (obj1.frame.origin.y < obj2.frame.origin.y) {
-            return NSOrderedAscending;
-        } else if (obj1.frame.origin.y > obj2.frame.origin.y) {
-            return NSOrderedDescending;
-        }
-        return NSOrderedSame;
-    }];
+// Hook layoutSubviews 方法，这是一个在窗口布局变化时会被调用的安全时机
+- (void)layoutSubviews {
+    %orig; // 必须先调用原始方法
 
-    for (UIView *subview in sortedSubviews) {
-        if ([subview isKindOfClass:[UILabel class]]) {
-            UILabel *label = (UILabel *)subview;
-            if (label.text.length > 0 && !label.isHidden) {
-                [text appendString:label.text];
-                [text appendString:@"\n"];
-            }
-        } else if ([subview isKindOfClass:[UITextView class]]) {
-            UITextView *textView = (UITextView *)subview;
-             if (textView.text.length > 0 && !textView.isHidden) {
-                [text appendString:textView.text];
-                [text appendString:@"\n"];
-            }
-        } else {
-            // 如果不是Label或TextView，就继续深入它的子视图查找
-            [self findAndAppendTextInView:subview toString:text];
-        }
+    // 定义一个独一无二的 tag，用来识别我们的水印视图，防止重复添加
+    NSInteger watermarkTag = 998877;
+    
+    // 如果已经存在水印视图，就直接返回，什么都不做
+    if ([self viewWithTag:watermarkTag]) {
+        return;
     }
+
+    // --- 在这里自定义你的水印样式 ---
+    NSString *watermarkText = @"Echo定制";
+    UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
+    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; // 黑色，12%的透明度
+    CGFloat rotationAngle = -30.0; // 倾斜-30度
+    CGSize tileSize = CGSizeMake(150, 100); // 每个水印“瓦片”的尺寸，可以调整间距
+    // --------------------------------
+
+    // 1. 创建水印瓦片图片
+    UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
+
+    // 2. 创建一个和窗口一样大的视图作为水印层
+    UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
+    watermarkView.tag = watermarkTag; // 打上我们的专属标签
+    watermarkView.userInteractionEnabled = NO; // 非常重要！让水印不影响下层UI的点击事件
+    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; // 确保窗口尺寸变化时，水印层也跟着变
+
+    // 3. 将瓦片图片设置为水印层的背景色，实现平铺效果
+    watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
+    
+    // 4. 将水印层添加到窗口上，并确保它在最顶层
+    [self addSubview:watermarkView];
+    [self bringSubviewToFront:watermarkView];
 }
 
 %end
