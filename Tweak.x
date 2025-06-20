@@ -1,86 +1,101 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-// 告诉编译器，我们接下来要Hook的ViewController，它其实是一个UIViewController
-@interface ViewController : UIViewController
-// 我们把递归函数声明为一个私有辅助方法
-- (void)findLabelInView:(UIView *)view withTargetFrame:(CGRect)targetFrame foundText:(__strong NSString **)foundText;
+// --- 定义一个简单的数据结构来管理我们要提取的区域 ---
+@interface InfoRegion : NSObject
+@property (nonatomic, strong) NSString *key;
+@property (nonatomic, assign) CGRect region;
+@property (nonatomic, strong) NSString *value;
++ (instancetype)regionWithKey:(NSString *)key rect:(CGRect)rect;
 @end
 
-// --- 我们只Hook主控制器 ---
-%hook ViewController
+@implementation InfoRegion
++ (instancetype)regionWithKey:(NSString *)key rect:(CGRect)rect {
+    InfoRegion *info = [[InfoRegion alloc] init];
+    info.key = key;
+    info.region = rect;
+    return info;
+}
+@end
 
-// 在视图完全显示后执行我们的代码
-- (void)viewDidAppear:(BOOL)animated {
-    // 先调用原始实现
+
+// --- 在这里替换成你确认后的真实类名 ---
+%hook KechuanShiTu 
+
+- (void)layoutSubviews {
+    // 必须先调用原始实现，这样所有的UILabel才会被正确布局
     %orig;
 
-    if (objc_getAssociatedObject(self, "hasExportedForTest")) {
-        return;
-    }
+    // --- 在这个点，所有UILabel的frame和text都应该是最终确定的了 ---
     
-    // 1. 定义目标区域
-    CGRect chartTypeFrame = CGRectMake(60, 5, 100, 40); 
+    // 防止重复导出
+    if (objc_getAssociatedObject(self, "hasExported")) { return; }
 
-    // 2. 准备一个变量来接收结果
-    NSString *chartTypeText = nil;
+    NSLog(@"[导出插件] Hooked KechuanShiTu -layoutSubviews, 开始提取...");
 
-    // 3. 调用我们的辅助方法来查找
-    [self findLabelInView:self.view withTargetFrame:chartTypeFrame foundText:&chartTypeText];
+    // --- 这是核心：定义所有你需要提取文字的区域 ---
+    // !!! 你需要用FLEX或其他工具，仔细查看排盘界面，把每个文字的坐标和大小测量出来，填在这里
+    // !!! 这是唯一需要你手动完成的“体力活”
+    // 示例坐标 (你需要替换成真实的测量值):
+    NSArray<InfoRegion *> *regionsToExtract = @[
+        // 课体名称
+        [InfoRegion regionWithKey:@"chart_name" rect:CGRectMake(150, 20, 100, 40)], // "伏吟门"
 
-    // 4. 检查结果并复制到剪贴板
-    if (chartTypeText) {
-        NSString *resultText = [NSString stringWithFormat:@"课格名称/起课方式: %@", chartTypeText];
-
-        [[UIPasteboard generalPasteboard] setString:resultText];
+        // 四课 - 关系
+        [InfoRegion regionWithKey:@"sike_1_relation" rect:CGRectMake(100, 100, 20, 20)], // "兄"
+        [InfoRegion regionWithKey:@"sike_2_relation" rect:CGRectMake(100, 130, 20, 20)], // "财"
+        [InfoRegion regionWithKey:@"sike_3_relation" rect:CGRectMake(100, 160, 20, 20)], // "官"
         
-        NSLog(@"[测试插件] 成功提取: %@", resultText);
-        NSLog(@"[测试插件] 已复制到剪贴板!");
-
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"测试成功" 
-                                                                         message:[NSString stringWithFormat:@"已复制内容:\n%@", resultText]
-                                                                  preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
+        // 四课 - 天盘地支
+        [InfoRegion regionWithKey:@"sike_1_ganzhi" rect:CGRectMake(180, 95, 40, 30)], // "申"
+        [InfoRegion regionWithKey:@"sike_2_ganzhi" rect:CGRectMake(180, 125, 40, 30)], // "寅"
+        [InfoRegion regionWithKey:@"sike_3_ganzhi" rect:CGRectMake(180, 155, 40, 30)], // "巳"
         
-        objc_setAssociatedObject(self, "hasExportedForTest", @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-
-    } else {
-        NSLog(@"[测试插件] 未能在指定区域找到UILabel。请检查坐标定义或视图层级。");
-
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"测试失败" 
-                                                                         message:@"未能在指定区域找到目标文字，请检查插件代码中的坐标定义。"
-                                                                  preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-    }
-}
-
-// --- 新增的辅助方法实现 ---
-// 这个方法不属于Hook的一部分，而是我们给ViewController类新增的一个方法
-// 所以它要放在 %hook 和 %end 的外面
-%new
-// 这是一个私有方法，专门用来递归遍历视图
-- (void)findLabelInView:(UIView *)view withTargetFrame:(CGRect)targetFrame foundText:(__strong NSString **)foundText {
-    // 如果已经找到了，就没必要继续了
-    if (*foundText) return;
-
-    if ([view isKindOfClass:[UILabel class]]) {
-        UILabel *label = (UILabel *)view;
+        // 四课 - 天将
+        [InfoRegion regionWithKey:@"sike_1_general" rect:CGRectMake(250, 100, 50, 20)], // "白虎"
+        [InfoRegion regionWithKey:@"sike_2_general" rect:CGRectMake(250, 130, 50, 20)], // "螣蛇"
+        [InfoRegion regionWithKey:@"sike_3_general" rect:CGRectMake(250, 160, 50, 20)], // "勾陈"
         
-        CGRect frameInWindow = [label.superview convertRect:label.frame toView:nil];
-        CGPoint centerInWindow = CGPointMake(CGRectGetMidX(frameInWindow), CGRectGetMidY(frameInWindow));
-        
-        if (CGRectContainsPoint(targetFrame, centerInWindow)) {
-            // 通过指针的指针，修改外部变量的值
-            *foundText = label.text;
-            return; // 找到就返回
+        // ... 在此添加所有其他你需要的信息，比如三传、神煞等
+    ];
+    
+    // --- 遍历所有UILabel，看它们落入哪个区域 ---
+    for (UIView *subview in self.subviews) {
+        if ([subview isKindOfClass:NSClassFromString(@"UILabel")]) {
+            UILabel *label = (UILabel *)subview;
+            
+            // 注意：这里的label.frame是相对于其父视图(即`课传视图`)的坐标
+            // 这正是我们需要的
+            CGPoint labelCenter = CGPointMake(CGRectGetMidX(label.frame), CGRectGetMidY(label.frame));
+            
+            for (InfoRegion *region in regionsToExtract) {
+                if (CGRectContainsPoint(region.region, labelCenter)) {
+                    region.value = label.text;
+                    //NSLog(@"[导出插件] 找到值: %@ -> %@", region.key, region.value);
+                    break; // 假设一个Label只属于一个区域
+                }
+            }
         }
     }
     
-    // 递归进入子视图
-    for (UIView *subview in view.subviews) {
-        [self findLabelInView:subview withTargetFrame:targetFrame foundText:foundText];
+    // --- 组装并导出JSON ---
+    NSMutableDictionary *jsonData = [NSMutableDictionary dictionary];
+    for (InfoRegion *region in regionsToExtract) {
+        if (region.value) {
+            jsonData[region.key] = region.value;
+        } else {
+            // 可选：记录哪些区域没有找到值，方便调试
+            //NSLog(@"[导出插件] 警告: 未在区域 %@ 中找到任何文本", region.key);
+        }
+    }
+
+    // 检查是否提取到了任何数据
+    if (jsonData.count > 0) {
+        // ... 导出JSON到文件或打印的逻辑 (同上一个回答) ...
+        NSLog(@"[导出插件] 最终聚合的数据: %@", jsonData);
+        
+        // 标记已导出
+        objc_setAssociatedObject(self, "hasExported", @(YES), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 }
 
