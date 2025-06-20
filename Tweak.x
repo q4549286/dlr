@@ -1,6 +1,14 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
+// --- 新增的修复代码 ---
+// 告诉编译器，我们接下来要Hook的ViewController，它其实是一个UIViewController
+// 这样编译器就知道它有 .view 和 presentViewController: 等属性和方法了
+@interface ViewController : UIViewController
+@end
+// --- 修复代码结束 ---
+
+
 // --- 我们只Hook主控制器 ---
 %hook ViewController
 
