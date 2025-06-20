@@ -13,8 +13,8 @@
 
     NSString *newString = nil;
 
-    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
-        newString = @"Echo";
+    if ([text isEqualToString:@"胎元"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
+        newString = @"Echo定制 胎元";
     } 
     else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) {
         newString = @"定制";
