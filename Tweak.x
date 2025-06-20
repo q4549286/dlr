@@ -1,88 +1,63 @@
 #import <UIKit/UIKit.h>
 
 // =========================================================================
-// Section 1: 你原有的文字替换功能 (无需任何改动，直接保留)
+// Section 1: 新的文字替换功能 (将 “胎元” 替换为 “Echo定制胎元”)
 // =========================================================================
 %hook UILabel
 
+// 1. 捕获动态设置的文本
 - (void)setText:(NSString *)text {
-    if (!text) {
-        %orig;
-        return;
+    // 检查文本中是否 *包含* "胎元"
+    if (text && [text containsString:@"胎元"]) {
+        // 创建一个新字符串，只把 "胎元" 替换掉，保留其他部分
+        NSString *newText = [text stringByReplacingOccurrencesOfString:@"胎元" withString:@"Echo定制胎元"];
+        %orig(newText);
+    } else {
+        %orig(text);
     }
-
-    NSString *newString = nil;
-
-    if ([text isEqualToString:@"胎元"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
-        newString = @"Echo定制 胎元";
-    } 
-    else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) {
-        newString = @"定制";
-    }
-    else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) {
-        newString = @"毕法";
-    }
-
-    if (newString) {
-        UIFont *currentFont = self.font;
-        UIColor *currentColor = self.textColor;
-        NSTextAlignment alignment = self.textAlignment;
-        
-        NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
-        if (currentFont) attributes[NSFontAttributeName] = currentFont;
-        if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
-        
-        NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
-        paragraphStyle.alignment = alignment;
-        attributes[NSParagraphStyleAttributeName] = paragraphStyle;
-
-        NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes];
-        [self setAttributedText:newAttributedText];
-        return;
-    }
-
-    NSMutableString *simplifiedText = [text mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
-
-    %orig(simplifiedText);
 }
 
+// 2. 捕获动态设置的富文本 (Attributed Text)
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (!attributedText) {
-        %orig;
-        return;
-    }
-
-    NSString *originalString = attributedText.string;
-    NSString *newString = nil;
-
-    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
-        newString = @"Echo";
-    } 
-    else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) {
-        newString = @"定制";
-    }
-    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
-        newString = @"毕法";
-    }
-
-    if (newString) {
+    if (attributedText && [attributedText.string containsString:@"胎元"]) {
         NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-        [newAttributedText.mutableString setString:newString];
+        // 在可变富文本中进行替换
+        [newAttributedText.mutableString replaceOccurrencesOfString:@"胎元"
+                                                         withString:@"Echo定制胎元"
+                                                            options:0
+                                                              range:NSMakeRange(0, newAttributedText.length)];
         %orig(newAttributedText);
-        return;
+    } else {
+        %orig(attributedText);
+    }
+}
+
+
+// 3. 检查已存在的文本 (解决时机问题，当Label显示时检查)
+- (void)didMoveToWindow {
+    %orig; // 必须先调用原始方法
+
+    // 检查普通文本
+    if (self.text && [self.text containsString:@"胎元"]) {
+        self.text = [self.text stringByReplacingOccurrencesOfString:@"胎元" withString:@"Echo定制胎元"];
     }
     
-    NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
-    
-    %orig(newAttributedText);
+    // 检查富文本
+    if (self.attributedText && [self.attributedText.string containsString:@"胎元"]) {
+        NSMutableAttributedString *newAttributedText = [self.attributedText mutableCopy];
+        [newAttributedText.mutableString replaceOccurrencesOfString:@"胎元"
+                                                         withString:@"Echo定制胎元"
+                                                            options:0
+                                                              range:NSMakeRange(0, newAttributedText.length)];
+        self.attributedText = newAttributedText;
+    }
 }
 
 %end
 
+
 // =========================================================================
-// Section 2: 全局水印功能 (已修复卡死问题)
+// Section 2: 全局水印功能 (和之前一样，无需改动)
 // =========================================================================
 
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
@@ -104,8 +79,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 - (void)layoutSubviews {
     %orig;
 
-    // 【重要修正】只在主程序窗口上添加水印，以防止在键盘等系统窗口上添加导致卡死。
-    // 主窗口的 windowLevel 是 UIWindowLevelNormal (值为0.0)。
+    // 只在主窗口上添加水印，防止键盘等界面卡死
     if (self.windowLevel != UIWindowLevelNormal) {
         return;
     }
@@ -120,7 +94,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12];
     CGFloat rotationAngle = -30.0;
     CGSize tileSize = CGSizeMake(150, 100);
-
+    
     UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
     UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
     watermarkView.tag = watermarkTag;
