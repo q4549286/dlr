@@ -3,6 +3,8 @@
 
 // 告诉编译器，我们接下来要Hook的ViewController，它其实是一个UIViewController
 @interface ViewController : UIViewController
+// 我们把递归函数声明为一个私有辅助方法
+- (void)findLabelInView:(UIView *)view withTargetFrame:(CGRect)targetFrame foundText:(__strong NSString **)foundText;
 @end
 
 // --- 我们只Hook主控制器 ---
@@ -10,49 +12,23 @@
 
 // 在视图完全显示后执行我们的代码
 - (void)viewDidAppear:(BOOL)animated {
-    // 先调用原始实现，这是好习惯
+    // 先调用原始实现
     %orig;
 
-    // 防止重复执行
     if (objc_getAssociatedObject(self, "hasExportedForTest")) {
         return;
     }
     
-    // --- 1. 定义我们要找的UILabel的精确位置 ---
+    // 1. 定义目标区域
     CGRect chartTypeFrame = CGRectMake(60, 5, 100, 40); 
 
-    // --- 2. 存储找到的文本 ---
-    __block NSString *chartTypeText = nil;
+    // 2. 准备一个变量来接收结果
+    NSString *chartTypeText = nil;
 
-    // --- 3. 遍历视图，寻找目标UILabel ---
-    // --- 新增的修复代码 ---
-    // 使用 __block 来解决Block递归调用时自身为nil的问题
-    __block void (^findLabelInView)(UIView *) = ^(UIView *view) {
-    // --- 修复代码结束 ---
-        // 如果已经找到了，就没必要继续了
-        if (chartTypeText) return;
+    // 3. 调用我们的辅助方法来查找
+    [self findLabelInView:self.view withTargetFrame:chartTypeFrame foundText:&chartTypeText];
 
-        if ([view isKindOfClass:[UILabel class]]) {
-            UILabel *label = (UILabel *)view;
-            
-            CGRect frameInWindow = [label.superview convertRect:label.frame toView:nil];
-            CGPoint centerInWindow = CGPointMake(CGRectGetMidX(frameInWindow), CGRectGetMidY(frameInWindow));
-            
-            if (CGRectContainsPoint(chartTypeFrame, centerInWindow)) {
-                chartTypeText = label.text;
-            }
-        }
-        
-        // 递归进入子视图
-        for (UIView *subview in view.subviews) {
-            findLabelInView(subview);
-        }
-    };
-    
-    // 从控制器的主视图开始遍历
-    findLabelInView(self.view);
-
-    // --- 4. 检查结果并复制到剪贴板 ---
+    // 4. 检查结果并复制到剪贴板
     if (chartTypeText) {
         NSString *resultText = [NSString stringWithFormat:@"课格名称/起课方式: %@", chartTypeText];
 
@@ -77,6 +53,34 @@
                                                                   preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
+    }
+}
+
+// --- 新增的辅助方法实现 ---
+// 这个方法不属于Hook的一部分，而是我们给ViewController类新增的一个方法
+// 所以它要放在 %hook 和 %end 的外面
+%new
+// 这是一个私有方法，专门用来递归遍历视图
+- (void)findLabelInView:(UIView *)view withTargetFrame:(CGRect)targetFrame foundText:(__strong NSString **)foundText {
+    // 如果已经找到了，就没必要继续了
+    if (*foundText) return;
+
+    if ([view isKindOfClass:[UILabel class]]) {
+        UILabel *label = (UILabel *)view;
+        
+        CGRect frameInWindow = [label.superview convertRect:label.frame toView:nil];
+        CGPoint centerInWindow = CGPointMake(CGRectGetMidX(frameInWindow), CGRectGetMidY(frameInWindow));
+        
+        if (CGRectContainsPoint(targetFrame, centerInWindow)) {
+            // 通过指针的指针，修改外部变量的值
+            *foundText = label.text;
+            return; // 找到就返回
+        }
+    }
+    
+    // 递归进入子视图
+    for (UIView *subview in view.subviews) {
+        [self findLabelInView:subview withTargetFrame:targetFrame foundText:foundText];
     }
 }
 
