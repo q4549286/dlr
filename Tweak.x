@@ -19,7 +19,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终决定版】一键复制到 AI (直接命令触发 + 真正无感)
+// Section 3: 【最终修复版】一键复制到 AI (修复汇总弹窗不显示问题)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -54,13 +54,16 @@ static NSMutableDictionary *g_extractedData = nil;
     }
 }
 
-// 【关键修正】重构 hook 逻辑，实现真正的无感抓取
+// 【关键修复】采用更标准的 hook 结构，确保只拦截目标弹窗，放行汇总弹窗
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    // 检查是否是我们的抓取任务
+    // 检查是否是我们需要无感抓取的目标
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
-        flag = NO; // 强制无动画
+        // 是目标，强制无感操作
+        flag = NO;
         viewControllerToPresent.view.alpha = 0.0f;
         EchoLog(@"无感模式启动，目标弹窗 %@ 已设为透明且无动画。", viewControllerToPresent.title);
+        
+        // 安排抓取和关闭任务
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             NSMutableArray *labels = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:labels];
@@ -93,9 +96,9 @@ static NSMutableDictionary *g_extractedData = nil;
             }
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
         });
-        %orig(viewControllerToPresent, flag, completion);
-        return;
     }
+    
+    // 统一调用原始方法。对于目标弹窗，flag已被修改为NO；对于其他弹窗（如汇总框），flag保持原样。
     %orig(viewControllerToPresent, flag, completion);
 }
 
@@ -152,12 +155,10 @@ static NSMutableDictionary *g_extractedData = nil;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         EchoLog(@"开始异步无感抓取动态信息...");
         
-        // 【终极方案】直接定义我们要调用的方法
         SEL selectorBiFa = NSSelectorFromString(@"顯示法訣總覽");
         SEL selectorGeJu = NSSelectorFromString(@"顯示格局總覽");
         SEL selectorQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:");
 
-        // 依次触发所有需要抓取的弹窗
         if ([self respondsToSelector:selectorBiFa]) {
             EchoLog(@"正在调用 '顯示法訣總覽'...");
             dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorBiFa withObject:nil]); });
