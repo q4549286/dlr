@@ -14,13 +14,13 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终完美版)
+// Section 3: 【新功能】一键复制到 AI (最终交付版)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
 
 @interface UIViewController (CopyAiAddon)
-- (void)copyAiButtonTapped_FinalMasterpiece;
+- (void)copyAiButtonTapped_FinalDelivery;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (UILabel *)findLabelToRightOf:(UILabel *)anchorLabel inArray:(NSArray *)labels;
 - (NSString *)extractTextFromFirstViewOfClass:(NSString *)className separator:(NSString *)separator;
@@ -44,7 +44,7 @@ static NSInteger const CopyAiButtonTag = 112233;
             copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
             [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             copyButton.layer.cornerRadius = 8;
-            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalMasterpiece) forControlEvents:UIControlEventTouchUpInside];
+            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalDelivery) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:copyButton];
         });
     }
@@ -74,10 +74,22 @@ static NSInteger const CopyAiButtonTag = 112233;
     return foundLabel;
 }
 
+// 提取文本的通用核心方法 (已修正繁体兼容)
 %new
 - (NSString *)extractTextFromFirstViewOfClass:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
-    if (!targetViewClass) targetViewClass = NSClassFromString([className stringByReplacingOccurrencesOfString:@"占" withString:@"占"]);
+    if (!targetViewClass) {
+        // 【关键修正】将所有可能的简体字替换为繁体再试一次
+        NSString *traditionalClassName = [className stringByReplacingOccurrencesOfString:@"占" withString:@"占"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"门" withString:@"門"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"时" withString:@"時"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"传" withString:@"傳"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"体" withString:@"體"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"视" withString:@"視"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"图" withString:@"圖"];
+        targetViewClass = NSClassFromString(traditionalClassName);
+    }
+    
     if (!targetViewClass) return @"";
     NSMutableArray *targetViews = [NSMutableArray array];
     [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
@@ -97,9 +109,9 @@ static NSInteger const CopyAiButtonTag = 112233;
     return [textParts componentsJoinedByString:separator];
 }
 
-// 【最终完美版】
+// 【最终交付版】
 %new
-- (void)copyAiButtonTapped_FinalMasterpiece {
+- (void)copyAiButtonTapped_FinalDelivery {
     #define SafeString(str) (str ?: @"")
 
     // --- 1. 结构化提取 ---
@@ -107,7 +119,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *timeBlock = [[self extractTextFromFirstViewOfClass:@"六壬大占.年月日时视图" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClass:@"六壬大占.课体视图" separator:@" "];
 
-    // --- 2. 【全新三传提取逻辑】---
+    // --- 2. 【全新三传提取与格式化逻辑】---
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.传视图");
     if (!sanChuanViewClass) sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
@@ -115,16 +127,16 @@ static NSInteger const CopyAiButtonTag = 112233;
     if (sanChuanViewClass) {
         NSMutableArray *sanChuanViews = [NSMutableArray array];
         [self findSubviewsOfClass:sanChuanViewClass inView:self.view andStoreIn:sanChuanViews];
-        
         [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) {
             return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
         }];
         
+        NSArray *chuanTitles = @[@"初传:", @"中传:", @"末传:"];
         NSMutableArray *sanChuanLines = [NSMutableArray array];
-        for (UIView *view in sanChuanViews) {
+        for (int i = 0; i < sanChuanViews.count; i++) {
+            UIView *view = sanChuanViews[i];
             NSMutableArray *labelsInView = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
-            // 按从左到右排序
             [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
                 return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
             }];
@@ -133,7 +145,9 @@ static NSInteger const CopyAiButtonTag = 112233;
             for (UILabel *label in labelsInView) {
                 if(label.text) [lineParts addObject:label.text];
             }
-            [sanChuanLines addObject:[lineParts componentsJoinedByString:@" "]];
+            
+            NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
+            [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, [lineParts componentsJoinedByString:@" "]]];
         }
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
@@ -167,8 +181,8 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *finalText = [NSString stringWithFormat:
         @"起课方式: %@\n"
         @"课体: %@\n"
-        @"三传:\n%@\n" // 三传单独占多行
-        @"%@\n"
+        @"%@\n" // 三传已经自带换行和标题
+        @"%@\n" // 时间块
         @"年柱: %@\n"
         @"月柱: %@\n"
         @"天盘: %@\n"
