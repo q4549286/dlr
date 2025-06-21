@@ -19,7 +19,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (修正命令 + 智能内容识别)
+// Section 3: 【最终版】一键复制到 AI (已根据截图信息修正)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -28,7 +28,7 @@ static NSMutableDictionary *g_extractedData = nil;
 @interface UIViewController (CopyAiAddon)
 - (void)copyAiButtonTapped_FinalMethod;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
-- (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
+- (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className inView:(UIView*)searchView separator:(NSString *)separator;
 @end
 
 %hook UIViewController
@@ -54,51 +54,32 @@ static NSMutableDictionary *g_extractedData = nil;
     }
 }
 
-// 【核心修改】实现真正无感 + 智能内容识别
+// 【核心修正】使用更可靠的视图类来识别弹窗，实现真正无感抓取
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         
         viewControllerToPresent.view.alpha = 0.0f;
-        flag = NO; 
-        EchoLog(@"无感模式启动，目标弹窗已设为透明且无动画。");
-
+        flag = NO; // 强制无动画，实现无感
+        
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            NSMutableArray *allLabels = [NSMutableArray array];
-            [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:allLabels];
             
-            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-                if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
-                if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
-                return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
-            }];
-            
+            // 【关键修正】不再依赖标题，而是通过检查弹窗内是否存在特定视图来识别
+            NSMutableArray *qizhengViews = [NSMutableArray array];
+            [self findSubviewsOfClass:NSClassFromString(@"六壬大占.七政視圖") inView:viewControllerToPresent.view andStoreIn:qizhengViews];
+
             NSString *title = viewControllerToPresent.title ?: @"";
             
-            // 【智能识别逻辑】
-            BOOL isHandled = NO;
-            // 1. 先按标题识别 "格局" 和 "毕法"
-            if ([title containsString:@"格局"]) {
-                g_extractedData[@"格局"] = [self extractContentFromLabels:allLabels excludingTitle:title];
-                EchoLog(@"成功抓取 [格局] 内容 (通过标题识别)");
-                isHandled = YES;
+            if (qizhengViews.count > 0) { // 如果弹窗内找到了“七政視圖”
+                g_extractedData[@"七政四余"] = [self extractTextFromFirstViewOfClassName:nil inView:viewControllerToPresent.view separator:@"\n"];
+                EchoLog(@"成功抓取 [七政四余] 内容 (通过视图类识别)");
+            } else if ([title containsString:@"格局"]) {
+                g_extractedData[@"格局"] = [self extractTextFromFirstViewOfClassName:nil inView:viewControllerToPresent.view separator:@"\n"];
+                EchoLog(@"成功抓取 [格局] 内容");
             } else if ([title containsString:@"法诀"] || [title containsString:@"毕法"]) {
-                g_extractedData[@"毕法"] = [self extractContentFromLabels:allLabels excludingTitle:title];
-                EchoLog(@"成功抓取 [毕法] 内容 (通过标题识别)");
-                isHandled = YES;
+                g_extractedData[@"毕法"] = [self extractTextFromFirstViewOfClassName:nil inView:viewControllerToPresent.view separator:@"\n"];
+                EchoLog(@"成功抓取 [毕法] 内容");
             } else {
-                // 2. 如果标题不匹配，则按内容识别 "七政四余"
-                for (UILabel *label in allLabels) {
-                    if ([label.text hasPrefix:@"日宿在"]) {
-                        g_extractedData[@"七政四余"] = [self extractContentFromLabels:allLabels excludingTitle:nil];
-                        EchoLog(@"成功抓取 [七政四余] 内容 (通过'日宿在'关键字识别)");
-                        isHandled = YES;
-                        break; // 找到后就跳出循环
-                    }
-                }
-            }
-
-            if (!isHandled) {
-                EchoLog(@"抓取到未知弹窗，标题: %@，内容被忽略。", title);
+                 EchoLog(@"抓取到未知弹窗，内容被忽略。");
             }
             
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
@@ -112,39 +93,24 @@ static NSMutableDictionary *g_extractedData = nil;
 }
 
 %new
-// 辅助方法：从UILabel数组中提取并拼接文本
-- (NSString *)extractContentFromLabels:(NSArray<UILabel *> *)labels excludingTitle:(NSString *)title {
-    NSMutableArray *textParts = [NSMutableArray array];
-    for (UILabel *label in labels) {
-        if (label.text && label.text.length > 0) {
-            // 如果提供了标题，就排除它
-            if (title && [label.text isEqualToString:title]) {
-                continue;
-            }
-            // 排除通用的标题词
-            if (![label.text isEqualToString:@"毕法"] && ![label.text isEqualToString:@"格局"]) {
-                [textParts addObject:label.text];
-            }
-        }
-    }
-    return [textParts componentsJoinedByString:@"\n"];
-}
-
-
-%new
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { [self findSubviewsOfClass:aClass inView:subview andStoreIn:storage]; }
 }
 
 %new
-- (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
-    Class targetViewClass = NSClassFromString(className);
-    if (!targetViewClass) { EchoLog(@"类名 '%@' 未找到。", className); return @""; }
-    NSMutableArray *targetViews = [NSMutableArray array];
-    [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
-    if (targetViews.count == 0) return @"";
-    UIView *containerView = targetViews.firstObject;
+- (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className inView:(UIView*)searchView separator:(NSString *)separator {
+    UIView *containerView = searchView;
+    if (className) { // 如果提供了类名，就查找该类的第一个实例
+        Class targetViewClass = NSClassFromString(className);
+        if (!targetViewClass) { EchoLog(@"类名 '%@' 未找到。", className); return @""; }
+        NSMutableArray *targetViews = [NSMutableArray array];
+        [self findSubviewsOfClass:targetViewClass inView:searchView andStoreIn:targetViews];
+        if (targetViews.count == 0) return @"";
+        containerView = targetViews.firstObject;
+    }
+    
+    // 从容器视图中提取所有UILabel的文本
     NSMutableArray *labelsInView = [NSMutableArray array];
     [self findSubviewsOfClass:[UILabel class] inView:containerView andStoreIn:labelsInView];
     [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
@@ -152,8 +118,16 @@ static NSMutableDictionary *g_extractedData = nil;
         if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
         return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
     }];
+    
     NSMutableArray *textParts = [NSMutableArray array];
-    for (UILabel *label in labelsInView) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } }
+    for (UILabel *label in labelsInView) {
+        if (label.text && label.text.length > 0) {
+            // 过滤掉一些通用标题词，避免重复
+            if (![label.text isEqualToString:@"毕法"] && ![label.text isEqualToString:@"格局"]) {
+                [textParts addObject:label.text];
+            }
+        }
+    }
     return [textParts componentsJoinedByString:separator];
 }
 
@@ -165,17 +139,17 @@ static NSMutableDictionary *g_extractedData = nil;
     g_extractedData = [NSMutableDictionary dictionary];
 
     EchoLog(@"正在提取主界面静态信息...");
-    g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-    g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
-    g_extractedData[@"空亡"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
-    g_extractedData[@"三宫时"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.三宮時視圖" separator:@" "];
-    g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
-    g_extractedData[@"课体"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
-    g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
+    g_extractedData[@"时间块"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" inView:self.view separator:@" "];
+    g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" inView:self.view separator:@" "];
+    g_extractedData[@"空亡"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" inView:self.view separator:@""];
+    g_extractedData[@"三宫时"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.三宮時視圖" inView:self.view separator:@" "];
+    g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" inView:self.view separator:@" "];
+    g_extractedData[@"课体"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" inView:self.view separator:@" "];
+    g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" inView:self.view separator:@" "];
     EchoLog(@"主界面信息提取完毕。");
 
-    // 四课和三传信息提取... (代码保持不变)
-    EchoLog(@"正在提取四课信息...");
+    // 四课和三传代码保持不变
+    // ...
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -209,9 +183,7 @@ static NSMutableDictionary *g_extractedData = nil;
         }
     }
     g_extractedData[@"四课"] = siKe;
-    EchoLog(@"四课信息提取完毕。");
-
-    EchoLog(@"正在提取三传信息...");
+    
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
@@ -228,9 +200,7 @@ static NSMutableDictionary *g_extractedData = nil;
             if (labelsInView.count >= 3) {
                 NSString *lq=((UILabel*)labelsInView.firstObject).text, *tj=((UILabel*)labelsInView.lastObject).text, *dz=((UILabel*)[labelsInView objectAtIndex:labelsInView.count-2]).text;
                 NSMutableArray *ssParts = [NSMutableArray array];
-                if (labelsInView.count > 3) {
-                    for(UILabel *l in [labelsInView subarrayWithRange:NSMakeRange(1, labelsInView.count-3)]){ if(l.text && l.text.length > 0) [ssParts addObject:l.text]; }
-                }
+                if (labelsInView.count > 3) { for(UILabel *l in [labelsInView subarrayWithRange:NSMakeRange(1, labelsInView.count-3)]){ if(l.text && l.text.length > 0) [ssParts addObject:l.text]; } }
                 NSString *ssString = [ssParts componentsJoinedByString:@" "];
                 NSMutableString *fLine = [NSMutableString stringWithFormat:@"%@->%@%@", SafeString(lq), SafeString(dz), SafeString(tj)];
                 if (ssString.length > 0) { [fLine appendFormat:@" (%@)", ssString]; }
@@ -240,15 +210,14 @@ static NSMutableDictionary *g_extractedData = nil;
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
     g_extractedData[@"三传"] = sanChuan;
-    EchoLog(@"三传信息提取完毕。");
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         EchoLog(@"开始异步无感抓取动态信息...");
         
+        // 【关键修正】使用您截图中显示的正确方法名
         SEL selectorBiFa = NSSelectorFromString(@"顯示法訣總覽");
         SEL selectorGeJu = NSSelectorFromString(@"顯示格局總覽");
-        // 【关键修正】使用您从截图中找到的正确方法名
-        SEL selectorQiZheng = NSSelectorFromString(@"顯示七政信息withSender:");
+        SEL selectorQiZheng = NSSelectorFromString(@"显示七政信息WithSender:"); // 注意是简体且带参数
 
         #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
             _Pragma("clang diagnostic push") \
@@ -266,11 +235,11 @@ static NSMutableDictionary *g_extractedData = nil;
             [NSThread sleepForTimeInterval:0.4];
         }
         if ([self respondsToSelector:selectorQiZheng]) {
-            EchoLog(@"找到'顯示七政信息withSender:', 正在调用...");
+            EchoLog(@"正在触发 '显示七政信息WithSender:'...");
             dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]); });
             [NSThread sleepForTimeInterval:0.4];
         } else {
-            EchoLog(@"错误: 未找到方法 '顯示七政信息withSender:'");
+            EchoLog(@"错误: 未找到方法 '显示七政信息WithSender:'，请检查方法名是否正确。");
         }
         
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -307,7 +276,7 @@ static NSMutableDictionary *g_extractedData = nil;
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             
             [self presentViewController:alert animated:YES completion:^{
-                 g_extractedData = nil; 
+                 g_extractedData = nil;
                  EchoLog(@"--- 复制任务完成 ---");
             }];
         });
