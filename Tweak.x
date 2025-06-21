@@ -2,7 +2,7 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// Section 1: 文字替换与简繁转换 (最终修正版 - 去除拼音转换)
+// Section 1: 文字替换与简繁转换 (最终修正版)
 // =========================================================================
 %hook UILabel
 
@@ -18,10 +18,10 @@
         return;
     }
     
-    // 【关键修正】只保留 繁体->简体 的转换
-    NSMutableString *finalText = [text mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)finalText, NULL, kCFStringTransformStripDiacritics, NO);
-    %orig(finalText);
+    // 【关键修正】使用正确的繁体->简体转换
+    NSMutableString *simplifiedText = [text mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
+    %orig(simplifiedText);
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
@@ -39,9 +39,9 @@
         return;
     }
     
-    // 【关键修正】只保留 繁体->简体 的转换
+    // 【关键修正】使用正确的繁体->简体转换
     NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, kCFStringTransformStripDiacritics, NO);
+    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
     %orig(finalAttributedText);
 }
 %end
@@ -57,7 +57,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终成品版 - 已修正编译错误)
+// Section 3: 【新功能】一键复制到 AI (最终成品版)
 // =========================================================================
 static NSInteger const CopyAiButtonTag = 112233;
 
@@ -105,7 +105,6 @@ static NSInteger const CopyAiButtonTag = 112233;
         if (label == anchorLabel) continue;
         if (fabs(CGRectGetMidY(label.frame) - CGRectGetMidY(anchorLabel.frame)) < 10 && CGRectGetMinX(label.frame) > CGRectGetMinX(anchorLabel.frame)) {
             CGFloat distance = CGRectGetMinX(label.frame) - CGRectGetMaxX(anchorLabel.frame);
-            // 【关键修正】将 d, target, l 修正为正确的变量名
             if (distance < minDistance) {
                 minDistance = distance;
                 foundLabel = label;
