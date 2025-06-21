@@ -2,125 +2,97 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// 侦察专用代码 - 将日志输出到弹窗
+// 侦察专用代码 V2 - 在更可靠的时机触发
 // =========================================================================
 
-static NSInteger const CopyAiButtonTag = 112233; // 保持按钮Tag一致
+// 全局变量，确保日志只显示一次
+static BOOL hasLogged = NO;
 
-@interface UIViewController (LoggingAddon)
-- (void)showLoggingAlert;
-@end
+// 声明一个方法，我们将在多个地方调用它
+void showLoggingAlertForViewController(UIViewController *vc);
 
-%hook UIViewController
+// 日志生成和显示的核心函数
+void showLoggingAlertForViewController(UIViewController *vc) {
+    // 防止重复触发
+    if (hasLogged) return;
+    hasLogged = YES;
 
-// 注入创建按钮的逻辑
-- (void)viewDidLoad {
-    %orig;
-    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
-    if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIWindow *keyWindow = self.view.window;
-            if (!keyWindow || [keyWindow viewWithTag:CopyAiButtonTag]) { return; }
-            UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
-            copyButton.tag = CopyAiButtonTag;
-            // 按钮标题可以保持不变，但功能已改为显示日志
-            [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
-            copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-            copyButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0]; // 改成红色，表示侦察模式
-            [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            copyButton.layer.cornerRadius = 8;
-            // 将按钮的点击事件指向我们新的日志显示方法
-            [copyButton addTarget:self action:@selector(showLoggingAlert) forControlEvents:UIControlEventTouchUpInside];
-            [keyWindow addSubview:copyButton];
-        });
-    }
-}
-
-// 这是核心的日志生成和显示方法
-%new
-- (void)showLoggingAlert {
     NSMutableString *logMessage = [NSMutableString string];
-
     [logMessage appendString:@"--- Logging ViewController Details ---\n\n"];
-    [logMessage appendFormat:@"Self: %@\n\n", self];
+    [logMessage appendFormat:@"Triggered by: %@\n", [vc class]];
+    [logMessage appendFormat:@"ViewController Instance: %@\n\n", vc];
 
-    id targetObject = self; // 目标就是ViewController本身
+    id targetObject = vc;
 
     // --- 打印属性 (Properties) ---
     [logMessage appendString:@"--- PROPERTIES ---\n"];
     unsigned int propCount;
     objc_property_t *properties = class_copyPropertyList([targetObject class], &propCount);
-    if (propCount == 0) {
-        [logMessage appendString:@"(No properties found)\n"];
-    }
+    if (propCount == 0) { [logMessage appendString:@"(No properties found)\n"]; }
     for (int i = 0; i < propCount; i++) {
         objc_property_t property = properties[i];
         const char *propName = property_getName(property);
         if (propName) {
             NSString *propertyName = [NSString stringWithUTF8String:propName];
             id value = nil;
-            @try {
-                value = [targetObject valueForKey:propertyName];
-            } @catch (NSException *exception) {
-                value = [NSString stringWithFormat:@"(Exception on access: %@)", exception.reason];
-            }
+            @try { value = [targetObject valueForKey:propertyName]; } @catch (NSException *exception) { value = @"(Access Exception)"; }
             [logMessage appendFormat:@"@property: %@ = %@\n", propertyName, value];
         }
     }
     free(properties);
     [logMessage appendString:@"\n"];
 
-
     // --- 打印实例变量 (Ivars) ---
     [logMessage appendString:@"--- IVARS ---\n"];
     unsigned int ivarCount;
     Ivar *ivars = class_copyIvarList([targetObject class], &ivarCount);
-    if (ivarCount == 0) {
-        [logMessage appendString:@"(No ivars found)\n"];
-    }
+    if (ivarCount == 0) { [logMessage appendString:@"(No ivars found)\n"]; }
     for (int i = 0; i < ivarCount; i++) {
         Ivar ivar = ivars[i];
         const char *ivarName = ivar_getName(ivar);
         if (ivarName) {
             NSString *ivarNameStr = [NSString stringWithUTF8String:ivarName];
             id value = nil;
-             @try {
-                value = [targetObject valueForKey:ivarNameStr];
-            } @catch (NSException *exception) {
-                value = [NSString stringWithFormat:@"(Exception on access: %@)", exception.reason];
-            }
+            @try { value = [targetObject valueForKey:ivarNameStr]; } @catch (NSException *exception) { value = @"(Access Exception)"; }
             [logMessage appendFormat:@"ivar: %@ = %@\n", ivarNameStr, value];
         }
     }
     free(ivars);
 
     // --- 创建并显示弹窗 ---
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察日志" message:@"" preferredStyle:UIAlertControllerStyleAlert];
+    // 确保在主线程上显示UI
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察日志 V2" message:logMessage preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
+        [alert addAction:okAction];
+        
+        // 找到最顶层的VC来呈现弹窗
+        UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
+        UIViewController *rootVC = keyWindow.rootViewController;
+        [rootVC presentViewController:alert animated:YES completion:nil];
+    });
+}
 
-    // 创建一个可滚动的文本视图来显示长日志
-    UITextView *textView = [[UITextView alloc] initWithFrame:CGRectZero];
-    textView.text = logMessage;
-    textView.editable = NO;
-    textView.backgroundColor = [UIColor clearColor];
+
+// 我们Hook一个很晚才会出现的视图的 `didMoveToWindow` 方法
+// “三传视图” (`六壬大占.傳視圖`) 是一个很好的目标
+%hook UIView 
+
+- (void)didMoveToWindow {
+    %orig;
     
-    // 为了在弹窗中正确显示，需要一些约束设置
-    textView.translatesAutoresizingMaskIntoConstraints = NO;
-    [alert.view addSubview:textView];
-    
-    // 设置约束
-    NSLayoutConstraint *leading = [NSLayoutConstraint constraintWithItem:textView attribute:NSLayoutAttributeLeading relatedBy:NSLayoutRelationEqual toItem:alert.view attribute:NSLayoutAttributeLeading multiplier:1.0 constant:15];
-    NSLayoutConstraint *trailing = [NSLayoutConstraint constraintWithItem:textView attribute:NSLayoutAttributeTrailing relatedBy:NSLayoutRelationEqual toItem:alert.view attribute:NSLayoutAttributeTrailing multiplier:1.0 constant:-15];
-    NSLayoutConstraint *top = [NSLayoutConstraint constraintWithItem:textView attribute:NSLayoutAttributeTop relatedBy:NSLayoutRelationEqual toItem:alert.view attribute:NSLayoutAttributeTop multiplier:1.0 constant:60];
-    NSLayoutConstraint *bottom = [NSLayoutConstraint constraintWithItem:textView attribute:NSLayoutAttributeBottom relatedBy:NSLayoutRelationEqual toItem:alert.view attribute:NSLayoutAttributeBottom multiplier:1.0 constant:-60];
-    
-    [alert.view addConstraints:@[leading, trailing, top, bottom]];
-    
-    // 添加一个“好的”按钮
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
-    [alert addAction:okAction];
-    
-    [self presentViewController:alert animated:YES completion:nil];
+    // 当这个视图是“三传视图”时
+    if ([self isKindOfClass:NSClassFromString(@"六壬大占.傳視圖")]) {
+        // 向上遍历视图层级，找到它所属的 ViewController
+        UIResponder *responder = self;
+        while ((responder = [responder nextResponder])) {
+            if ([responder isKindOfClass:[UIViewController class]]) {
+                // 找到了！触发日志弹窗
+                showLoggingAlertForViewController((UIViewController *)responder);
+                break;
+            }
+        }
+    }
 }
 
 %end
