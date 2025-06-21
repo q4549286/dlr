@@ -54,20 +54,17 @@ static NSMutableDictionary *g_extractedData = nil;
     }
 }
 
+// 【终极修复】使用最可靠的方式识别弹窗
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         
         viewControllerToPresent.view.alpha = 0.0f;
         flag = NO;
+
+        // 增加诊断日志，打印出所有被拦截的弹窗的类名和标题
+        EchoLog(@"捕获到弹窗, 类名: %@, 标题: %@", NSStringFromClass([viewControllerToPresent class]), viewControllerToPresent.title);
         
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            
-            // 【关键修复】使用您提供的最准确的类名来识别七政弹窗
-            NSMutableArray *qizhengInfoViews = [NSMutableArray array];
-            Class qizhengInfoViewClass = NSClassFromString(@"六壬大占.七政信息視圖");
-            if (qizhengInfoViewClass) {
-                [self findSubviewsOfClass:qizhengInfoViewClass inView:viewControllerToPresent.view andStoreIn:qizhengInfoViews];
-            }
             
             NSMutableArray *labels = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:labels];
@@ -77,17 +74,19 @@ static NSMutableDictionary *g_extractedData = nil;
                 return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
             }];
             
+            NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
             NSString *title = viewControllerToPresent.title ?: @"";
             if (title.length == 0 && labels.count > 0) { title = ((UILabel*)labels.firstObject).text; }
 
             NSMutableArray* textParts = [NSMutableArray array];
             NSString* content = nil;
 
-            if (qizhengInfoViews.count > 0) {
+            // 【关键】直接检查弹出的 ViewController 的类名是否包含“七政”
+            if ([vcClassName containsString:@"七政"]) {
                 for (UILabel *label in labels) { if (label.text && label.text.length > 0) [textParts addObject:label.text]; }
                 content = [textParts componentsJoinedByString:@"\n"];
                 g_extractedData[@"七政四余"] = content;
-                EchoLog(@"成功抓取 [七政四余] 内容 (通过 '七政信息視圖' 识别)");
+                EchoLog(@"成功抓取 [七政四余] 内容 (通过 VC 类名 '%@' 识别)", vcClassName);
             } 
             else if ([title containsString:@"格局"] || [title containsString:@"法诀"] || [title containsString:@"毕法"]) {
                 for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title]) { [textParts addObject:label.text]; } }
@@ -142,7 +141,7 @@ static NSMutableDictionary *g_extractedData = nil;
 
     EchoLog(@"正在提取主界面静态信息...");
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-    g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "]; // 这个保持不变，是主界面的
+    g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
     g_extractedData[@"空亡"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
     g_extractedData[@"三宫时"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.三宮時視圖" separator:@" "];
     g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
@@ -150,7 +149,7 @@ static NSMutableDictionary *g_extractedData = nil;
     g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
     EchoLog(@"主界面信息提取完毕。");
 
-    // 四课和三传代码保持不变...
+    // 四课和三传代码...
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
