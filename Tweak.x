@@ -84,7 +84,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
 
-    // --- 2. 四课提取逻辑 ---
+    // --- 2. 【四课提取逻辑 - 恢复到正确的版本】---
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -94,24 +94,35 @@ static NSInteger const CopyAiButtonTag = 112233;
             UIView* container = siKeViews.firstObject;
             NSMutableArray* labels = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:container andStoreIn:labels];
+            
             if(labels.count >= 12){
                 [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
                     if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
                     if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
                     return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
                 }];
+
+                // **【最终修正】** 严格按照最终推导出的正确映射关系
                 NSString* ke1_di = ((UILabel*)labels[11]).text; NSString* ke1_tian = ((UILabel*)labels[7]).text; NSString* ke1_shen = ((UILabel*)labels[3]).text;
                 NSString* ke2_di = ((UILabel*)labels[10]).text; NSString* ke2_tian = ((UILabel*)labels[6]).text; NSString* ke2_shen = ((UILabel*)labels[2]).text;
                 NSString* ke3_di = ((UILabel*)labels[9]).text; NSString* ke3_tian = ((UILabel*)labels[5]).text; NSString* ke3_shen = ((UILabel*)labels[1]).text;
                 NSString* ke4_di = ((UILabel*)labels[8]).text; NSString* ke4_tian = ((UILabel*)labels[4]).text; NSString* ke4_shen = ((UILabel*)labels[0]).text;
-                siKe = [NSMutableString stringWithFormat:@"第一课: %@->%@%@\n第二课: %@->%@%@\n第三课: %@->%@%@\n第四课: %@->%@%@",
-                    SafeString(ke1_di), SafeString(ke1_tian), SafeString(ke1_shen), SafeString(ke2_di), SafeString(ke2_tian), SafeString(ke2_shen),
-                    SafeString(ke3_di), SafeString(ke3_tian), SafeString(ke3_shen), SafeString(ke4_di), SafeString(ke4_tian), SafeString(ke4_shen)];
+                
+                siKe = [NSMutableString stringWithFormat:
+                    @"第一课: %@->%@%@\n"
+                    @"第二课: %@->%@%@\n"
+                    @"第三课: %@->%@%@\n"
+                    @"第四课: %@->%@%@",
+                    SafeString(ke4_di), SafeString(ke4_tian), SafeString(ke4_shen),
+                    SafeString(ke3_di), SafeString(ke3_tian), SafeString(ke3_shen),
+                    SafeString(ke2_di), SafeString(ke2_tian), SafeString(ke2_shen),
+                    SafeString(ke1_di), SafeString(ke1_tian), SafeString(ke1_shen)
+                ];
             }
         }
     }
     
-    // --- 3. 【三传提取逻辑 - 最终结构化格式】---
+    // --- 3. 【三传提取逻辑 - 回归稳定拼接】---
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
@@ -126,35 +137,14 @@ static NSInteger const CopyAiButtonTag = 112233;
             UIView *view = sanChuanViews[i];
             NSMutableArray *labelsInView = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
-            
-            // 智能识别和分类
-            NSString *liuqin = @"", *dizhi = @"", *tianjiang = @"";
-            NSMutableArray *extras = [NSMutableArray array];
-            
-            for (UILabel *label in labelsInView) {
-                NSString *text = label.text;
-                if (!text || text.length == 0) continue;
-                
-                if (text.length == 1 && [@"官财父兄子" containsString:text]) {
-                    liuqin = text;
-                } else if (text.length == 1 && [@"子丑寅卯辰巳午未申酉戌亥" containsString:text]) {
-                    dizhi = text;
-                } else if (text.length == 2) {
-                    tianjiang = text;
-                } else {
-                    [extras addObject:text];
-                }
-            }
-            
-            NSString *extrasStr = [extras componentsJoinedByString:@" "];
-            NSString *line;
-            if (extrasStr.length > 0) {
-                line = [NSString stringWithFormat:@"%@ %@ (%@) -> %@ (%@)", chuanTitles[i], liuqin, extrasStr, dizhi, tianjiang];
-            } else {
-                // 如果没有额外信息，就不显示括号
-                line = [NSString stringWithFormat:@"%@ %@ -> %@ (%@)", chuanTitles[i], liuqin, dizhi, tianjiang];
-            }
-            [sanChuanLines addObject:line];
+            [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
+                return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
+            }];
+            NSMutableArray *lineParts = [NSMutableArray array];
+            for (UILabel *label in labelsInView) { if(label.text) [lineParts addObject:label.text]; }
+            NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
+            // 使用稳定可靠的空格拼接，确保所有信息都被提取
+            [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, [lineParts componentsJoinedByString:@" "]]];
         }
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
