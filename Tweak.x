@@ -16,7 +16,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (按钮位置修正 + 全新提取模板)
+// Section 3: 【新功能】一键复制到 AI
 // =========================================================================
 
 static const char *AllLabelsOnViewKey = "AllLabelsOnViewKey";
@@ -30,21 +30,16 @@ static NSInteger const CopyAiButtonTag = 112233;
 
 %hook UIViewController
 
-// 【已修正】按钮将被添加到 Window 上，确保在最顶层
 - (void)viewDidLoad {
     %orig;
-
     Class targetClass = objc_getClass("六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        // 使用 dispatch_after 确保 window 已经准备好
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow || [keyWindow viewWithTag:CopyAiButtonTag]) {
                 return;
             }
-            
             UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            // Y坐标设置为45，放在"定制"按钮附近。您可以微调。
             copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36); 
             copyButton.tag = CopyAiButtonTag;
             [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
@@ -52,9 +47,7 @@ static NSInteger const CopyAiButtonTag = 112233;
             copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
             [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             copyButton.layer.cornerRadius = 8;
-            
             [copyButton addTarget:self action:@selector(copyAiButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-            
             [keyWindow addSubview:copyButton];
         });
     }
@@ -91,7 +84,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     for (UIView *subview in view.subviews) { [self findAllLabelsInView:subview andStoreIn:storage]; }
 }
 
-// 【已更新】全新的数据提取模板
+// 【已根据您的索引更新】
 %new
 - (void)copyAiButtonTapped {
     NSArray *sortedLabels = objc_getAssociatedObject(self, &AllLabelsOnViewKey);
@@ -101,7 +94,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     }
     if (sortedLabels.count == 0) { NSLog(@"[TweakLog] 未找到任何 UILabel。"); return; }
     
-    // ----- 打印调试日志，这是您寻找正确索引的唯一工具！-----
+    // ----- 打印调试日志，方便您继续查找其他索引 -----
     NSMutableString *debugLog = [NSMutableString stringWithString:@"\n[TweakLog] --- 调试日志 ---\n"];
     for (int i = 0; i < sortedLabels.count; i++) {
         UILabel *label = sortedLabels[i];
@@ -110,46 +103,29 @@ static NSInteger const CopyAiButtonTag = 112233;
     }
     NSLog(@"%@", debugLog);
     
-    // ================== 全新的数据提取区域 ==================
-    //
-    //  请根据上面打印出的日志，将下面所有的 [99] 替换为正确的索引号！
-    //
+    // ================== 根据您的反馈更新的数据提取区域 ==================
     
-    // 起课方式 (比如 "元首门")
-    NSString *methodName = sortedLabels.count > 99 ? ((UILabel *)sortedLabels[99]).text : @"";
+    // 起课方式 (元首门) -> 您说在 索引 1
+    NSString *methodName = sortedLabels.count > 1 ? ((UILabel *)sortedLabels[1]).text : @"";
     
-    // 四柱第一行 (比如 "乙巳年 壬午月")
-    NSString *sichouLine1 = sortedLabels.count > 99 ? ((UILabel *)sortedLabels[99]).text : @"";
+    // 起课时间 (乙巳年...) -> 您说在 索引 2
+    // 注意：这个UILabel里的文字可能是多行，我们需要替换掉换行符，让它变成一行。
+    NSString *timeInfoBlock = sortedLabels.count > 2 ? ((UILabel *)sortedLabels[2]).text : @"";
+    NSString *formattedTimeInfo = [timeInfoBlock stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
 
-    // 四柱第二行 (比如 "辛酉日 丁酉时")
-    NSString *sichouLine2 = sortedLabels.count > 99 ? ((UILabel *)sortedLabels[99]).text : @"";
 
-    // 节令第一行 (比如 "夏时 火王")
-    NSString *jielingLine1 = sortedLabels.count > 99 ? ((UILabel *)sortedLabels[99]).text : @"";
+    // 其他信息暂时留空，您可以稍后根据日志继续补充
+    NSString *nianZhuSha = @""; // 年柱神煞 (太岁)
+    NSString *yueZhuSha = @"";  // 月柱神煞 (岁德)
+    NSString *tianPan = @"";    // 天盘 (亥)
+    NSString *diPan = @"";      // 地盘 (寅)
 
-    // 节令第二行 (比如 "夏至 初候")
-    NSString *jielingLine2 = sortedLabels.count > 99 ? ((UILabel *)sortedLabels[99]).text : @"";
-    
-    // 年柱神煞 (比如 "太岁"，它在底部表格中，在“己”的旁边)
-    NSString *nianZhuSha = sortedLabels.count > 99 ? ((UILabel *)sortedLabels[99]).text : @"";
 
-    // 月柱神煞 (比如 "岁德"，它在底部表格中，在“庚”的旁边)
-    NSString *yueZhuSha = sortedLabels.count > 99 ? ((UILabel *)sortedLabels[99]).text : @"";
-
-    // 天盘 (比如 "亥"，在罗盘上)
-    NSString *tianPan = sortedLabels.count > 99 ? ((UILabel *)sortedLabels[99]).text : @"";
-
-    // 地盘 (比如 "寅"，在罗盘上)
-    NSString *diPan = sortedLabels.count > 99 ? ((UILabel *)sortedLabels[99]).text : @"";
-
-    // 为了防止提取内容为空时显示 "(null)"，我们做一下处理
+    // 格式化最终文本
     #define SafeString(str) (str ?: @"")
 
     NSString *finalText = [NSString stringWithFormat:
         @"起课方式: %@\n"
-        @"%@\n"
-        @"%@\n"
-        @"%@\n"
         @"%@\n"
         @"年柱: %@\n"
         @"月柱: %@\n"
@@ -157,10 +133,7 @@ static NSInteger const CopyAiButtonTag = 112233;
         @"地盘: %@\n\n"
         @"#奇门遁甲 #AI分析",
         SafeString(methodName),
-        SafeString(sichouLine1),
-        SafeString(sichouLine2),
-        SafeString(jielingLine1),
-        SafeString(jielingLine2),
+        SafeString(formattedTimeInfo),
         SafeString(nianZhuSha),
         SafeString(yueZhuSha),
         SafeString(tianPan),
