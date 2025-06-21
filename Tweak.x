@@ -16,7 +16,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI
+// Section 3: 【新功能】一键复制到 AI (调试专用版)
 // =========================================================================
 
 static const char *AllLabelsOnViewKey = "AllLabelsOnViewKey";
@@ -25,7 +25,7 @@ static NSInteger const CopyAiButtonTag = 112233;
 @interface UIViewController (CopyAiAddon)
 - (void)refreshAndSortLabelsForAiCopy;
 - (void)findAllLabelsInView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
-- (void)copyAiButtonTapped;
+- (void)copyAiButtonTapped_Debug; // 改个名字，表明是调试用的
 @end
 
 %hook UIViewController
@@ -42,12 +42,12 @@ static NSInteger const CopyAiButtonTag = 112233;
             UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
             copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36); 
             copyButton.tag = CopyAiButtonTag;
-            [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
+            [copyButton setTitle:@"查看索引" forState:UIControlStateNormal]; // 按钮文字改成"查看索引"
             copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-            copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
+            copyButton.backgroundColor = [UIColor systemOrangeColor]; // 按钮颜色改成橙色，以示区别
             [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             copyButton.layer.cornerRadius = 8;
-            [copyButton addTarget:self action:@selector(copyAiButtonTapped) forControlEvents:UIControlEventTouchUpInside];
+            [copyButton addTarget:self action:@selector(copyAiButtonTapped_Debug) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:copyButton];
         });
     }
@@ -84,69 +84,43 @@ static NSInteger const CopyAiButtonTag = 112233;
     for (UIView *subview in view.subviews) { [self findAllLabelsInView:subview andStoreIn:storage]; }
 }
 
-// 【已根据您的索引更新】
+// 【调试专用版】点击后，弹窗直接显示所有索引和文本
 %new
-- (void)copyAiButtonTapped {
+- (void)copyAiButtonTapped_Debug {
     NSArray *sortedLabels = objc_getAssociatedObject(self, &AllLabelsOnViewKey);
     if (!sortedLabels || sortedLabels.count == 0) {
         [self refreshAndSortLabelsForAiCopy];
         sortedLabels = objc_getAssociatedObject(self, &AllLabelsOnViewKey);
     }
-    if (sortedLabels.count == 0) { NSLog(@"[TweakLog] 未找到任何 UILabel。"); return; }
+    if (sortedLabels.count == 0) { 
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:@"未找到任何文本标签" preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return; 
+    }
     
-    // ----- 打印调试日志，方便您继续查找其他索引 -----
-    NSMutableString *debugLog = [NSMutableString stringWithString:@"\n[TweakLog] --- 调试日志 ---\n"];
+    // 创建一个巨大的字符串，包含所有信息
+    NSMutableString *treasureMap = [NSMutableString string];
     for (int i = 0; i < sortedLabels.count; i++) {
         UILabel *label = sortedLabels[i];
-        NSString *text = label.text ?: @"(空)";
-        [debugLog appendFormat:@"索引 %d: '%@' | 位置: %@\n", i, text, NSStringFromCGRect(label.frame)];
+        NSString *text = [label.text stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"]; // 把换行符显示成\n
+        // 格式: 索引 - "文本内容"
+        [treasureMap appendFormat:@"%d - \"%@\"\n", i, text];
     }
-    NSLog(@"%@", debugLog);
     
-    // ================== 根据您的反馈更新的数据提取区域 ==================
+    // 在一个弹窗里显示这个巨大的字符串
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"索引藏宝图" message:treasureMap preferredStyle:UIAlertControllerStyleAlert];
     
-    // 起课方式 (元首门) -> 您说在 索引 1
-    NSString *methodName = sortedLabels.count > 1 ? ((UILabel *)sortedLabels[1]).text : @"";
-    
-    // 起课时间 (乙巳年...) -> 您说在 索引 2
-    // 注意：这个UILabel里的文字可能是多行，我们需要替换掉换行符，让它变成一行。
-    NSString *timeInfoBlock = sortedLabels.count > 2 ? ((UILabel *)sortedLabels[2]).text : @"";
-    NSString *formattedTimeInfo = [timeInfoBlock stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+    // 添加一个“复制”按钮，可以直接把这张“藏宝图”复制下来发给我
+    UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"复制这张图" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [UIPasteboard generalPasteboard].string = treasureMap;
+    }];
+    [alert addAction:copyAction];
 
+    // 添加一个“关闭”按钮
+    UIAlertAction *closeAction = [UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil];
+    [alert addAction:closeAction];
 
-    // 其他信息暂时留空，您可以稍后根据日志继续补充
-    NSString *nianZhuSha = @""; // 年柱神煞 (太岁)
-    NSString *yueZhuSha = @"";  // 月柱神煞 (岁德)
-    NSString *tianPan = @"";    // 天盘 (亥)
-    NSString *diPan = @"";      // 地盘 (寅)
-
-
-    // 格式化最终文本
-    #define SafeString(str) (str ?: @"")
-
-    NSString *finalText = [NSString stringWithFormat:
-        @"起课方式: %@\n"
-        @"%@\n"
-        @"年柱: %@\n"
-        @"月柱: %@\n"
-        @"天盘: %@\n"
-        @"地盘: %@\n\n"
-        @"#奇门遁甲 #AI分析",
-        SafeString(methodName),
-        SafeString(formattedTimeInfo),
-        SafeString(nianZhuSha),
-        SafeString(yueZhuSha),
-        SafeString(tianPan),
-        SafeString(diPan)
-    ];
-    
-    // ----- 结束数据提取 -----
-    
-    [UIPasteboard generalPasteboard].string = finalText;
-    
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
-    [alert addAction:okAction];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
