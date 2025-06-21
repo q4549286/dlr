@@ -2,7 +2,7 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// 侦察专用代码 V2 - 在更可靠的时机触发
+// 侦察专用代码 V2.1 - 修复了 keyWindow 编译错误
 // =========================================================================
 
 // 全局变量，确保日志只显示一次
@@ -60,19 +60,33 @@ void showLoggingAlertForViewController(UIViewController *vc) {
     free(ivars);
 
     // --- 创建并显示弹窗 ---
-    // 确保在主线程上显示UI
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察日志 V2" message:logMessage preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察日志 V2.1" message:logMessage preferredStyle:UIAlertControllerStyleAlert];
         UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
         [alert addAction:okAction];
         
-        // 找到最顶层的VC来呈现弹窗
-        UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
-        UIViewController *rootVC = keyWindow.rootViewController;
+        // ---【修复点】--- 使用现代方法获取当前窗口和根视图控制器
+        UIWindow *activeWindow = nil;
+        if (@available(iOS 13.0, *)) {
+            for (UIWindowScene *windowScene in [UIApplication sharedApplication].connectedScenes) {
+                if (windowScene.activationState == UISceneActivationStateForegroundActive) {
+                    activeWindow = windowScene.windows.firstObject;
+                    break;
+                }
+            }
+        }
+        // 如果新方法找不到，或者在旧系统上，使用原始方法作为备用
+        if (!activeWindow) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            activeWindow = [[UIApplication sharedApplication] keyWindow];
+            #pragma clang diagnostic pop
+        }
+
+        UIViewController *rootVC = activeWindow.rootViewController;
         [rootVC presentViewController:alert animated:YES completion:nil];
     });
 }
-
 
 // 我们Hook一个很晚才会出现的视图的 `didMoveToWindow` 方法
 // “三传视图” (`六壬大占.傳視圖`) 是一个很好的目标
