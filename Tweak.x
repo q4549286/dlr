@@ -18,6 +18,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 // Section 3: 【新功能】一键复制到 AI (最终版 - 数据截获)
 // =========================================================================
 
+// --- 修复点：将所有全局变量定义移到所有 %hook 区块之外 ---
 static NSInteger const CopyAiButtonTag = 112233;
 static BOOL isCapturingData = NO;
 static NSMutableArray *capturedBiFa;
@@ -28,6 +29,7 @@ typedef NS_ENUM(NSInteger, CaptureMode) {
     CaptureModeQiZheng
 };
 static CaptureMode currentCaptureMode = CaptureModeNone;
+
 
 @interface UIViewController (CopyAiAddon)
 - (void)copyAiButtonTapped_FinalDataCapture;
@@ -41,17 +43,14 @@ static CaptureMode currentCaptureMode = CaptureModeNone;
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     UICollectionViewCell *cell = %orig;
     
-    // 如果不是在我们的捕获模式下，直接返回原始cell
     if (!isCapturingData || currentCaptureMode == CaptureModeNone) {
         return cell;
     }
 
-    // 遍历cell中的所有UILabel，提取文本
     for (UIView *subview in cell.contentView.subviews) {
         if ([subview isKindOfClass:[UILabel class]]) {
             UILabel *label = (UILabel *)subview;
             if (label.text && label.text.length > 0) {
-                // 根据当前的捕获模式，存入对应的数组
                 if (currentCaptureMode == CaptureModeBiFa) {
                     if (![capturedBiFa containsObject:label.text]) {
                         [capturedBiFa addObject:label.text];
@@ -61,7 +60,6 @@ static CaptureMode currentCaptureMode = CaptureModeNone;
                         [capturedQiZheng addObject:label.text];
                     }
                 }
-                // 找到一个即可
                 break;
             }
         }
@@ -75,32 +73,25 @@ static CaptureMode currentCaptureMode = CaptureModeNone;
 - (void)copyAiButtonTapped_FinalDataCapture {
     #define SafeString(str) (str ?: @"")
 
-    // --- 准备开始捕获 ---
     isCapturingData = YES;
     capturedBiFa = [NSMutableArray array];
     capturedQiZheng = [NSMutableArray array];
     
-    // --- 在后台静默加载“毕法”数据 ---
     SEL bifaSelector = NSSelectorFromString(@"显示法诀总览");
     if ([self respondsToSelector:bifaSelector]) {
         currentCaptureMode = CaptureModeBiFa;
-        // 使用 performSelector 来调用方法
         ((void (*)(id, SEL))[self methodForSelector:bifaSelector])(self, bifaSelector);
     }
     
-    // --- 在后台静默加载“七政”数据 ---
     SEL qizhengSelector = NSSelectorFromString(@"显示七政信息WithSender:");
      if ([self respondsToSelector:qizhengSelector]) {
         currentCaptureMode = CaptureModeQiZheng;
-        // 带参数调用，参数传nil即可
         ((void (*)(id, SEL, id))[self methodForSelector:qizhengSelector])(self, qizhengSelector, nil);
     }
     
-    // --- 捕获结束 ---
     isCapturingData = NO;
     currentCaptureMode = CaptureModeNone;
 
-    // --- 1. 提取主界面信息 (沿用旧方法) ---
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *yueJiang = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
     NSString *kongWang = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
@@ -109,18 +100,13 @@ static CaptureMode currentCaptureMode = CaptureModeNone;
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
     NSString *methodName = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
     
-    // --- 2. 格式化捕获到的毕法和七政 ---
     NSString *bifaText = [capturedBiFa componentsJoinedByString:@"\n"];
     if (bifaText.length == 0) {
-        // 如果没捕获到，尝试用旧方法读取格局单元作为备用
         bifaText = [self extractTextFromFirstViewOfClassName:@"六壬大占.格局單元" separator:@"\n"];
     }
-
     NSString *qizhengText = [capturedQiZheng componentsJoinedByString:@"\n"];
     
-    // --- 3. 四课提取 (保持不变) ---
     NSMutableString *siKe = [NSMutableString string];
-    // (四课代码省略，与上一版完全相同，直接复制即可)
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
         NSMutableArray *siKeViews = [NSMutableArray array];
@@ -156,9 +142,7 @@ static CaptureMode currentCaptureMode = CaptureModeNone;
         }
     }
     
-    // --- 4. 三传提取 (保持不变) ---
     NSMutableString *sanChuan = [NSMutableString string];
-    // (三传代码省略，与上一版完全相同，直接复制即可)
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
         NSMutableArray *sanChuanViews = [NSMutableArray array];
@@ -196,22 +180,20 @@ static CaptureMode currentCaptureMode = CaptureModeNone;
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
     
-    // --- 5. 组合最终文本 (全新排版，加入毕法和七政) ---
-    // 构建可选部分，只有在内容不为空时才加入
     NSMutableString *optionalPart = [NSMutableString string];
     if (bifaText.length > 0) { [optionalPart appendFormat:@"毕法:\n%@\n\n", bifaText]; }
     if (qizhengText.length > 0) { [optionalPart appendFormat:@"七政:\n%@\n\n", qizhengText]; }
 
     NSString *finalText = [NSString stringWithFormat:
-        @"%@\n\n" // 时间块
+        @"%@\n\n"
         @"月将: %@\n"
         @"空亡: %@\n"
         @"三宫时: %@\n"
         @"昼夜: %@\n"
         @"课体: %@\n\n"
-        @"%@" // 可选的毕法和七政部分
-        @"%@\n\n" // 四课
-        @"%@\n\n" // 三传
+        @"%@"
+        @"%@\n\n"
+        @"%@\n\n"
         @"起课方式: %@",
         SafeString(timeBlock),
         SafeString(yueJiang), SafeString(kongWang), SafeString(sanGongShi), SafeString(zhouYe), SafeString(fullKeti),
@@ -229,31 +211,6 @@ static CaptureMode currentCaptureMode = CaptureModeNone;
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-%end
-
-
-// %hook UIViewController (因为我们现在只针对特定ViewController，所以这个可以简化)
-// 新增对特定ViewController的viewDidLoad Hook来添加按钮
-%hook 六壬大占_ViewController
-- (void)viewDidLoad {
-    %orig;
-    // 使用dispatch_after确保视图已加载到window
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *keyWindow = self.view.window;
-        if (!keyWindow || [keyWindow viewWithTag:CopyAiButtonTag]) { return; }
-        UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
-        copyButton.tag = CopyAiButtonTag;
-        [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
-        copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-        copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
-        [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        copyButton.layer.cornerRadius = 8;
-        // 注意：这里的action要指向我们新写的方法
-        [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalDataCapture) forControlEvents:UIControlEventTouchUpInside];
-        [keyWindow addSubview:copyButton];
-    });
-}
 // 辅助方法，可以放在ViewController的Hook中
 %new
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage {
@@ -278,6 +235,24 @@ static CaptureMode currentCaptureMode = CaptureModeNone;
     NSMutableArray *textParts = [NSMutableArray array];
     for (UILabel *label in labelsInView) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } }
     return [textParts componentsJoinedByString:separator];
+}
+
+- (void)viewDidLoad {
+    %orig;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIWindow *keyWindow = self.view.window;
+        if (!keyWindow || [keyWindow viewWithTag:CopyAiButtonTag]) { return; }
+        UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
+        copyButton.tag = CopyAiButtonTag;
+        [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
+        copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+        copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
+        [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        copyButton.layer.cornerRadius = 8;
+        [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalDataCapture) forControlEvents:UIControlEventTouchUpInside];
+        [keyWindow addSubview:copyButton];
+    });
 }
 
 %end
