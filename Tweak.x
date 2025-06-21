@@ -19,7 +19,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (链式反应方案)
+// Section 3: 【新功能】一键复制到 AI (链式反应方案 + 编译修复)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -28,23 +28,22 @@ static NSArray *g_taskQueue = nil;
 static int g_currentTaskIndex = -1;
 static __weak UIViewController *g_mainViewController = nil;
 
-// 宏定义，用于安全地调用performSelector
 #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
     _Pragma("clang diagnostic push") \
     _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
     code; \
     _Pragma("clang diagnostic pop")
 
+#define SafeString(str) (str ?: @"")
+
 void executeNextTask() {
     g_currentTaskIndex++;
     if (!g_mainViewController || g_currentTaskIndex >= g_taskQueue.count) {
         EchoLog(@"所有任务执行完毕，开始组合最终文本...");
-        // 所有任务完成，组合并显示最终结果
         NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", g_extractedData[@"毕法"]] : @"";
         NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"格局:\n%@\n\n", g_extractedData[@"格局"]] : @"";
         NSString *qiZhengOutput = g_extractedData[@"七政"] ? [NSString stringWithFormat:@"七政:\n%@\n\n", g_extractedData[@"七政"]] : @"";
         
-        #define SafeString(str) (str ?: @"")
         NSString *finalText = [NSString stringWithFormat:
             @"%@\n\n"
             @"月将: %@\n"
@@ -52,9 +51,9 @@ void executeNextTask() {
             @"三宫时: %@\n"
             @"昼夜: %@\n"
             @"课体: %@\n\n"
-            @"%@" // 毕法
-            @"%@" // 格局
-            @"%@" // 七政
+            @"%@"
+            @"%@"
+            @"%@"
             @"%@\n\n"
             @"%@\n\n"
             @"起课方式: %@",
@@ -83,7 +82,6 @@ void executeNextTask() {
         return;
     }
 
-    // 执行当前任务
     NSDictionary *task = g_taskQueue[g_currentTaskIndex];
     NSString *selectorName = task[@"selector"];
     SEL selector = NSSelectorFromString(selectorName);
@@ -95,7 +93,7 @@ void executeNextTask() {
         });
     } else {
         EchoLog(@"错误: 未找到方法 '%@', 跳过此任务。", selectorName);
-        executeNextTask(); // 直接执行下一个任务
+        executeNextTask();
     }
 }
 
@@ -131,12 +129,9 @@ void executeNextTask() {
 }
 
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    // 只有在执行我们的任务队列时才进行抓取
     if (g_taskQueue && g_currentTaskIndex < g_taskQueue.count) {
         EchoLog(@"弹窗事件被触发，准备抓取内容...");
-        // 确保视图加载完成
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-             // 提取数据
             NSDictionary *currentTask = g_taskQueue[g_currentTaskIndex];
             NSString *dataKey = currentTask[@"key"];
             
@@ -167,7 +162,6 @@ void executeNextTask() {
     %orig(viewControllerToPresent, flag, completion);
 }
 
-// Hook弹窗关闭事件，以触发下一个任务
 - (void)dismissViewControllerAnimated:(BOOL)flag completion:(void (^)(void))completion {
      if (g_taskQueue && g_currentTaskIndex < g_taskQueue.count) {
         EchoLog(@"弹窗关闭事件被触发，执行下一个任务...");
@@ -179,7 +173,6 @@ void executeNextTask() {
         %orig(flag, completion);
      }
 }
-
 
 %new
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage {
@@ -216,7 +209,6 @@ void executeNextTask() {
     g_extractedData = [NSMutableDictionary dictionary];
     g_mainViewController = self;
     
-    // --- 1. 提取所有静态信息 ---
     EchoLog(@"正在提取主界面静态信息...");
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
@@ -225,8 +217,7 @@ void executeNextTask() {
     g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
     g_extractedData[@"课体"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
     g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
-    // 四课和三传也属于静态信息
-    // (四课代码)
+
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -267,13 +258,14 @@ void executeNextTask() {
                     NSString* ke4_shen = ((UILabel*)column1[0]).text;
                     NSString* ke4_tian = ((UILabel*)column1[1]).text;
                     NSString* ke4_di = ((UILabel*)column1[2]).text;
-                    siKe = [NSMutableString stringWithFormat:@"第一课: %@->%@%@\n第二课: %@->%@%@\n第三课: %@->%@%@\n第四课: %@->%@%@", ke1_di, ke1_tian, ke1_shen, ke2_di, ke2_tian, ke2_shen, ke3_di, ke3_tian, ke3_shen, ke4_di, ke4_tian, ke4_shen];
+                    // 【编译修复】 添加了缺失的 ']'
+                    siKe = [NSMutableString stringWithFormat:@"第一课: %@->%@%@\n第二课: %@->%@%@\n第三课: %@->%@%@\n第四课: %@->%@%@", SafeString(ke1_di), SafeString(ke1_tian), SafeString(ke1_shen), SafeString(ke2_di), SafeString(ke2_tian), SafeString(ke2_shen), SafeString(ke3_di), SafeString(ke3_tian), SafeString(ke3_shen), SafeString(ke4_di), SafeString(ke4_tian), SafeString(ke4_shen)];
                 }
             }
         }
     }
     g_extractedData[@"四课"] = siKe;
-    // (三传代码)
+
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
@@ -298,18 +290,18 @@ void executeNextTask() {
                     for (UILabel *label in shenShaLabels) { if (label.text && label.text.length > 0) { [shenShaParts addObject:label.text]; } }
                 }
                 NSString *shenShaString = [shenShaParts componentsJoinedByString:@" "];
-                NSMutableString *formattedLine = [NSMutableString stringWithFormat:@"%@->%@%@", liuQin, diZhi, tianJiang];
+                NSMutableString *formattedLine = [NSMutableString stringWithFormat:@"%@->%@%@", SafeString(liuQin), SafeString(diZhi), SafeString(tianJiang)];
                 if (shenShaString.length > 0) { [formattedLine appendFormat:@" (%@)", shenShaString]; }
                 NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
                 [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, formattedLine]];
             }
         }
+        // 【编译修复】 添加了缺失的 ']'
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
     g_extractedData[@"三传"] = sanChuan;
     EchoLog(@"主界面信息提取完毕。");
 
-    // --- 2. 定义动态任务队列 ---
     g_taskQueue = @[
         @{@"key": @"毕法", @"selector": @"顯示法訣總覽"},
         @{@"key": @"格局", @"selector": @"顯示格局總覽"},
@@ -317,7 +309,6 @@ void executeNextTask() {
     ];
     g_currentTaskIndex = -1;
 
-    // --- 3. 启动任务队列 ---
     executeNextTask();
 }
 
