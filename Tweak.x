@@ -35,7 +35,7 @@ static NSInteger const CopyAiButtonTag = 112233;
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow || [keyWindow viewWithTag:CopyAiButtonTag]) { return; }
             UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36); 
+            copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
             copyButton.tag = CopyAiButtonTag;
             [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
             copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
@@ -84,7 +84,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
 
-    // --- 2. 【四课提取逻辑 - 恢复到正确的版本】---
+    // --- 2. 【最终四课提取逻辑 - 按列分组】---
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -96,55 +96,111 @@ static NSInteger const CopyAiButtonTag = 112233;
             [self findSubviewsOfClass:[UILabel class] inView:container andStoreIn:labels];
             
             if(labels.count >= 12){
-                [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-                    if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
-                    if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
-                    return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
-                }];
-
-                // **【最终修正】** 严格按照最终推导出的正确映射关系
-                NSString* ke1_di = ((UILabel*)labels[11]).text; NSString* ke1_tian = ((UILabel*)labels[7]).text; NSString* ke1_shen = ((UILabel*)labels[3]).text;
-                NSString* ke2_di = ((UILabel*)labels[10]).text; NSString* ke2_tian = ((UILabel*)labels[6]).text; NSString* ke2_shen = ((UILabel*)labels[2]).text;
-                NSString* ke3_di = ((UILabel*)labels[9]).text; NSString* ke3_tian = ((UILabel*)labels[5]).text; NSString* ke3_shen = ((UILabel*)labels[1]).text;
-                NSString* ke4_di = ((UILabel*)labels[8]).text; NSString* ke4_tian = ((UILabel*)labels[4]).text; NSString* ke4_shen = ((UILabel*)labels[0]).text;
+                NSMutableDictionary *columns = [NSMutableDictionary dictionary];
+                for(UILabel *label in labels){
+                    NSString *columnKey = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))];
+                    if(!columns[columnKey]){ columns[columnKey] = [NSMutableArray array]; }
+                    [columns[columnKey] addObject:label];
+                }
                 
-                siKe = [NSMutableString stringWithFormat:
-                    @"第一课: %@->%@%@\n"
-                    @"第二课: %@->%@%@\n"
-                    @"第三课: %@->%@%@\n"
-                    @"第四课: %@->%@%@",
-                    SafeString(ke4_di), SafeString(ke4_tian), SafeString(ke4_shen),
-                    SafeString(ke3_di), SafeString(ke3_tian), SafeString(ke3_shen),
-                    SafeString(ke2_di), SafeString(ke2_tian), SafeString(ke2_shen),
-                    SafeString(ke1_di), SafeString(ke1_tian), SafeString(ke1_shen)
-                ];
+                if (columns.allKeys.count == 4) {
+                    NSArray *sortedColumnKeys = [columns.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
+                        return [@([obj1 floatValue]) compare:@([obj2 floatValue])];
+                    }];
+
+                    NSMutableArray *column1 = columns[sortedColumnKeys[0]];
+                    NSMutableArray *column2 = columns[sortedColumnKeys[1]];
+                    NSMutableArray *column3 = columns[sortedColumnKeys[2]];
+                    NSMutableArray *column4 = columns[sortedColumnKeys[3]];
+
+                    [column1 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
+                    [column2 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
+                    [column3 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
+                    [column4 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
+
+                    NSString* ke1_shen = ((UILabel*)column4[0]).text;
+                    NSString* ke1_tian = ((UILabel*)column4[1]).text;
+                    NSString* ke1_di = ((UILabel*)column4[2]).text;
+                    
+                    NSString* ke2_shen = ((UILabel*)column3[0]).text;
+                    NSString* ke2_tian = ((UILabel*)column3[1]).text;
+                    NSString* ke2_di = ((UILabel*)column3[2]).text;
+                    
+                    NSString* ke3_shen = ((UILabel*)column2[0]).text;
+                    NSString* ke3_tian = ((UILabel*)column2[1]).text;
+                    NSString* ke3_di = ((UILabel*)column2[2]).text;
+                    
+                    NSString* ke4_shen = ((UILabel*)column1[0]).text;
+                    NSString* ke4_tian = ((UILabel*)column1[1]).text;
+                    NSString* ke4_di = ((UILabel*)column1[2]).text;
+
+                    siKe = [NSMutableString stringWithFormat:
+                        @"第一课: %@->%@%@\n"
+                        @"第二课: %@->%@%@\n"
+                        @"第三课: %@->%@%@\n"
+                        @"第四课: %@->%@%@",
+                        SafeString(ke1_di), SafeString(ke1_tian), SafeString(ke1_shen),
+                        SafeString(ke2_di), SafeString(ke2_tian), SafeString(ke2_shen),
+                        SafeString(ke3_di), SafeString(ke3_tian), SafeString(ke3_shen),
+                        SafeString(ke4_di), SafeString(ke4_tian), SafeString(ke4_shen)
+                    ];
+                }
             }
         }
     }
     
-    // --- 3. 【三传提取逻辑 - 回归稳定拼接】---
+    // --- 3. 【三传提取逻辑 - 优化版】---
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
         NSMutableArray *sanChuanViews = [NSMutableArray array];
         [self findSubviewsOfClass:sanChuanViewClass inView:self.view andStoreIn:sanChuanViews];
-        [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) {
-            return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
-        }];
+        [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
         NSArray *chuanTitles = @[@"初传:", @"中传:", @"末传:"];
         NSMutableArray *sanChuanLines = [NSMutableArray array];
         for (int i = 0; i < sanChuanViews.count; i++) {
             UIView *view = sanChuanViews[i];
             NSMutableArray *labelsInView = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
-            [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-                return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
-            }];
-            NSMutableArray *lineParts = [NSMutableArray array];
-            for (UILabel *label in labelsInView) { if(label.text) [lineParts addObject:label.text]; }
-            NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
-            // 使用稳定可靠的空格拼接，确保所有信息都被提取
-            [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, [lineParts componentsJoinedByString:@" "]]];
+            [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)]; }];
+
+            // 新的结构化格式化逻辑
+            if (labelsInView.count >= 3) { // 必须至少有六亲、地支、天将
+                // 1. 提取核心组件 (基于从左到右的位置)
+                NSString *liuQin = ((UILabel *)labelsInView.firstObject).text;
+                NSString *tianJiang = ((UILabel *)labelsInView.lastObject).text;
+                NSString *diZhi = ((UILabel *)[labelsInView objectAtIndex:labelsInView.count - 2]).text;
+
+                // 2. 提取所有神煞 (在六亲和地支之间的所有部分)
+                NSMutableArray *shenShaParts = [NSMutableArray array];
+                if (labelsInView.count > 3) {
+                    NSRange shenShaRange = NSMakeRange(1, labelsInView.count - 3);
+                    NSArray *shenShaLabels = [labelsInView subarrayWithRange:shenShaRange];
+                    for (UILabel *label in shenShaLabels) {
+                        if (label.text && label.text.length > 0) {
+                            [shenShaParts addObject:label.text];
+                        }
+                    }
+                }
+                NSString *shenShaString = [shenShaParts componentsJoinedByString:@" "];
+                
+                // 3. 组合成新的格式: "六亲->地支天将 (神煞)"
+                NSMutableString *formattedLine = [NSMutableString stringWithFormat:@"%@->%@%@", SafeString(liuQin), SafeString(diZhi), SafeString(tianJiang)];
+                
+                if (shenShaString.length > 0) {
+                    [formattedLine appendFormat:@" (%@)", shenShaString];
+                }
+
+                // 4. 添加标题并存入数组
+                NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
+                [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, formattedLine]];
+            } else {
+                // 如果标签数量不足，则使用原始的简单拼接方式作为备用方案
+                NSMutableArray *lineParts = [NSMutableArray array];
+                for (UILabel *label in labelsInView) { if(label.text) [lineParts addObject:label.text]; }
+                NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
+                [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, [lineParts componentsJoinedByString:@" "]]];
+            }
         }
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
