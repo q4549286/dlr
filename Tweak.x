@@ -2,47 +2,105 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// 侦察代码 V5 - 绝对无错，Hook所有弹窗
+// 侦察专用代码 V3 - 使用 object_getIvar 进行精准探测
 // =========================================================================
 
-static UIViewController *lastPresentedVC = nil;
+static BOOL hasLogged_V3 = NO;
 
-%hook UIViewController
+void showLoggingAlertForViewController_V3(UIViewController *vc);
 
-- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    
-    // 只对我们关心的弹窗进行操作
-    NSString *className = NSStringFromClass([viewControllerToPresent class]);
-    if ([className containsString:@"格局總覽視圖"] || [className containsString:@"七政信息視圖"]) {
-        
-        // 避免重复弹窗
-        if (lastPresentedVC == viewControllerToPresent) {
-            %orig(viewControllerToPresent, flag, completion);
-            return;
-        }
-        lastPresentedVC = viewControllerToPresent;
+// 日志生成和显示的核心函数
+void showLoggingAlertForViewController_V3(UIViewController *vc) {
+    if (hasLogged_V3) return;
+    hasLogged_V3 = YES;
 
-        NSString *logMessage = [NSString stringWithFormat:
-            @"侦察目标已捕获!\n\n"
-            @"类型 (Class): %@\n\n"
-            @"内存地址 (Address): %p\n\n"
-            @"请使用FLEX的pt命令或等效功能查看此地址的详细信息。",
-            className, viewControllerToPresent];
+    NSMutableString *logMessage = [NSMutableString string];
+    [logMessage appendString:@"--- 侦察日志 V3 (精准探测) ---\n\n"];
+    [logMessage appendFormat:@"ViewController Instance: %@\n\n", vc];
 
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察到目标！" message:logMessage preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-        
-        // 先调用原始方法，让列表弹出来
-        %orig(viewControllerToPresent, flag, ^{
-            // 在原始弹窗完成后，再弹出我们的侦察弹窗
-            [viewControllerToPresent presentViewController:alert animated:YES completion:nil];
-            if(completion) completion();
-        });
+    id targetObject = vc;
 
-    } else {
-        // 如果不是我们关心的弹窗，就直接执行原始方法
-        %orig(viewControllerToPresent, flag, completion);
+    // --- 使用 object_getIvar 精准探测实例变量 ---
+    [logMessage appendString:@"--- IVARS (Direct Read) ---\n"];
+    unsigned int ivarCount;
+    Ivar *ivars = class_copyIvarList([targetObject class], &ivarCount);
+    if (ivarCount == 0) {
+        [logMessage appendString:@"(No ivars found)\n"];
     }
+    for (int i = 0; i < ivarCount; i++) {
+        Ivar ivar = ivars[i];
+        const char *ivarName_c = ivar_getName(ivar);
+        const char *ivarType_c = ivar_getTypeEncoding(ivar);
+        if (ivarName_c) {
+            NSString *ivarName = [NSString stringWithUTF8String:ivarName_c];
+            NSString *ivarType = [NSString stringWithUTF8String:ivarType_c];
+            id value = nil;
+            @try {
+                // 这是最关键的一步：直接从内存读取实例变量
+                value = object_getIvar(targetObject, ivar);
+            } @catch (NSException *exception) {
+                value = [NSString stringWithFormat:@"(Exception on direct access: %@)", exception.reason];
+            }
+            [logMessage appendFormat:@"ivar: %@ (type: %@) = %@\n", ivarName, ivarType, value];
+        }
+    }
+    free(ivars);
+
+    // --- 创建并显示弹窗 ---
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察日志 V3 (精准探测)" message:logMessage preferredStyle:UIAlertControllerStyleAlert];
+        
+        // 为长日志添加滚动视图
+        UITextView *textView = [[UITextView alloc] initWithFrame:CGRectMake(0, 0, 270, 400)]; // 给一个足够大的初始尺寸
+        textView.text = logMessage;
+        textView.editable = NO;
+        textView.backgroundColor = [UIColor clearColor];
+        textView.font = [UIFont systemFontOfSize:10]; // 用小一点的字体显示更多内容
+        
+        // 将TextView放入一个容器视图中，再设置给alert的accessoryView（如果支持）或直接添加到视图中
+        // 为了简单兼容，我们直接修改message，并让用户可以复制
+        [alert setValue:logMessage forKey:@"message"];
+
+        UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"复制日志" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [UIPasteboard generalPasteboard].string = logMessage;
+        }];
+        UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleCancel handler:nil];
+
+        [alert addAction:copyAction];
+        [alert addAction:okAction];
+        
+        UIWindow *activeWindow = nil;
+        if (@available(iOS 13.0, *)) {
+            for (UIWindowScene *windowScene in [UIApplication sharedApplication].connectedScenes) {
+                if (windowScene.activationState == UISceneActivationStateForegroundActive) {
+                    activeWindow = windowScene.windows.firstObject;
+                    break;
+                }
+            }
+        }
+        if (!activeWindow) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            activeWindow = [[UIApplication sharedApplication] keyWindow];
+            #pragma clang diagnostic pop
+        }
+        [activeWindow.rootViewController presentViewController:alert animated:YES completion:nil];
+    });
 }
 
+
+// Hook一个很晚才会出现的视图，确保数据已加载
+%hook UIView 
+- (void)didMoveToWindow {
+    %orig;
+    if ([self isKindOfClass:NSClassFromString(@"六壬大占.傳視圖")]) {
+        UIResponder *responder = self;
+        while ((responder = [responder nextResponder])) {
+            if ([responder isKindOfClass:NSClassFromString(@"六壬大占.ViewController")]) {
+                showLoggingAlertForViewController_V3((UIViewController *)responder);
+                break;
+            }
+        }
+    }
+}
 %end
