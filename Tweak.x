@@ -14,16 +14,15 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终稳定版 - 已修复闪退)
+// Section 3: 【新功能】一键复制到 AI (最终竣工版)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
 
 @interface UIViewController (CopyAiAddon)
-- (void)copyAiButtonTapped_FinalStable;
+- (void)copyAiButtonTapped_FinalMasterpiece;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
-- (UILabel *)findLabelToRightOf:(UILabel *)anchorLabel inArray:(NSArray *)labels;
-- (NSString *)extractTextFromFirstViewOfClass:(NSString *)className separator:(NSString *)separator;
+- (NSString *)extractTextFromViewWithClassName:(NSString *)className separator:(NSString *)separator;
 @end
 
 %hook UIViewController
@@ -44,7 +43,7 @@ static NSInteger const CopyAiButtonTag = 112233;
             copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
             [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             copyButton.layer.cornerRadius = 8;
-            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalStable) forControlEvents:UIControlEventTouchUpInside];
+            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalMasterpiece) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:copyButton];
         });
     }
@@ -56,91 +55,43 @@ static NSInteger const CopyAiButtonTag = 112233;
     for (UIView *subview in view.subviews) { [self findSubviewsOfClass:aClass inView:subview andStoreIn:storage]; }
 }
 
+// 提取文本的通用核心方法 (使用繁体类名)
 %new
-- (UILabel *)findLabelToRightOf:(UILabel *)anchorLabel inArray:(NSArray *)labels {
-    if (!anchorLabel) return nil;
-    UILabel *foundLabel = nil;
-    CGFloat minDistance = CGFLOAT_MAX;
-    for (UILabel *label in labels) {
-        if (label == anchorLabel) continue;
-        if (fabs(CGRectGetMidY(label.frame) - CGRectGetMidY(anchorLabel.frame)) < 10 && CGRectGetMinX(label.frame) > CGRectGetMinX(anchorLabel.frame)) {
-            CGFloat distance = CGRectGetMinX(label.frame) - CGRectGetMaxX(anchorLabel.frame);
-            if (distance < minDistance) {
-                minDistance = distance;
-                foundLabel = label;
-            }
-        }
-    }
-    return foundLabel;
-}
-
-// 提取文本的通用核心方法 (只找第一个匹配的视图)
-%new
-- (NSString *)extractTextFromFirstViewOfClass:(NSString *)className separator:(NSString *)separator {
+- (NSString *)extractTextFromViewWithClassName:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
-    // 自动兼容繁体
-    if (!targetViewClass) targetViewClass = NSClassFromString([className stringByReplacingOccurrencesOfString:@"占." withString:@"占."]);
-
     if (!targetViewClass) return @"";
 
     NSMutableArray *targetViews = [NSMutableArray array];
     [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
     
-    if (targetViews.count == 0) return @"";
-
-    UIView *containerView = targetViews.firstObject;
-    NSMutableArray *labelsInView = [NSMutableArray array];
-    [self findSubviewsOfClass:[UILabel class] inView:containerView andStoreIn:labelsInView];
-    
-    [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-        if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
-        if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
-        return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
+    [targetViews sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) {
+        return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
     }];
 
     NSMutableArray *textParts = [NSMutableArray array];
-    for (UILabel *label in labelsInView) {
-        if (label.text && label.text.length > 0) { [textParts addObject:label.text]; }
+    for (UIView *view in targetViews) {
+        NSMutableArray *labelsInView = [NSMutableArray array];
+        [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
+        if (labelsInView.count > 0) {
+            // 假设每个视图里只有一个UILabel是我们想要的
+            [textParts addObject:((UILabel *)labelsInView.firstObject).text ?: @""];
+        }
     }
     return [textParts componentsJoinedByString:separator];
 }
 
-// 【最终稳定版 - 已修复闪退】
+// 【最终竣工版】
 %new
-- (void)copyAiButtonTapped_FinalStable {
+- (void)copyAiButtonTapped_FinalMasterpiece {
     #define SafeString(str) (str ?: @"")
 
-    // --- 1. 结构化提取 (使用稳定的方法) ---
-    NSString *methodName = [self extractTextFromFirstViewOfClass:@"六壬大占.九宗门视图" separator:@" "];
-    NSString *timeBlock = [[self extractTextFromFirstViewOfClass:@"六壬大占.年月日时视图" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-    NSString *fullKeti = [self extractTextFromFirstViewOfClass:@"六壬大占.课体视图" separator:@" "];
+    // --- 1. 结构化提取 (使用您确认的繁体类名) ---
+    NSString *methodName = [self extractTextFromViewWithClassName:@"六壬大占.九宗門視圖" separator:@" "];
+    NSString *timeBlock = [[self extractTextFromViewWithClassName:@"六壬大占.年月日視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+    NSString *fullKeti = [self extractTextFromViewWithClassName:@"六壬大占.課體視圖" separator:@" "];
+    NSString *sanChuan = [self extractTextFromViewWithClassName:@"六壬大占.傳視圖" separator:@" "];
 
-    // --- 2. 【安全提取三传】---
-    NSMutableString *sanChuan = [NSMutableString string];
-    Class sanChuanViewClass = NSClassFromString(@"六壬大占.传视图");
-    if (!sanChuanViewClass) sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
-    
-    if (sanChuanViewClass) {
-        NSMutableArray *sanChuanViews = [NSMutableArray array];
-        [self findSubviewsOfClass:sanChuanViewClass inView:self.view andStoreIn:sanChuanViews];
-        
-        [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) {
-            return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
-        }];
-        
-        NSMutableArray *sanChuanParts = [NSMutableArray array];
-        for (UIView *view in sanChuanViews) {
-            NSMutableArray *labelsInView = [NSMutableArray array];
-            [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
-            if(labelsInView.count > 0) {
-                NSString *text = ((UILabel *)labelsInView.firstObject).text;
-                if(text) [sanChuanParts addObject:text];
-            }
-        }
-        sanChuan = [[sanChuanParts componentsJoinedByString:@" "] mutableCopy];
-    }
-
-    // --- 3. 地标定位法提取其他信息 ---
+    // --- 2. 健壮的地标定位法提取 ---
     NSMutableArray *allLabels = [NSMutableArray array];
     [self findSubviewsOfClass:[UILabel class] inView:self.view andStoreIn:allLabels];
     
@@ -149,23 +100,36 @@ static NSInteger const CopyAiButtonTag = 112233;
     for (UILabel *label in allLabels) {
         if (label.text && label.text.length > 0) {
             NSString *key = [[label.text componentsSeparatedByString:@"\n"] firstObject];
+            // 使用简体作为key，因为界面上已经是简体了
             if (!labelMap[key]) { [labelMap setObject:label forKey:key]; }
         }
     }
 
-    UILabel *taoSuiLabel = labelMap[@"太岁"] ?: labelMap[@"太歲"];
-    if (taoSuiLabel) nianZhuShaVal = [self findLabelToRightOf:taoSuiLabel inArray:allLabels].text;
-
-    UILabel *suiDeLabel = labelMap[@"岁德"] ?: labelMap[@"歲德"];
-    if (suiDeLabel) yueZhuShaVal = [self findLabelToRightOf:suiDeLabel inArray:allLabels].text;
-
-    UILabel *tianPanAnchor = labelMap[@"官"];
-    if (tianPanAnchor) tianPan = [self findLabelToRightOf:tianPanAnchor inArray:allLabels].text;
-
-    UILabel *diPanAnchor = labelMap[@"财"] ?: labelMap[@"財"];
-    if (diPanAnchor) diPan = [self findLabelToRightOf:diPanAnchor inArray:allLabels].text;
+    // 【强化版地标定位】
+    UILabel* (^findRightLabel)(NSString*) = ^UILabel* (NSString *key) {
+        UILabel *anchor = labelMap[key];
+        if (!anchor) return nil;
+        UILabel *foundLabel = nil;
+        CGFloat minDistance = CGFLOAT_MAX;
+        for (UILabel *label in allLabels) {
+            if (label == anchor) continue;
+            if (fabs(CGRectGetMidY(label.frame) - CGRectGetMidY(anchor.frame)) < 10 && CGRectGetMinX(label.frame) > CGRectGetMaxX(anchor.frame)) {
+                CGFloat distance = CGRectGetMinX(label.frame) - CGRectGetMaxX(anchor.frame);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    foundLabel = label;
+                }
+            }
+        }
+        return foundLabel;
+    };
     
-    // --- 4. 组合最终文本 ---
+    nianZhuShaVal = findRightLabel(@"太岁").text;
+    yueZhuShaVal = findRightLabel(@"岁德").text;
+    tianPan = findRightLabel(@"官").text;
+    diPan = findRightLabel(@"财").text;
+    
+    // --- 3. 组合最终文本 ---
     NSString *finalText = [NSString stringWithFormat:
         @"起课方式: %@\n"
         @"课体: %@\n"
