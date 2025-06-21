@@ -16,41 +16,29 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (绝对可靠的最终版)
+// Section 3: 【新功能】一键复制到 AI (已清理无用变量)
 // =========================================================================
 
 // 定义一些常量，避免魔法数字
-static const char *CopyAiButtonAddedKey = "CopyAiButtonAddedKey";
+// 【修正】只保留被用到的常量
 static const char *AllLabelsOnViewKey = "AllLabelsOnViewKey";
 static NSInteger const CopyAiButtonTag = 112233;
 
-// 把新方法添加到通用的 UIViewController 上
-// 这样做可能会给所有 VC 都加上这些方法，但这是最能保证编译通过的方式
 @interface UIViewController (CopyAiAddon)
 - (void)refreshAndSortLabelsForAiCopy;
 - (void)findAllLabelsInView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (void)copyAiButtonTapped;
 @end
 
-
-// Hook 通用的 UIViewController，这个类名编译器绝对认识
 %hook UIViewController
 
-// 在 viewDidLoad 中，我们判断当前是不是目标VC，如果是，就加按钮
 - (void)viewDidLoad {
     %orig;
-
-    // 1. 获取目标类的 Class 对象
     Class targetClass = objc_getClass("六壬大占.ViewController");
-
-    // 2. 判断当前 self 是不是目标类的实例，并且目标类真的存在
     if (targetClass && [self isKindOfClass:targetClass]) {
-        // 3. 检查按钮是否已经添加过，防止重复
         if ([self.view viewWithTag:CopyAiButtonTag]) {
             return;
         }
-
-        // 4. 创建并添加按钮
         UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
         copyButton.frame = CGRectMake(self.view.frame.size.width - 100, 88, 90, 36); 
         copyButton.tag = CopyAiButtonTag;
@@ -59,25 +47,19 @@ static NSInteger const CopyAiButtonTag = 112233;
         copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
         [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         copyButton.layer.cornerRadius = 8;
-        
-        // 5. 绑定点击事件，调用我们新加的方法
         [copyButton addTarget:self action:@selector(copyAiButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-        
         [self.view addSubview:copyButton];
     }
 }
 
-// 在 viewDidAppear 中，同样判断，如果是目标VC，就刷新数据
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
-
     Class targetClass = objc_getClass("六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         [self refreshAndSortLabelsForAiCopy];
     }
 }
 
-// 为 UIViewController 添加新方法
 %new
 - (void)refreshAndSortLabelsForAiCopy {
     NSMutableArray *labels = [NSMutableArray array];
@@ -119,7 +101,6 @@ static NSInteger const CopyAiButtonTag = 112233;
     }
     NSLog(@"%@", debugLog);
     
-    // 【请根据调试日志的结果，修改下面的索引值】
     NSString *methodName     = sortedLabels.count > 4  ? ((UILabel *)sortedLabels[4]).text  : @"";
     NSString *nianZhuGanZhi  = sortedLabels.count > 6  ? ((UILabel *)sortedLabels[6]).text  : @"";
     NSString *yueZhuGanZhi  = sortedLabels.count > 7  ? ((UILabel *)sortedLabels[7]).text  : @"";
