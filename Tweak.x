@@ -14,13 +14,13 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终交付版)
+// Section 3: 【新功能】一键复制到 AI (最终完美版)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
 
 @interface UIViewController (CopyAiAddon)
-- (void)copyAiButtonTapped_FinalDelivery;
+- (void)copyAiButtonTapped_FinalPerfect;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
 @end
@@ -42,7 +42,7 @@ static NSInteger const CopyAiButtonTag = 112233;
             copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
             [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             copyButton.layer.cornerRadius = 8;
-            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalDelivery) forControlEvents:UIControlEventTouchUpInside];
+            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalPerfect) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:copyButton];
         });
     }
@@ -74,9 +74,9 @@ static NSInteger const CopyAiButtonTag = 112233;
     return [textParts componentsJoinedByString:separator];
 }
 
-// 【最终交付版】
+// 【最终完美版】
 %new
-- (void)copyAiButtonTapped_FinalDelivery {
+- (void)copyAiButtonTapped_FinalPerfect {
     #define SafeString(str) (str ?: @"")
 
     // --- 1. 结构化提取 ---
@@ -84,7 +84,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
 
-    // --- 2. 【四课提取逻辑】---
+    // --- 2. 【四课提取逻辑 - 已恢复到正确的版本】---
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -94,27 +94,46 @@ static NSInteger const CopyAiButtonTag = 112233;
             UIView* container = siKeViews.firstObject;
             NSMutableArray* labels = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:container andStoreIn:labels];
+            
             if(labels.count >= 12){
                 [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
                     if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
                     if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
                     return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
                 }];
-                NSArray* keTitles = @[@"第一课:", @"第二课:", @"第三课:", @"第四课:"];
-                NSMutableArray* keLines = [NSMutableArray array];
-                for(int i = 0; i < 4; i++){
-                    NSString* shen = ((UILabel*)labels[i]).text;
-                    NSString* tian = ((UILabel*)labels[i+4]).text;
-                    NSString* di   = ((UILabel*)labels[i+8]).text;
-                    [keLines addObject:[NSString stringWithFormat:@"%@ %@->%@%@", keTitles[3-i], SafeString(di), SafeString(tian), SafeString(shen)]];
-                }
-                // 反转数组以得到正确的顺序 1,2,3,4
-                siKe = [[[keLines reverseObjectEnumerator].allObjects componentsJoinedByString:@"\n"] mutableCopy];
+
+                // **【最终修正】** 严格按照最终推导出的正确映射关系
+                NSString* ke1_di = ((UILabel*)labels[11]).text;
+                NSString* ke1_tian = ((UILabel*)labels[7]).text;
+                NSString* ke1_shen = ((UILabel*)labels[3]).text;
+                
+                NSString* ke2_di = ((UILabel*)labels[10]).text;
+                NSString* ke2_tian = ((UILabel*)labels[6]).text;
+                NSString* ke2_shen = ((UILabel*)labels[2]).text;
+                
+                NSString* ke3_di = ((UILabel*)labels[9]).text;
+                NSString* ke3_tian = ((UILabel*)labels[5]).text;
+                NSString* ke3_shen = ((UILabel*)labels[1]).text;
+                
+                NSString* ke4_di = ((UILabel*)labels[8]).text;
+                NSString* ke4_tian = ((UILabel*)labels[4]).text;
+                NSString* ke4_shen = ((UILabel*)labels[0]).text;
+
+                siKe = [NSMutableString stringWithFormat:
+                    @"第一课: %@->%@%@\n"
+                    @"第二课: %@->%@%@\n"
+                    @"第三课: %@->%@%@\n"
+                    @"第四课: %@->%@%@",
+                    SafeString(ke1_di), SafeString(ke1_tian), SafeString(ke1_shen),
+                    SafeString(ke2_di), SafeString(ke2_tian), SafeString(ke2_shen),
+                    SafeString(ke3_di), SafeString(ke3_tian), SafeString(ke3_shen),
+                    SafeString(ke4_di), SafeString(ke4_tian), SafeString(ke4_shen)
+                ];
             }
         }
     }
     
-    // --- 3. 【三传提取逻辑 - 全新格式化】---
+    // --- 3. 【三传提取逻辑 - 回归稳定拼接】---
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
@@ -132,28 +151,10 @@ static NSInteger const CopyAiButtonTag = 112233;
             [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
                 return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
             }];
-            
-            // 智能拼接逻辑
-            NSString *liuqin = @"";
-            NSMutableArray *shensha = [NSMutableArray array];
-            NSString *dizhi = @"";
-            NSString *tianjiang = @"";
-
-            for(UILabel *label in labelsInView){
-                if(label.text.length == 1 && [@"官财父兄子" containsString:label.text]){
-                    liuqin = label.text;
-                } else if (label.text.length == 1 && [@"子丑寅卯辰巳午未申酉戌亥" containsString:label.text]){
-                    dizhi = label.text;
-                } else if (label.text.length == 2){
-                    tianjiang = label.text;
-                } else {
-                    [shensha addObject:label.text];
-                }
-            }
-            
-            NSString *shenshaStr = [shensha componentsJoinedByString:@" "];
-            NSString *line = [NSString stringWithFormat:@"%@ %@ (%@) -> %@ (%@)", chuanTitles[i], liuqin, shenshaStr, dizhi, tianjiang];
-            [sanChuanLines addObject:line];
+            NSMutableArray *lineParts = [NSMutableArray array];
+            for (UILabel *label in labelsInView) { if(label.text) [lineParts addObject:label.text]; }
+            NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
+            [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, [lineParts componentsJoinedByString:@" "]]];
         }
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
