@@ -84,7 +84,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
 
-    // --- 2. 【最终四课提取逻辑 - 彻底修正】---
+    // --- 2. 【最终四课提取逻辑 - 绝对修正】---
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -102,7 +102,7 @@ static NSInteger const CopyAiButtonTag = 112233;
                     return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
                 }];
 
-                // **【最终修正】** 严格按照正确的映射关系，重新组合四课
+                // **【绝对修正】** 严格按照最终推导出的正确映射关系，重新组合四课
                 
                 // 第一课: 辛->未白虎
                 NSString* ke1_di = ((UILabel*)labels[11]).text;
@@ -124,7 +124,6 @@ static NSInteger const CopyAiButtonTag = 112233;
                 NSString* ke4_tian = ((UILabel*)labels[4]).text;
                 NSString* ke4_shen = ((UILabel*)labels[0]).text;
 
-                // **【最终修正】** 使用正确的变量进行拼接
                 siKe = [NSMutableString stringWithFormat:
                     @"第一课: %@->%@%@\n"
                     @"第二课: %@->%@%@\n"
