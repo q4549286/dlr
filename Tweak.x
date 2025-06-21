@@ -79,12 +79,17 @@ static NSInteger const CopyAiButtonTag = 112233;
 - (void)copyAiButtonTapped_FinalPerfect {
     #define SafeString(str) (str ?: @"")
 
-    // --- 1. 结构化提取 ---
-    NSString *methodName = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
+    // --- 1. 结构化提取所有信息 ---
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+    NSString *yueJiang = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
+    NSString *kongWang = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
+    NSString *sanGongShi = [self extractTextFromFirstViewOfClassName:@"六壬大占.三宮時視圖" separator:@" "];
+    NSString *zhouYe = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
-
-    // --- 2. 【最终四课提取逻辑 - 按列分组】---
+    NSString *biFa = [self extractTextFromFirstViewOfClassName:@"六壬大占.格局單元" separator:@" "];
+    NSString *methodName = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
+    
+    // --- 2. 【四课提取逻辑 - 保持不变】---
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -149,7 +154,7 @@ static NSInteger const CopyAiButtonTag = 112233;
         }
     }
     
-    // --- 3. 【三传提取逻辑 - 优化版】---
+    // --- 3. 【三传提取逻辑 - 优化版，保持不变】---
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
@@ -164,38 +169,27 @@ static NSInteger const CopyAiButtonTag = 112233;
             [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
             [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)]; }];
 
-            // 新的结构化格式化逻辑
-            if (labelsInView.count >= 3) { // 必须至少有六亲、地支、天将
-                // 1. 提取核心组件 (基于从左到右的位置)
+            if (labelsInView.count >= 3) {
                 NSString *liuQin = ((UILabel *)labelsInView.firstObject).text;
                 NSString *tianJiang = ((UILabel *)labelsInView.lastObject).text;
                 NSString *diZhi = ((UILabel *)[labelsInView objectAtIndex:labelsInView.count - 2]).text;
 
-                // 2. 提取所有神煞 (在六亲和地支之间的所有部分)
                 NSMutableArray *shenShaParts = [NSMutableArray array];
                 if (labelsInView.count > 3) {
                     NSRange shenShaRange = NSMakeRange(1, labelsInView.count - 3);
                     NSArray *shenShaLabels = [labelsInView subarrayWithRange:shenShaRange];
                     for (UILabel *label in shenShaLabels) {
-                        if (label.text && label.text.length > 0) {
-                            [shenShaParts addObject:label.text];
-                        }
+                        if (label.text && label.text.length > 0) { [shenShaParts addObject:label.text]; }
                     }
                 }
                 NSString *shenShaString = [shenShaParts componentsJoinedByString:@" "];
                 
-                // 3. 组合成新的格式: "六亲->地支天将 (神煞)"
                 NSMutableString *formattedLine = [NSMutableString stringWithFormat:@"%@->%@%@", SafeString(liuQin), SafeString(diZhi), SafeString(tianJiang)];
-                
-                if (shenShaString.length > 0) {
-                    [formattedLine appendFormat:@" (%@)", shenShaString];
-                }
+                if (shenShaString.length > 0) { [formattedLine appendFormat:@" (%@)", shenShaString]; }
 
-                // 4. 添加标题并存入数组
                 NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
                 [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, formattedLine]];
             } else {
-                // 如果标签数量不足，则使用原始的简单拼接方式作为备用方案
                 NSMutableArray *lineParts = [NSMutableArray array];
                 for (UILabel *label in labelsInView) { if(label.text) [lineParts addObject:label.text]; }
                 NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
@@ -205,14 +199,27 @@ static NSInteger const CopyAiButtonTag = 112233;
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
     
-    // --- 4. 组合最终文本 ---
+    // --- 4. 组合最终文本 (全新排版) ---
     NSString *finalText = [NSString stringWithFormat:
-        @"起课方式: %@\n"
+        // 时间块置顶
+        @"%@\n\n"
+        // 基本信息
+        @"月将: %@\n"
+        @"空亡: %@\n"
+        @"三宫时: %@\n"
+        @"昼夜: %@\n"
         @"课体: %@\n"
-        @"%@\n" // 四课
-        @"%@\n" // 三传
-        @"%@",   // 时间块
-        SafeString(methodName), SafeString(fullKeti), SafeString(siKe), SafeString(sanChuan), SafeString(timeBlock)
+        @"毕法: %@\n\n"
+        // 课体三传
+        @"%@\n\n" // 四课
+        @"%@\n\n" // 三传
+        // 起课方式
+        @"起课方式: %@",
+        SafeString(timeBlock),
+        SafeString(yueJiang), SafeString(kongWang), SafeString(sanGongShi), SafeString(zhouYe), SafeString(fullKeti), SafeString(biFa),
+        SafeString(siKe),
+        SafeString(sanChuan),
+        SafeString(methodName)
     ];
     
     [UIPasteboard generalPasteboard].string = finalText;
