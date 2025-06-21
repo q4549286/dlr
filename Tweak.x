@@ -107,13 +107,13 @@ static NSInteger const CopyAiButtonTag = 112233;
                 NSArray* keTitles = @[@"第一课:", @"第二课:", @"第三课:", @"第四课:"];
                 NSMutableArray* keLines = [NSMutableArray array];
                 
-                // 排序后，我们知道0-3是神，4-7是天盘，8-11是地盘
                 for(int i = 0; i < 4; i++){
                     NSString* shen = ((UILabel*)labels[i]).text;
                     NSString* tian = ((UILabel*)labels[i+4]).text;
                     NSString* di = ((UILabel*)labels[i+8]).text;
                     [keLines addObject:[NSString stringWithFormat:@"%@ %@ %@ %@", keTitles[i], shen, tian, di]];
                 }
+                // 【关键修正】直接拼接，不再反序
                 siKe = [[keLines componentsJoinedByString:@"\n"] mutableCopy];
             }
         }
