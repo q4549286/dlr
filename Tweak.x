@@ -3,6 +3,7 @@
 
 // =========================================================================
 // 日志宏定义
+// =========================================================================
 #define EchoLog(format, ...) NSLog((@"[EchoAI] " format), ##__VA_ARGS__)
 
 // =========================================================================
@@ -18,16 +19,91 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (终极无感版)
+// Section 3: 【新功能】一键复制到 AI (链式反应方案)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
+static NSMutableDictionary *g_extractedData = nil;
+static NSArray *g_taskQueue = nil;
+static int g_currentTaskIndex = -1;
+static __weak UIViewController *g_mainViewController = nil;
+
+// 宏定义，用于安全地调用performSelector
+#define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
+    _Pragma("clang diagnostic push") \
+    _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
+    code; \
+    _Pragma("clang diagnostic pop")
+
+void executeNextTask() {
+    g_currentTaskIndex++;
+    if (!g_mainViewController || g_currentTaskIndex >= g_taskQueue.count) {
+        EchoLog(@"所有任务执行完毕，开始组合最终文本...");
+        // 所有任务完成，组合并显示最终结果
+        NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", g_extractedData[@"毕法"]] : @"";
+        NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"格局:\n%@\n\n", g_extractedData[@"格局"]] : @"";
+        NSString *qiZhengOutput = g_extractedData[@"七政"] ? [NSString stringWithFormat:@"七政:\n%@\n\n", g_extractedData[@"七政"]] : @"";
+        
+        #define SafeString(str) (str ?: @"")
+        NSString *finalText = [NSString stringWithFormat:
+            @"%@\n\n"
+            @"月将: %@\n"
+            @"空亡: %@\n"
+            @"三宫时: %@\n"
+            @"昼夜: %@\n"
+            @"课体: %@\n\n"
+            @"%@" // 毕法
+            @"%@" // 格局
+            @"%@" // 七政
+            @"%@\n\n"
+            @"%@\n\n"
+            @"起课方式: %@",
+            SafeString(g_extractedData[@"时间块"]),
+            SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]), SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]),
+            biFaOutput,
+            geJuOutput,
+            qiZhengOutput,
+            SafeString(g_extractedData[@"四课"]),
+            SafeString(g_extractedData[@"三传"]),
+            SafeString(g_extractedData[@"起课方式"])
+        ];
+        
+        [UIPasteboard generalPasteboard].string = finalText;
+        
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
+        [alert addAction:okAction];
+        [g_mainViewController presentViewController:alert animated:YES completion:^{
+            g_extractedData = nil;
+            g_mainViewController = nil;
+            g_taskQueue = nil;
+            g_currentTaskIndex = -1;
+            EchoLog(@"--- 复制任务完成 ---");
+        }];
+        return;
+    }
+
+    // 执行当前任务
+    NSDictionary *task = g_taskQueue[g_currentTaskIndex];
+    NSString *selectorName = task[@"selector"];
+    SEL selector = NSSelectorFromString(selectorName);
+    
+    if ([g_mainViewController respondsToSelector:selector]) {
+        EchoLog(@"执行任务 %d: 调用 '%@'", g_currentTaskIndex + 1, selectorName);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([g_mainViewController performSelector:selector withObject:nil]);
+        });
+    } else {
+        EchoLog(@"错误: 未找到方法 '%@', 跳过此任务。", selectorName);
+        executeNextTask(); // 直接执行下一个任务
+    }
+}
+
 
 @interface UIViewController (CopyAiAddon)
-- (void)copyAiButtonTapped_FinalMethod;
+- (void)copyAiButtonTapped_ChainReaction;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
-- (NSString *)extractTextFromStaticViewOfClassName:(NSString *)className separator:(NSString *)separator;
-- (NSString *)extractTextFromInvisibleVC:(NSString *)vcClassName;
+- (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
 @end
 
 %hook UIViewController
@@ -37,6 +113,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            g_mainViewController = self;
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow || [keyWindow viewWithTag:CopyAiButtonTag]) { return; }
             UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -47,11 +124,62 @@ static NSInteger const CopyAiButtonTag = 112233;
             copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
             [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             copyButton.layer.cornerRadius = 8;
-            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalMethod) forControlEvents:UIControlEventTouchUpInside];
+            [copyButton addTarget:self action:@selector(copyAiButtonTapped_ChainReaction) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:copyButton];
         });
     }
 }
+
+- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
+    // 只有在执行我们的任务队列时才进行抓取
+    if (g_taskQueue && g_currentTaskIndex < g_taskQueue.count) {
+        EchoLog(@"弹窗事件被触发，准备抓取内容...");
+        // 确保视图加载完成
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+             // 提取数据
+            NSDictionary *currentTask = g_taskQueue[g_currentTaskIndex];
+            NSString *dataKey = currentTask[@"key"];
+            
+            NSMutableArray *labels = [NSMutableArray array];
+            [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:labels];
+            
+            [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
+                if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
+                if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
+                return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
+            }];
+            
+            NSMutableArray *textParts = [NSMutableArray array];
+            NSString *title = viewControllerToPresent.title ?: @"";
+            if(title.length == 0 && labels.count > 0) { title = ((UILabel*)labels.firstObject).text; }
+
+            for (UILabel *label in labels) {
+                if (label.text && label.text.length > 0 && ![label.text isEqualToString:title] && ![label.text isEqualToString:@"毕法"] && ![label.text isEqualToString:@"格局"]) {
+                    [textParts addObject:label.text];
+                }
+            }
+            
+            NSString *content = [textParts componentsJoinedByString:@"\n"];
+            g_extractedData[dataKey] = content;
+            EchoLog(@"成功抓取 [%@] 内容", dataKey);
+        });
+    }
+    %orig(viewControllerToPresent, flag, completion);
+}
+
+// Hook弹窗关闭事件，以触发下一个任务
+- (void)dismissViewControllerAnimated:(BOOL)flag completion:(void (^)(void))completion {
+     if (g_taskQueue && g_currentTaskIndex < g_taskQueue.count) {
+        EchoLog(@"弹窗关闭事件被触发，执行下一个任务...");
+        %orig(flag, ^{
+            executeNextTask();
+            if (completion) completion();
+        });
+     } else {
+        %orig(flag, completion);
+     }
+}
+
 
 %new
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage {
@@ -60,9 +188,12 @@ static NSInteger const CopyAiButtonTag = 112233;
 }
 
 %new
-- (NSString *)extractTextFromStaticViewOfClassName:(NSString *)className separator:(NSString *)separator {
+- (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
-    if (!targetViewClass) { return @""; }
+    if (!targetViewClass) {
+        EchoLog(@"类名 '%@' 未找到。", className);
+        return @"";
+    }
     NSMutableArray *targetViews = [NSMutableArray array];
     [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
     if (targetViews.count == 0) return @"";
@@ -79,68 +210,23 @@ static NSInteger const CopyAiButtonTag = 112233;
     return [textParts componentsJoinedByString:separator];
 }
 
-// 【核心】无感抓取动态内容的方法
 %new
-- (NSString *)extractTextFromInvisibleVC:(NSString *)vcClassName {
-    Class vcClass = NSClassFromString(vcClassName);
-    if (!vcClass) {
-        EchoLog(@"错误: 找不到视图控制器类 '%@'", vcClassName);
-        return nil;
-    }
+- (void)copyAiButtonTapped_ChainReaction {
+    EchoLog(@"--- 开始执行复制到AI任务 ---");
+    g_extractedData = [NSMutableDictionary dictionary];
+    g_mainViewController = self;
     
-    UIViewController *invisibleVC = [[vcClass alloc] init];
-    if (!invisibleVC) {
-        EchoLog(@"错误: 创建'%@'实例失败", vcClassName);
-        return nil;
-    }
-
-    // 强制加载视图层级，但并不显示它
-    [invisibleVC loadViewIfNeeded];
-    
-    NSMutableArray *labels = [NSMutableArray array];
-    [self findSubviewsOfClass:[UILabel class] inView:invisibleVC.view andStoreIn:labels];
-    
-    [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-        if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
-        if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
-        return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
-    }];
-    
-    NSMutableArray *textParts = [NSMutableArray array];
-    NSString *title = invisibleVC.title ?: @"";
-    if (title.length == 0 && labels.count > 0) {
-        title = ((UILabel*)labels.firstObject).text;
-    }
-
-    for (UILabel *label in labels) {
-        if (label.text && label.text.length > 0 && ![label.text isEqualToString:title] && ![label.text isEqualToString:@"毕法"]) {
-            [textParts addObject:label.text];
-        }
-    }
-    
-    return [textParts componentsJoinedByString:@"\n"];
-}
-
-
-%new
-- (void)copyAiButtonTapped_FinalMethod {
-    #define SafeString(str) (str ?: @"")
-    
-    EchoLog(@"--- 开始执行【无感】复制到AI任务 ---");
-    
-    NSMutableDictionary *data = [NSMutableDictionary dictionary];
-
-    // --- 1. 提取主界面静态信息 ---
-    EchoLog(@"[1/3] 正在提取主界面静态信息...");
-    data[@"时间块"] = [[self extractTextFromStaticViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-    data[@"月将"] = [self extractTextFromStaticViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
-    data[@"空亡"] = [self extractTextFromStaticViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
-    data[@"三宫时"] = [self extractTextFromStaticViewOfClassName:@"六壬大占.三宮時視圖" separator:@" "];
-    data[@"昼夜"] = [self extractTextFromStaticViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
-    data[@"课体"] = [self extractTextFromStaticViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
-    data[@"起课方式"] = [self extractTextFromStaticViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
-    
-    // 提取四课
+    // --- 1. 提取所有静态信息 ---
+    EchoLog(@"正在提取主界面静态信息...");
+    g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+    g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
+    g_extractedData[@"空亡"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
+    g_extractedData[@"三宫时"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.三宮時視圖" separator:@" "];
+    g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
+    g_extractedData[@"课体"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
+    g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
+    // 四课和三传也属于静态信息
+    // (四课代码)
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -152,106 +238,87 @@ static NSInteger const CopyAiButtonTag = 112233;
             [self findSubviewsOfClass:[UILabel class] inView:container andStoreIn:labels];
             if(labels.count >= 12){
                 NSMutableDictionary *columns = [NSMutableDictionary dictionary];
-                for(UILabel *label in labels){ NSString *columnKey = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))]; if(!columns[columnKey]){ columns[columnKey] = [NSMutableArray array]; } [columns[columnKey] addObject:label]; }
+                for(UILabel *label in labels){
+                    NSString *columnKey = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))];
+                    if(!columns[columnKey]){ columns[columnKey] = [NSMutableArray array]; }
+                    [columns[columnKey] addObject:label];
+                }
                 if (columns.allKeys.count == 4) {
-                    NSArray *sortedColumnKeys = [columns.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) { return [@([obj1 floatValue]) compare:@([obj2 floatValue])]; }];
-                    NSMutableArray *c1=columns[sortedColumnKeys[0]], *c2=columns[sortedColumnKeys[1]], *c3=columns[sortedColumnKeys[2]], *c4=columns[sortedColumnKeys[3]];
-                    [c1 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];}]; [c2 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];}]; [c3 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];}]; [c4 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];}];
-                    NSString* s1=((UILabel*)c4[0]).text, *t1=((UILabel*)c4[1]).text, *d1=((UILabel*)c4[2]).text;
-                    NSString* s2=((UILabel*)c3[0]).text, *t2=((UILabel*)c3[1]).text, *d2=((UILabel*)c3[2]).text;
-                    NSString* s3=((UILabel*)c2[0]).text, *t3=((UILabel*)c2[1]).text, *d3=((UILabel*)c2[2]).text;
-                    NSString* s4=((UILabel*)c1[0]).text, *t4=((UILabel*)c1[1]).text, *d4=((UILabel*)c1[2]).text;
-                    siKe = [NSMutableString stringWithFormat:@"第一课: %@->%@%@\n第二课: %@->%@%@\n第三课: %@->%@%@\n第四课: %@->%@%@", SafeString(d1),SafeString(t1),SafeString(s1), SafeString(d2),SafeString(t2),SafeString(s2), SafeString(d3),SafeString(t3),SafeString(s3), SafeString(d4),SafeString(t4),SafeString(s4)];
+                    NSArray *sortedColumnKeys = [columns.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
+                        return [@([obj1 floatValue]) compare:@([obj2 floatValue])];
+                    }];
+                    NSMutableArray *column1 = columns[sortedColumnKeys[0]];
+                    NSMutableArray *column2 = columns[sortedColumnKeys[1]];
+                    NSMutableArray *column3 = columns[sortedColumnKeys[2]];
+                    NSMutableArray *column4 = columns[sortedColumnKeys[3]];
+                    [column1 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
+                    [column2 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
+                    [column3 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
+                    [column4 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
+                    NSString* ke1_shen = ((UILabel*)column4[0]).text;
+                    NSString* ke1_tian = ((UILabel*)column4[1]).text;
+                    NSString* ke1_di = ((UILabel*)column4[2]).text;
+                    NSString* ke2_shen = ((UILabel*)column3[0]).text;
+                    NSString* ke2_tian = ((UILabel*)column3[1]).text;
+                    NSString* ke2_di = ((UILabel*)column3[2]).text;
+                    NSString* ke3_shen = ((UILabel*)column2[0]).text;
+                    NSString* ke3_tian = ((UILabel*)column2[1]).text;
+                    NSString* ke3_di = ((UILabel*)column2[2]).text;
+                    NSString* ke4_shen = ((UILabel*)column1[0]).text;
+                    NSString* ke4_tian = ((UILabel*)column1[1]).text;
+                    NSString* ke4_di = ((UILabel*)column1[2]).text;
+                    siKe = [NSMutableString stringWithFormat:@"第一课: %@->%@%@\n第二课: %@->%@%@\n第三课: %@->%@%@\n第四课: %@->%@%@", ke1_di, ke1_tian, ke1_shen, ke2_di, ke2_tian, ke2_shen, ke3_di, ke3_tian, ke3_shen, ke4_di, ke4_tian, ke4_shen];
                 }
             }
         }
     }
-    data[@"四课"] = siKe;
-
-    // 提取三传
+    g_extractedData[@"四课"] = siKe;
+    // (三传代码)
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
         NSMutableArray *sanChuanViews = [NSMutableArray array];
         [self findSubviewsOfClass:sanChuanViewClass inView:self.view andStoreIn:sanChuanViews];
-        [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2){return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];}];
+        [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
         NSArray *chuanTitles = @[@"初传:", @"中传:", @"末传:"];
         NSMutableArray *sanChuanLines = [NSMutableArray array];
-        for (int i=0; i<sanChuanViews.count; i++) {
+        for (int i = 0; i < sanChuanViews.count; i++) {
             UIView *view = sanChuanViews[i];
             NSMutableArray *labelsInView = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
-            [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];}];
-            if(labelsInView.count >= 3){
-                NSString *lq=((UILabel*)labelsInView.firstObject).text, *tj=((UILabel*)labelsInView.lastObject).text, *dz=((UILabel*)[labelsInView objectAtIndex:labelsInView.count - 2]).text;
-                NSMutableArray *ssParts = [NSMutableArray array];
-                if(labelsInView.count > 3){
-                    for(UILabel *l in [labelsInView subarrayWithRange:NSMakeRange(1, labelsInView.count - 3)]) { if(l.text.length>0) [ssParts addObject:l.text]; }
+            [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)]; }];
+            if (labelsInView.count >= 3) {
+                NSString *liuQin = ((UILabel *)labelsInView.firstObject).text;
+                NSString *tianJiang = ((UILabel *)labelsInView.lastObject).text;
+                NSString *diZhi = ((UILabel *)[labelsInView objectAtIndex:labelsInView.count - 2]).text;
+                NSMutableArray *shenShaParts = [NSMutableArray array];
+                if (labelsInView.count > 3) {
+                    NSRange shenShaRange = NSMakeRange(1, labelsInView.count - 3);
+                    NSArray *shenShaLabels = [labelsInView subarrayWithRange:shenShaRange];
+                    for (UILabel *label in shenShaLabels) { if (label.text && label.text.length > 0) { [shenShaParts addObject:label.text]; } }
                 }
-                NSString *ssStr = [ssParts componentsJoinedByString:@" "];
-                NSMutableString *fLine = [NSMutableString stringWithFormat:@"%@->%@%@", SafeString(lq), SafeString(dz), SafeString(tj)];
-                if(ssStr.length > 0) [fLine appendFormat:@" (%@)", ssStr];
+                NSString *shenShaString = [shenShaParts componentsJoinedByString:@" "];
+                NSMutableString *formattedLine = [NSMutableString stringWithFormat:@"%@->%@%@", liuQin, diZhi, tianJiang];
+                if (shenShaString.length > 0) { [formattedLine appendFormat:@" (%@)", shenShaString]; }
                 NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
-                [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, fLine]];
+                [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, formattedLine]];
             }
         }
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
-    data[@"三传"] = sanChuan;
+    g_extractedData[@"三传"] = sanChuan;
     EchoLog(@"主界面信息提取完毕。");
-    
-    // --- 2. 在后台线程中无感抓取动态信息 ---
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        EchoLog(@"[2/3] 开始在后台无感抓取动态信息...");
-        
-        // 抓取毕法
-        data[@"毕法"] = [self extractTextFromInvisibleVC:@"六壬大占.法訣總覽視圖控制器"];
-        EchoLog(@"毕法信息抓取完毕。");
 
-        // 抓取格局
-        data[@"格局"] = [self extractTextFromInvisibleVC:@"六壬大占.格局總覽視圖控制器"];
-        EchoLog(@"格局信息抓取完毕。");
+    // --- 2. 定义动态任务队列 ---
+    g_taskQueue = @[
+        @{@"key": @"毕法", @"selector": @"顯示法訣總覽"},
+        @{@"key": @"格局", @"selector": @"顯示格局總覽"},
+        @{@"key": @"七政", @"selector": @"顯示七政信息:"}
+    ];
+    g_currentTaskIndex = -1;
 
-        // 抓取七政
-        data[@"七政"] = [self extractTextFromInvisibleVC:@"六壬大占.七政信息視圖控制器"];
-        EchoLog(@"七政信息抓取完毕。");
-
-        // --- 3. 组合并显示最终结果 ---
-        dispatch_async(dispatch_get_main_queue(), ^{
-            EchoLog(@"[3/3] 所有信息收集完毕，正在组合最终文本...");
-            
-            NSString *biFaOutput = data[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", data[@"毕法"]] : @"";
-            NSString *geJuOutput = data[@"格局"] ? [NSString stringWithFormat:@"格局:\n%@\n\n", data[@"格局"]] : @"";
-            NSString *qiZhengOutput = data[@"七政"] ? [NSString stringWithFormat:@"七政:\n%@\n\n", data[@"七政"]] : @"";
-            
-            NSString *finalText = [NSString stringWithFormat:
-                @"%@\n\n"
-                @"月将: %@\n"
-                @"空亡: %@\n"
-                @"三宫时: %@\n"
-                @"昼夜: %@\n"
-                @"课体: %@\n\n"
-                @"%@" @"%@" @"%@"
-                @"%@\n\n"
-                @"%@\n\n"
-                @"起课方式: %@",
-                SafeString(data[@"时间块"]),
-                SafeString(data[@"月将"]), SafeString(data[@"空亡"]), SafeString(data[@"三宫时"]), SafeString(data[@"昼夜"]), SafeString(data[@"课体"]),
-                biFaOutput, geJuOutput, qiZhengOutput,
-                SafeString(data[@"四课"]),
-                SafeString(data[@"三传"]),
-                SafeString(data[@"起课方式"])
-            ];
-            
-            [UIPasteboard generalPasteboard].string = finalText;
-            
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
-            UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
-            [alert addAction:okAction];
-            [self presentViewController:alert animated:YES completion:nil];
-            EchoLog(@"--- 复制任务完成 ---");
-        });
-    });
+    // --- 3. 启动任务队列 ---
+    executeNextTask();
 }
 
 %end
