@@ -102,29 +102,30 @@ static NSInteger const CopyAiButtonTag = 112233;
                     if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
                     return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
                 }];
-
-                // 排序后，我们知道0-3是神，4-7是天盘，8-11是地盘，都是从左到右
+                
                 // 【关键修正】根据正确的对应关系，重新组合四课
+                // 排序后，我们知道0-3是神，4-7是天盘，8-11是地盘，都是从左到右
+                // 真正的对应关系是：第N课 = 第(4-N)列的元素
+
+                // 第一课 = 第4列 (索引3, 7, 11)
+                NSString* ke1_shen = ((UILabel*)labels[3]).text;
+                NSString* ke1_tian = ((UILabel*)labels[7]).text;
+                NSString* ke1_di   = ((UILabel*)labels[11]).text;
                 
-                // 第一课 = 第4列
-                NSString* ke1_di = ((UILabel*)labels[11]).text; // 辛
-                NSString* ke1_tian = ((UILabel*)labels[7]).text;  // 未
-                NSString* ke1_shen = ((UILabel*)labels[3]).text;  // 白虎
+                // 第二课 = 第3列 (索引2, 6, 10)
+                NSString* ke2_shen = ((UILabel*)labels[2]).text;
+                NSString* ke2_tian = ((UILabel*)labels[6]).text;
+                NSString* ke2_di   = ((UILabel*)labels[10]).text;
+
+                // 第三课 = 第2列 (索引1, 5, 9)
+                NSString* ke3_shen = ((UILabel*)labels[1]).text;
+                NSString* ke3_tian = ((UILabel*)labels[5]).text;
+                NSString* ke3_di   = ((UILabel*)labels[9]).text;
                 
-                // 第二课 = 第3列
-                NSString* ke2_di = ((UILabel*)labels[10]).text; // 未
-                NSString* ke2_tian = ((UILabel*)labels[6]).text;  // 辰
-                NSString* ke2_shen = ((UILabel*)labels[2]).text;  // 太阴
-                
-                // 第三课 = 第2列
-                NSString* ke3_di = ((UILabel*)labels[9]).text; // 酉
-                NSString* ke3_tian = ((UILabel*)labels[5]).text;  // 午
-                NSString* ke3_shen = ((UILabel*)labels[1]).text;  // 太常
-                
-                // 第四课 = 第1列
-                NSString* ke4_di = ((UILabel*)labels[8]).text; // 午
-                NSString* ke4_tian = ((UILabel*)labels[4]).text;  // 卯
-                NSString* ke4_shen = ((UILabel*)labels[0]).text;  // 天后
+                // 第四课 = 第1列 (索引0, 4, 8)
+                NSString* ke4_shen = ((UILabel*)labels[0]).text;
+                NSString* ke4_tian = ((UILabel*)labels[4]).text;
+                NSString* ke4_di   = ((UILabel*)labels[8]).text;
 
                 siKe = [NSMutableString stringWithFormat:
                     @"第一课: %@->%@%@\n"
