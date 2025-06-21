@@ -2,17 +2,25 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// Section 1: 文字替换功能 (原样保留)
+// Section 1: 文字替换功能 (已修正编译错误)
 // =========================================================================
 %hook UILabel
-// ... 您的UILabel hook代码原封不动地放在这里 ...
+
 - (void)setText:(NSString *)text {
-    if (!text) { %orig; return; }
+    // 【修正】当 text 为 nil 时，正确的调用方式是 %orig(nil) 或 %orig(text)。
+    // 这里我们直接让后续逻辑处理，如果没有任何修改，最后的 %orig 会处理 nil 的情况。
+    if (!text) {
+        %orig(text); // 正确的调用方式
+        return;
+    }
+
     NSString *newString = nil;
     if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } 
     else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; }
     else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; }
+
     if (newString) {
+        // ... (这部分逻辑保持不变)
         UIFont *currentFont = self.font;
         UIColor *currentColor = self.textColor;
         NSTextAlignment alignment = self.textAlignment;
@@ -26,28 +34,37 @@
         [self setAttributedText:newAttributedText];
         return;
     }
+
     NSMutableString *simplifiedText = [text mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
     %orig(simplifiedText);
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (!attributedText) { %orig; return; }
+    // 【修正】当 attributedText 为 nil 时，正确的调用方式是 %orig(nil) 或 %orig(attributedText)。
+    if (!attributedText) {
+        %orig(attributedText); // 正确的调用方式
+        return;
+    }
+
     NSString *originalString = attributedText.string;
     NSString *newString = nil;
     if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } 
     else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; }
     else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; }
+
     if (newString) {
         NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
         [newAttributedText.mutableString setString:newString];
         %orig(newAttributedText);
         return;
     }
+    
     NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
     %orig(newAttributedText);
 }
+
 %end
 
 
@@ -69,7 +86,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 }
 
 %hook UIWindow
-// ... 您的UIWindow hook代码原封不动地放在这里 ...
 - (void)layoutSubviews {
     %orig;
     if (self.windowLevel != UIWindowLevelNormal) { return; }
@@ -93,20 +109,14 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (已修正编译错误)
+// Section 3: 【新功能】一键复制到 AI (结构正确)
 // =========================================================================
-
-// 定义一个我们自己添加的属性的 key
 static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
 
-// %hook 目标 ViewController
-// 根据您的截图，类名是 "六壬大占.ViewController"
 %hook 六壬大占.ViewController
 
-// 在界面加载时，添加我们的按钮
 - (void)viewDidLoad {
-    %orig; // 在方法内部使用 %orig 是正确的
-
+    %orig;
     UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
     copyButton.frame = CGRectMake(self.view.frame.size.width - 100, 88, 90, 36); 
     [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
@@ -115,43 +125,28 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
     [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     copyButton.layer.cornerRadius = 8;
     copyButton.tag = 112233;
-
-    // 【修正】直接使用 %new 添加的方法名
     [copyButton addTarget:self action:@selector(copyAiButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    
     if (![self.view viewWithTag:copyButton.tag]) {
         [self.view addSubview:copyButton];
     }
 }
 
-// 在界面每次显示时，都刷新一下 UILabel 列表
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
-    // 【修正】直接调用 %new 添加的方法
     [self refreshAndSortLabelsForAiCopy];
 }
-
-// ----- 所有的 %new 方法都必须定义在 %hook 和 %end 之间 -----
 
 %new
 - (void)refreshAndSortLabelsForAiCopy {
     NSMutableArray *labels = [NSMutableArray array];
     [self findAllLabelsInView:self.view andStoreIn:labels];
-
     NSArray *sortedLabels = [labels sortedArrayUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-        CGFloat y1 = roundf(obj1.frame.origin.y);
-        CGFloat y2 = roundf(obj2.frame.origin.y);
-        if (y1 < y2) return NSOrderedAscending;
-        if (y1 > y2) return NSOrderedDescending;
-        
-        CGFloat x1 = roundf(obj1.frame.origin.x);
-        CGFloat x2 = roundf(obj2.frame.origin.x);
-        if (x1 < x2) return NSOrderedAscending;
-        if (x1 > x2) return NSOrderedDescending;
-        
+        CGFloat y1 = roundf(obj1.frame.origin.y); CGFloat y2 = roundf(obj2.frame.origin.y);
+        if (y1 < y2) return NSOrderedAscending; if (y1 > y2) return NSOrderedDescending;
+        CGFloat x1 = roundf(obj1.frame.origin.x); CGFloat x2 = roundf(obj2.frame.origin.x);
+        if (x1 < x2) return NSOrderedAscending; if (x1 > x2) return NSOrderedDescending;
         return NSOrderedSame;
     }];
-
     objc_setAssociatedObject(self, AllLabelsOnViewKey, sortedLabels, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
@@ -159,28 +154,19 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
 - (void)findAllLabelsInView:(UIView *)view andStoreIn:(NSMutableArray *)storage {
     if ([view isKindOfClass:[UILabel class]]) {
         UILabel *label = (UILabel *)view;
-        if (label.text.length > 0) {
-            [storage addObject:label];
-        }
+        if (label.text.length > 0) { [storage addObject:label]; }
     }
-    for (UIView *subview in view.subviews) {
-        [self findAllLabelsInView:subview andStoreIn:storage];
-    }
+    for (UIView *subview in view.subviews) { [self findAllLabelsInView:subview andStoreIn:storage]; }
 }
 
 %new
 - (void)copyAiButtonTapped {
     NSArray *sortedLabels = objc_getAssociatedObject(self, AllLabelsOnViewKey);
-
     if (!sortedLabels || sortedLabels.count == 0) {
         [self refreshAndSortLabelsForAiCopy];
         sortedLabels = objc_getAssociatedObject(self, AllLabelsOnViewKey);
     }
-    
-    if (sortedLabels.count == 0) {
-        NSLog(@"[TweakLog] 未找到任何 UILabel。");
-        return;
-    }
+    if (sortedLabels.count == 0) { NSLog(@"[TweakLog] 未找到任何 UILabel。"); return; }
     
     // ================== 数据提取核心区域 ==================
     NSMutableString *debugLog = [NSMutableString stringWithString:@"\n[TweakLog] --- 调试日志 ---\n"];
@@ -192,11 +178,11 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
     NSLog(@"%@", debugLog);
     
     // 【请根据调试日志的结果，修改下面的索引值】
-    NSString *methodName     = ((UILabel *)sortedLabels[4]).text;  // 示例: 元首门
-    NSString *nianZhuGanZhi  = ((UILabel *)sortedLabels[6]).text;  // 示例: 己巳
-    NSString *yueZhuGanZhi  = ((UILabel *)sortedLabels[7]).text;  // 示例: 庚午
-    NSString *tianPan        = ((UILabel *)sortedLabels[25]).text; // 示例: 父
-    NSString *diPan          = ((UILabel *)sortedLabels[26]).text; // 示例: 辰
+    NSString *methodName     = ((UILabel *)sortedLabels[4]).text;
+    NSString *nianZhuGanZhi  = ((UILabel *)sortedLabels[6]).text;
+    NSString *yueZhuGanZhi  = ((UILabel *)sortedLabels[7]).text;
+    NSString *tianPan        = ((UILabel *)sortedLabels[25]).text;
+    NSString *diPan          = ((UILabel *)sortedLabels[26]).text;
 
     NSString *finalText = [NSString stringWithFormat:
         @"起课方式: %@\n"
@@ -221,4 +207,4 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-%end // 这是 %hook 六壬大占.ViewController 的结束
+%end
