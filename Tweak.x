@@ -14,12 +14,11 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终完美版 - 已修复编译错误)
+// Section 3: 【新功能】一键复制到 AI (最终完美版)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
 
-// 【关键修正】恢复 interface 声明，确保编译器能找到我们新加的方法
 @interface UIViewController (CopyAiAddon)
 - (void)copyAiButtonTapped_FinalPerfect;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
@@ -58,26 +57,21 @@ static NSInteger const CopyAiButtonTag = 112233;
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
+    if (!targetViewClass) targetViewClass = NSClassFromString([className stringByReplacingOccurrencesOfString:@"占." withString:@"占."]);
     if (!targetViewClass) return @"";
-
     NSMutableArray *targetViews = [NSMutableArray array];
     [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
     if (targetViews.count == 0) return @"";
-
     UIView *containerView = targetViews.firstObject;
     NSMutableArray *labelsInView = [NSMutableArray array];
     [self findSubviewsOfClass:[UILabel class] inView:containerView andStoreIn:labelsInView];
-    
     [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
         if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
         if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
         return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
     }];
-
     NSMutableArray *textParts = [NSMutableArray array];
-    for (UILabel *label in labelsInView) {
-        if (label.text && label.text.length > 0) { [textParts addObject:label.text]; }
-    }
+    for (UILabel *label in labelsInView) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } }
     return [textParts componentsJoinedByString:separator];
 }
 
@@ -91,7 +85,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
 
-    // --- 2. 【全新四课提取与排序逻辑】---
+    // --- 2. 【最终四课提取逻辑】---
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -103,35 +97,22 @@ static NSInteger const CopyAiButtonTag = 112233;
             [self findSubviewsOfClass:[UILabel class] inView:container andStoreIn:labels];
             
             if(labels.count >= 12){
-                NSMutableDictionary *columns = [NSMutableDictionary dictionary];
-                for(UILabel *label in labels){
-                    NSString *columnKey = [NSString stringWithFormat:@"%.0f", roundf(label.frame.origin.x)];
-                    if(!columns[columnKey]){
-                        columns[columnKey] = [NSMutableArray array];
-                    }
-                    [columns[columnKey] addObject:label];
-                }
-                
-                NSArray *sortedColumnKeys = [columns.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
-                    return [@([obj1 floatValue]) compare:@([obj2 floatValue])];
+                // 唯一的排序规则：先按Y坐标（分行），再按X坐标（行内排序）
+                [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
+                    if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
+                    if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
+                    return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
                 }];
 
                 NSArray* keTitles = @[@"第一课:", @"第二课:", @"第三课:", @"第四课:"];
                 NSMutableArray* keLines = [NSMutableArray array];
-
-                for(int i = 0; i < sortedColumnKeys.count && i < keTitles.count; i++){
-                    NSString *key = sortedColumnKeys[i];
-                    NSMutableArray *columnLabels = columns[key];
-                    [columnLabels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-                        return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
-                    }];
-                    
-                    if(columnLabels.count >= 3){
-                        NSString* shen = ((UILabel*)columnLabels[0]).text;
-                        NSString* tian = ((UILabel*)columnLabels[1]).text;
-                        NSString* di = ((UILabel*)columnLabels[2]).text;
-                        [keLines addObject:[NSString stringWithFormat:@"%@ %@ %@ %@", keTitles[i], shen, tian, di]];
-                    }
+                
+                // 排序后，我们知道0-3是神，4-7是天盘，8-11是地盘
+                for(int i = 0; i < 4; i++){
+                    NSString* shen = ((UILabel*)labels[i]).text;
+                    NSString* tian = ((UILabel*)labels[i+4]).text;
+                    NSString* di = ((UILabel*)labels[i+8]).text;
+                    [keLines addObject:[NSString stringWithFormat:@"%@ %@ %@ %@", keTitles[i], shen, tian, di]];
                 }
                 siKe = [[keLines componentsJoinedByString:@"\n"] mutableCopy];
             }
