@@ -14,7 +14,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终交付版)
+// Section 3: 【新功能】一键复制到 AI (最终交付版 - 支持四课)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -74,23 +74,11 @@ static NSInteger const CopyAiButtonTag = 112233;
     return foundLabel;
 }
 
-// 提取文本的通用核心方法 (已修正繁体兼容)
 %new
 - (NSString *)extractTextFromFirstViewOfClass:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
-    if (!targetViewClass) {
-        // 【关键修正】将所有可能的简体字替换为繁体再试一次
-        NSString *traditionalClassName = [className stringByReplacingOccurrencesOfString:@"占" withString:@"占"];
-        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"门" withString:@"門"];
-        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"时" withString:@"時"];
-        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"传" withString:@"傳"];
-        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"体" withString:@"體"];
-        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"视" withString:@"視"];
-        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"图" withString:@"圖"];
-        targetViewClass = NSClassFromString(traditionalClassName);
-    }
-    
     if (!targetViewClass) return @"";
+
     NSMutableArray *targetViews = [NSMutableArray array];
     [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
     if (targetViews.count == 0) return @"";
@@ -115,41 +103,58 @@ static NSInteger const CopyAiButtonTag = 112233;
     #define SafeString(str) (str ?: @"")
 
     // --- 1. 结构化提取 ---
-    NSString *methodName = [self extractTextFromFirstViewOfClass:@"六壬大占.九宗门视图" separator:@" "];
-    NSString *timeBlock = [[self extractTextFromFirstViewOfClass:@"六壬大占.年月日时视图" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-    NSString *fullKeti = [self extractTextFromFirstViewOfClass:@"六壬大占.课体视图" separator:@" "];
-
-    // --- 2. 【全新三传提取与格式化逻辑】---
-    NSMutableString *sanChuan = [NSMutableString string];
-    Class sanChuanViewClass = NSClassFromString(@"六壬大占.传视图");
-    if (!sanChuanViewClass) sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
+    NSString *methodName = [self extractTextFromFirstViewOfClass:@"六壬大占.九宗門視圖" separator:@" "];
+    NSString *timeBlock = [[self extractTextFromFirstViewOfClass:@"六壬大占.年月日視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+    NSString *sanChuan = [self extractTextFromFirstViewOfClass:@"六壬大占.傳視圖" separator:@" "]; // 这个方法可能不再需要，但保留
     
-    if (sanChuanViewClass) {
-        NSMutableArray *sanChuanViews = [NSMutableArray array];
-        [self findSubviewsOfClass:sanChuanViewClass inView:self.view andStoreIn:sanChuanViews];
-        [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) {
-            return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
-        }];
-        
-        NSArray *chuanTitles = @[@"初传:", @"中传:", @"末传:"];
-        NSMutableArray *sanChuanLines = [NSMutableArray array];
-        for (int i = 0; i < sanChuanViews.count; i++) {
-            UIView *view = sanChuanViews[i];
-            NSMutableArray *labelsInView = [NSMutableArray array];
-            [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
-            [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-                return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
+    // --- 2. 【全新四课/课体智能提取逻辑】 ---
+    NSString *mainBodyTitle = @"";
+    NSString *mainBodyContent = @"";
+
+    Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
+    if (siKeViewClass) {
+        NSMutableArray *siKeViews = [NSMutableArray array];
+        [self findSubviewsOfClass:siKeViewClass inView:self.view andStoreIn:siKeViews];
+        if (siKeViews.count > 0) {
+            mainBodyTitle = @"四课:";
+            UIView *siKeContainer = siKeViews.firstObject;
+            NSMutableArray *columns = [NSMutableArray array];
+            // 假设四课是4个垂直排列的view，我们需要找到它们
+            // 这里用一个简化的方法，直接找容器内的所有UILabel
+            NSMutableArray *allLabelsInSiKe = [NSMutableArray array];
+            [self findSubviewsOfClass:[UILabel class] inView:siKeContainer andStoreIn:allLabelsInSiKe];
+            
+            // 按从左到右，再从上到下排序
+            [allLabelsInSiKe sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
+                if (roundf(obj1.frame.origin.x) < roundf(obj2.frame.origin.x)) return NSOrderedAscending;
+                if (roundf(obj1.frame.origin.x) > roundf(obj2.frame.origin.x)) return NSOrderedDescending;
+                return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
             }];
-            
-            NSMutableArray *lineParts = [NSMutableArray array];
-            for (UILabel *label in labelsInView) {
-                if(label.text) [lineParts addObject:label.text];
+
+            // 每3个UILabel为一课
+            NSMutableArray *siKeLines = [NSMutableArray array];
+            NSArray *titles = @[@"第一课:", @"第二课:", @"第三课:", @"第四课:"];
+            for (int i = 0; i < allLabelsInSiKe.count; i += 3) {
+                if (i + 2 < allLabelsInSiKe.count) {
+                    NSString *line = [NSString stringWithFormat:@"%@ %@ %@", ((UILabel*)allLabelsInSiKe[i]).text, ((UILabel*)allLabelsInSiKe[i+1]).text, ((UILabel*)allLabelsInSiKe[i+2]).text];
+                    [columns addObject:line];
+                }
             }
-            
-            NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
-            [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, [lineParts componentsJoinedByString:@" "]]];
+            // 按要求倒序排列
+            NSArray *reversedColumns = [[columns reverseObjectEnumerator] allObjects];
+            for (int i = 0; i < reversedColumns.count; i++) {
+                if(i < titles.count) {
+                    [siKeLines addObject:[NSString stringWithFormat:@"%@ %@", titles[titles.count - 1 - i], reversedColumns[i]]];
+                }
+            }
+            mainBodyContent = [siKeLines componentsJoinedByString:@"\n"];
         }
-        sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
+    }
+    
+    // 如果没找到四课，就尝试找课体
+    if (mainBodyContent.length == 0) {
+        mainBodyTitle = @"课体:";
+        mainBodyContent = [self extractTextFromFirstViewOfClass:@"六壬大占.課體視圖" separator:@" "];
     }
 
     // --- 3. 地标定位法提取其他信息 ---
@@ -180,15 +185,17 @@ static NSInteger const CopyAiButtonTag = 112233;
     // --- 4. 组合最终文本 ---
     NSString *finalText = [NSString stringWithFormat:
         @"起课方式: %@\n"
-        @"课体: %@\n"
-        @"%@\n" // 三传已经自带换行和标题
-        @"%@\n" // 时间块
+        @"%@\n%@\n" // 四课或课体
+        @"三传: %@\n"
+        @"%@\n"
         @"年柱: %@\n"
         @"月柱: %@\n"
         @"天盘: %@\n"
         @"地盘: %@\n\n"
         @"#奇门遁甲 #AI分析",
-        SafeString(methodName), SafeString(fullKeti), SafeString(sanChuan), SafeString(timeBlock),
+        SafeString(methodName),
+        SafeString(mainBodyTitle), SafeString(mainBodyContent),
+        SafeString(sanChuan), SafeString(timeBlock),
         SafeString(nianZhuShaVal), SafeString(yueZhuShaVal), SafeString(tianPan), SafeString(diPan)
     ];
     
