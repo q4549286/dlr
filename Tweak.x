@@ -104,14 +104,14 @@ static NSInteger const CopyAiButtonTag = 112233;
                 NSString* ke2_di = ((UILabel*)labels[10]).text; NSString* ke2_tian = ((UILabel*)labels[6]).text; NSString* ke2_shen = ((UILabel*)labels[2]).text;
                 NSString* ke3_di = ((UILabel*)labels[9]).text; NSString* ke3_tian = ((UILabel*)labels[5]).text; NSString* ke3_shen = ((UILabel*)labels[1]).text;
                 NSString* ke4_di = ((UILabel*)labels[8]).text; NSString* ke4_tian = ((UILabel*)labels[4]).text; NSString* ke4_shen = ((UILabel*)labels[0]).text;
-                siKe = [NSMutableString stringWithFormat: @"第一课: %@->%@%@\n第二课: %@->%@%@\n第三课: %@->%@%@\n第四课: %@->%@%@",
+                siKe = [NSMutableString stringWithFormat:@"第一课: %@->%@%@\n第二课: %@->%@%@\n第三课: %@->%@%@\n第四课: %@->%@%@",
                     SafeString(ke1_di), SafeString(ke1_tian), SafeString(ke1_shen), SafeString(ke2_di), SafeString(ke2_tian), SafeString(ke2_shen),
                     SafeString(ke3_di), SafeString(ke3_tian), SafeString(ke3_shen), SafeString(ke4_di), SafeString(ke4_tian), SafeString(ke4_shen)];
             }
         }
     }
     
-    // --- 3. 【三传提取逻辑 - 全新格式化】---
+    // --- 3. 【三传提取逻辑 - 最终结构化格式】---
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
@@ -126,33 +126,34 @@ static NSInteger const CopyAiButtonTag = 112233;
             UIView *view = sanChuanViews[i];
             NSMutableArray *labelsInView = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
-            [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-                return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
-            }];
             
-            NSString *A_liuqin = @"";
-            NSMutableArray *X_shensha = [NSMutableArray array];
-            NSString *C_dizhi = @"";
-            NSString *D_tianjiang = @"";
-
-            for(UILabel *label in labelsInView){
+            // 智能识别和分类
+            NSString *liuqin = @"", *dizhi = @"", *tianjiang = @"";
+            NSMutableArray *extras = [NSMutableArray array];
+            
+            for (UILabel *label in labelsInView) {
                 NSString *text = label.text;
-                if(text && text.length > 0){
-                    if(text.length == 1 && [@"官财父兄子" containsString:text]){
-                        A_liuqin = text;
-                    } else if (text.length == 1 && [@"子丑寅卯辰巳午未申酉戌亥" containsString:text]){
-                        C_dizhi = text;
-                    } else if (text.length == 2){ // 假设天将都是两个字
-                        D_tianjiang = text;
-                    } else {
-                        [X_shensha addObject:text];
-                    }
+                if (!text || text.length == 0) continue;
+                
+                if (text.length == 1 && [@"官财父兄子" containsString:text]) {
+                    liuqin = text;
+                } else if (text.length == 1 && [@"子丑寅卯辰巳午未申酉戌亥" containsString:text]) {
+                    dizhi = text;
+                } else if (text.length == 2) {
+                    tianjiang = text;
+                } else {
+                    [extras addObject:text];
                 }
             }
             
-            NSString *shenshaStr = [X_shensha componentsJoinedByString:@" "];
-            NSString *shenshaPart = shenshaStr.length > 0 ? [NSString stringWithFormat:@"(%@) ", shenshaStr] : @"";
-            NSString *line = [NSString stringWithFormat:@"%@ %@ %@-> %@ (%@)", chuanTitles[i], A_liuqin, shenshaPart, C_dizhi, D_tianjiang];
+            NSString *extrasStr = [extras componentsJoinedByString:@" "];
+            NSString *line;
+            if (extrasStr.length > 0) {
+                line = [NSString stringWithFormat:@"%@ %@ (%@) -> %@ (%@)", chuanTitles[i], liuqin, extrasStr, dizhi, tianjiang];
+            } else {
+                // 如果没有额外信息，就不显示括号
+                line = [NSString stringWithFormat:@"%@ %@ -> %@ (%@)", chuanTitles[i], liuqin, dizhi, tianjiang];
+            }
             [sanChuanLines addObject:line];
         }
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
