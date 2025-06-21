@@ -3,7 +3,6 @@
 
 // =========================================================================
 // 日志宏定义
-// =========================================================================
 #define EchoLog(format, ...) NSLog((@"[EchoAI] " format), ##__VA_ARGS__)
 
 // =========================================================================
@@ -19,12 +18,13 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (信号量同步终极版)
+// Section 3: 【新功能】一键复制到 AI (终极信号量同步版)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
 static NSMutableDictionary *g_extractedData = nil;
-static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
+static NSMutableArray *g_openedViewControllers = nil;
+static dispatch_semaphore_t g_fetchSemaphore = NULL; // 全局信号量
 
 @interface UIViewController (CopyAiAddon)
 - (void)copyAiButtonTapped_FinalMethod;
@@ -56,13 +56,11 @@ static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
 }
 
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    // 只在我们的抓取任务进行时才响应
-    if (g_semaphore) {
+    if (g_fetchSemaphore) { // 只在信号量存在时（即我们的任务正在执行时）才抓取
         EchoLog(@"弹窗事件被触发，准备抓取内容...");
-        
-        // 【关键】立刻关闭弹窗，避免UI卡顿和堆叠
-        [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-            // 在关闭动画完成后再抓取，保证数据准确性
+        [g_openedViewControllers addObject:viewControllerToPresent]; 
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             NSMutableArray *labels = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:labels];
             
@@ -102,12 +100,11 @@ static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
                  EchoLog(@"抓取到未知弹窗，标题: %@，内容被忽略。", title);
             }
             
-            // 【关键】任务完成，发出信号，让主流程继续
-            EchoLog(@"发出信号，解除等待。");
-            dispatch_semaphore_signal(g_semaphore);
-        }];
+            // 【关键】数据抓取完毕，发出信号，让主流程继续
+            EchoLog(@"发出信号，允许下一个任务执行。");
+            dispatch_semaphore_signal(g_fetchSemaphore);
+        });
     }
-    // 正常执行原始的弹窗方法
     %orig(viewControllerToPresent, flag, completion);
 }
 
@@ -120,10 +117,7 @@ static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
-    if (!targetViewClass) {
-        EchoLog(@"类名 '%@' 未找到。", className);
-        return @"";
-    }
+    if (!targetViewClass) { return @""; }
     NSMutableArray *targetViews = [NSMutableArray array];
     [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
     if (targetViews.count == 0) return @"";
@@ -146,10 +140,10 @@ static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
     
     EchoLog(@"--- 开始执行复制到AI任务 ---");
     g_extractedData = [NSMutableDictionary dictionary];
-    g_semaphore = dispatch_semaphore_create(0); // 创建信号量，初始值为0
+    g_openedViewControllers = [NSMutableArray array];
+    g_fetchSemaphore = dispatch_semaphore_create(0); // 创建信号量，初始值为0（栏杆放下）
 
-    // ... 静态信息提取部分保持不变 ...
-    EchoLog(@"正在提取主界面静态信息...");
+    // 提取所有静态信息...
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
     g_extractedData[@"空亡"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
@@ -157,10 +151,8 @@ static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
     g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
     g_extractedData[@"课体"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
     g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
-    EchoLog(@"主界面信息提取完毕。");
-
+    
     // 提取四课
-    EchoLog(@"正在提取四课信息...");
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -197,10 +189,8 @@ static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
         }
     }
     g_extractedData[@"四课"] = siKe;
-    EchoLog(@"四课信息提取完毕。");
-    
+
     // 提取三传
-    EchoLog(@"正在提取三传信息...");
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
@@ -231,9 +221,7 @@ static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
     g_extractedData[@"三传"] = sanChuan;
-     EchoLog(@"三传信息提取完毕。");
     
-    // 【关键修改】使用信号量进行同步的异步任务
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         EchoLog(@"开始异步任务，抓取动态信息...");
         
@@ -247,30 +235,28 @@ static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
             code; \
             _Pragma("clang diagnostic pop")
 
+        // 依次触发、等待、抓取
         if ([self respondsToSelector:selectorBiFa]) {
-            EchoLog(@"找到方法 '顯示法訣總覽', 准备调用并等待信号...");
+            EchoLog(@"[1/3] 调用'顯示法訣總覽'，等待信号...");
             dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorBiFa withObject:nil]); });
-            dispatch_semaphore_wait(g_semaphore, DISPATCH_TIME_FOREVER);
-            EchoLog(@"收到 '毕法' 信号, 继续...");
+            dispatch_semaphore_wait(g_fetchSemaphore, DISPATCH_TIME_FOREVER);
         } else { EchoLog(@"错误: 未找到方法 '顯示法訣總覽'"); }
 
         if ([self respondsToSelector:selectorGeJu]) {
-            EchoLog(@"找到方法 '顯示格局總覽', 准备调用并等待信号...");
+            EchoLog(@"[2/3] 调用'顯示格局總覽'，等待信号...");
             dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorGeJu withObject:nil]); });
-            dispatch_semaphore_wait(g_semaphore, DISPATCH_TIME_FOREVER);
-            EchoLog(@"收到 '格局' 信号, 继续...");
+            dispatch_semaphore_wait(g_fetchSemaphore, DISPATCH_TIME_FOREVER);
         } else { EchoLog(@"错误: 未找到方法 '顯示格局總覽'"); }
 
         if ([self respondsToSelector:selectorQiZheng]) {
-            EchoLog(@"找到方法 '顯示七政信息:', 准备调用并等待信号...");
+            EchoLog(@"[3/3] 调用'顯示七政信息:'，等待信号...");
             dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]); });
-            dispatch_semaphore_wait(g_semaphore, DISPATCH_TIME_FOREVER);
-            EchoLog(@"收到 '七政' 信号, 继续...");
+            dispatch_semaphore_wait(g_fetchSemaphore, DISPATCH_TIME_FOREVER);
+
         } else { EchoLog(@"错误: 未找到方法 '顯示七政信息:'"); }
         
-        // 所有信息收集完毕，在主线程组合并显示
         dispatch_async(dispatch_get_main_queue(), ^{
-            EchoLog(@"所有信息收集完毕，正在组合最终文本...");
+             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
             
             NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", g_extractedData[@"毕法"]] : @"";
             NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"格局:\n%@\n\n", g_extractedData[@"格局"]] : @"";
@@ -283,17 +269,13 @@ static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
                 @"三宫时: %@\n"
                 @"昼夜: %@\n"
                 @"课体: %@\n\n"
-                @"%@" // 毕法
-                @"%@" // 格局
-                @"%@" // 七政
+                @"%@" @"%@" @"%@"
                 @"%@\n\n"
                 @"%@\n\n"
                 @"起课方式: %@",
                 SafeString(g_extractedData[@"时间块"]),
                 SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]), SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]),
-                biFaOutput,
-                geJuOutput,
-                qiZhengOutput,
+                biFaOutput, geJuOutput, qiZhengOutput,
                 SafeString(g_extractedData[@"四课"]),
                 SafeString(g_extractedData[@"三传"]),
                 SafeString(g_extractedData[@"起课方式"])
@@ -301,16 +283,20 @@ static dispatch_semaphore_t g_semaphore = NULL; // 全局信号量
             
             [UIPasteboard generalPasteboard].string = finalText;
             
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
-            UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
-
-            [alert addAction:okAction];
-            [self presentViewController:alert animated:YES completion:^{
-                 // 清理工作
-                 g_extractedData = nil;
-                 g_semaphore = NULL; // 释放信号量
-                 EchoLog(@"--- 复制任务完成 ---");
+            UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                EchoLog(@"用户点击'好的'，开始关闭所有弹窗...");
+                for (UIViewController *vc in [g_openedViewControllers reverseObjectEnumerator]) {
+                    [vc dismissViewControllerAnimated:YES completion:nil];
+                }
+                g_extractedData = nil;
+                g_openedViewControllers = nil;
+                g_fetchSemaphore = NULL; // 释放信号量
+                EchoLog(@"--- 复制任务完成 ---");
             }];
+
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:okAction];
+            [self presentViewController:alert animated:YES completion:nil];
         });
     });
 }
