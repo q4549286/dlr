@@ -2,7 +2,7 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// Section 1: 辅助接口声明
+// Section 1: 辅助接口与函数
 // =========================================================================
 
 // 声明我们推断的核心数据对象接口
@@ -15,6 +15,26 @@
 @interface UIViewController (PaiPanProperty)
 @property (nonatomic, readonly) PaiPanResult *課傳;
 @end
+
+// 【新】独立的 C 递归函数，用于查找指定类的子视图
+static void findSubviewsOfClass(UIView *view, Class targetClass, NSMutableArray *storage) {
+    if ([view isKindOfClass:targetClass]) {
+        [storage addObject:view];
+    }
+    for (UIView *subview in view.subviews) {
+        findSubviewsOfClass(subview, targetClass, storage);
+    }
+}
+
+// 【新】独立的 C 递归函数，用于查找所有 UILabel
+static void findAllLabelsInView(UIView *view, NSMutableArray *storage) {
+    if ([view isKindOfClass:[UILabel class]]) {
+        [storage addObject:view];
+    }
+    for (UIView *subview in view.subviews) {
+        findAllLabelsInView(subview, storage);
+    }
+}
 
 
 // =========================================================================
@@ -40,15 +60,13 @@ static NSInteger const CopyAiButtonTag = 112233;
                 for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes) {
                     if (scene.activationState == UISceneActivationStateForegroundActive) {
                         for (UIWindow *window in scene.windows) {
-                            if (window.isKeyWindow) {
-                                keyWindow = window;
-                                break;
-                            }
+                            if (window.isKeyWindow) { keyWindow = window; break; }
                         }
                         if (keyWindow) break;
                     }
                 }
-            } else {
+            }
+            if (!keyWindow) {
                 #pragma clang diagnostic push
                 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
                 keyWindow = UIApplication.sharedApplication.keyWindow;
@@ -78,27 +96,22 @@ static NSInteger const CopyAiButtonTag = 112233;
 - (NSString *)extractTextFromViewWithClassName:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
     if (!targetViewClass) return @"";
+    
     NSMutableArray *targetViews = [NSMutableArray array];
-    __block void (^findSubviews)(UIView *);
-    findSubviews = ^(UIView *view) {
-        if ([view isKindOfClass:targetViewClass]) { [targetViews addObject:view]; }
-        for (UIView *subview in view.subviews) { findSubviews(subview); }
-    };
-    findSubviews(self.view);
+    findSubviewsOfClass(self.view, targetViewClass, targetViews); // 使用新的C函数
+
     if (targetViews.count == 0) return @"";
     UIView *containerView = targetViews.firstObject;
+    
     NSMutableArray *labelsInView = [NSMutableArray array];
-    __block void (^findLabels)(UIView *);
-    findLabels = ^(UIView *view) {
-        if ([view isKindOfClass:[UILabel class]]) { [labelsInView addObject:view]; }
-        for (UIView *subview in view.subviews) { findLabels(subview); }
-    };
-    findLabels(containerView);
+    findAllLabelsInView(containerView, labelsInView); // 使用新的C函数
+
     [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
         if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
         if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
         return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
     }];
+    
     NSMutableArray *textParts = [NSMutableArray array];
     for (UILabel *label in labelsInView) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } }
     return [textParts componentsJoinedByString:separator];
@@ -113,10 +126,9 @@ static NSInteger const CopyAiButtonTag = 112233;
         keChuanData = [self performSelector:@selector(課傳)];
     }
 
-    // --- 【已修正为繁体】从数据源提取毕法和七政 ---
     NSString *biFa = @"";
-    if (keChuanData && [keChuanData respondsToSelector:@selector(法訣)]) { // 修正点
-        NSArray *biFaArray = [keChuanData performSelector:@selector(法訣)]; // 修正点
+    if (keChuanData && [keChuanData respondsToSelector:@selector(法訣)]) {
+        NSArray *biFaArray = [keChuanData performSelector:@selector(法訣)];
         if (biFaArray && [biFaArray isKindOfClass:[NSArray class]] && biFaArray.count > 0) {
             biFa = [biFaArray componentsJoinedByString:@"\n"];
         }
@@ -142,15 +154,11 @@ static NSInteger const CopyAiButtonTag = 112233;
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
         NSMutableArray *siKeViews = [NSMutableArray array];
-        __block void (^findSiKeView)(UIView *);
-        findSiKeView = ^(UIView *view) { if ([view isKindOfClass:siKeViewClass]) { [siKeViews addObject:view]; } for (UIView *subview in view.subviews) { findSiKeView(subview); } };
-        findSiKeView(self.view);
+        findSubviewsOfClass(self.view, siKeViewClass, siKeViews);
         if(siKeViews.count > 0){
             UIView* container = siKeViews.firstObject;
             NSMutableArray* labels = [NSMutableArray array];
-            __block void (^findLabelsInSiKe)(UIView *);
-            findLabelsInSiKe = ^(UIView *view) { if ([view isKindOfClass:[UILabel class]]) { [labels addObject:view]; } for (UIView *subview in view.subviews) { findLabelsInSiKe(subview); } };
-            findLabelsInSiKe(container);
+            findAllLabelsInView(container, labels);
             if(labels.count >= 12){
                 NSMutableDictionary *columns=[NSMutableDictionary dictionary];
                 for(UILabel *label in labels){ NSString *key = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))]; if(!columns[key]){ columns[key] = [NSMutableArray array]; } [columns[key] addObject:label]; }
@@ -171,18 +179,14 @@ static NSInteger const CopyAiButtonTag = 112233;
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
         NSMutableArray *sanChuanViews = [NSMutableArray array];
-        __block void (^findSanChuanView)(UIView *);
-        findSanChuanView = ^(UIView *view) { if ([view isKindOfClass:sanChuanViewClass]) { [sanChuanViews addObject:view]; } for (UIView *subview in view.subviews) { findSanChuanView(subview); } };
-        findSanChuanView(self.view);
+        findSubviewsOfClass(self.view, sanChuanViewClass, sanChuanViews);
         [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
         NSArray *chuanTitles = @[@"初传:", @"中传:", @"末传:"];
         NSMutableArray *sanChuanLines = [NSMutableArray array];
         for (int i=0; i < sanChuanViews.count; i++) {
             UIView *view = sanChuanViews[i];
             NSMutableArray *labelsInView = [NSMutableArray array];
-            __block void (^findLabelsInSanChuan)(UIView *);
-            findLabelsInSanChuan = ^(UIView *v) { if ([v isKindOfClass:[UILabel class]]) { [labelsInView addObject:v]; } for (UIView *sv in v.subviews) { findLabelsInSanChuan(sv); } };
-            findLabelsInSanChuan(view);
+            findAllLabelsInView(view, labelsInView);
             [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
             if (labelsInView.count >= 3) {
                 NSString *liuQin = ((UILabel *)labelsInView.firstObject).text, *tianJiang = ((UILabel *)labelsInView.lastObject).text, *diZhi = ((UILabel *)[labelsInView objectAtIndex:labelsInView.count - 2]).text;
