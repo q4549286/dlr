@@ -205,8 +205,13 @@ static NSString *g_qizhengText = nil;
     NSLog(@"%@ copyAiButtonTapped triggered!", LOG_PREFIX);
     #define SafeString(str) (str ?: @"")
 
-    [self 顯示法訣總覽];
-    [self 顯示七政信息WithSender:nil];
+    // 🔥 FIX: Use performSelector to call hooked methods from a %new method
+    // This avoids the Logos preprocessor error.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    [self performSelector:NSSelectorFromString(@"顯示法訣總覽")];
+    [self performSelector:NSSelectorFromString(@"顯示七政信息WithSender:") withObject:nil];
+#pragma clang diagnostic pop
 
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *kongWang = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
@@ -277,7 +282,6 @@ static NSString *g_qizhengText = nil;
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
     UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
-    [alert addAction:okAction];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
