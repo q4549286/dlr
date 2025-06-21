@@ -1,104 +1,75 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-// =========================================================================
-// 侦察专用代码 V6 - 万能触摸侦测
-// =========================================================================
+// --- 声明接口 ---
+@interface KeChuanObject : NSObject
+@property (nonatomic, strong) NSArray<NSString *> *法诀;
+@property (nonatomic, strong) NSArray *七政;
+@end
 
-static BOOL hasLogged_V6 = NO;
+@interface UIViewController (CopyAiAddon)
+- (void)copyAiButtonTapped_FinalPerfect;
+- (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
+@end
 
-// 日志生成和显示的核心函数
-void showLoggingAlertForHierarchy_V6(UIView *tappedView) {
-    if (hasLogged_V6) return;
-    hasLogged_V6 = YES;
+// --- 关键注入逻辑 ---
+static void (*original_viewDidLoad)(id, SEL);
 
-    NSMutableString *logMessage = [NSMutableString string];
-    [logMessage appendString:@"--- 侦察日志 V6 (万能触摸侦测) ---\n\n"];
+static void new_viewDidLoad(UIViewController *self, SEL _cmd) {
+    original_viewDidLoad(self, _cmd); // 调用原始方法
+
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if ([self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindow *keyWindow = self.view.window;
+            if (!keyWindow) return; // 安全检查
+
+            UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
+            [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
+            copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+            copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
+            [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            copyButton.layer.cornerRadius = 8;
+            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalPerfect) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:copyButton];
+        });
+    }
+}
+
+// --- 核心复制方法 ---
+static void copyAiButtonTapped_FinalPerfect(UIViewController *self, SEL _cmd) {
+    #define SafeString(str) (str ?: @"")
+
+    KeChuanObject *keChuanData = nil;
+    @try {
+        keChuanData = [self valueForKey:@"课传"];
+    } @catch (NSException *exception) {
+        // Log error if needed
+    }
+
+    NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+    // ... (其他界面信息提取，此处省略，完整版我会提供)
+    NSString *biFa = @"";
+    if (keChuanData && [keChuanData respondsToSelector:@selector(法诀)]) {
+        NSArray *biFaArray = [keChuanData valueForKey:@"法诀"];
+        if (biFaArray.count > 0) biFa = [biFaArray componentsJoinedByString:@"\n"];
+    }
+    // ... 组合最终文本并显示弹窗
+}
+
+// ... 其他辅助方法的实现 ...
+
+// --- dylib 入口函数 ---
+__attribute__((constructor)) static void init() {
+    Class vcClass = NSClassFromString(@"六壬大占.ViewController");
     
-    // 从被点击的视图开始，向上遍历并记录整个视图层级
-    UIView *currentView = tappedView;
-    int depth = 0;
-    while (currentView) {
-        [logMessage appendFormat:@"--- Level %d ---\n", depth];
-        [logMessage appendFormat:@"View: %@\n", currentView];
-        [logMessage appendFormat:@"Class: %@\n\n", [currentView class]];
-        
-        // --- 探测当前视图的实例变量 ---
-        [logMessage appendString:@"--- IVARS ---\n"];
-        unsigned int ivarCount;
-        Ivar *ivars = class_copyIvarList([currentView class], &ivarCount);
-        if (ivarCount == 0) {
-            [logMessage appendString:@"(No ivars found)\n"];
-        }
-        for (int i = 0; i < ivarCount; i++) {
-            Ivar ivar = ivars[i];
-            const char *ivarName_c = ivar_getName(ivar);
-            if (ivarName_c) {
-                NSString *ivarName = [NSString stringWithUTF8String:ivarName_c];
-                id value = nil;
-                @try {
-                    value = object_getIvar(currentView, ivar);
-                } @catch (NSException *exception) {
-                    value = [NSString stringWithFormat:@"(Exception)"];
-                }
-                [logMessage appendFormat:@"ivar: %@ = %@\n", ivarName, value];
-            }
-        }
-        free(ivars);
-        [logMessage appendString:@"\n---------------------------------\n\n"];
-        
-        currentView = currentView.superview;
-        depth++;
-    }
+    // 动态添加我们的复制方法
+    class_addMethod(vcClass, @selector(copyAiButtonTapped_FinalPerfect), (IMP)copyAiButtonTapped_FinalPerfect, "v@:");
+    // ... 动态添加其他辅助方法 ...
 
-    // --- 创建并显示弹窗 ---
-    dispatch_async(dispatch_get_main_queue(), ^{
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察日志 V6" message:@"已捕获点击事件，请复制日志" preferredStyle:UIAlertControllerStyleAlert];
-        
-        UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"复制日志" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [UIPasteboard generalPasteboard].string = logMessage;
-        }];
-        UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleCancel handler:nil];
-
-        [alert addAction:copyAction];
-        [alert addAction:okAction];
-        
-        UIWindow *activeWindow = nil;
-        if (@available(iOS 13.0, *)) {
-            for (UIWindowScene *windowScene in [UIApplication sharedApplication].connectedScenes) {
-                if (windowScene.activationState == UISceneActivationStateForegroundActive) {
-                    activeWindow = windowScene.windows.firstObject;
-                    break;
-                }
-            }
-        }
-        if (!activeWindow) {
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            activeWindow = [[UIApplication sharedApplication] keyWindow];
-            #pragma clang diagnostic pop
-        }
-        [activeWindow.rootViewController presentViewController:alert animated:YES completion:nil];
-    });
+    // Hook viewDidLoad
+    Method viewDidLoadMethod = class_getInstanceMethod(vcClass, @selector(viewDidLoad));
+    original_viewDidLoad = (void (*)(id, SEL))method_getImplementation(viewDidLoadMethod);
+    method_setImplementation(viewDidLoadMethod, (IMP)new_viewDidLoad);
 }
-
-// Hook UIWindow，这是所有触摸事件的根源
-%hook UIWindow
-
-- (void)sendEvent:(UIEvent *)event {
-    %orig; // 必须先调用 %orig，让系统处理事件
-
-    // 只关心触摸事件，并且只在触摸结束时触发
-    if (event.type == UIEventTypeTouches) {
-        UITouch *touch = [event.allTouches anyObject];
-        if (touch.phase == UITouchPhaseEnded) {
-            // 获取被点击的视图
-            UIView *tappedView = touch.view;
-            
-            // 触发我们的万能日志记录器
-            showLoggingAlertForHierarchy_V6(tappedView);
-        }
-    }
-}
-
-%end
