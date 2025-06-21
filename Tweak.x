@@ -14,13 +14,13 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终完美版)
+// Section 3: 【新功能】一键复制到 AI (最终交付版)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
 
 @interface UIViewController (CopyAiAddon)
-- (void)copyAiButtonTapped_FinalPerfect;
+- (void)copyAiButtonTapped_FinalDelivery;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
 @end
@@ -42,7 +42,7 @@ static NSInteger const CopyAiButtonTag = 112233;
             copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
             [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             copyButton.layer.cornerRadius = 8;
-            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalPerfect) forControlEvents:UIControlEventTouchUpInside];
+            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalDelivery) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:copyButton];
         });
     }
@@ -74,9 +74,9 @@ static NSInteger const CopyAiButtonTag = 112233;
     return [textParts componentsJoinedByString:separator];
 }
 
-// 【最终完美版】
+// 【最终交付版】
 %new
-- (void)copyAiButtonTapped_FinalPerfect {
+- (void)copyAiButtonTapped_FinalDelivery {
     #define SafeString(str) (str ?: @"")
 
     // --- 1. 结构化提取 ---
@@ -84,7 +84,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
 
-    // --- 2. 【最终四课提取逻辑 - 按列分组】---
+    // --- 2. 【四课提取逻辑】---
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -94,86 +94,66 @@ static NSInteger const CopyAiButtonTag = 112233;
             UIView* container = siKeViews.firstObject;
             NSMutableArray* labels = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:container andStoreIn:labels];
-            
             if(labels.count >= 12){
-                NSMutableDictionary *columns = [NSMutableDictionary dictionary];
-                for(UILabel *label in labels){
-                    NSString *columnKey = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))];
-                    if(!columns[columnKey]){ columns[columnKey] = [NSMutableArray array]; }
-                    [columns[columnKey] addObject:label];
+                [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
+                    if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
+                    if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
+                    return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
+                }];
+                NSArray* keTitles = @[@"第一课:", @"第二课:", @"第三课:", @"第四课:"];
+                NSMutableArray* keLines = [NSMutableArray array];
+                for(int i = 0; i < 4; i++){
+                    NSString* shen = ((UILabel*)labels[i]).text;
+                    NSString* tian = ((UILabel*)labels[i+4]).text;
+                    NSString* di   = ((UILabel*)labels[i+8]).text;
+                    [keLines addObject:[NSString stringWithFormat:@"%@ %@->%@%@", keTitles[3-i], SafeString(di), SafeString(tian), SafeString(shen)]];
                 }
-                
-                if (columns.allKeys.count == 4) {
-                    NSArray *sortedColumnKeys = [columns.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
-                        return [@([obj1 floatValue]) compare:@([obj2 floatValue])];
-                    }];
-
-                    // 从左到右的四列
-                    NSMutableArray *column1 = columns[sortedColumnKeys[0]];
-                    NSMutableArray *column2 = columns[sortedColumnKeys[1]];
-                    NSMutableArray *column3 = columns[sortedColumnKeys[2]];
-                    NSMutableArray *column4 = columns[sortedColumnKeys[3]];
-
-                    // 对每列内部按Y坐标排序
-                    [column1 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
-                    [column2 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
-                    [column3 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
-                    [column4 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
-
-                    // 【最终修正】严格按照从右到左的课序，和正确的地->天神格式
-                    // 第一课 = 第4列
-                    NSString* ke1_shen = ((UILabel*)column4[0]).text;
-                    NSString* ke1_tian = ((UILabel*)column4[1]).text;
-                    NSString* ke1_di = ((UILabel*)column4[2]).text;
-                    
-                    // 第二课 = 第3列
-                    NSString* ke2_shen = ((UILabel*)column3[0]).text;
-                    NSString* ke2_tian = ((UILabel*)column3[1]).text;
-                    NSString* ke2_di = ((UILabel*)column3[2]).text;
-                    
-                    // 第三课 = 第2列
-                    NSString* ke3_shen = ((UILabel*)column2[0]).text;
-                    NSString* ke3_tian = ((UILabel*)column2[1]).text;
-                    NSString* ke3_di = ((UILabel*)column2[2]).text;
-                    
-                    // 第四课 = 第1列
-                    NSString* ke4_shen = ((UILabel*)column1[0]).text;
-                    NSString* ke4_tian = ((UILabel*)column1[1]).text;
-                    NSString* ke4_di = ((UILabel*)column1[2]).text;
-
-                    siKe = [NSMutableString stringWithFormat:
-                        @"第一课: %@->%@%@\n"
-                        @"第二课: %@->%@%@\n"
-                        @"第三课: %@->%@%@\n"
-                        @"第四课: %@->%@%@",
-                        SafeString(ke1_di), SafeString(ke1_tian), SafeString(ke1_shen),
-                        SafeString(ke2_di), SafeString(ke2_tian), SafeString(ke2_shen),
-                        SafeString(ke3_di), SafeString(ke3_tian), SafeString(ke3_shen),
-                        SafeString(ke4_di), SafeString(ke4_tian), SafeString(ke4_shen)
-                    ];
-                }
+                // 反转数组以得到正确的顺序 1,2,3,4
+                siKe = [[[keLines reverseObjectEnumerator].allObjects componentsJoinedByString:@"\n"] mutableCopy];
             }
         }
     }
     
-    // --- 3. 【三传提取逻辑】---
+    // --- 3. 【三传提取逻辑 - 全新格式化】---
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
         NSMutableArray *sanChuanViews = [NSMutableArray array];
         [self findSubviewsOfClass:sanChuanViewClass inView:self.view andStoreIn:sanChuanViews];
-        [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
+        [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) {
+            return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
+        }];
         NSArray *chuanTitles = @[@"初传:", @"中传:", @"末传:"];
         NSMutableArray *sanChuanLines = [NSMutableArray array];
         for (int i = 0; i < sanChuanViews.count; i++) {
             UIView *view = sanChuanViews[i];
             NSMutableArray *labelsInView = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
-            [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)]; }];
-            NSMutableArray *lineParts = [NSMutableArray array];
-            for (UILabel *label in labelsInView) { if(label.text) [lineParts addObject:label.text]; }
-            NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
-            [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, [lineParts componentsJoinedByString:@" "]]];
+            [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
+                return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
+            }];
+            
+            // 智能拼接逻辑
+            NSString *liuqin = @"";
+            NSMutableArray *shensha = [NSMutableArray array];
+            NSString *dizhi = @"";
+            NSString *tianjiang = @"";
+
+            for(UILabel *label in labelsInView){
+                if(label.text.length == 1 && [@"官财父兄子" containsString:label.text]){
+                    liuqin = label.text;
+                } else if (label.text.length == 1 && [@"子丑寅卯辰巳午未申酉戌亥" containsString:label.text]){
+                    dizhi = label.text;
+                } else if (label.text.length == 2){
+                    tianjiang = label.text;
+                } else {
+                    [shensha addObject:label.text];
+                }
+            }
+            
+            NSString *shenshaStr = [shensha componentsJoinedByString:@" "];
+            NSString *line = [NSString stringWithFormat:@"%@ %@ (%@) -> %@ (%@)", chuanTitles[i], liuqin, shenshaStr, dizhi, tianjiang];
+            [sanChuanLines addObject:line];
         }
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
@@ -196,4 +176,4 @@ static NSInteger const CopyAiButtonTag = 112233;
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-%end // 【关键修正】补上这个缺失的 %end
+%end
