@@ -2,11 +2,41 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 这部分没有问题
+// Section 1 & 2: 您的原始代码 (已移除繁简转换)
 // =========================================================================
 %hook UILabel
-- (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { UIFont *currentFont = self.font; UIColor *currentColor = self.textColor; NSTextAlignment alignment = self.textAlignment; NSMutableDictionary *attributes = [NSMutableDictionary dictionary]; if (currentFont) attributes[NSFontAttributeName] = currentFont; if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor; NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init]; paragraphStyle.alignment = alignment; attributes[NSParagraphStyleAttributeName] = paragraphStyle; NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes]; [self setAttributedText:newAttributedText]; return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
-- (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttributedText = [attributedText mutableCopy]; [newAttributedText.mutableString setString:newString]; %orig(newAttributedText); return; } NSMutableAttributedString *newAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(newAttributedText); }
+// 【关键修正】完全移除了 setText 和 setAttributedText 里的繁简转换逻辑
+// 只保留您最初的文字替换功能
+- (void)setText:(NSString *)text {
+    if (!text) { %orig(text); return; }
+    NSString *newString = nil;
+    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } 
+    else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; }
+    else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; }
+
+    if (newString) {
+        %orig(newString);
+    } else {
+        %orig(text);
+    }
+}
+
+- (void)setAttributedText:(NSAttributedString *)attributedText {
+    if (!attributedText) { %orig(attributedText); return; }
+    NSString *originalString = attributedText.string;
+    NSString *newString = nil;
+    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } 
+    else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; }
+    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; }
+
+    if (newString) {
+        NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
+        [newAttributedText.mutableString setString:newString];
+        %orig(newAttributedText);
+    } else {
+        %orig(attributedText);
+    }
+}
 %end
 
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); CGContextRef context = UIGraphicsGetCurrentContext(); CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); CGContextRotateCTM(context, angle * M_PI / 180); NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; CGSize textSize = [text sizeWithAttributes:attributes]; CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); [text drawInRect:textRect withAttributes:attributes]; UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext(); return image; }
@@ -16,7 +46,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (终极诊断版)
+// Section 3: 【新功能】一键复制到 AI (最终诊断版 - 已移除繁简转换)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -40,7 +70,7 @@ static NSInteger const CopyAiButtonTag = 112233;
             copyButton.tag = CopyAiButtonTag;
             [copyButton setTitle:@"诊断课体" forState:UIControlStateNormal];
             copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-            copyButton.backgroundColor = [UIColor systemTealColor]; // 换个颜色
+            copyButton.backgroundColor = [UIColor systemTealColor];
             [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             copyButton.layer.cornerRadius = 8;
             [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalDiagnosis) forControlEvents:UIControlEventTouchUpInside];
@@ -67,11 +97,15 @@ static NSInteger const CopyAiButtonTag = 112233;
 
     // --- 步骤 1: 检查类是否能找到 ---
     Class ketiCellClass = NSClassFromString(@"六壬大占.课体单元");
+    // 同时尝试繁体类名，以防万一
+    if (!ketiCellClass) {
+        ketiCellClass = NSClassFromString(@"六壬大占.課體單元");
+    }
+
     if (ketiCellClass) {
-        [diagnosisResult appendString:@"[成功] 找到了 '六壬大占.课体单元' 这个类。\n\n"];
+        [diagnosisResult appendString:@"[成功] 找到了课体单元类。\n\n"];
     } else {
-        [diagnosisResult appendString:@"[失败] 找不到 '六壬大占.课体单元' 这个类！请检查类名是否完全正确。\n"];
-        // 显示结果并终止
+        [diagnosisResult appendString:@"[失败] 找不到 '六壬大占.课体单元' 或 '六壬大占.課體單元'。请用FLEX再次确认类名。\n"];
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"诊断报告" message:diagnosisResult preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
@@ -81,10 +115,10 @@ static NSInteger const CopyAiButtonTag = 112233;
     // --- 步骤 2: 查找所有课体单元格 ---
     NSMutableArray *ketiCells = [NSMutableArray array];
     [self findSubviewsOfClass:ketiCellClass inView:self.view andStoreIn:ketiCells];
-    [diagnosisResult appendFormat:@"[信息] 共找到 %ld 个 '课体单元' 实例。\n\n", (unsigned long)ketiCells.count];
+    [diagnosisResult appendFormat:@"[信息] 共找到 %ld 个课体单元实例。\n\n", (unsigned long)ketiCells.count];
 
     if (ketiCells.count == 0) {
-        [diagnosisResult appendString:@"[问题] 虽然找到了类，但在界面上没有找到它的实例。可能查找范围不对。\n"];
+        [diagnosisResult appendString:@"[问题] 虽然找到了类，但在界面上没有找到它的实例。\n"];
     }
 
     // --- 步骤 3: 检查每个单元格内部 ---
@@ -92,12 +126,11 @@ static NSInteger const CopyAiButtonTag = 112233;
     int cellIndex = 0;
     for (UICollectionViewCell *cell in ketiCells) {
         NSMutableArray *labelsInCell = [NSMutableArray array];
-        // 【关键诊断】我们同时查找 cell 和 cell.contentView
-        [self findSubviewsOfClass:[UILabel class] inView:cell andStoreIn:labelsInCell];
+        [self findSubviewsOfClass:[UILabel class] inView:cell.contentView andStoreIn:labelsInCell];
         
         if (labelsInCell.count > 0) {
             NSString* labelText = ((UILabel *)labelsInCell.firstObject).text ?: @"(空)";
-            [diagnosisResult appendFormat:@"单元格 %d: 找到了 %ld 个UILabel，第一个是 '%@'\n", cellIndex, (unsigned long)labelsInCell.count, labelText];
+            [diagnosisResult appendFormat:@"单元格 %d: 找到了UILabel，内容是 '%@'\n", cellIndex, labelText];
             [fullKetiText appendString:labelText];
         } else {
             [diagnosisResult appendFormat:@"单元格 %d: [警告] 内部没有找到UILabel！\n", cellIndex];
@@ -109,15 +142,9 @@ static NSInteger const CopyAiButtonTag = 112233;
 
     // --- 步骤 4: 显示完整的诊断报告 ---
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"课体提取诊断报告" message:diagnosisResult preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"复制报告" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [UIPasteboard generalPasteboard].string = diagnosisResult;
-    }];
+    UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"复制报告" style:UIAlertActionStyleDefault handler:nil];
     [alert addAction:copyAction];
-
-    UIAlertAction *closeAction = [UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil];
-    [alert addAction:closeAction];
-
+    [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
