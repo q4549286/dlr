@@ -14,7 +14,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终完全体)
+// Section 3: 【新功能】一键复制到 AI (最终完全体 - 已修正繁体兼容)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -23,7 +23,7 @@ static NSInteger const CopyAiButtonTag = 112233;
 - (void)copyAiButtonTapped_FinalMasterpiece;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (UILabel *)findLabelToRightOf:(UILabel *)anchorLabel inArray:(NSArray *)labels;
-- (NSString *)extractTextFromViewWithClassName:(NSString *)className joinSeparator:(NSString *)separator;
+- (NSString *)extractTextFromViewWithClassName:(NSString *)className separator:(NSString *)separator;
 @end
 
 %hook UIViewController
@@ -31,7 +31,8 @@ static NSInteger const CopyAiButtonTag = 112233;
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
-    if (!targetClass) targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (!targetClass) targetClass = NSClassFromString(@"六壬大占.ViewController"); // 此处繁体相同，保留
+    
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window;
@@ -74,11 +75,20 @@ static NSInteger const CopyAiButtonTag = 112233;
     return foundLabel;
 }
 
-// 提取文本的通用核心方法
+// 提取文本的通用核心方法 (已修正繁体兼容)
 %new
-- (NSString *)extractTextFromViewWithClassName:(NSString *)className joinSeparator:(NSString *)separator {
+- (NSString *)extractTextFromViewWithClassName:(NSString *)className separator:(NSString *)separator {
+    // 【关键修正】同时尝试简体和繁体类名
     Class targetViewClass = NSClassFromString(className);
-    if (!targetViewClass) targetViewClass = NSClassFromString([className stringByReplacingOccurrencesOfString:@"占." withString:@"占."]); // 兼容繁体
+    if (!targetViewClass) {
+        // 自动生成繁体版本进行尝试
+        NSString *traditionalClassName = [className stringByReplacingOccurrencesOfString:@"占" withString:@"占"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"九宗门视图" withString:@"九宗門視圖"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"年月日时视图" withString:@"年月日時視圖"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"传视图" withString:@"傳視圖"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"课体视图" withString:@"課體視圖"];
+        targetViewClass = NSClassFromString(traditionalClassName);
+    }
     
     if (!targetViewClass) return @"";
 
@@ -87,12 +97,10 @@ static NSInteger const CopyAiButtonTag = 112233;
     
     if (targetViews.count == 0) return @"";
 
-    // 假设我们只需要第一个找到的视图内部的内容
     UIView *containerView = targetViews.firstObject;
     NSMutableArray *labelsInView = [NSMutableArray array];
     [self findSubviewsOfClass:[UILabel class] inView:containerView andStoreIn:labelsInView];
     
-    // 按从上到下，从左到右排序
     [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
         if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
         if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
@@ -115,13 +123,10 @@ static NSInteger const CopyAiButtonTag = 112233;
     #define SafeString(str) (str ?: @"")
 
     // --- 1. 结构化提取 ---
-    NSString *methodName = [self extractTextFromViewWithClassName:@"六壬大占.九宗门视图" joinSeparator:@" "];
-    NSString *timeBlock = [[self extractTextFromViewWithClassName:@"六壬大占.年月日时视图" joinSeparator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-    NSString *sanChuan = [self extractTextFromViewWithClassName:@"六壬大占.传视图" joinSeparator:@" "];
-    
-    // 单独处理课体，因为它是由多个独立的单元格（或视图）组成的
-    NSString *fullKeti = [self extractTextFromViewWithClassName:@"六壬大占.课体视图" joinSeparator:@" "];
-
+    NSString *methodName = [self extractTextFromViewWithClassName:@"六壬大占.九宗门视图" separator:@" "];
+    NSString *timeBlock = [[self extractTextFromViewWithClassName:@"六壬大占.年月日时视图" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+    NSString *sanChuan = [self extractTextFromViewWithClassName:@"六壬大占.传视图" separator:@" "];
+    NSString *fullKeti = [self extractTextFromViewWithClassName:@"六壬大占.课体视图" separator:@" "];
 
     // --- 2. 地标定位法提取其他信息 ---
     NSMutableArray *allLabels = [NSMutableArray array];
