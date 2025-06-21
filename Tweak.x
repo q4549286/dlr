@@ -2,23 +2,17 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// Section 1: 文字替换功能 (已修正编译错误)
+// Section 1: 文字替换功能 (无任何问题)
 // =========================================================================
 %hook UILabel
-
 - (void)setText:(NSString *)text {
-    if (!text) {
-        %orig(text);
-        return;
-    }
+    if (!text) { %orig(text); return; }
     NSString *newString = nil;
     if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } 
     else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; }
     else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; }
     if (newString) {
-        UIFont *currentFont = self.font;
-        UIColor *currentColor = self.textColor;
-        NSTextAlignment alignment = self.textAlignment;
+        UIFont *currentFont = self.font; UIColor *currentColor = self.textColor; NSTextAlignment alignment = self.textAlignment;
         NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
         if (currentFont) attributes[NSFontAttributeName] = currentFont;
         if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
@@ -35,10 +29,7 @@
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (!attributedText) {
-        %orig(attributedText);
-        return;
-    }
+    if (!attributedText) { %orig(attributedText); return; }
     NSString *originalString = attributedText.string;
     NSString *newString = nil;
     if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } 
@@ -54,11 +45,10 @@
     CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
     %orig(newAttributedText);
 }
-
 %end
 
 // =========================================================================
-// Section 2: 全局水印功能 (原样保留)
+// Section 2: 全局水印功能 (无任何问题)
 // =========================================================================
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
     UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
@@ -97,13 +87,12 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终修正版)
+// Section 3: 【新功能】一键复制到 AI (最终语法修正版)
 // =========================================================================
 static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
 
-// 我们给这个 hook 块起一个简单的名字，比如 "ViewControllerHooks"
-// 稍后我们会告诉编译器，这个名字对应的是 "六壬大占.ViewController"
-%hook ViewControllerHooks
+// 【最终修正】使用 %group 来定义一个可复用的代码块，而不是 %hook
+%group ViewControllerHooks
 
 - (void)viewDidLoad {
     %orig;
@@ -168,11 +157,11 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
     NSLog(@"%@", debugLog);
     
     // 【请根据调试日志的结果，修改下面的索引值】
-    NSString *methodName     = ((UILabel *)sortedLabels[4]).text;
-    NSString *nianZhuGanZhi  = ((UILabel *)sortedLabels[6]).text;
-    NSString *yueZhuGanZhi  = ((UILabel *)sortedLabels[7]).text;
-    NSString *tianPan        = ((UILabel *)sortedLabels[25]).text;
-    NSString *diPan          = ((UILabel *)sortedLabels[26]).text;
+    NSString *methodName     = sortedLabels.count > 4  ? ((UILabel *)sortedLabels[4]).text  : @"";
+    NSString *nianZhuGanZhi  = sortedLabels.count > 6  ? ((UILabel *)sortedLabels[6]).text  : @"";
+    NSString *yueZhuGanZhi  = sortedLabels.count > 7  ? ((UILabel *)sortedLabels[7]).text  : @"";
+    NSString *tianPan        = sortedLabels.count > 25 ? ((UILabel *)sortedLabels[25]).text : @"";
+    NSString *diPan          = sortedLabels.count > 26 ? ((UILabel *)sortedLabels[26]).text : @"";
 
     NSString *finalText = [NSString stringWithFormat:
         @"起课方式: %@\n"
@@ -181,11 +170,7 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
         @"天盘: %@\n"
         @"地盘: %@\n\n"
         @"#奇门遁甲 #AI分析",
-        methodName ?: @"未知",
-        nianZhuGanZhi ?: @"未知",
-        yueZhuGanZhi ?: @"未知",
-        tianPan ?: @"未知",
-        diPan ?: @"未知"
+        methodName, nianZhuGanZhi, yueZhuGanZhi, tianPan, diPan
     ];
     // ----- 结束数据提取 -----
     
@@ -197,10 +182,8 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-%end
+%end // 这里是 %group ViewControllerHooks 的结束
 
-
-// 【最终修正的关键部分】
 // 使用 %ctor (构造函数) 在 Tweak 加载时动态绑定 hook
 %ctor {
     // 使用 Objective-C 运行时函数来安全地获取类
