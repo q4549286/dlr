@@ -14,7 +14,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终完美版)
+// Section 3: 【新功能】一键复制到 AI (最终完美格式版)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -85,7 +85,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
 
-    // --- 2. 【最终四课提取逻辑】---
+    // --- 2. 【最终四课提取与格式化逻辑】---
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -97,7 +97,6 @@ static NSInteger const CopyAiButtonTag = 112233;
             [self findSubviewsOfClass:[UILabel class] inView:container andStoreIn:labels];
             
             if(labels.count >= 12){
-                // 唯一的排序规则：先按Y坐标（分行），再按X坐标（行内排序）
                 [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
                     if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
                     if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
@@ -108,12 +107,14 @@ static NSInteger const CopyAiButtonTag = 112233;
                 NSMutableArray* keLines = [NSMutableArray array];
                 
                 for(int i = 0; i < 4; i++){
+                    // 【关键修正】根据您的格式要求，重新组合元素
+                    // 元素顺序：天神(0-3), 天盘(4-7), 地盘(8-11)
                     NSString* shen = ((UILabel*)labels[i]).text;
                     NSString* tian = ((UILabel*)labels[i+4]).text;
                     NSString* di = ((UILabel*)labels[i+8]).text;
-                    [keLines addObject:[NSString stringWithFormat:@"%@ %@ %@ %@", keTitles[i], shen, tian, di]];
+                    // 新格式: [课名]: [地盘] -> [天盘] [天神]
+                    [keLines addObject:[NSString stringWithFormat:@"%@ %@->%@ %@", keTitles[i], di, tian, shen]];
                 }
-                // 【关键修正】直接拼接，不再反序
                 siKe = [[keLines componentsJoinedByString:@"\n"] mutableCopy];
             }
         }
