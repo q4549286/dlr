@@ -84,7 +84,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
 
-    // --- 2. 【最终四课提取逻辑 - 绝对修正】---
+    // --- 2. 【最终四课提取逻辑 - 按列分组】---
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -96,44 +96,45 @@ static NSInteger const CopyAiButtonTag = 112233;
             [self findSubviewsOfClass:[UILabel class] inView:container andStoreIn:labels];
             
             if(labels.count >= 12){
-                [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-                    if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
-                    if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
-                    return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
-                }];
+                NSMutableDictionary *columns = [NSMutableDictionary dictionary];
+                for(UILabel *label in labels){
+                    // 使用四舍五入的X坐标作为分组的键
+                    NSString *columnKey = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))];
+                    if(!columns[columnKey]){ columns[columnKey] = [NSMutableArray array]; }
+                    [columns[columnKey] addObject:label];
+                }
+                
+                // 确保我们真的得到了4列
+                if (columns.allKeys.count == 4) {
+                    // 把所有列按X坐标排序
+                    NSArray *sortedColumnKeys = [columns.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
+                        return [@([obj1 floatValue]) compare:@([obj2 floatValue])];
+                    }];
 
-                // **【绝对修正】** 严格按照最终推导出的正确映射关系，重新组合四课
-                
-                // 第一课: 辛->未白虎
-                NSString* ke1_di = ((UILabel*)labels[11]).text;
-                NSString* ke1_tian = ((UILabel*)labels[7]).text;
-                NSString* ke1_shen = ((UILabel*)labels[3]).text;
-                
-                // 第二课: 未->辰太阴
-                NSString* ke2_di = ((UILabel*)labels[10]).text;
-                NSString* ke2_tian = ((UILabel*)labels[6]).text;
-                NSString* ke2_shen = ((UILabel*)labels[2]).text;
-                
-                // 第三课: 酉->午太常
-                NSString* ke3_di = ((UILabel*)labels[9]).text;
-                NSString* ke3_tian = ((UILabel*)labels[5]).text;
-                NSString* ke3_shen = ((UILabel*)labels[1]).text;
-                
-                // 第四课: 午->卯天后
-                NSString* ke4_di = ((UILabel*)labels[8]).text;
-                NSString* ke4_tian = ((UILabel*)labels[4]).text;
-                NSString* ke4_shen = ((UILabel*)labels[0]).text;
+                    // 【关键修正】将列数组反转，以匹配从右到左的课序
+                    NSArray *reversedColumnKeys = [[sortedColumnKeys reverseObjectEnumerator] allObjects];
 
-                siKe = [NSMutableString stringWithFormat:
-                    @"第一课: %@->%@%@\n"
-                    @"第二课: %@->%@%@\n"
-                    @"第三课: %@->%@%@\n"
-                    @"第四课: %@->%@%@",
-                    SafeString(ke1_di), SafeString(ke1_tian), SafeString(ke1_shen),
-                    SafeString(ke2_di), SafeString(ke2_tian), SafeString(ke2_shen),
-                    SafeString(ke3_di), SafeString(ke3_tian), SafeString(ke3_shen),
-                    SafeString(ke4_di), SafeString(ke4_tian), SafeString(ke4_shen)
-                ];
+                    NSArray* keTitles = @[@"第一课:", @"第二课:", @"第三课:", @"第四课:"];
+                    NSMutableArray* keLines = [NSMutableArray array];
+
+                    for(int i = 0; i < reversedColumnKeys.count && i < keTitles.count; i++){
+                        NSString *key = reversedColumnKeys[i];
+                        NSMutableArray *columnLabels = columns[key];
+                        // 对每一列内部按Y坐标排序
+                        [columnLabels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
+                            return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
+                        }];
+                        
+                        if(columnLabels.count >= 3){
+                            // 0:神, 1:天盘, 2:地盘
+                            NSString* shen = ((UILabel*)columnLabels[0]).text;
+                            NSString* tian = ((UILabel*)columnLabels[1]).text;
+                            NSString* di   = ((UILabel*)columnLabels[2]).text;
+                            [keLines addObject:[NSString stringWithFormat:@"%@ %@->%@%@", keTitles[i], SafeString(di), SafeString(tian), SafeString(shen)]];
+                        }
+                    }
+                    siKe = [[keLines componentsJoinedByString:@"\n"] mutableCopy];
+                }
             }
         }
     }
@@ -157,29 +158,4 @@ static NSInteger const CopyAiButtonTag = 112233;
                 return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
             }];
             NSMutableArray *lineParts = [NSMutableArray array];
-            for (UILabel *label in labelsInView) { if(label.text) [lineParts addObject:label.text]; }
-            NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
-            [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, [lineParts componentsJoinedByString:@" "]]];
-        }
-        sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
-    }
-    
-    // --- 4. 组合最终文本 ---
-    NSString *finalText = [NSString stringWithFormat:
-        @"起课方式: %@\n"
-        @"课体: %@\n"
-        @"%@\n" // 四课
-        @"%@\n" // 三传
-        @"%@",   // 时间块
-        SafeString(methodName), SafeString(fullKeti), SafeString(siKe), SafeString(sanChuan), SafeString(timeBlock)
-    ];
-    
-    [UIPasteboard generalPasteboard].string = finalText;
-    
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
-    [alert addAction:okAction];
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
-%end
+            for (UILabel *label in labelsInV
