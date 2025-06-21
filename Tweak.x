@@ -14,7 +14,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终布局分析版)
+// Section 3: 【新功能】一键复制到 AI (最终布局分析版 - 已修正繁体兼容)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -77,13 +77,18 @@ static NSInteger const CopyAiButtonTag = 112233;
 // 【已升级】提取文本的通用核心方法，现在能处理多个同名视图
 %new
 - (NSString *)extractTextFromViewsWithClassName:(NSString *)className separator:(NSString *)separator {
+    // 【关键修正】同时尝试简体和繁体类名
     Class targetViewClass = NSClassFromString(className);
     if (!targetViewClass) {
-        NSString *traditionalClassName = [className stringByReplacingOccurrencesOfString:@"占" withString:@"占"];
-        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"九宗门视图" withString:@"九宗門視圖"];
-        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"年月日时视图" withString:@"年月日時視圖"];
-        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"传视图" withString:@"傳視圖"];
-        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"课体视图" withString:@"課體視圖"];
+        NSString *traditionalClassName = [className mutableCopy];
+        // 自动进行一些常见的简繁体替换
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"占" withString:@"占"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"视图" withString:@"視圖"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"门" withString:@"門"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"时" withString:@"時"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"传" withString:@"傳"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"课" withString:@"課"];
+        traditionalClassName = [traditionalClassName stringByReplacingOccurrencesOfString:@"体" withString:@"體"];
         targetViewClass = NSClassFromString(traditionalClassName);
     }
     
@@ -94,7 +99,6 @@ static NSInteger const CopyAiButtonTag = 112233;
     
     if (targetViews.count == 0) return @"";
 
-    // 按Y坐标给所有找到的视图排序
     [targetViews sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) {
         return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
     }];
@@ -102,7 +106,8 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSMutableArray *allTextParts = [NSMutableArray array];
     for (UIView *containerView in targetViews) {
         NSMutableArray *labelsInView = [NSMutableArray array];
-        [self findSubviewsOfClass:[UILabel class] inView:containerView andStoreIn:labelsInView];
+        UIView *content = [containerView valueForKey:@"contentView"] ?: containerView;
+        [self findSubviewsOfClass:[UILabel class] inView:content andStoreIn:labelsInView];
         
         [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
             if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
@@ -119,18 +124,14 @@ static NSInteger const CopyAiButtonTag = 112233;
     return [allTextParts componentsJoinedByString:separator];
 }
 
-
 // 【最终布局分析版】
 %new
 - (void)copyAiButtonTapped_FinalLayoutAnalysis {
     #define SafeString(str) (str ?: @"")
 
     // --- 1. 结构化提取 ---
-    // 对于只有一个实例的视图，我们的方法依然有效
     NSString *methodName = [self extractTextFromViewsWithClassName:@"六壬大占.九宗门视图" separator:@" "];
     NSString *timeBlock = [[self extractTextFromViewsWithClassName:@"六壬大占.年月日时视图" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-    
-    // 对于有多个实例的“三传”和“课体”，我们的方法现在能按顺序提取并拼接
     NSString *sanChuan = [self extractTextFromViewsWithClassName:@"六壬大占.传视图" separator:@" "];
     NSString *fullKeti = [self extractTextFromViewsWithClassName:@"六壬大占.课体视图" separator:@" "];
 
@@ -170,14 +171,9 @@ static NSInteger const CopyAiButtonTag = 112233;
         @"天盘: %@\n"
         @"地盘: %@\n\n"
         @"#奇门遁甲 #AI分析",
-        SafeString(methodName),
-        SafeString(fullKeti),
-        SafeString(sanChuan),
-        SafeString(timeBlock),
-        SafeString(nianZhuShaVal),
-        SafeString(yueZhuShaVal),
-        SafeString(tianPan),
-        SafeString(diPan)
+        SafeString(methodName), SafeString(fullKeti), SafeString(sanChuan),
+        SafeString(timeBlock), SafeString(nianZhuShaVal), SafeString(yueZhuShaVal),
+        SafeString(tianPan), SafeString(diPan)
     ];
     
     [UIPasteboard generalPasteboard].string = finalText;
