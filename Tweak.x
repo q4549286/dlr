@@ -2,7 +2,7 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 已修复
+// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 无改动
 // =========================================================================
 %hook UILabel
 - (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
@@ -14,7 +14,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (终极修复重构版)
+// Section 3: 【新功能】一键复制到 AI (最终修复版)
 // =========================================================================
 
 #define LOG_PREFIX @"[CopyAI_DEBUG]"
@@ -25,24 +25,18 @@ static NSString *g_qizhengText = nil;
 
 %hook 六壬大占_ViewController
 
-// --- Forward declarations for new methods ---
-%new
-- (void)copyAiButtonTapped;
-%new
-- (NSString *)extractAllTextFromTopViewControllerWithCaller:(NSString *)caller;
-
-// --- Method Hooks ---
+// --- 钩子方法 ---
 
 - (void)顯示法訣總覽 {
     NSLog(@"%@ Hooking 顯示法訣總覽...", LOG_PREFIX);
     %orig;
-    g_bifaText = [self extractAllTextFromTopViewControllerWithCaller:@"顯示法訣總覽"];
+    g_bifaText = [(id)self extractAllTextFromTopViewControllerWithCaller:@"顯示法訣總覽"];
 }
 
 - (void)顯示七政信息WithSender:(id)sender {
     NSLog(@"%@ Hooking 顯示七政信息WithSender:...", LOG_PREFIX);
     %orig;
-    g_qizhengText = [self extractAllTextFromTopViewControllerWithCaller:@"顯示七政信息WithSender"];
+    g_qizhengText = [(id)self extractAllTextFromTopViewControllerWithCaller:@"顯示七政信息WithSender"];
 }
 
 - (void)viewDidLoad {
@@ -64,7 +58,7 @@ static NSString *g_qizhengText = nil;
     });
 }
 
-// --- New Helper Methods ---
+// --- 新增的辅助方法 ---
 
 %new
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view storage:(NSMutableArray *)storage {
@@ -121,16 +115,18 @@ static NSString *g_qizhengText = nil;
     return result;
 }
 
-// --- Main Action Method ---
+// --- 按钮点击的核心功能方法 ---
 
 %new
 - (void)copyAiButtonTapped {
     NSLog(@"%@ copyAiButtonTapped triggered!", LOG_PREFIX);
     #define SafeString(str) (str ?: @"")
 
+    // 触发隐藏信息计算
     [self 顯示法訣總覽];
     [self 顯示七政信息WithSender:nil];
 
+    // 提取主界面信息
     NSString *timeBlock = [self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "];
     NSString *kongWang = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
     NSString *sanGongShi = [self extractTextFromFirstViewOfClassName:@"六壬大占.三宮時視圖" separator:@" "];
@@ -138,7 +134,7 @@ static NSString *g_qizhengText = nil;
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
     NSString *methodName = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
     
-    // SiKe Extraction
+    // 四课提取
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -158,7 +154,7 @@ static NSString *g_qizhengText = nil;
         }
     }
 
-    // SanChuan Extraction
+    // 三传提取
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
@@ -179,9 +175,9 @@ static NSString *g_qizhengText = nil;
         sanChuan = [[lines componentsJoinedByString:@"\n"] mutableCopy];
     }
     
-    // Assemble Final Text
+    // 组合最终文本
     NSMutableString *finalText = [NSMutableString string];
-    [finalText appendFormat:@"%@\n\n", SafeString(timeBlock)];
+    [finalText appendFormat:@"%@\n\n", SafeString([timeBlock stringByReplacingOccurrencesOfString:@"\n" withString:@" "])];
     if(g_qizhengText.length > 0) { [finalText appendFormat:@"七政:\n%@\n\n", SafeString(g_qizhengText)]; }
     [finalText appendFormat:@"空亡: %@\n", SafeString(kongWang)];
     [finalText appendFormat:@"三宫时: %@\n", SafeString(sanGongShi)];
@@ -192,6 +188,7 @@ static NSString *g_qizhengText = nil;
     [finalText appendFormat:@"%@\n\n", SafeString(sanChuan)];
     [finalText appendFormat:@"起课方式: %@", SafeString(methodName)];
     
+    // 清理全局变量
     g_bifaText = nil;
     g_qizhengText = nil;
 
