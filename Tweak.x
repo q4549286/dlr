@@ -2,7 +2,7 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 无改动
+// Section 1 & 2: 您的原始代码 (UILabel, UIWindow)
 // =========================================================================
 %hook UILabel
 - (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
@@ -14,37 +14,36 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终修复版)
+// Section 3: 【新功能】一键复制到 AI (最终功能完整版)
 // =========================================================================
 
 #define LOG_PREFIX @"[CopyAI_DEBUG]"
-
 static NSInteger const CopyAiButtonTag = 112233;
 static NSString *g_bifaText = nil;
 static NSString *g_qizhengText = nil;
 
+// 声明所有需要的方法
+@interface _UIBackdropView
+@end
+@interface UIViewController (CopyAi)
+- (void)copyAiButtonTapped;
+- (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view storage:(NSMutableArray *)storage;
+- (NSString *)extractAllTextFromTopViewControllerWithCaller:(NSString *)caller;
+- (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
+- (void)顯示法訣總覽;
+- (void)顯示七政信息WithSender:(id)sender;
+@end
+
+
 %hook 六壬大占_ViewController
 
 // --- 钩子方法 ---
-
-- (void)顯示法訣總覽 {
-    NSLog(@"%@ Hooking 顯示法訣總覽...", LOG_PREFIX);
-    %orig;
-    g_bifaText = [(id)self extractAllTextFromTopViewControllerWithCaller:@"顯示法訣總覽"];
-}
-
-- (void)顯示七政信息WithSender:(id)sender {
-    NSLog(@"%@ Hooking 顯示七政信息WithSender:...", LOG_PREFIX);
-    %orig;
-    g_qizhengText = [(id)self extractAllTextFromTopViewControllerWithCaller:@"顯示七政信息WithSender"];
-}
-
 - (void)viewDidLoad {
     %orig;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         UIWindow *keyWindow = self.view.window;
         if (!keyWindow || [keyWindow viewWithTag:CopyAiButtonTag]) { return; }
-        NSLog(@"%@ Adding CopyAI button to window.", LOG_PREFIX);
+        NSLog(@"%@ Adding CopyAI button.", LOG_PREFIX);
         UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
         copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
         copyButton.tag = CopyAiButtonTag;
@@ -58,8 +57,19 @@ static NSString *g_qizhengText = nil;
     });
 }
 
-// --- 新增的辅助方法 ---
+- (void)顯示法訣總覽 {
+    NSLog(@"%@ Hooking 顯示法訣總覽...", LOG_PREFIX);
+    %orig;
+    g_bifaText = [self extractAllTextFromTopViewControllerWithCaller:@"顯示法訣總覽"];
+}
 
+- (void)顯示七政信息WithSender:(id)sender {
+    NSLog(@"%@ Hooking 顯示七政信息WithSender:...", LOG_PREFIX);
+    %orig;
+    g_qizhengText = [self extractAllTextFromTopViewControllerWithCaller:@"顯示七政信息WithSender"];
+}
+
+// --- 新增的辅助方法 ---
 %new
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view storage:(NSMutableArray *)storage {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
@@ -72,16 +82,16 @@ static NSString *g_qizhengText = nil;
     UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
     UIViewController *topController = keyWindow.rootViewController;
     while (topController.presentedViewController) { topController = topController.presentedViewController; }
-    
+
     NSMutableArray *allLabels = [NSMutableArray array];
     [self findSubviewsOfClass:[UILabel class] inView:topController.view storage:allLabels];
-    
+
     [allLabels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-        CGFloat y1 = CGRectGetMidY(obj1.frame); CGFloat y2 = CGRectGetMidY(obj2.frame);
-        if (fabs(y1 - y2) > 1.0) { return y1 < y2 ? NSOrderedAscending : NSOrderedDescending; }
+        if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
+        if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
         return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
     }];
-    
+
     NSMutableString *fullText = [NSMutableString string];
     for (UILabel *label in allLabels) {
         if (label.text && ![label.text isEqualToString:@"毕法"] && ![label.text isEqualToString:@"完成"] && ![label.text isEqualToString:@"返回"]) {
@@ -96,7 +106,7 @@ static NSString *g_qizhengText = nil;
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
-    if (!targetViewClass) { NSLog(@"%@ ERROR: Class not found: %@", LOG_PREFIX, className); return @""; }
+    if (!targetViewClass) { return @""; }
     NSMutableArray *targetViews = [NSMutableArray array];
     [self findSubviewsOfClass:targetViewClass inView:self.view storage:targetViews];
     if (targetViews.count == 0) return @"";
@@ -110,40 +120,35 @@ static NSString *g_qizhengText = nil;
     }];
     NSMutableArray *textParts = [NSMutableArray array];
     for (UILabel *label in labelsInView) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } }
-    NSString *result = [textParts componentsJoinedByString:separator];
-    NSLog(@"%@ Extracted from %@: %@", LOG_PREFIX, className, result);
-    return result;
+    return [textParts componentsJoinedByString:separator];
 }
 
 // --- 按钮点击的核心功能方法 ---
-
 %new
 - (void)copyAiButtonTapped {
     NSLog(@"%@ copyAiButtonTapped triggered!", LOG_PREFIX);
     #define SafeString(str) (str ?: @"")
 
-    // 触发隐藏信息计算
     [self 顯示法訣總覽];
     [self 顯示七政信息WithSender:nil];
 
-    // 提取主界面信息
-    NSString *timeBlock = [self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "];
+    NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *kongWang = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
     NSString *sanGongShi = [self extractTextFromFirstViewOfClassName:@"六壬大占.三宮時視圖" separator:@" "];
     NSString *zhouYe = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
     NSString *methodName = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
-    
+
     // 四课提取
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
-        NSMutableArray *siKeViews = [NSMutableArray array]; [self findSubviewsOfClass:siKeViewClass inView:self.view storage:siKeViews];
-        if(siKeViews.count > 0){
-            UIView* c = siKeViews.firstObject; NSMutableArray* l = [NSMutableArray array]; [self findSubviewsOfClass:[UILabel class] inView:c storage:l];
+        NSMutableArray *views = [NSMutableArray new]; [self findSubviewsOfClass:siKeViewClass inView:self.view storage:views];
+        if(views.count > 0){
+            UIView* c = views.firstObject; NSMutableArray* l = [NSMutableArray new]; [self findSubviewsOfClass:[UILabel class] inView:c storage:l];
             if(l.count >= 12){
-                NSMutableDictionary *cols = [NSMutableDictionary dictionary];
-                for(UILabel *lbl in l){ NSString *k = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(lbl.frame))]; if(!cols[k]){ cols[k] = [NSMutableArray array]; } [cols[k] addObject:lbl]; }
+                NSMutableDictionary *cols = [NSMutableDictionary new];
+                for(UILabel *lbl in l){ NSString *k = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(lbl.frame))]; if(!cols[k]){ cols[k] = [NSMutableArray new]; } [cols[k] addObject:lbl]; }
                 if (cols.allKeys.count == 4) {
                     NSArray *sKeys = [cols.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *o1, NSString *o2) { return [@([o1 floatValue]) compare:@([o2 floatValue])]; }];
                     NSMutableArray *c1=cols[sKeys[0]], *c2=cols[sKeys[1]], *c3=cols[sKeys[2]], *c4=cols[sKeys[3]];
@@ -158,13 +163,13 @@ static NSString *g_qizhengText = nil;
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
-        NSMutableArray *sanChuanViews = [NSMutableArray array]; [self findSubviewsOfClass:sanChuanViewClass inView:self.view storage:sanChuanViews]; [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-        NSArray *titles = @[@"初传:", @"中传:", @"末传:"]; NSMutableArray *lines = [NSMutableArray array];
-        for (int i = 0; i < sanChuanViews.count; i++) {
-            UIView *v = sanChuanViews[i]; NSMutableArray *labels = [NSMutableArray array]; [self findSubviewsOfClass:[UILabel class] inView:v storage:labels]; [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
+        NSMutableArray *views = [NSMutableArray new]; [self findSubviewsOfClass:sanChuanViewClass inView:self.view storage:views]; [views sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+        NSArray *titles = @[@"初传:", @"中传:", @"末传:"]; NSMutableArray *lines = [NSMutableArray new];
+        for (int i = 0; i < views.count; i++) {
+            UIView *v = views[i]; NSMutableArray *labels = [NSMutableArray new]; [self findSubviewsOfClass:[UILabel class] inView:v storage:labels]; [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
             if (labels.count >= 3) {
                 NSString *lq = ((UILabel *)labels.firstObject).text; NSString *tj = ((UILabel *)labels.lastObject).text; NSString *dz = ((UILabel *)[labels objectAtIndex:labels.count - 2]).text;
-                NSMutableArray *ssParts = [NSMutableArray array];
+                NSMutableArray *ssParts = [NSMutableArray new];
                 if (labels.count > 3) { for (UILabel *l in [labels subarrayWithRange:NSMakeRange(1, labels.count - 3)]) { if (l.text.length > 0) [ssParts addObject:l.text]; } }
                 NSString *ssStr = [ssParts componentsJoinedByString:@" "];
                 NSMutableString *fLine = [NSMutableString stringWithFormat:@"%@->%@%@", SafeString(lq), SafeString(dz), SafeString(tj)];
@@ -177,7 +182,7 @@ static NSString *g_qizhengText = nil;
     
     // 组合最终文本
     NSMutableString *finalText = [NSMutableString string];
-    [finalText appendFormat:@"%@\n\n", SafeString([timeBlock stringByReplacingOccurrencesOfString:@"\n" withString:@" "])];
+    [finalText appendFormat:@"%@\n\n", SafeString(timeBlock)];
     if(g_qizhengText.length > 0) { [finalText appendFormat:@"七政:\n%@\n\n", SafeString(g_qizhengText)]; }
     [finalText appendFormat:@"空亡: %@\n", SafeString(kongWang)];
     [finalText appendFormat:@"三宫时: %@\n", SafeString(sanGongShi)];
@@ -188,11 +193,10 @@ static NSString *g_qizhengText = nil;
     [finalText appendFormat:@"%@\n\n", SafeString(sanChuan)];
     [finalText appendFormat:@"起课方式: %@", SafeString(methodName)];
     
-    // 清理全局变量
     g_bifaText = nil;
     g_qizhengText = nil;
 
-    NSLog(@"%@ Final text ready for clipboard:\n---\n%@\n---", LOG_PREFIX, finalText);
+    NSLog(@"%@ Final text ready for clipboard.", LOG_PREFIX);
     [UIPasteboard generalPasteboard].string = finalText;
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
