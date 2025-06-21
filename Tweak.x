@@ -2,72 +2,32 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// Section 1: 文字替换与简繁转换 (最终修正版)
+// Section 1 & 2: 您的原始代码 (UILabel, UIWindow)
 // =========================================================================
 %hook UILabel
-
-- (void)setText:(NSString *)text {
-    if (!text) { %orig(text); return; }
-    NSString *newString = nil;
-    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } 
-    else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; }
-    else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; }
-
-    if (newString) {
-        %orig(newString);
-        return;
-    }
-    
-    // 【关键修正】使用正确的繁体->简体转换
-    NSMutableString *simplifiedText = [text mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
-    %orig(simplifiedText);
-}
-
-- (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (!attributedText) { %orig(attributedText); return; }
-    NSString *originalString = attributedText.string;
-    NSString *newString = nil;
-    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } 
-    else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; }
-    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; }
-
-    if (newString) {
-        NSMutableAttributedString *newAttr = [attributedText mutableCopy];
-        [newAttr.mutableString setString:newString];
-        %orig(newAttr);
-        return;
-    }
-    
-    // 【关键修正】使用正确的繁体->简体转换
-    NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
-    %orig(finalAttributedText);
-}
+- (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
+- (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
 %end
-
-
-// =========================================================================
-// Section 2: 全局水印功能 (原样保留)
-// =========================================================================
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); CGContextRef context = UIGraphicsGetCurrentContext(); CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); CGContextRotateCTM(context, angle * M_PI / 180); NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; CGSize textSize = [text sizeWithAttributes:attributes]; CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); [text drawInRect:textRect withAttributes:attributes]; UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext(); return image; }
 %hook UIWindow
 - (void)layoutSubviews { %orig; if (self.windowLevel != UIWindowLevelNormal) { return; } NSInteger watermarkTag = 998877; if ([self viewWithTag:watermarkTag]) { return; } NSString *watermarkText = @"Echo定制"; UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; CGFloat rotationAngle = -30.0; CGSize tileSize = CGSizeMake(150, 100); UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; watermarkView.tag = watermarkTag; watermarkView.userInteractionEnabled = NO; watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; [self addSubview:watermarkView]; [self bringSubviewToFront:watermarkView]; }
 %end
 
+// =========================================================================
+// Section 3: 【新功能】一键复制到 AI (最终完全体)
+// =========================================================================
 
-// =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终成品版)
-// =========================================================================
 static NSInteger const CopyAiButtonTag = 112233;
 
 @interface UIViewController (CopyAiAddon)
-- (void)copyAiButtonTapped_Production;
+- (void)copyAiButtonTapped_FinalMasterpiece;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (UILabel *)findLabelToRightOf:(UILabel *)anchorLabel inArray:(NSArray *)labels;
+- (NSString *)extractTextFromViewWithClassName:(NSString *)className joinSeparator:(NSString *)separator;
 @end
 
 %hook UIViewController
+
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
@@ -84,7 +44,7 @@ static NSInteger const CopyAiButtonTag = 112233;
             copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
             [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             copyButton.layer.cornerRadius = 8;
-            [copyButton addTarget:self action:@selector(copyAiButtonTapped_Production) forControlEvents:UIControlEventTouchUpInside];
+            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalMasterpiece) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:copyButton];
         });
     }
@@ -114,37 +74,60 @@ static NSInteger const CopyAiButtonTag = 112233;
     return foundLabel;
 }
 
+// 提取文本的通用核心方法
 %new
-- (void)copyAiButtonTapped_Production {
+- (NSString *)extractTextFromViewWithClassName:(NSString *)className joinSeparator:(NSString *)separator {
+    Class targetViewClass = NSClassFromString(className);
+    if (!targetViewClass) targetViewClass = NSClassFromString([className stringByReplacingOccurrencesOfString:@"占." withString:@"占."]); // 兼容繁体
+    
+    if (!targetViewClass) return @"";
+
+    NSMutableArray *targetViews = [NSMutableArray array];
+    [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
+    
+    if (targetViews.count == 0) return @"";
+
+    // 假设我们只需要第一个找到的视图内部的内容
+    UIView *containerView = targetViews.firstObject;
+    NSMutableArray *labelsInView = [NSMutableArray array];
+    [self findSubviewsOfClass:[UILabel class] inView:containerView andStoreIn:labelsInView];
+    
+    // 按从上到下，从左到右排序
+    [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
+        if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
+        if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
+        return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
+    }];
+
+    NSMutableArray *textParts = [NSMutableArray array];
+    for (UILabel *label in labelsInView) {
+        if (label.text && label.text.length > 0) {
+            [textParts addObject:label.text];
+        }
+    }
+    return [textParts componentsJoinedByString:separator];
+}
+
+
+// 【最终完全体】
+%new
+- (void)copyAiButtonTapped_FinalMasterpiece {
     #define SafeString(str) (str ?: @"")
 
+    // --- 1. 结构化提取 ---
+    NSString *methodName = [self extractTextFromViewWithClassName:@"六壬大占.九宗门视图" joinSeparator:@" "];
+    NSString *timeBlock = [[self extractTextFromViewWithClassName:@"六壬大占.年月日时视图" joinSeparator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+    NSString *sanChuan = [self extractTextFromViewWithClassName:@"六壬大占.传视图" joinSeparator:@" "];
+    
+    // 单独处理课体，因为它是由多个独立的单元格（或视图）组成的
+    NSString *fullKeti = [self extractTextFromViewWithClassName:@"六壬大占.课体视图" joinSeparator:@" "];
+
+
+    // --- 2. 地标定位法提取其他信息 ---
     NSMutableArray *allLabels = [NSMutableArray array];
     [self findSubviewsOfClass:[UILabel class] inView:self.view andStoreIn:allLabels];
-
-    NSMutableString *fullKeti = [NSMutableString string];
-    Class ketiCellClass = NSClassFromString(@"六壬大占.课体单元");
-    if (!ketiCellClass) ketiCellClass = NSClassFromString(@"六壬大占.課體單元");
-    if (ketiCellClass) {
-        NSMutableArray *ketiCells = [NSMutableArray array];
-        [self findSubviewsOfClass:ketiCellClass inView:self.view andStoreIn:ketiCells];
-        [ketiCells sortUsingComparator:^NSComparisonResult(UIView *obj1, UIView *obj2) {
-            return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
-        }];
-        NSMutableArray *ketiTextParts = [NSMutableArray array];
-        for (UIView *cell in ketiCells) {
-            UIView *content = [cell valueForKey:@"contentView"] ?: cell;
-            for(UIView *subview in content.subviews) {
-                if ([subview isKindOfClass:[UILabel class]]) {
-                    NSString *text = ((UILabel *)subview).text;
-                    if(text) [ketiTextParts addObject:text];
-                    break;
-                }
-            }
-        }
-        fullKeti = [[ketiTextParts componentsJoinedByString:@" "] mutableCopy];
-    }
     
-    NSString *methodName = @"", *timeBlock = @"", *nianZhuShaVal = @"", *yueZhuShaVal = @"", *tianPan = @"", *diPan = @"";
+    NSString *nianZhuShaVal = @"", *yueZhuShaVal = @"", *tianPan = @"", *diPan = @"";
     NSMutableDictionary *labelMap = [NSMutableDictionary dictionary];
     for (UILabel *label in allLabels) {
         if (label.text && label.text.length > 0) {
@@ -152,14 +135,7 @@ static NSInteger const CopyAiButtonTag = 112233;
             if (!labelMap[key]) { [labelMap setObject:label forKey:key]; }
         }
     }
-    
-    CGFloat screenWidth = self.view.bounds.size.width;
-    for (UILabel *label in allLabels) {
-        CGRect frame = label.frame;
-        if (frame.origin.y < 100 && frame.origin.y > 20 && fabs(CGRectGetMidX(frame) - screenWidth / 2) < 50) { methodName = label.text; }
-        if (frame.origin.x < 50 && frame.origin.y < 150 && [label.text containsString:@"\n"]) { timeBlock = [label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]; }
-    }
-    
+
     UILabel *taoSuiLabel = labelMap[@"太岁"] ?: labelMap[@"太歲"];
     if (taoSuiLabel) nianZhuShaVal = [self findLabelToRightOf:taoSuiLabel inArray:allLabels].text;
 
@@ -172,17 +148,25 @@ static NSInteger const CopyAiButtonTag = 112233;
     UILabel *diPanAnchor = labelMap[@"财"] ?: labelMap[@"財"];
     if (diPanAnchor) diPan = [self findLabelToRightOf:diPanAnchor inArray:allLabels].text;
     
+    // --- 3. 组合最终文本 ---
     NSString *finalText = [NSString stringWithFormat:
         @"起课方式: %@\n"
         @"课体: %@\n"
+        @"三传: %@\n"
         @"%@\n"
         @"年柱: %@\n"
         @"月柱: %@\n"
         @"天盘: %@\n"
         @"地盘: %@\n\n"
         @"#奇门遁甲 #AI分析",
-        SafeString(methodName), SafeString(fullKeti), SafeString(timeBlock),
-        SafeString(nianZhuShaVal), SafeString(yueZhuShaVal), SafeString(tianPan), SafeString(diPan)
+        SafeString(methodName),
+        SafeString(fullKeti),
+        SafeString(sanChuan),
+        SafeString(timeBlock),
+        SafeString(nianZhuShaVal),
+        SafeString(yueZhuShaVal),
+        SafeString(tianPan),
+        SafeString(diPan)
     ];
     
     [UIPasteboard generalPasteboard].string = finalText;
