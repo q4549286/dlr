@@ -19,7 +19,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已修正所有问题)
+// Section 3: 【最终完美版】一键复制到 AI
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -70,8 +70,9 @@ static NSMutableDictionary *g_extractedData = nil;
                 return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
             }];
             
+            // 【关键修正】使用您提供的最准确的类名来识别弹窗
             NSMutableArray *qizhengViews = [NSMutableArray array];
-            [self findSubviewsOfClass:NSClassFromString(@"六壬大占.七政視圖") inView:viewControllerToPresent.view andStoreIn:qizhengViews];
+            [self findSubviewsOfClass:NSClassFromString(@"六壬大占.七政信息视图") inView:viewControllerToPresent.view andStoreIn:qizhengViews];
 
             NSString *title = viewControllerToPresent.title ?: @"";
             if (title.length == 0 && labels.count > 0) { title = ((UILabel*)labels.firstObject).text; }
@@ -79,13 +80,13 @@ static NSMutableDictionary *g_extractedData = nil;
             NSMutableArray* textParts = [NSMutableArray array];
             NSString* content = nil;
 
-            if (qizhengViews.count > 0) {
+            if (qizhengViews.count > 0) { // 识别七政弹窗成功
                 for (UILabel *label in labels) { if (label.text && label.text.length > 0) [textParts addObject:label.text]; }
                 content = [textParts componentsJoinedByString:@"\n"];
                 g_extractedData[@"七政四余"] = content;
-                EchoLog(@"成功抓取 [七政四余] 内容");
+                EchoLog(@"成功抓取 [七政四余] 内容 (通过 '七政信息视图' 识别)");
             } 
-            else if ([title containsString:@"格局"] || [title containsString:@"法诀"] || [title containsString:@"毕法"]) {
+            else if ([title containsString:@"格局"] || [title containsString:@"法诀"] || [title containsString:@"毕法"]) { // 识别毕法/格局弹窗
                 for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title]) { [textParts addObject:label.text]; } }
                 content = [textParts componentsJoinedByString:@"\n"];
                 if ([title containsString:@"格局"]) { g_extractedData[@"格局"] = content; EchoLog(@"成功抓取 [格局] 内容"); } 
@@ -138,7 +139,8 @@ static NSMutableDictionary *g_extractedData = nil;
 
     EchoLog(@"正在提取主界面静态信息...");
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-    g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
+    // 【关键修正】同步更新静态月将的提取类名
+    g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政信息视图" separator:@" "];
     g_extractedData[@"空亡"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
     g_extractedData[@"三宫时"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.三宮時視圖" separator:@" "];
     g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
@@ -196,7 +198,6 @@ static NSMutableDictionary *g_extractedData = nil;
         
         SEL selectorBiFa = NSSelectorFromString(@"顯示法訣總覽");
         SEL selectorGeJu = NSSelectorFromString(@"顯示格局總覽");
-        // 【关键修正】使用您确认的繁体方法名
         SEL selectorQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:");
 
         #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
