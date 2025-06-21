@@ -57,7 +57,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终成品版)
+// Section 3: 【新功能】一键复制到 AI (最终成品版 - 已修正编译错误)
 // =========================================================================
 static NSInteger const CopyAiButtonTag = 112233;
 
@@ -105,7 +105,11 @@ static NSInteger const CopyAiButtonTag = 112233;
         if (label == anchorLabel) continue;
         if (fabs(CGRectGetMidY(label.frame) - CGRectGetMidY(anchorLabel.frame)) < 10 && CGRectGetMinX(label.frame) > CGRectGetMinX(anchorLabel.frame)) {
             CGFloat distance = CGRectGetMinX(label.frame) - CGRectGetMaxX(anchorLabel.frame);
-            if (distance < minDistance) { minDistance = d; target = l; }
+            // 【关键修正】将 d, target, l 修正为正确的变量名
+            if (distance < minDistance) {
+                minDistance = distance;
+                foundLabel = label;
+            }
         }
     }
     return foundLabel;
@@ -132,7 +136,8 @@ static NSInteger const CopyAiButtonTag = 112233;
             UIView *content = [cell valueForKey:@"contentView"] ?: cell;
             for(UIView *subview in content.subviews) {
                 if ([subview isKindOfClass:[UILabel class]]) {
-                    [ketiTextParts addObject:((UILabel *)subview).text];
+                    NSString *text = ((UILabel *)subview).text;
+                    if(text) [ketiTextParts addObject:text];
                     break;
                 }
             }
