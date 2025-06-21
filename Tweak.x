@@ -19,11 +19,11 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (全新方法重构 + 日志)
+// Section 3: 【新功能】一键复制到 AI (全新方法重构 + 日志 + 编译修复)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
-static NSMutableDictionary *g_extractedData = nil; // 全局数据存储字典
+static NSMutableDictionary *g_extractedData = nil;
 
 @interface UIViewController (CopyAiAddon)
 - (void)copyAiButtonTapped_FinalMethod;
@@ -54,7 +54,6 @@ static NSMutableDictionary *g_extractedData = nil; // 全局数据存储字典
     }
 }
 
-// 核心Hook：监听所有弹窗事件
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData) {
         EchoLog(@"弹窗事件被触发，准备抓取内容...");
@@ -71,7 +70,6 @@ static NSMutableDictionary *g_extractedData = nil; // 全局数据存储字典
             NSMutableArray *textParts = [NSMutableArray array];
             NSString *title = viewControllerToPresent.title ?: @"";
             
-            // 如果弹窗本身没有标题，尝试从第一个UILabel获取
             if(title.length == 0 && labels.count > 0) {
                 title = ((UILabel*)labels.firstObject).text;
             }
@@ -112,18 +110,9 @@ static NSMutableDictionary *g_extractedData = nil; // 全局数据存储字典
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
     if (!targetViewClass) {
-        EchoLog(@"类名 '%@' 未找到，将尝试简体。", className);
-        // 类名繁转简
-        NSMutableString *simplifiedClassName = [className mutableCopy];
-        CFStringTransform((__bridge CFMutableStringRef)simplifiedClassName, NULL, kCFStringTransformMandarinLatin, NO);
-        CFStringTransform((__bridge CFMutableStringRef)simplifiedClassName, NULL, kCFStringTransformStripDiacritics, NO);
-        targetViewClass = NSClassFromString(simplifiedClassName);
-        if (!targetViewClass) {
-             EchoLog(@"简体类名 '%@' 仍未找到，提取失败。", simplifiedClassName);
-             return @"";
-        }
+        EchoLog(@"类名 '%@' 未找到。", className);
+        return @"";
     }
-    // ... 后续提取逻辑不变
     NSMutableArray *targetViews = [NSMutableArray array];
     [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
     if (targetViews.count == 0) return @"";
@@ -147,7 +136,6 @@ static NSMutableDictionary *g_extractedData = nil; // 全局数据存储字典
     EchoLog(@"--- 开始执行复制到AI任务 ---");
     g_extractedData = [NSMutableDictionary dictionary];
 
-    // --- 1. 提取主界面静态信息 ---
     EchoLog(@"正在提取主界面静态信息...");
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
@@ -158,8 +146,6 @@ static NSMutableDictionary *g_extractedData = nil; // 全局数据存储字典
     g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
     EchoLog(@"主界面信息提取完毕。");
 
-    // --- 2. 提取四课信息 ---
-    // (逻辑不变)
     EchoLog(@"正在提取四课信息...");
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
@@ -209,8 +195,6 @@ static NSMutableDictionary *g_extractedData = nil; // 全局数据存储字典
     g_extractedData[@"四课"] = siKe;
     EchoLog(@"四课信息提取完毕。");
 
-    // --- 3. 提取三传信息 ---
-    // (逻辑不变)
     EchoLog(@"正在提取三传信息...");
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
@@ -247,35 +231,42 @@ static NSMutableDictionary *g_extractedData = nil; // 全局数据存储字典
     g_extractedData[@"三传"] = sanChuan;
      EchoLog(@"三传信息提取完毕。");
     
-    // --- 4. 异步触发并抓取动态信息 ---
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         EchoLog(@"开始异步任务，抓取动态信息...");
         
-        // 【关键】使用繁体字方法名
         SEL selectorBiFa = NSSelectorFromString(@"顯示法訣總覽");
         SEL selectorQiZheng = NSSelectorFromString(@"顯示七政信息:");
 
+        // 使用宏来包裹performSelector调用，以抑制编译器警告
+        #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
+            _Pragma("clang diagnostic push") \
+            _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
+            code; \
+            _Pragma("clang diagnostic pop")
+
         if ([self respondsToSelector:selectorBiFa]) {
             EchoLog(@"找到方法 '顯示法訣總覽', 准备调用...");
-            dispatch_sync(dispatch_get_main_queue(), ^{ [self performSelector:selectorBiFa withObject:nil]; });
-            [NSThread sleepForTimeInterval:0.8]; // 等待弹窗处理
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorBiFa withObject:nil]);
+            });
+            [NSThread sleepForTimeInterval:0.8];
         } else {
             EchoLog(@"错误: 未找到方法 '顯示法訣總覽'");
         }
 
         if ([self respondsToSelector:selectorQiZheng]) {
             EchoLog(@"找到方法 '顯示七政信息:', 准备调用...");
-            dispatch_sync(dispatch_get_main_queue(), ^{ [self performSelector:selectorQiZheng withObject:nil]; });
-            [NSThread sleepForTimeInterval:0.8]; // 等待弹窗处理
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]);
+            });
+            [NSThread sleepForTimeInterval:0.8];
         } else {
              EchoLog(@"错误: 未找到方法 '顯示七政信息:'");
         }
         
-        // --- 5. 所有信息收集完毕，在主线程组合并显示 ---
         dispatch_async(dispatch_get_main_queue(), ^{
              EchoLog(@"所有信息收集完毕，正在组合最终文本...");
             
-            // 格式化输出
             NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", g_extractedData[@"毕法"]] : @"";
             NSString *qiZhengOutput = g_extractedData[@"七政"] ? [NSString stringWithFormat:@"七政:\n%@\n\n", g_extractedData[@"七政"]] : @"";
             
@@ -286,8 +277,8 @@ static NSMutableDictionary *g_extractedData = nil; // 全局数据存储字典
                 @"三宫时: %@\n"
                 @"昼夜: %@\n"
                 @"课体: %@\n\n"
-                @"%@" // 毕法/格局
-                @"%@" // 七政
+                @"%@"
+                @"%@"
                 @"%@\n\n"
                 @"%@\n\n"
                 @"起课方式: %@",
@@ -306,7 +297,7 @@ static NSMutableDictionary *g_extractedData = nil; // 全局数据存储字典
             UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
             [alert addAction:okAction];
             [self presentViewController:alert animated:YES completion:^{
-                 g_extractedData = nil; // 清理全局字典，为下次点击做准备
+                 g_extractedData = nil;
                  EchoLog(@"--- 复制任务完成 ---");
             }];
         });
