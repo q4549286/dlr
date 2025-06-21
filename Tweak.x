@@ -14,16 +14,21 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (终极版)
+// Section 3: 【新功能】一键复制到 AI (带Debug功能的最终版)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
+static NSInteger const DebugButtonTag = 445566;
 
 @interface UIViewController (CopyAiAddon)
 - (void)copyAiButtonTapped_FinalPerfect;
+- (void)debugButtonTapped;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
-- (NSString *)extractTextFromCollectionViewDataSourceWithViewClassName:(NSString *)viewClassName;
+- (NSString *)extractTextFromCollectionViewByShowingItFirst:(SEL)showSelector viewClassName:(NSString *)viewClassName;
+// App内部方法声明，防止编译器警告
+- (void)顯示法訣總覽;
+- (void)顯示七政信息WithSender:(id)sender;
 @end
 
 %hook UIViewController
@@ -34,17 +39,35 @@ static NSInteger const CopyAiButtonTag = 112233;
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window;
-            if (!keyWindow || [keyWindow viewWithTag:CopyAiButtonTag]) { return; }
-            UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
-            copyButton.tag = CopyAiButtonTag;
-            [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
-            copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-            copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
-            [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            copyButton.layer.cornerRadius = 8;
-            [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalPerfect) forControlEvents:UIControlEventTouchUpInside];
-            [keyWindow addSubview:copyButton];
+            if (!keyWindow) { return; }
+            
+            // "复制到AI" 按钮
+            if (![keyWindow viewWithTag:CopyAiButtonTag]) {
+                UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+                copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
+                copyButton.tag = CopyAiButtonTag;
+                [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
+                copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+                copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
+                [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+                copyButton.layer.cornerRadius = 8;
+                [copyButton addTarget:self action:@selector(copyAiButtonTapped_FinalPerfect) forControlEvents:UIControlEventTouchUpInside];
+                [keyWindow addSubview:copyButton];
+            }
+            
+            // "Debug" 按钮
+            if (![keyWindow viewWithTag:DebugButtonTag]) {
+                UIButton *debugButton = [UIButton buttonWithType:UIButtonTypeSystem];
+                debugButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 85, 90, 30); // 放在复制按钮下方
+                debugButton.tag = DebugButtonTag;
+                [debugButton setTitle:@"Debug" forState:UIControlStateNormal];
+                debugButton.titleLabel.font = [UIFont systemFontOfSize:12];
+                debugButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.4 blue:0.2 alpha:1.0];
+                [debugButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+                debugButton.layer.cornerRadius = 6;
+                [debugButton addTarget:self action:@selector(debugButtonTapped) forControlEvents:UIControlEventTouchUpInside];
+                [keyWindow addSubview:debugButton];
+            }
         });
     }
 }
@@ -60,7 +83,8 @@ static NSInteger const CopyAiButtonTag = 112233;
     Class targetViewClass = NSClassFromString(className);
     if (!targetViewClass) return @"";
     NSMutableArray *targetViews = [NSMutableArray array];
-    [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
+    UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+    [self findSubviewsOfClass:targetViewClass inView:keyWindow andStoreIn:targetViews];
     if (targetViews.count == 0) return @"";
     UIView *containerView = targetViews.firstObject;
     NSMutableArray *labelsInView = [NSMutableArray array];
@@ -76,20 +100,44 @@ static NSInteger const CopyAiButtonTag = 112233;
 }
 
 %new
-// 终极武器：直接从数据源提取列表信息
-- (NSString *)extractTextFromCollectionViewDataSourceWithViewClassName:(NSString *)viewClassName {
-    Class targetViewClass = NSClassFromString(viewClassName);
-    if (!targetViewClass || ![self conformsToProtocol:@protocol(UICollectionViewDataSource)]) {
+- (NSString *)extractTextFromCollectionViewByShowingItFirst:(SEL)showSelector viewClassName:(NSString *)viewClassName {
+    if (![self respondsToSelector:showSelector]) {
         return nil;
     }
-
-    id<UICollectionViewDataSource> dataSource = (id<UICollectionViewDataSource>)self;
     
-    // 找到用作模板的CollectionView
+    NSMethodSignature *signature = [self methodSignatureForSelector:showSelector];
+    if (signature.numberOfArguments > 2) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        [self performSelector:showSelector withObject:nil];
+        #pragma clang diagnostic pop
+    } else {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        [self performSelector:showSelector];
+        #pragma clang diagnostic pop
+    }
+
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+
+    Class targetViewClass = NSClassFromString(viewClassName);
+    if (!targetViewClass) return nil;
+    
+    UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
     NSMutableArray *views = [NSMutableArray array];
-    [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:views];
+    [self findSubviewsOfClass:targetViewClass inView:keyWindow andStoreIn:views];
+    
     UICollectionView *collectionView = views.firstObject;
-    if (!collectionView || ![collectionView isKindOfClass:[UICollectionView class]]) return nil;
+    if (!collectionView || ![collectionView isKindOfClass:[UICollectionView class]]) {
+         if (self.presentedViewController) { [self.presentedViewController dismissViewControllerAnimated:NO completion:nil]; }
+         return nil;
+    }
+
+    id<UICollectionViewDataSource> dataSource = collectionView.dataSource;
+    if (!dataSource) {
+        if (self.presentedViewController) { [self.presentedViewController dismissViewControllerAnimated:NO completion:nil]; }
+        return nil;
+    }
 
     NSInteger sections = 1;
     if ([dataSource respondsToSelector:@selector(numberOfSectionsInCollectionView:)]) {
@@ -103,7 +151,6 @@ static NSInteger const CopyAiButtonTag = 112233;
             NSIndexPath *indexPath = [NSIndexPath indexPathForItem:item inSection:section];
             UICollectionViewCell *cell = [dataSource collectionView:collectionView cellForItemAtIndexPath:indexPath];
             
-            // 从cell中提取所有UILabel的文本
             NSMutableArray *labelsInCell = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:cell.contentView andStoreIn:labelsInCell];
             [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
@@ -116,7 +163,6 @@ static NSInteger const CopyAiButtonTag = 112233;
                     [cellText appendFormat:@"%@ ", label.text];
                 }
             }
-            // 去掉末尾的空格
             NSString *trimmedText = [cellText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             if (trimmedText.length > 0) {
                 [allTexts addObject:trimmedText];
@@ -124,17 +170,23 @@ static NSInteger const CopyAiButtonTag = 112233;
         }
     }
     
+    if (self.presentedViewController) {
+        [self.presentedViewController dismissViewControllerAnimated:NO completion:nil];
+    } else {
+        [collectionView.superview removeFromSuperview];
+    }
+    
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+
     return allTexts.count > 0 ? [allTexts componentsJoinedByString:@"\n"] : nil;
 }
 
-
-// 【终极版】
+// 【主功能】
 %new
 - (void)copyAiButtonTapped_FinalPerfect {
     #define SafeString(str) (str ?: @"")
 
     // --- 1. 结构化提取所有信息 ---
-    // A. 主盘面固定信息
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *yueJiang = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
     NSString *kongWang = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
@@ -142,14 +194,14 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *zhouYe = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
     NSString *methodName = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
+    
+    // 修正方法名为繁体
+    NSString *biFaList = [self extractTextFromCollectionViewByShowingItFirst:@selector(顯示法訣總覽) viewClassName:@"六壬大占.格局總覽視圖"];
+    NSString *qiZhengList = [self extractTextFromCollectionViewByShowingItFirst:@selector(顯示七政信息WithSender:) viewClassName:@"六壬大占.七政信息視圖"];
 
-    // B. 从数据源提取隐藏列表信息 (终极方案)
-    NSString *biFaList = [self extractTextFromCollectionViewDataSourceWithViewClassName:@"六壬大占.格局總覽視圖"];
-    NSString *qiZhengList = [self extractTextFromCollectionViewDataSourceWithViewClassName:@"六壬大占.七政信息視圖"];
-
-
-    // --- 2. 【四课提取逻辑 - 保持不变】---
-    NSMutableString *siKe = [NSMutableString string];
+    // --- 2. 四课提取逻辑 ---
+    // (代码与之前版本相同，此处省略)
+        NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
         NSMutableArray *siKeViews = [NSMutableArray array];
@@ -212,9 +264,11 @@ static NSInteger const CopyAiButtonTag = 112233;
             }
         }
     }
-    
-    // --- 3. 【三传提取逻辑 - 优化版，保持不变】---
-    NSMutableString *sanChuan = [NSMutableString string];
+
+
+    // --- 3. 三传提取逻辑 ---
+    // (代码与之前版本相同，此处省略)
+        NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
         NSMutableArray *sanChuanViews = [NSMutableArray array];
@@ -257,41 +311,55 @@ static NSInteger const CopyAiButtonTag = 112233;
         }
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
-    
-    // --- 4. 组合最终文本 (终极版排版) ---
+
+    // --- 4. 组合最终文本 ---
     NSMutableString *finalText = [NSMutableString string];
-    
-    // 基础信息块
     [finalText appendFormat:@"%@\n\n", SafeString(timeBlock)];
     [finalText appendFormat:@"月将: %@\n", SafeString(yueJiang)];
     [finalText appendFormat:@"空亡: %@\n", SafeString(kongWang)];
     [finalText appendFormat:@"三宫时: %@\n", SafeString(sanGongShi)];
     [finalText appendFormat:@"昼夜: %@\n", SafeString(zhouYe)];
     [finalText appendFormat:@"课体: %@\n\n", SafeString(fullKeti)];
-    
-    // 课体三传块
     [finalText appendFormat:@"%@\n\n", SafeString(siKe)];
     [finalText appendFormat:@"%@\n\n", SafeString(sanChuan)];
-    
-    // 毕法列表 (如果存在)
-    if (biFaList && biFaList.length > 0) {
-        [finalText appendFormat:@"毕法:\n%@\n\n", biFaList];
-    }
-    
-    // 七政列表 (如果存在)
-    if (qiZhengList && qiZhengList.length > 0) {
-        [finalText appendFormat:@"七政:\n%@\n\n", qiZhengList];
-    }
-
-    // 起课方式
+    if (biFaList && biFaList.length > 0) { [finalText appendFormat:@"毕法:\n%@\n\n", biFaList]; }
+    if (qiZhengList && qiZhengList.length > 0) { [finalText appendFormat:@"七政:\n%@\n\n", qiZhengList]; }
     [finalText appendFormat:@"起课方式: %@", SafeString(methodName)];
     
-    // 移除可能的多余换行
     NSString *cleanedFinalText = [finalText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
     [UIPasteboard generalPasteboard].string = cleanedFinalText;
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:cleanedFinalText preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+// 【Debug功能】
+%new
+- (void)debugButtonTapped {
+    #define DebugString(str) (str ?: @"nil")
+
+    NSMutableString *debugInfo = [NSMutableString string];
+    
+    [debugInfo appendString:@"--- 固定视图提取 ---\n"];
+    NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+    [debugInfo appendFormat:@"时间块: %@\n", DebugString(timeBlock)];
+    NSString *yueJiang = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
+    [debugInfo appendFormat:@"月将: %@\n", DebugString(yueJiang)];
+    NSString *kongWang = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
+    [debugInfo appendFormat:@"空亡: %@\n", DebugString(kongWang)];
+    
+    [debugInfo appendString:@"\n--- 动态列表提取 ---\n"];
+    [debugInfo appendString:@"正在尝试提取毕法...\n"];
+    NSString *biFaList = [self extractTextFromCollectionViewByShowingItFirst:@selector(顯示法訣總覽) viewClassName:@"六壬大占.格局總覽視圖"];
+    [debugInfo appendFormat:@"毕法列表:\n%@\n", DebugString(biFaList)];
+
+    [debugInfo appendString:@"\n正在尝试提取七政...\n"];
+    NSString *qiZhengList = [self extractTextFromCollectionViewByShowingItFirst:@selector(顯示七政信息WithSender:) viewClassName:@"六壬大占.七政信息視圖"];
+    [debugInfo appendFormat:@"七政列表:\n%@\n", DebugString(qiZhengList)];
+    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Debug 信息" message:debugInfo preferredStyle:UIAlertControllerStyleAlert];
     UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
     [alert addAction:okAction];
     [self presentViewController:alert animated:YES completion:nil];
