@@ -7,20 +7,15 @@
 %hook UILabel
 
 - (void)setText:(NSString *)text {
-    // 【修正】当 text 为 nil 时，正确的调用方式是 %orig(nil) 或 %orig(text)。
-    // 这里我们直接让后续逻辑处理，如果没有任何修改，最后的 %orig 会处理 nil 的情况。
     if (!text) {
-        %orig(text); // 正确的调用方式
+        %orig(text);
         return;
     }
-
     NSString *newString = nil;
     if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } 
     else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; }
     else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; }
-
     if (newString) {
-        // ... (这部分逻辑保持不变)
         UIFont *currentFont = self.font;
         UIColor *currentColor = self.textColor;
         NSTextAlignment alignment = self.textAlignment;
@@ -34,39 +29,33 @@
         [self setAttributedText:newAttributedText];
         return;
     }
-
     NSMutableString *simplifiedText = [text mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
     %orig(simplifiedText);
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    // 【修正】当 attributedText 为 nil 时，正确的调用方式是 %orig(nil) 或 %orig(attributedText)。
     if (!attributedText) {
-        %orig(attributedText); // 正确的调用方式
+        %orig(attributedText);
         return;
     }
-
     NSString *originalString = attributedText.string;
     NSString *newString = nil;
     if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } 
     else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; }
     else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; }
-
     if (newString) {
         NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
         [newAttributedText.mutableString setString:newString];
         %orig(newAttributedText);
         return;
     }
-    
     NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
     %orig(newAttributedText);
 }
 
 %end
-
 
 // =========================================================================
 // Section 2: 全局水印功能 (原样保留)
@@ -107,13 +96,14 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 }
 %end
 
-
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (结构正确)
+// Section 3: 【新功能】一键复制到 AI (最终修正版)
 // =========================================================================
 static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
 
-%hook 六壬大占.ViewController
+// 我们给这个 hook 块起一个简单的名字，比如 "ViewControllerHooks"
+// 稍后我们会告诉编译器，这个名字对应的是 "六壬大占.ViewController"
+%hook ViewControllerHooks
 
 - (void)viewDidLoad {
     %orig;
@@ -168,7 +158,7 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
     }
     if (sortedLabels.count == 0) { NSLog(@"[TweakLog] 未找到任何 UILabel。"); return; }
     
-    // ================== 数据提取核心区域 ==================
+    // ----- 数据提取核心区域 -----
     NSMutableString *debugLog = [NSMutableString stringWithString:@"\n[TweakLog] --- 调试日志 ---\n"];
     for (int i = 0; i < sortedLabels.count; i++) {
         UILabel *label = sortedLabels[i];
@@ -197,7 +187,7 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
         tianPan ?: @"未知",
         diPan ?: @"未知"
     ];
-    // =======================================================
+    // ----- 结束数据提取 -----
     
     [UIPasteboard generalPasteboard].string = finalText;
     
@@ -208,3 +198,20 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
 }
 
 %end
+
+
+// 【最终修正的关键部分】
+// 使用 %ctor (构造函数) 在 Tweak 加载时动态绑定 hook
+%ctor {
+    // 使用 Objective-C 运行时函数来安全地获取类
+    Class targetClass = objc_getClass("六壬大占.ViewController");
+
+    // 如果成功找到了这个类
+    if (targetClass) {
+        // 就将我们上面定义的 "ViewControllerHooks" 这个组，应用到这个类上
+        %init(ViewControllerHooks, targetClass);
+    } else {
+        // 如果找不到，打印一个日志，方便调试
+        NSLog(@"[TweakLog] 错误: 无法找到目标类 '六壬大占.ViewController'");
+    }
+}
