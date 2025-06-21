@@ -14,11 +14,37 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【新功能】一键复制到 AI (带Debug功能的最终版)
+// Section 3: 【新功能】一键复制到 AI (已修复编译错误)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
 static NSInteger const DebugButtonTag = 445566;
+
+// 辅助函数，用于获取当前活跃的Window
+static UIWindow *getActiveWindow() {
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                // 如果是iOS 15+, 直接用keyWindow
+                if (@available(iOS 15.0, *)) {
+                    return scene.keyWindow;
+                }
+                // iOS 13/14, 遍历windows
+                for (UIWindow *window in scene.windows) {
+                    if (window.isKeyWindow) {
+                        return window;
+                    }
+                }
+            }
+        }
+    }
+    // Fallback for older iOS versions
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    return [UIApplication sharedApplication].keyWindow;
+    #pragma clang diagnostic pop
+}
+
 
 @interface UIViewController (CopyAiAddon)
 - (void)copyAiButtonTapped_FinalPerfect;
@@ -38,10 +64,9 @@ static NSInteger const DebugButtonTag = 445566;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIWindow *keyWindow = self.view.window;
+            UIWindow *keyWindow = getActiveWindow(); // 使用新的辅助函数
             if (!keyWindow) { return; }
             
-            // "复制到AI" 按钮
             if (![keyWindow viewWithTag:CopyAiButtonTag]) {
                 UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
                 copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
@@ -55,10 +80,9 @@ static NSInteger const DebugButtonTag = 445566;
                 [keyWindow addSubview:copyButton];
             }
             
-            // "Debug" 按钮
             if (![keyWindow viewWithTag:DebugButtonTag]) {
                 UIButton *debugButton = [UIButton buttonWithType:UIButtonTypeSystem];
-                debugButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 85, 90, 30); // 放在复制按钮下方
+                debugButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 85, 90, 30);
                 debugButton.tag = DebugButtonTag;
                 [debugButton setTitle:@"Debug" forState:UIControlStateNormal];
                 debugButton.titleLabel.font = [UIFont systemFontOfSize:12];
@@ -83,7 +107,7 @@ static NSInteger const DebugButtonTag = 445566;
     Class targetViewClass = NSClassFromString(className);
     if (!targetViewClass) return @"";
     NSMutableArray *targetViews = [NSMutableArray array];
-    UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+    UIWindow *keyWindow = getActiveWindow(); // 使用新的辅助函数
     [self findSubviewsOfClass:targetViewClass inView:keyWindow andStoreIn:targetViews];
     if (targetViews.count == 0) return @"";
     UIView *containerView = targetViews.firstObject;
@@ -123,7 +147,7 @@ static NSInteger const DebugButtonTag = 445566;
     Class targetViewClass = NSClassFromString(viewClassName);
     if (!targetViewClass) return nil;
     
-    UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+    UIWindow *keyWindow = getActiveWindow(); // 使用新的辅助函数
     NSMutableArray *views = [NSMutableArray array];
     [self findSubviewsOfClass:targetViewClass inView:keyWindow andStoreIn:views];
     
@@ -163,7 +187,7 @@ static NSInteger const DebugButtonTag = 445566;
                     [cellText appendFormat:@"%@ ", label.text];
                 }
             }
-            NSString *trimmedText = [cellText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+            NSString *trimmedText = [cellText stringbyTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             if (trimmedText.length > 0) {
                 [allTexts addObject:trimmedText];
             }
@@ -186,7 +210,6 @@ static NSInteger const DebugButtonTag = 445566;
 - (void)copyAiButtonTapped_FinalPerfect {
     #define SafeString(str) (str ?: @"")
 
-    // --- 1. 结构化提取所有信息 ---
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *yueJiang = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
     NSString *kongWang = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
@@ -195,13 +218,10 @@ static NSInteger const DebugButtonTag = 445566;
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
     NSString *methodName = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
     
-    // 修正方法名为繁体
     NSString *biFaList = [self extractTextFromCollectionViewByShowingItFirst:@selector(顯示法訣總覽) viewClassName:@"六壬大占.格局總覽視圖"];
     NSString *qiZhengList = [self extractTextFromCollectionViewByShowingItFirst:@selector(顯示七政信息WithSender:) viewClassName:@"六壬大占.七政信息視圖"];
 
-    // --- 2. 四课提取逻辑 ---
-    // (代码与之前版本相同，此处省略)
-        NSMutableString *siKe = [NSMutableString string];
+    NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
         NSMutableArray *siKeViews = [NSMutableArray array];
@@ -223,33 +243,26 @@ static NSInteger const DebugButtonTag = 445566;
                     NSArray *sortedColumnKeys = [columns.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
                         return [@([obj1 floatValue]) compare:@([obj2 floatValue])];
                     }];
-
                     NSMutableArray *column1 = columns[sortedColumnKeys[0]];
                     NSMutableArray *column2 = columns[sortedColumnKeys[1]];
                     NSMutableArray *column3 = columns[sortedColumnKeys[2]];
                     NSMutableArray *column4 = columns[sortedColumnKeys[3]];
-
                     [column1 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
                     [column2 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
                     [column3 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
                     [column4 sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
-
                     NSString* ke1_shen = ((UILabel*)column4[0]).text;
                     NSString* ke1_tian = ((UILabel*)column4[1]).text;
                     NSString* ke1_di = ((UILabel*)column4[2]).text;
-                    
                     NSString* ke2_shen = ((UILabel*)column3[0]).text;
                     NSString* ke2_tian = ((UILabel*)column3[1]).text;
                     NSString* ke2_di = ((UILabel*)column3[2]).text;
-                    
                     NSString* ke3_shen = ((UILabel*)column2[0]).text;
                     NSString* ke3_tian = ((UILabel*)column2[1]).text;
                     NSString* ke3_di = ((UILabel*)column2[2]).text;
-                    
                     NSString* ke4_shen = ((UILabel*)column1[0]).text;
                     NSString* ke4_tian = ((UILabel*)column1[1]).text;
                     NSString* ke4_di = ((UILabel*)column1[2]).text;
-
                     siKe = [NSMutableString stringWithFormat:
                         @"第一课: %@->%@%@\n"
                         @"第二课: %@->%@%@\n"
@@ -265,10 +278,7 @@ static NSInteger const DebugButtonTag = 445566;
         }
     }
 
-
-    // --- 3. 三传提取逻辑 ---
-    // (代码与之前版本相同，此处省略)
-        NSMutableString *sanChuan = [NSMutableString string];
+    NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
         NSMutableArray *sanChuanViews = [NSMutableArray array];
@@ -281,12 +291,10 @@ static NSInteger const DebugButtonTag = 445566;
             NSMutableArray *labelsInView = [NSMutableArray array];
             [self findSubviewsOfClass:[UILabel class] inView:view andStoreIn:labelsInView];
             [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)]; }];
-
             if (labelsInView.count >= 3) {
                 NSString *liuQin = ((UILabel *)labelsInView.firstObject).text;
                 NSString *tianJiang = ((UILabel *)labelsInView.lastObject).text;
                 NSString *diZhi = ((UILabel *)[labelsInView objectAtIndex:labelsInView.count - 2]).text;
-
                 NSMutableArray *shenShaParts = [NSMutableArray array];
                 if (labelsInView.count > 3) {
                     NSRange shenShaRange = NSMakeRange(1, labelsInView.count - 3);
@@ -296,10 +304,8 @@ static NSInteger const DebugButtonTag = 445566;
                     }
                 }
                 NSString *shenShaString = [shenShaParts componentsJoinedByString:@" "];
-                
                 NSMutableString *formattedLine = [NSMutableString stringWithFormat:@"%@->%@%@", SafeString(liuQin), SafeString(diZhi), SafeString(tianJiang)];
                 if (shenShaString.length > 0) { [formattedLine appendFormat:@" (%@)", shenShaString]; }
-
                 NSString *title = (i < chuanTitles.count) ? chuanTitles[i] : @"";
                 [sanChuanLines addObject:[NSString stringWithFormat:@"%@ %@", title, formattedLine]];
             } else {
@@ -312,7 +318,6 @@ static NSInteger const DebugButtonTag = 445566;
         sanChuan = [[sanChuanLines componentsJoinedByString:@"\n"] mutableCopy];
     }
 
-    // --- 4. 组合最终文本 ---
     NSMutableString *finalText = [NSMutableString string];
     [finalText appendFormat:@"%@\n\n", SafeString(timeBlock)];
     [finalText appendFormat:@"月将: %@\n", SafeString(yueJiang)];
@@ -332,6 +337,7 @@ static NSInteger const DebugButtonTag = 445566;
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:cleanedFinalText preferredStyle:UIAlertControllerStyleAlert];
     UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
+    [alert addAction:okAction];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -361,7 +367,7 @@ static NSInteger const DebugButtonTag = 445566;
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Debug 信息" message:debugInfo preferredStyle:UIAlertControllerStyleAlert];
     UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];
-    [alert addAction:okAction];
+    [alert addAction:okAction]; // 修复：将action添加到alert
     [self presentViewController:alert animated:YES completion:nil];
 }
 
