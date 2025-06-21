@@ -2,19 +2,20 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// 侦察专用代码 V4 - 探测“右列”视图内部
+// 侦察专用代码 V5 - 点击按钮反向侦察
 // =========================================================================
 
-static BOOL hasLogged_V4 = NO;
+static BOOL hasLogged_V5 = NO;
 
 // 日志生成和显示的核心函数
-void showLoggingAlertForObject_V4(id targetObject, NSString *objectName) {
-    if (hasLogged_V4) return;
-    hasLogged_V4 = YES;
+void showLoggingAlertForObject_V5(id targetObject, NSString *objectName) {
+    if (hasLogged_V5) return;
+    hasLogged_V5 = YES;
 
     NSMutableString *logMessage = [NSMutableString string];
-    [logMessage appendFormat:@"--- 侦察日志 V4 (探测 %@) ---\n\n", objectName];
-    [logMessage appendFormat:@"Instance: %@\n\n", targetObject];
+    [logMessage appendFormat:@"--- 侦察日志 V5 (探测 %@) ---\n\n", objectName];
+    [logMessage appendFormat:@"Instance: %@\n", targetObject];
+    [logMessage appendFormat:@"Class: %@\n\n", [targetObject class]];
 
     // --- 使用 object_getIvar 精准探测实例变量 ---
     [logMessage appendString:@"--- IVARS (Direct Read) ---\n"];
@@ -26,24 +27,22 @@ void showLoggingAlertForObject_V4(id targetObject, NSString *objectName) {
     for (int i = 0; i < ivarCount; i++) {
         Ivar ivar = ivars[i];
         const char *ivarName_c = ivar_getName(ivar);
-        const char *ivarType_c = ivar_getTypeEncoding(ivar);
         if (ivarName_c) {
             NSString *ivarName = [NSString stringWithUTF8String:ivarName_c];
-            NSString *ivarType = [NSString stringWithUTF8String:ivarType_c];
             id value = nil;
             @try {
                 value = object_getIvar(targetObject, ivar);
             } @catch (NSException *exception) {
-                value = [NSString stringWithFormat:@"(Exception on direct access: %@)", exception.reason];
+                value = [NSString stringWithFormat:@"(Exception on direct access)"];
             }
-            [logMessage appendFormat:@"ivar: %@ (type: %@) = %@\n", ivarName, ivarType, value];
+            [logMessage appendFormat:@"ivar: %@ = %@\n", ivarName, value];
         }
     }
     free(ivars);
 
     // --- 创建并显示弹窗 ---
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"侦察日志 V4 (探测 %@)", objectName] message:logMessage preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"侦察日志 V5 (探测 %@)", objectName] message:logMessage preferredStyle:UIAlertControllerStyleAlert];
         
         UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"复制日志" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             [UIPasteboard generalPasteboard].string = logMessage;
@@ -73,35 +72,35 @@ void showLoggingAlertForObject_V4(id targetObject, NSString *objectName) {
 }
 
 
-// Hook UIView，等待“右列”视图出现
-%hook UIView 
-- (void)didMoveToWindow {
-    %orig;
+// Hook UIButton 的点击事件
+%hook UIButton
 
-    // 获取“右列”视图的类名
-    // 根据之前的日志，乱码是 Âè≥ÂàóË¶ñÂúñ
-    // 我们需要找到它真正的名字。如果找不到，就用乱码尝试。
-    // 一个常见的技巧是，先找到它的父视图（ViewController），再从父视图里找到它。
-    
-    UIResponder *responder = self;
-    while ((responder = [responder nextResponder])) {
-        if ([responder isKindOfClass:NSClassFromString(@"六壬大占.ViewController")]) {
-            UIViewController *vc = (UIViewController *)responder;
+- (void)sendAction:(SEL)action to:(id)target forEvent:(UIEvent *)event {
+    %orig; // 先执行原始的点击事件，确保App正常响应
+
+    // 获取按钮的标题
+    NSString *buttonTitle = self.titleLabel.text;
+
+    // 如果点击的是“格局”或“法诀”(毕法)按钮
+    if ([buttonTitle isEqualToString:@"格局"] || [buttonTitle isEqualToString:@"法诀"] || [buttonTitle isEqualToString:@"毕法"]) {
+        
+        // --- 开始向上查找“右列”视图 ---
+        UIView *currentView = self;
+        while (currentView.superview) {
+            currentView = currentView.superview;
             
-            // 从ViewController中，尝试获取名为“右列”的实例变量
-            id youLieView = nil;
-            @try {
-                 youLieView = [vc valueForKey:@"右列"];
-            } @catch (NSException *e) {
-                // pass
+            // 我们根据FLEX截图里的乱码类名来猜测它真正的类名
+            // `Âè≥ÂàóË¶ñÂúñ` -> `右列视图`
+            // 我们直接检查类名中是否包含“右列”这两个字，这是一个更稳妥的方法
+            NSString *className = NSStringFromClass([currentView class]);
+            if ([className containsString:@"右列"]) {
+                // 找到了！这个 currentView 就是我们要的“右列”视图对象
+                // 对它进行精准探测
+                showLoggingAlertForObject_V5(currentView, @"右列视图");
+                return; // 找到后就停止查找
             }
-
-            if (youLieView && self == youLieView) {
-                // 确认当前这个 self 就是我们要找的“右列”视图
-                showLoggingAlertForObject_V4(youLieView, @"右列视图");
-            }
-            break;
         }
     }
 }
+
 %end
