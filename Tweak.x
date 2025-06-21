@@ -57,7 +57,6 @@ static NSInteger const CopyAiButtonTag = 112233;
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
-    if (!targetViewClass) targetViewClass = NSClassFromString([className stringByReplacingOccurrencesOfString:@"占." withString:@"占."]);
     if (!targetViewClass) return @"";
     NSMutableArray *targetViews = [NSMutableArray array];
     [self findSubviewsOfClass:targetViewClass inView:self.view andStoreIn:targetViews];
@@ -85,7 +84,7 @@ static NSInteger const CopyAiButtonTag = 112233;
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
 
-    // --- 2. 【最终四课提取逻辑】---
+    // --- 2. 【最终四课提取逻辑 - 按列分组】---
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -97,24 +96,36 @@ static NSInteger const CopyAiButtonTag = 112233;
             [self findSubviewsOfClass:[UILabel class] inView:container andStoreIn:labels];
             
             if(labels.count >= 12){
-                // 唯一的排序规则：先按Y坐标（分行），再按X坐标（行内排序）
-                [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-                    if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
-                    if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
-                    return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
+                // 按X坐标分成4列
+                NSMutableDictionary *columns = [NSMutableDictionary dictionary];
+                for(UILabel *label in labels){
+                    NSString *columnKey = [NSString stringWithFormat:@"%.0f", roundf(label.frame.origin.x)];
+                    if(!columns[columnKey]){ columns[columnKey] = [NSMutableArray array]; }
+                    [columns[columnKey] addObject:label];
+                }
+                
+                NSArray *sortedColumnKeys = [columns.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
+                    return [@([obj1 floatValue]) compare:@([obj2 floatValue])];
                 }];
 
                 NSArray* keTitles = @[@"第一课:", @"第二课:", @"第三课:", @"第四课:"];
                 NSMutableArray* keLines = [NSMutableArray array];
-                
-                for(int i = 0; i < 4; i++){
-                    // 【关键修正】根据正确的UI结构和您要求的格式重新赋值
-                    // 第0-3个label是第一行(神), 4-7是第二行(天盘), 8-11是第三行(地盘)
-                    NSString* shen = ((UILabel*)labels[i]).text;
-                    NSString* tian = ((UILabel*)labels[i+4]).text;
-                    NSString* di   = ((UILabel*)labels[i+8]).text;
-                    // 格式: [课名] [地盘] -> [天盘][神]
-                    [keLines addObject:[NSString stringWithFormat:@"%@ %@->%@%@", keTitles[i], SafeString(di), SafeString(tian), SafeString(shen)]];
+
+                for(int i = 0; i < sortedColumnKeys.count && i < keTitles.count; i++){
+                    NSString *key = sortedColumnKeys[i];
+                    NSMutableArray *columnLabels = columns[key];
+                    [columnLabels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
+                        return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
+                    }];
+                    
+                    if(columnLabels.count >= 3){
+                        // 【关键修正】根据您的最终格式要求重新赋值
+                        // 0:神, 1:天盘, 2:地盘
+                        NSString* shen = ((UILabel*)columnLabels[0]).text;
+                        NSString* tian = ((UILabel*)columnLabels[1]).text;
+                        NSString* di   = ((UILabel*)columnLabels[2]).text;
+                        [keLines addObject:[NSString stringWithFormat:@"%@ %@->%@%@", keTitles[i], SafeString(di), SafeString(tian), SafeString(shen)]];
+                    }
                 }
                 siKe = [[keLines componentsJoinedByString:@"\n"] mutableCopy];
             }
