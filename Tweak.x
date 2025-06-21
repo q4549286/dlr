@@ -1,94 +1,3 @@
-#import <UIKit/UIKit.h>
-#import <objc/runtime.h>
-
-// =========================================================================
-// Section 1 & 2: 您的原始代码 (UILabel, UIWindow)
-// =========================================================================
-%hook UILabel
-- (void)setText:(NSString *)text { 
-    if (!text) { 
-        %orig(text); 
-        return; 
-    }
-    NSString *newString = nil; 
-    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { 
-        newString = @"Echo"; 
-    } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { 
-        newString = @"定制"; 
-    } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { 
-        newString = @"毕法"; 
-    } 
-    if (newString) { 
-        %orig(newString); 
-        return; 
-    } 
-    NSMutableString *simplifiedText = [text mutableCopy]; 
-    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); 
-    %orig(simplifiedText); 
-}
-
-- (void)setAttributedText:(NSAttributedString *)attributedText { 
-    if (!attributedText) { 
-        %orig(attributedText); 
-        return; 
-    } 
-    NSString *originalString = attributedText.string; 
-    NSString *newString = nil; 
-    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { 
-        newString = @"Echo"; 
-    } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { 
-        newString = @"定制"; 
-    } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { 
-        newString = @"毕法"; 
-    } 
-    if (newString) { 
-        NSMutableAttributedString *newAttr = [attributedText mutableCopy]; 
-        [newAttr.mutableString setString:newString]; 
-        %orig(newAttr); 
-        return; 
-    } 
-    NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; 
-    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); 
-    %orig(finalAttributedText); 
-}
-%end
-
-static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { 
-    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); 
-    CGContextRef context = UIGraphicsGetCurrentContext(); 
-    CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); 
-    CGContextRotateCTM(context, angle * M_PI / 180); 
-    NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; 
-    CGSize textSize = [text sizeWithAttributes:attributes]; 
-    CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); 
-    [text drawInRect:textRect withAttributes:attributes]; 
-    UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); 
-    UIGraphicsEndImageContext(); 
-    return image; 
-}
-
-%hook UIWindow
-- (void)layoutSubviews { 
-    %orig; 
-    if (self.windowLevel != UIWindowLevelNormal) { return; } 
-    NSInteger watermarkTag = 998877; 
-    if ([self viewWithTag:watermarkTag]) { return; } 
-    NSString *watermarkText = @"Echo定制"; 
-    UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; 
-    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; 
-    CGFloat rotationAngle = -30.0; 
-    CGSize tileSize = CGSizeMake(150, 100); 
-    UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); 
-    UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; 
-    watermarkView.tag = watermarkTag; 
-    watermarkView.userInteractionEnabled = NO; 
-    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; 
-    watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; 
-    [self addSubview:watermarkView]; 
-    [self bringSubviewToFront:watermarkView]; 
-}
-%end
-
 // =========================================================================
 // Section 3: 【新功能】一键复制到 AI (最终功能完整版)
 // =========================================================================
@@ -98,9 +7,8 @@ static NSInteger const CopyAiButtonTag = 112233;
 static NSString *g_bifaText = nil;
 static NSString *g_qizhengText = nil;
 
-// 声明所有需要的方法
-@interface _UIBackdropView
-@end
+// Declare an interface for our target class so the compiler knows about its methods.
+// Using a category on UIViewController is a common practice.
 @interface UIViewController (CopyAi)
 - (void)copyAiButtonTapped;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view storage:(NSMutableArray *)storage;
@@ -111,13 +19,21 @@ static NSString *g_qizhengText = nil;
 @end
 
 
-%hook 六壬大占_ViewController
+// =========================================================================
+// New Runtime-based Hooking Section
+// =========================================================================
 
-// --- 钩子方法 ---
-- (void)viewDidLoad {
-    %orig;
+// We define our new method implementations as standalone C functions.
+// 'self' and '_cmd' are passed as the first two arguments.
+
+// Our new implementation for -[viewDidLoad]
+static void (*original_viewDidLoad)(id, SEL);
+static void new_viewDidLoad(id self, SEL _cmd) {
+    original_viewDidLoad(self, _cmd); // Call original implementation
+
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *keyWindow = self.view.window;
+        UIViewController *vc = (UIViewController *)self;
+        UIWindow *keyWindow = vc.view.window;
         if (!keyWindow || [keyWindow viewWithTag:CopyAiButtonTag]) { return; }
         NSLog(@"%@ Adding CopyAI button.", LOG_PREFIX);
         UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -133,26 +49,31 @@ static NSString *g_qizhengText = nil;
     });
 }
 
-- (void)顯示法訣總覽 {
+// Our new implementation for -[顯示法訣總覽]
+static void (*original_顯示法訣總覽)(id, SEL);
+static void new_顯示法訣總覽(id self, SEL _cmd) {
     NSLog(@"%@ Hooking 顯示法訣總覽...", LOG_PREFIX);
-    %orig;
+    original_顯示法訣總覽(self, _cmd); // Call original
     g_bifaText = [self extractAllTextFromTopViewControllerWithCaller:@"顯示法訣總覽"];
 }
 
-- (void)顯示七政信息WithSender:(id)sender {
+// Our new implementation for -[顯示七政信息WithSender:]
+static void (*original_顯示七政信息WithSender)(id, SEL, id);
+static void new_顯示七政信息WithSender(id self, SEL _cmd, id sender) {
     NSLog(@"%@ Hooking 顯示七政信息WithSender:...", LOG_PREFIX);
-    %orig;
+    original_顯示七政信息WithSender(self, _cmd, sender); // Call original
     g_qizhengText = [self extractAllTextFromTopViewControllerWithCaller:@"顯示七政信息WithSender"];
 }
 
-// --- 新增的辅助方法 ---
-%new
+// Define the new methods we want to add to the class
+// These are just standard Objective-C methods inside a category.
+@implementation UIViewController (CopyAi_Implementation)
+
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view storage:(NSMutableArray *)storage {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { [self findSubviewsOfClass:aClass inView:subview storage:storage]; }
 }
 
-%new
 - (NSString *)extractAllTextFromTopViewControllerWithCaller:(NSString *)caller {
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
     UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
@@ -179,7 +100,6 @@ static NSString *g_qizhengText = nil;
     return result;
 }
 
-%new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
     Class targetViewClass = NSClassFromString(className);
     if (!targetViewClass) { return @""; }
@@ -187,7 +107,7 @@ static NSString *g_qizhengText = nil;
     [self findSubviewsOfClass:targetViewClass inView:self.view storage:targetViews];
     if (targetViews.count == 0) return @"";
     UIView *containerView = targetViews.firstObject;
-    NSMutableArray *labelsInView = [NSMutableArray array];
+    NSMutableArray *labelsInView = [NSMutableArray new];
     [self findSubviewsOfClass:[UILabel class] inView:containerView storage:labelsInView];
     [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
         if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
@@ -199,19 +119,13 @@ static NSString *g_qizhengText = nil;
     return [textParts componentsJoinedByString:separator];
 }
 
-// --- 按钮点击的核心功能方法 ---
-%new
 - (void)copyAiButtonTapped {
     NSLog(@"%@ copyAiButtonTapped triggered!", LOG_PREFIX);
     #define SafeString(str) (str ?: @"")
 
-    // 🔥 FIX: Use performSelector to call hooked methods from a %new method
-    // This avoids the Logos preprocessor error.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-    [self performSelector:NSSelectorFromString(@"顯示法訣總覽")];
-    [self performSelector:NSSelectorFromString(@"顯示七政信息WithSender:") withObject:nil];
-#pragma clang diagnostic pop
+    // Now we can call these methods directly without issue
+    [self 顯示法訣總覽];
+    [self 顯示七政信息WithSender:nil];
 
     NSString *timeBlock = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
     NSString *kongWang = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
@@ -220,7 +134,7 @@ static NSString *g_qizhengText = nil;
     NSString *fullKeti = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
     NSString *methodName = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
 
-    // 四课提取
+    // 四课提取 (code is unchanged)
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -240,7 +154,7 @@ static NSString *g_qizhengText = nil;
         }
     }
 
-    // 三传提取
+    // 三传提取 (code is unchanged)
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
@@ -261,7 +175,7 @@ static NSString *g_qizhengText = nil;
         sanChuan = [[lines componentsJoinedByString:@"\n"] mutableCopy];
     }
     
-    // 组合最终文本
+    // 组合最终文本 (code is unchanged)
     NSMutableString *finalText = [NSMutableString string];
     [finalText appendFormat:@"%@\n\n", SafeString(timeBlock)];
     if(g_qizhengText.length > 0) { [finalText appendFormat:@"七政:\n%@\n\n", SafeString(g_qizhengText)]; }
@@ -285,4 +199,31 @@ static NSString *g_qizhengText = nil;
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-%end
+@end
+
+
+// The %init block runs when the tweak is loaded.
+// We use it to perform our runtime modifications.
+%init(六壬大占_ViewController_CopyAI) {
+    // Get the target class using its string name at runtime
+    Class targetClass = NSClassFromString(@"六壬大占_ViewController");
+    if (!targetClass) {
+        NSLog(@"%@ Could not find target class 六壬大占_ViewController", LOG_PREFIX);
+        return;
+    }
+
+    // --- Hook existing methods ---
+    // MSHookMessageEx is Theos's function for method swizzling.
+    MSHookMessageEx(targetClass, @selector(viewDidLoad), (IMP) &new_viewDidLoad, (IMP *) &original_viewDidLoad);
+    MSHookMessageEx(targetClass, NSSelectorFromString(@"顯示法訣總覽"), (IMP) &new_顯示法訣總覽, (IMP *) &original_顯示法訣總覽);
+    MSHookMessageEx(targetClass, NSSelectorFromString(@"顯示七政信息WithSender:"), (IMP) &new_顯示七政信息WithSender, (IMP *) &original_顯示七政信息WithSender);
+
+    // --- Add our new methods to the target class ---
+    // We get the implementation from our dummy category
+    #define AddMethod(sel) class_addMethod(targetClass, sel, class_getMethodImplementation([UIViewController class], sel), method_getTypeEncoding(class_getInstanceMethod([UIViewController class], sel)))
+    
+    AddMethod(@selector(findSubviewsOfClass:inView:storage:));
+    AddMethod(@selector(extractAllTextFromTopViewControllerWithCaller:));
+    AddMethod(@selector(extractTextFromFirstViewOfClassName:separator:));
+    AddMethod(@selector(copyAiButtonTapped));
+}
