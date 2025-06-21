@@ -2,119 +2,82 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// Section 1: 文字替换功能 (无任何问题)
+// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 这部分没有问题
 // =========================================================================
 %hook UILabel
-- (void)setText:(NSString *)text {
-    if (!text) { %orig(text); return; }
-    NSString *newString = nil;
-    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } 
-    else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; }
-    else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; }
-    if (newString) {
-        UIFont *currentFont = self.font; UIColor *currentColor = self.textColor; NSTextAlignment alignment = self.textAlignment;
-        NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
-        if (currentFont) attributes[NSFontAttributeName] = currentFont;
-        if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor;
-        NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
-        paragraphStyle.alignment = alignment;
-        attributes[NSParagraphStyleAttributeName] = paragraphStyle;
-        NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes];
-        [self setAttributedText:newAttributedText];
-        return;
-    }
-    NSMutableString *simplifiedText = [text mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
-    %orig(simplifiedText);
-}
-
-- (void)setAttributedText:(NSAttributedString *)attributedText {
-    if (!attributedText) { %orig(attributedText); return; }
-    NSString *originalString = attributedText.string;
-    NSString *newString = nil;
-    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } 
-    else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; }
-    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; }
-    if (newString) {
-        NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-        [newAttributedText.mutableString setString:newString];
-        %orig(newAttributedText);
-        return;
-    }
-    NSMutableAttributedString *newAttributedText = [attributedText mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
-    %orig(newAttributedText);
-}
+- (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { UIFont *currentFont = self.font; UIColor *currentColor = self.textColor; NSTextAlignment alignment = self.textAlignment; NSMutableDictionary *attributes = [NSMutableDictionary dictionary]; if (currentFont) attributes[NSFontAttributeName] = currentFont; if (currentColor) attributes[NSForegroundColorAttributeName] = currentColor; NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init]; paragraphStyle.alignment = alignment; attributes[NSParagraphStyleAttributeName] = paragraphStyle; NSAttributedString *newAttributedText = [[NSAttributedString alloc] initWithString:newString attributes:attributes]; [self setAttributedText:newAttributedText]; return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
+- (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttributedText = [attributedText mutableCopy]; [newAttributedText.mutableString setString:newString]; %orig(newAttributedText); return; } NSMutableAttributedString *newAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)newAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(newAttributedText); }
 %end
 
-// =========================================================================
-// Section 2: 全局水印功能 (无任何问题)
-// =========================================================================
-static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) {
-    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0);
-    CGContextRef context = UIGraphicsGetCurrentContext();
-    CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2);
-    CGContextRotateCTM(context, angle * M_PI / 180);
-    NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor};
-    CGSize textSize = [text sizeWithAttributes:attributes];
-    CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height);
-    [text drawInRect:textRect withAttributes:attributes];
-    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    return image;
-}
-
+static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); CGContextRef context = UIGraphicsGetCurrentContext(); CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); CGContextRotateCTM(context, angle * M_PI / 180); NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; CGSize textSize = [text sizeWithAttributes:attributes]; CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); [text drawInRect:textRect withAttributes:attributes]; UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext(); return image; }
 %hook UIWindow
-- (void)layoutSubviews {
-    %orig;
-    if (self.windowLevel != UIWindowLevelNormal) { return; }
-    NSInteger watermarkTag = 998877;
-    if ([self viewWithTag:watermarkTag]) { return; }
-    NSString *watermarkText = @"Echo定制";
-    UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
-    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12];
-    CGFloat rotationAngle = -30.0;
-    CGSize tileSize = CGSizeMake(150, 100);
-    UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
-    UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
-    watermarkView.tag = watermarkTag;
-    watermarkView.userInteractionEnabled = NO;
-    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
-    [self addSubview:watermarkView];
-    [self bringSubviewToFront:watermarkView];
-}
+- (void)layoutSubviews { %orig; if (self.windowLevel != UIWindowLevelNormal) { return; } NSInteger watermarkTag = 998877; if ([self viewWithTag:watermarkTag]) { return; } NSString *watermarkText = @"Echo定制"; UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; CGFloat rotationAngle = -30.0; CGSize tileSize = CGSizeMake(150, 100); UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; watermarkView.tag = watermarkTag; watermarkView.userInteractionEnabled = NO; watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; [self addSubview:watermarkView]; [self bringSubviewToFront:watermarkView]; }
 %end
 
-// =========================================================================
-// Section 3: 【新功能】一键复制到 AI (最终语法修正版)
-// =========================================================================
-static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
 
-// 【最终修正】使用 %group 来定义一个可复用的代码块，而不是 %hook
-%group ViewControllerHooks
+// =========================================================================
+// Section 3: 【新功能】一键复制到 AI (绝对可靠的最终版)
+// =========================================================================
 
+// 定义一些常量，避免魔法数字
+static const char *CopyAiButtonAddedKey = "CopyAiButtonAddedKey";
+static const char *AllLabelsOnViewKey = "AllLabelsOnViewKey";
+static NSInteger const CopyAiButtonTag = 112233;
+
+// 把新方法添加到通用的 UIViewController 上
+// 这样做可能会给所有 VC 都加上这些方法，但这是最能保证编译通过的方式
+@interface UIViewController (CopyAiAddon)
+- (void)refreshAndSortLabelsForAiCopy;
+- (void)findAllLabelsInView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
+- (void)copyAiButtonTapped;
+@end
+
+
+// Hook 通用的 UIViewController，这个类名编译器绝对认识
+%hook UIViewController
+
+// 在 viewDidLoad 中，我们判断当前是不是目标VC，如果是，就加按钮
 - (void)viewDidLoad {
     %orig;
-    UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    copyButton.frame = CGRectMake(self.view.frame.size.width - 100, 88, 90, 36); 
-    [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
-    copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
-    [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    copyButton.layer.cornerRadius = 8;
-    copyButton.tag = 112233;
-    [copyButton addTarget:self action:@selector(copyAiButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    if (![self.view viewWithTag:copyButton.tag]) {
+
+    // 1. 获取目标类的 Class 对象
+    Class targetClass = objc_getClass("六壬大占.ViewController");
+
+    // 2. 判断当前 self 是不是目标类的实例，并且目标类真的存在
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        // 3. 检查按钮是否已经添加过，防止重复
+        if ([self.view viewWithTag:CopyAiButtonTag]) {
+            return;
+        }
+
+        // 4. 创建并添加按钮
+        UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        copyButton.frame = CGRectMake(self.view.frame.size.width - 100, 88, 90, 36); 
+        copyButton.tag = CopyAiButtonTag;
+        [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
+        copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+        copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
+        [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        copyButton.layer.cornerRadius = 8;
+        
+        // 5. 绑定点击事件，调用我们新加的方法
+        [copyButton addTarget:self action:@selector(copyAiButtonTapped) forControlEvents:UIControlEventTouchUpInside];
+        
         [self.view addSubview:copyButton];
     }
 }
 
+// 在 viewDidAppear 中，同样判断，如果是目标VC，就刷新数据
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
-    [self refreshAndSortLabelsForAiCopy];
+
+    Class targetClass = objc_getClass("六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        [self refreshAndSortLabelsForAiCopy];
+    }
 }
 
+// 为 UIViewController 添加新方法
 %new
 - (void)refreshAndSortLabelsForAiCopy {
     NSMutableArray *labels = [NSMutableArray array];
@@ -126,7 +89,7 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
         if (x1 < x2) return NSOrderedAscending; if (x1 > x2) return NSOrderedDescending;
         return NSOrderedSame;
     }];
-    objc_setAssociatedObject(self, AllLabelsOnViewKey, sortedLabels, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &AllLabelsOnViewKey, sortedLabels, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 %new
@@ -140,10 +103,10 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
 
 %new
 - (void)copyAiButtonTapped {
-    NSArray *sortedLabels = objc_getAssociatedObject(self, AllLabelsOnViewKey);
+    NSArray *sortedLabels = objc_getAssociatedObject(self, &AllLabelsOnViewKey);
     if (!sortedLabels || sortedLabels.count == 0) {
         [self refreshAndSortLabelsForAiCopy];
-        sortedLabels = objc_getAssociatedObject(self, AllLabelsOnViewKey);
+        sortedLabels = objc_getAssociatedObject(self, &AllLabelsOnViewKey);
     }
     if (sortedLabels.count == 0) { NSLog(@"[TweakLog] 未找到任何 UILabel。"); return; }
     
@@ -182,19 +145,4 @@ static const void *AllLabelsOnViewKey = &AllLabelsOnViewKey;
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-%end // 这里是 %group ViewControllerHooks 的结束
-
-// 使用 %ctor (构造函数) 在 Tweak 加载时动态绑定 hook
-%ctor {
-    // 使用 Objective-C 运行时函数来安全地获取类
-    Class targetClass = objc_getClass("六壬大占.ViewController");
-
-    // 如果成功找到了这个类
-    if (targetClass) {
-        // 就将我们上面定义的 "ViewControllerHooks" 这个组，应用到这个类上
-        %init(ViewControllerHooks, targetClass);
-    } else {
-        // 如果找不到，打印一个日志，方便调试
-        NSLog(@"[TweakLog] 错误: 无法找到目标类 '六壬大占.ViewController'");
-    }
-}
+%end
