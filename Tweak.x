@@ -9,47 +9,28 @@
 #define EchoLog(format, ...) NSLog((@"[EchoAI] " format), ##__VA_ARGS__)
 
 // =========================================================================
-// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 已修正乱码问题
+// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 无改动
 // =========================================================================
 %hook UILabel
-// 修正了 setAttributedText 中的简体中文转换逻辑
 - (void)setText:(NSString *)text { 
-    if (!text) { 
-        %orig(text); 
-        return; 
-    } 
+    if (!text) { %orig(text); return; } 
     NSString *newString = nil; 
-    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { 
-        newString = @"Echo"; 
-    } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { 
-        newString = @"定制"; 
-    } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { 
-        newString = @"毕法"; 
-    } 
-    if (newString) { 
-        %orig(newString); 
-        return; 
-    } 
+    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } 
+    else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } 
+    else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } 
+    if (newString) { %orig(newString); return; } 
     NSMutableString *simplifiedText = [text mutableCopy]; 
-    // 【修正】恢复了您正确的简繁转换代码
     CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); 
     %orig(simplifiedText); 
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText { 
-    if (!attributedText) { 
-        %orig(attributedText); 
-        return; 
-    } 
+    if (!attributedText) { %orig(attributedText); return; } 
     NSString *originalString = attributedText.string; 
     NSString *newString = nil; 
-    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { 
-        newString = @"Echo"; 
-    } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { 
-        newString = @"定制"; 
-    } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { 
-        newString = @"毕法"; 
-    } 
+    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } 
+    else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } 
+    else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } 
     if (newString) { 
         NSMutableAttributedString *newAttr = [attributedText mutableCopy]; 
         [newAttr.mutableString setString:newString]; 
@@ -57,7 +38,6 @@
         return; 
     } 
     NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; 
-    // 【修正】恢复了您正确的简繁转换代码
     CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); 
     %orig(finalAttributedText); 
 }
@@ -68,13 +48,9 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %hook UIWindow
 - (void)layoutSubviews { 
     %orig; 
-    if (self.windowLevel != UIWindowLevelNormal) { 
-        return; 
-    } 
+    if (self.windowLevel != UIWindowLevelNormal) { return; } 
     NSInteger watermarkTag = 998877; 
-    if ([self viewWithTag:watermarkTag]) { 
-        return; 
-    } 
+    if ([self viewWithTag:watermarkTag]) { return; } 
     NSString *watermarkText = @"Echo定制"; 
     UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; 
     UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; 
@@ -92,7 +68,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已集成天地盘提取和激活功能)
+// Section 3: 【最终版】一键复制到 AI (已修复闪退问题)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -234,7 +210,7 @@ static NSMutableDictionary *g_extractedData = nil;
     EchoLog(@"主界面信息提取完毕。");
 
     // ==========================================================
-    // 新增：提取天地盘信息
+    // 提取天地盘信息 (已修复闪退问题)
     // ==========================================================
     EchoLog(@"正在提取天地盘信息...");
     NSMutableString *tianDiPanInfo = [NSMutableString string];
@@ -250,9 +226,12 @@ static NSMutableDictionary *g_extractedData = nil;
             [tianDiPanView layoutIfNeeded];
             EchoLog(@"激活完毕。");
 
-            // 使用 valueForKey 安全地读取 Swift 属性
-            id diGong = [tianDiPanView valueForKey:@"地宫名列"];
-            id tianShenGong = [tianDiPanView valueForKey:@"天神宫名列"];
+            // 【最终方案】使用 object_getIvar 直接读取内存，避免闪退
+            Ivar diGongIvar = class_getInstanceVariable([tianDiPanView class], "地宫名列");
+            Ivar tianShenGongIvar = class_getInstanceVariable([tianDiPanView class], "天神宫名列");
+
+            id diGong = diGongIvar ? object_getIvar(tianDiPanView, diGongIvar) : nil;
+            id tianShenGong = tianShenGongIvar ? object_getIvar(tianDiPanView, tianShenGongIvar) : nil;
 
             if ([diGong isKindOfClass:[NSArray class]] && ((NSArray *)diGong).count > 0) {
                 [tianDiPanInfo appendFormat:@"地盘: %@\n", [diGong componentsJoinedByString:@" "]];
