@@ -28,7 +28,7 @@ static BOOL g_isTestTaskRunning = NO;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window;
             NSInteger buttonTag = 445566; 
-            if ([keyWindow viewWithTag:buttonTag]) { return; } // 防止重复添加
+            if (!keyWindow || [keyWindow viewWithTag:buttonTag]) { return; } // 防止重复添加
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45 + 40, 90, 36);
@@ -57,14 +57,11 @@ static BOOL g_isTestTaskRunning = NO;
     if ([vcClassName isEqualToString:@"六壬大占.格局總覽視圖"]) {
         EchoLog(@"成功拦截到目标控制器: %@", vcClassName);
         
-        // 阻止弹窗显示
         viewControllerToPresent.view.alpha = 0.0f;
         flag = NO;
         
         dispatch_async(dispatch_get_main_queue(), ^{
-            // 使用 KVC 精准访问 Swift 的 '法訣列' 属性，它应该返回一个 NSString
             id biFaData = [viewControllerToPresent valueForKey:@"法訣列"];
-
             NSString *resultText = @"";
             
             if (biFaData && [biFaData isKindOfClass:[NSString class]]) {
@@ -86,9 +83,34 @@ static BOOL g_isTestTaskRunning = NO;
                 EchoLog(@"测试任务结束。");
             }]];
             
-            UIWindow *window = [[UIApplication sharedApplication] keyWindow];
+            // =========================================================
+            //  ↓↓↓ 这里是修改后的代码 ↓↓↓
+            // =========================================================
+            UIWindow *window = nil;
+            if (@available(iOS 13.0, *)) {
+                for (UIWindowScene *windowScene in [UIApplication sharedApplication].connectedScenes) {
+                    if (windowScene.activationState == UISceneActivationStateForegroundActive) {
+                        window = windowScene.windows.firstObject;
+                        break;
+                    }
+                }
+            } else {
+                #pragma clang diagnostic push
+                #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                window = [[UIApplication sharedApplication] keyWindow];
+                #pragma clang diagnostic pop
+            }
+            if (!window) { // Fallback
+                #pragma clang diagnostic push
+                #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                window = [[UIApplication sharedApplication] keyWindow];
+                #pragma clang diagnostic pop
+            }
+            // =========================================================
+            //  ↑↑↑ 这里是修改后的代码 ↑↑↑
+            // =========================================================
+            
             [window.rootViewController presentViewController:alert animated:YES completion:nil];
-
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
         });
         
@@ -98,7 +120,6 @@ static BOOL g_isTestTaskRunning = NO;
 
     %orig(viewControllerToPresent, flag, completion);
 }
-
 
 %new
 - (void)copyBiFaOnlyButtonTapped_TestAction {
