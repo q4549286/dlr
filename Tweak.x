@@ -3,13 +3,13 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 最终决战版 (V16 - 追踪数据源)
-// 目标: 获取'課盤被動更新器'对象，并从它那里提取数据
+// 极简独立测试版 (V17 - 数据源探测版)
+// 目标: 仅探测'課盤被動更新器'内部的数据，不做任何操作
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Final] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Debug] " format), ##__VA_ARGS__)
 
-// ... (辅助函数保持不变) ...
+// ... (辅助函数 FindSubviewsOfClassRecursive 和 GetIvarValueSafely 保持不变) ...
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
@@ -36,17 +36,9 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
     free(ivars);
     return value;
 }
-static NSString* GetStringFromLayer(id layer) {
-    if (layer && [layer respondsToSelector:@selector(string)]) {
-        id stringValue = [layer valueForKey:@"string"];
-        if ([stringValue isKindOfClass:[NSString class]]) return stringValue;
-        if ([stringValue isKindOfClass:[NSAttributedString class]]) return ((NSAttributedString *)stringValue).string;
-    }
-    return @"?";
-}
 
 @interface UIViewController (FinalTweak)
-- (void)runFinalExtraction;
+- (void)runDataSourceProbe;
 @end
 
 %hook UIViewController
@@ -59,100 +51,83 @@ static NSString* GetStringFromLayer(id layer) {
             [[keyWindow viewWithTag:12345] removeFromSuperview];
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem]; testButton.tag = 12345;
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 120, 45, 110, 36);
-            [testButton setTitle:@"最终提取" forState:UIControlStateNormal]; testButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-            testButton.backgroundColor = [UIColor purpleColor]; [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            [testButton setTitle:@"探测数据源" forState:UIControlStateNormal]; testButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+            testButton.backgroundColor = [UIColor orangeColor]; [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(runFinalExtraction) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(runDataSourceProbe) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton]; [keyWindow bringSubviewToFront:testButton];
         });
     }
 }
 
 %new
-- (void)runFinalExtraction {
+- (void)runDataSourceProbe {
+    NSMutableString *logOutput = [NSMutableString string];
+    [logOutput appendString:@"--- 开始执行V17数据源探测 ---\n\n"];
+    
     @try {
         // 1. 找到显示层 View
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
-        if (!plateViewClass) return;
-        UIWindow *keyWindow = self.view.window; if (!keyWindow) return;
+        if (!plateViewClass) { [logOutput appendString:@"1. 失败: 找不到天地盤視圖类。\n"]; goto show_log; }
+        
+        UIWindow *keyWindow = self.view.window;
         NSMutableArray *plateViews = [NSMutableArray array];
         FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
-        if (plateViews.count == 0) return;
+        if (plateViews.count == 0) { [logOutput appendString:@"1. 失败: 找不到天地盤視圖实例。\n"]; goto show_log; }
+        
         id plateView = plateViews.firstObject;
+        [logOutput appendString:@"1. 成功: 找到天地盤視圖实例。\n\n"];
 
         // 2. 从显示层中获取数据源 "大脑" 对象
+        [logOutput appendString:@"2. 正在获取 '課盤被動更新器'...\n"];
         id dataSource = GetIvarValueSafely(plateView, @"課盤被動更新器");
         if (!dataSource) {
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"失败" message:@"未能获取'課盤被動更新器'对象。" preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:alert animated:YES completion:nil];
-            return;
+             [logOutput appendString:@"失败: '課盤被動更新器' 对象为nil。\n"];
+             goto show_log;
         }
-        EchoLog(@"成功获取到数据源 '課盤被動更新器': %@", dataSource);
+        [logOutput appendFormat:@"成功: 获取到数据源对象, 类型: %@\n\n", NSStringFromClass([dataSource class])];
 
-        // 3. 从数据源对象中，再获取真正的数据字典
-        NSDictionary *diGongDict = GetIvarValueSafely(dataSource, @"地宮宮名列");
-        NSDictionary *tianShenDict = GetIvarValueSafely(dataSource, @"天神宮名列");
-        NSDictionary *tianJiangDict = GetIvarValueSafely(dataSource, @"天將宮名列");
-
-        if (!diGongDict || !tianShenDict || !tianJiangDict) {
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"失败" message:@"在'課盤被動更新器'中未能找到'宮名列'数据。" preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:alert animated:YES completion:nil];
-            return;
+        // 3. 探测'地宮宮名列'
+        [logOutput appendString:@"3. 正在探测 '地宮宮名列'...\n"];
+        id diGongObj = GetIvarValueSafely(dataSource, @"地宮宮名列");
+        if (!diGongObj) {
+            [logOutput appendString:@"结果: nil\n\n"];
+        } else {
+            NSString *type = NSStringFromClass([diGongObj class]);
+            NSUInteger count = [diGongObj respondsToSelector:@selector(count)] ? [(id)diGongObj count] : 0;
+            [logOutput appendFormat:@"结果: 类型=%@, 数量=%ld\n\n", type, (unsigned long)count];
         }
 
-        // 4. 我们已经知道直接操作字典会崩溃，所以再次使用几何排序法，但这次数据源更可靠
-        NSArray *diGongLayers = [diGongDict allValues];
-        NSArray *tianShenLayers = [tianShenDict allValues];
-        NSArray *tianJiangLayers = [tianJiangDict allValues];
-        
-        // ... 后续的几何排序和格式化逻辑 (与V11相同) ...
-        NSMutableArray *allLayerInfos = [NSMutableArray array];
-        CGPoint center = CGPointMake(CGRectGetMidX(((UIView *)plateView).bounds), CGRectGetMidY(((UIView *)plateView).bounds));
-        void (^processLayers)(NSArray *, NSString *) = ^(NSArray *layers, NSString *type) {
-            for (CALayer *layer in layers) {
-                CGPoint pos = layer.position; CGFloat dx = pos.x - center.x; CGFloat dy = pos.y - center.y;
-                [allLayerInfos addObject:@{ @"type": type, @"text": GetStringFromLayer(layer), @"angle": @(atan2(dy, dx)), @"radius": @(sqrt(dx*dx + dy*dy)) }];
-            }
-        };
-        processLayers(diGongLayers, @"diPan"); processLayers(tianShenLayers, @"tianPan"); processLayers(tianJiangLayers, @"tianJiang");
-
-        NSMutableDictionary *palaceGroups = [NSMutableDictionary dictionary];
-        for (NSDictionary *info in allLayerInfos) {
-            BOOL foundGroup = NO;
-            for (NSNumber *groupAngle in [palaceGroups allKeys]) {
-                CGFloat diff = fabsf([info[@"angle"] floatValue] - [groupAngle floatValue]);
-                if (diff < 0.1) { [palaceGroups[groupAngle] addObject:info]; foundGroup = YES; break; }
-            }
-            if (!foundGroup) { palaceGroups[info[@"angle"]] = [NSMutableArray arrayWithObject:info];}
-        }
-        
-        NSMutableArray *palaceData = [NSMutableArray array];
-        for (NSNumber *groupAngle in palaceGroups) {
-            NSMutableArray *group = palaceGroups[groupAngle];
-            if (group.count < 3) continue;
-            [group sortUsingComparator:^NSComparisonResult(id o1, id o2) { return [o2[@"radius"] compare:o1[@"radius"]]; }];
-            [palaceData addObject:@{ @"diPan": group[0][@"text"], @"tianPan": group[1][@"text"], @"tianJiang": group[2][@"text"] }];
-        }
-        
-        NSArray *diPanOrder = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
-        [palaceData sortUsingComparator:^NSComparisonResult(NSDictionary *o1, NSDictionary *o2) {
-            return [@([diPanOrder indexOfObject:o1[@"diPan"]]) compare:@([diPanOrder indexOfObject:o2[@"diPan"]])];
-        }];
-
-        NSMutableString *resultText = [NSMutableString string];
-        [resultText appendString:@"天地盤數據\n\n"];
-        for (NSDictionary *entry in palaceData) {
-            [resultText appendFormat:@"%@宮: %@(%@)\n", entry[@"diPan"], entry[@"tianPan"], entry[@"tianJiang"]];
+        // 4. 探测'天神宮名列'
+        [logOutput appendString:@"4. 正在探测 '天神宮名列'...\n"];
+        id tianShenObj = GetIvarValueSafely(dataSource, @"天神宮名列");
+        if (!tianShenObj) {
+            [logOutput appendString:@"结果: nil\n\n"];
+        } else {
+            NSString *type = NSStringFromClass([tianShenObj class]);
+            NSUInteger count = [tianShenObj respondsToSelector:@selector(count)] ? [(id)tianShenObj count] : 0;
+            [logOutput appendFormat:@"结果: 类型=%@, 数量=%ld\n\n", type, (unsigned long)count];
         }
 
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取成功" message:resultText preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
+        // 5. 探测'天將宮名列'
+        [logOutput appendString:@"5. 正在探测 '天將宮名列'...\n"];
+        id tianJiangObj = GetIvarValueSafely(dataSource, @"天將宮名列");
+        if (!tianJiangObj) {
+            [logOutput appendString:@"结果: nil\n"];
+        } else {
+            NSString *type = NSStringFromClass([tianJiangObj class]);
+            NSUInteger count = [tianJiangObj respondsToSelector:@selector(count)] ? [(id)tianJiangObj count] : 0;
+            [logOutput appendFormat:@"结果: 类型=%@, 数量=%ld\n", type, (unsigned long)count];
+        }
 
     } @catch (NSException *exception) {
-        // ... 异常捕获
+        [logOutput appendFormat:@"\n!!! 捕获到异常 !!!\n\n%@\n%@", exception.name, exception.reason];
     }
+    
+show_log:;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"V17探测日志" message:logOutput preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
+
 %end
