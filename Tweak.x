@@ -19,7 +19,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已新增“方法”模块)
+// Section 3: 【最终版】一键复制到 AI (已修复“毕法”和“方法”排版)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -74,12 +74,15 @@ static NSMutableDictionary *g_extractedData = nil;
             NSString *title = viewControllerToPresent.title ?: @"";
             if (title.length == 0 && labels.count > 0) { title = ((UILabel*)labels.firstObject).text; }
 
-            // 【新增】为“方法”弹窗准备识别工具
+            // 准备识别工具
             NSMutableArray *fangfaViews = [NSMutableArray array];
             Class fangfaViewClass = NSClassFromString(@"六壬大占.格局單元");
-            if (fangfaViewClass) {
-                [self findSubviewsOfClass:fangfaViewClass inView:viewControllerToPresent.view andStoreIn:fangfaViews];
-            }
+            if (fangfaViewClass) { [self findSubviewsOfClass:fangfaViewClass inView:viewControllerToPresent.view andStoreIn:fangfaViews]; }
+
+            // 【修复毕法】准备毕法识别工具
+            NSMutableArray *bifaViews = [NSMutableArray array];
+            Class bifaViewClass = NSClassFromString(@"六壬大占.毕法單元") ?: NSClassFromString(@"六壬大占.法诀單元"); // 尝试两个可能的类名
+            if (bifaViewClass) { [self findSubviewsOfClass:bifaViewClass inView:viewControllerToPresent.view andStoreIn:bifaViews]; }
 
             NSMutableArray* textParts = [NSMutableArray array];
             NSString* content = nil;
@@ -88,20 +91,36 @@ static NSMutableDictionary *g_extractedData = nil;
                 for (UILabel *label in labels) { if (label.text && label.text.length > 0) [textParts addObject:label.text]; }
                 content = [textParts componentsJoinedByString:@"\n"];
                 g_extractedData[@"七政四余"] = content;
-                EchoLog(@"成功抓取 [七政四余] 内容 (通过 VC 类名 '%@' 识别)", vcClassName);
+                EchoLog(@"成功抓取 [七政四余] 内容");
             }
-            // 【新增】添加对“方法”弹窗的识别逻辑
             else if (fangfaViews.count > 0) {
-                for (UILabel *label in labels) { if (label.text && label.text.length > 0) [textParts addObject:label.text]; }
+                // 【修复方法排版】重构排版逻辑
+                NSMutableArray *leftColumn = [NSMutableArray array];
+                NSMutableArray *rightColumn = [NSMutableArray array];
+                CGFloat midX = viewControllerToPresent.view.bounds.size.width / 2;
+                for(UILabel *label in labels) {
+                    if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } 
+                    else { [rightColumn addObject:label.text]; }
+                }
+                for (int i=0; i < MIN(leftColumn.count, rightColumn.count); i++) {
+                    [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]];
+                }
                 content = [textParts componentsJoinedByString:@"\n"];
                 g_extractedData[@"方法"] = content;
-                EchoLog(@"成功抓取 [方法] 内容 (通过内部视图 '六壬大占.格局單元' 识别)");
+                EchoLog(@"成功抓取并重排版 [方法] 内容");
             }
-            else if ([title containsString:@"格局"] || [title containsString:@"法诀"] || [title containsString:@"毕法"]) {
+            // 【修复毕法】使用更可靠的方式识别
+            else if (bifaViews.count > 0 || [title containsString:@"法诀"] || [title containsString:@"毕法"]) {
                 for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title]) { [textParts addObject:label.text]; } }
                 content = [textParts componentsJoinedByString:@"\n"];
-                if ([title containsString:@"格局"]) { g_extractedData[@"格局"] = content; EchoLog(@"成功抓取 [格局] 内容"); } 
-                else { g_extractedData[@"毕法"] = content; EchoLog(@"成功抓取 [毕法] 内容"); }
+                g_extractedData[@"毕法"] = content;
+                EchoLog(@"成功抓取 [毕法] 内容");
+            }
+            else if ([title containsString:@"格局"]) { // 格局暂时还用标题识别
+                for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title]) { [textParts addObject:label.text]; } }
+                content = [textParts componentsJoinedByString:@"\n"];
+                g_extractedData[@"格局"] = content;
+                EchoLog(@"成功抓取 [格局] 内容");
             } else {
                  EchoLog(@"抓取到未知弹窗，内容被忽略。");
             }
@@ -204,7 +223,6 @@ static NSMutableDictionary *g_extractedData = nil;
         SEL selectorBiFa = NSSelectorFromString(@"顯示法訣總覽");
         SEL selectorGeJu = NSSelectorFromString(@"顯示格局總覽");
         SEL selectorQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:");
-        // 【新增】为“方法”弹窗准备触发器
         SEL selectorFangFa = NSSelectorFromString(@"顯示方法總覽");
 
         #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
@@ -215,11 +233,8 @@ static NSMutableDictionary *g_extractedData = nil;
 
         if ([self respondsToSelector:selectorBiFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorBiFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:selectorGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorGeJu withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
-        // 【新增】触发“方法”弹窗
-        if ([self respondsToSelector:selectorFangFa]) { EchoLog(@"正在触发 '顯示方法總覽'..."); dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
-        else { EchoLog(@"提示: 未找到方法 '顯示方法總覽'"); }
-        if ([self respondsToSelector:selectorQiZheng]) { EchoLog(@"正在触发 '顯示七政信息WithSender:'..."); dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
-        else { EchoLog(@"错误: 未找到方法 '顯示七政信息WithSender:'"); }
+        if ([self respondsToSelector:selectorFangFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
+        if ([self respondsToSelector:selectorQiZheng]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
         
         dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
@@ -227,7 +242,6 @@ static NSMutableDictionary *g_extractedData = nil;
             NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", g_extractedData[@"毕法"]] : @"";
             NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"格局:\n%@\n\n", g_extractedData[@"格局"]] : @"";
             NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
-            // 【新增】准备“方法”模块的输出
             NSString *fangFaOutput = g_extractedData[@"方法"] ? [NSString stringWithFormat:@"方法:\n%@\n\n", g_extractedData[@"方法"]] : @"";
 
             NSString *finalText = [NSString stringWithFormat:
@@ -243,7 +257,7 @@ static NSMutableDictionary *g_extractedData = nil;
                 @"起课方式: %@",
                 SafeString(g_extractedData[@"时间块"]),
                 SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]), SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]),
-                biFaOutput, geJuOutput, fangFaOutput, qiZhengOutput, // 【新增】添加 fangFaOutput
+                biFaOutput, geJuOutput, fangFaOutput, qiZhengOutput,
                 SafeString(g_extractedData[@"四课"]),
                 SafeString(g_extractedData[@"三传"]),
                 SafeString(g_extractedData[@"起课方式"])
