@@ -84,15 +84,18 @@ static NSInteger const CopyAiButtonTag = 112233;
     
     NSMutableString *report = [NSMutableString stringWithString:@"--- 天地盘视图 调试报告 ---\n\n"];
     
-    Class tiandiPanViewClass = NSClassFromString(@"六壬大占.天地盘视圖");
+    // 【关键修正】使用您提供的正确类名
+    NSString *className = @"六壬大占.天地盘视圖類";
+    Class tiandiPanViewClass = NSClassFromString(className);
+    
     if (!tiandiPanViewClass) {
-        [report appendString:@"错误：未能找到 '六壬大占.天地盘视圖' 这个类。\n请用Flex确认类名是否正确。"];
+        [report appendFormat:@"错误：未能找到 '%@' 这个类。\n请再次用Flex确认类名是否正确无误。", className];
     } else {
         NSMutableArray *views = [NSMutableArray array];
         [self findSubviewsOfClass:tiandiPanViewClass inView:self.view andStoreIn:views];
         
         if (views.count == 0) {
-            [report appendFormat:@"错误：找到了 '%@' 类，但在当前视图层级中找不到它的实例。\n", NSStringFromClass(tiandiPanViewClass)];
+            [report appendFormat:@"错误：找到了 '%@' 类，但在当前视图层级中找不到它的实例。\n", className];
         } else {
             UIView *tiandiPanView = views.firstObject;
             [report appendFormat:@"成功找到视图实例: %@\n\n", tiandiPanView.description];
