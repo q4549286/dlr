@@ -3,13 +3,13 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 最终决战版 (V15 - 内省版)
-// 目标: 对获取到的字典对象进行内省，找到其获取数据的方法
+// 最终决战版 (V16 - 追踪数据源)
+// 目标: 获取'課盤被動更新器'对象，并从它那里提取数据
 // =========================================================================
 
 #define EchoLog(format, ...) NSLog((@"[EchoAI-Final] " format), ##__VA_ARGS__)
 
-// ... 辅助函数 ...
+// ... (辅助函数保持不变) ...
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
@@ -18,7 +18,7 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
     if (!object || !ivarNameSuffix) return nil;
     unsigned int ivarCount;
     Ivar *ivars = class_copyIvarList([object class], &ivarCount);
-    if (!ivars) return nil;
+    if (!ivars) { free(ivars); return nil; }
     id value = nil;
     for (unsigned int i = 0; i < ivarCount; i++) {
         Ivar ivar = ivars[i];
@@ -43,38 +43,6 @@ static NSString* GetStringFromLayer(id layer) {
         if ([stringValue isKindOfClass:[NSAttributedString class]]) return ((NSAttributedString *)stringValue).string;
     }
     return @"?";
-}
-
-// 新增：调用未知对象的 allValues (或类似) 方法
-static NSArray* GetValuesFromUnknownDictionary(id dict) {
-    if (!dict) return nil;
-    // 优先尝试标准方法
-    if ([dict respondsToSelector:@selector(allValues)]) {
-        return [dict allValues];
-    }
-    // 如果标准方法不行，就动态查找
-    unsigned int methodCount;
-    Method *methods = class_copyMethodList([dict class], &methodCount);
-    if (!methods) return nil;
-    SEL targetSelector = NULL;
-    for (unsigned int i = 0; i < methodCount; i++) {
-        SEL selector = method_getName(methods[i]);
-        NSString *methodName = NSStringFromSelector(selector);
-        // 寻找无参数且看起来像返回值的 getter
-        if (![methodName containsString:@":"] && ([methodName containsString:@"values"] || [methodName containsString:@"getObjects"])) {
-            targetSelector = selector;
-            break;
-        }
-    }
-    free(methods);
-    if (targetSelector) {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        id result = [dict performSelector:targetSelector];
-        #pragma clang diagnostic pop
-        if ([result isKindOfClass:[NSArray class]]) return result;
-    }
-    return nil;
 }
 
 @interface UIViewController (FinalTweak)
@@ -103,6 +71,7 @@ static NSArray* GetValuesFromUnknownDictionary(id dict) {
 %new
 - (void)runFinalExtraction {
     @try {
+        // 1. 找到显示层 View
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
         if (!plateViewClass) return;
         UIWindow *keyWindow = self.view.window; if (!keyWindow) return;
@@ -111,41 +80,44 @@ static NSArray* GetValuesFromUnknownDictionary(id dict) {
         if (plateViews.count == 0) return;
         id plateView = plateViews.firstObject;
 
-        id diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
-        id tianShenDict = GetIvarValueSafely(plateView, @"天神宮名列");
-        id tianJiangDict = GetIvarValueSafely(plateView, @"天將宮名列");
+        // 2. 从显示层中获取数据源 "大脑" 对象
+        id dataSource = GetIvarValueSafely(plateView, @"課盤被動更新器");
+        if (!dataSource) {
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"失败" message:@"未能获取'課盤被動更新器'对象。" preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:alert animated:YES completion:nil];
+            return;
+        }
+        EchoLog(@"成功获取到数据源 '課盤被動更新器': %@", dataSource);
 
-        if (!diGongDict || !tianShenDict || !tianJiangDict) return;
+        // 3. 从数据源对象中，再获取真正的数据字典
+        NSDictionary *diGongDict = GetIvarValueSafely(dataSource, @"地宮宮名列");
+        NSDictionary *tianShenDict = GetIvarValueSafely(dataSource, @"天神宮名列");
+        NSDictionary *tianJiangDict = GetIvarValueSafely(dataSource, @"天將宮名列");
 
-        // 使用新方法获取values
-        NSArray *diGongLayers = GetValuesFromUnknownDictionary(diGongDict);
-        NSArray *tianShenLayers = GetValuesFromUnknownDictionary(tianShenDict);
-        NSArray *tianJiangLayers = GetValuesFromUnknownDictionary(tianJiangDict);
-
-        if (!diGongLayers || !tianShenLayers || !tianJiangLayers || diGongLayers.count != 12) {
-             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取失败" message:@"无法从字典对象中获取values数组" preferredStyle:UIAlertControllerStyleAlert];
-             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-             [self presentViewController:alert animated:YES completion:nil];
-             return;
+        if (!diGongDict || !tianShenDict || !tianJiangDict) {
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"失败" message:@"在'課盤被動更新器'中未能找到'宮名列'数据。" preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:alert animated:YES completion:nil];
+            return;
         }
 
-        // 使用 V11 的几何排序逻辑，这是最可靠的
+        // 4. 我们已经知道直接操作字典会崩溃，所以再次使用几何排序法，但这次数据源更可靠
+        NSArray *diGongLayers = [diGongDict allValues];
+        NSArray *tianShenLayers = [tianShenDict allValues];
+        NSArray *tianJiangLayers = [tianJiangDict allValues];
+        
+        // ... 后续的几何排序和格式化逻辑 (与V11相同) ...
         NSMutableArray *allLayerInfos = [NSMutableArray array];
         CGPoint center = CGPointMake(CGRectGetMidX(((UIView *)plateView).bounds), CGRectGetMidY(((UIView *)plateView).bounds));
-        
         void (^processLayers)(NSArray *, NSString *) = ^(NSArray *layers, NSString *type) {
             for (CALayer *layer in layers) {
-                CGPoint pos = layer.position;
-                CGFloat dx = pos.x - center.x;
-                CGFloat dy = pos.y - center.y;
-                [allLayerInfos addObject:@{ @"type": type, @"text": GetStringFromLayer(layer), @"angle": @(atan2(dy, dx)) }];
+                CGPoint pos = layer.position; CGFloat dx = pos.x - center.x; CGFloat dy = pos.y - center.y;
+                [allLayerInfos addObject:@{ @"type": type, @"text": GetStringFromLayer(layer), @"angle": @(atan2(dy, dx)), @"radius": @(sqrt(dx*dx + dy*dy)) }];
             }
         };
-        processLayers(diGongLayers, @"diPan");
-        processLayers(tianShenLayers, @"tianPan");
-        processLayers(tianJiangLayers, @"tianJiang");
-        
-        // 分组和排序... (V11的逻辑)
+        processLayers(diGongLayers, @"diPan"); processLayers(tianShenLayers, @"tianPan"); processLayers(tianJiangLayers, @"tianJiang");
+
         NSMutableDictionary *palaceGroups = [NSMutableDictionary dictionary];
         for (NSDictionary *info in allLayerInfos) {
             BOOL foundGroup = NO;
@@ -180,7 +152,7 @@ static NSArray* GetValuesFromUnknownDictionary(id dict) {
         [self presentViewController:alert animated:YES completion:nil];
 
     } @catch (NSException *exception) {
-        // ...
+        // ... 异常捕获
     }
 }
 %end
