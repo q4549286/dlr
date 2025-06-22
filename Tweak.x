@@ -3,8 +3,8 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 极简独立测试版 (V13 - 强制平行匹配版)
-// 目标: 验证三个字典的values数组顺序是否一致
+// 极简独立测试版 (V14 - 数据源探测版)
+// 目标: 从'課盤被動更新器'中提取数据
 // =========================================================================
 
 #define EchoLog(format, ...) NSLog((@"[EchoAI-Test] " format), ##__VA_ARGS__)
@@ -69,7 +69,7 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
 %new
 - (void)runFinalExtraction {
     @try {
-        // 1. 查找视图和字典 (V8的稳定逻辑)
+        // 1. 查找视图
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
         if (!plateViewClass) return;
         
@@ -80,63 +80,58 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
         FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
         if (plateViews.count == 0) return;
         
-        UIView *plateView = plateViews.firstObject;
+        id plateView = plateViews.firstObject;
 
-        NSDictionary *diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
-        NSDictionary *tianShenDict = GetIvarValueSafely(plateView, @"天神宮名列");
-        NSDictionary *tianJiangDict = GetIvarValueSafely(plateView, @"天將宮名列");
+        // 2. 从视图中获取'課盤被動更新器'对象
+        id dataSource = GetIvarValueSafely(plateView, @"課盤被動更新器");
         
-        if (!diGongDict || !tianShenDict || !tianJiangDict) return;
+        if (!dataSource) {
+             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"測試失敗" message:@"未能獲取到'課盤被動更新器'對象。" preferredStyle:UIAlertControllerStyleAlert];
+             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+             [self presentViewController:alert animated:YES completion:nil];
+             return;
+        }
+        EchoLog(@"成功获取到数据源: %@", dataSource);
 
-        // 2. 安全地获取所有 CATextLayer
-        NSArray *diGongLayers = [diGongDict allValues];
-        NSArray *tianShenLayers = [tianShenDict allValues];
-        NSArray *tianJiangLayers = [tianJiangDict allValues];
+        // 3. 从'課盤被動更新器'中提取数据
+        // 注意：我们现在直接从 dataSource 中获取数据，而不是 plateView
+        NSArray *diGong = GetIvarValueSafely(dataSource, @"地宮宮名列");
+        NSArray *tianShen = GetIvarValueSafely(dataSource, @"天神宮名列");
+        NSArray *tianJiang = GetIvarValueSafely(dataSource, @"天將宮名列");
+        
+        // 4. 检查数据并格式化
+        if (!diGong || ![diGong isKindOfClass:[NSArray class]] || diGong.count != 12) {
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取失败" message:@"从更新器中未能获取到正确的'地宮宮名列'。" preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:alert animated:YES completion:nil];
+            return;
+        }
+        // ... (对 tianShen 和 tianJiang 进行类似检查) ...
 
-        if (diGongLayers.count != 12 || tianShenLayers.count != 12 || tianJiangLayers.count != 12) return;
-
-        // 3. 强制进行平行匹配
+        // 5. 排序和输出
         NSMutableArray *palaceData = [NSMutableArray array];
         for (NSUInteger i = 0; i < 12; i++) {
-            CALayer *diGongLayer = diGongLayers[i];
-            CALayer *tianShenLayer = tianShenLayers[i];
-            CALayer *tianJiangLayer = tianJiangLayers[i];
-
-            NSString *diGongStr = [[diGongLayer valueForKey:@"string"] description] ?: @"?";
-            NSString *tianShenStr = [[tianShenLayer valueForKey:@"string"] description] ?: @"?";
-            NSString *tianJiangStr = [[tianJiangLayer valueForKey:@"string"] description] ?: @"??";
-
-            NSDictionary *entry = @{
-                @"diPan": diGongStr,
-                @"tianPan": tianShenStr,
-                @"tianJiang": tianJiangStr
-            };
+            // 注意：这次我们直接使用数组，因为数据源里的数组很可能是已经排好序的
+            NSString *diGongStr = [diGong[i] isKindOfClass:[NSString class]] ? diGong[i] : @"?";
+            // 这里我们假设天神和天将也是排好序的数组，但它们可能不是，我们先做简单提取
+            // 为了安全，我们只显示地宫，验证数据是否正确和实时
+             NSDictionary *entry = @{@"diPan": diGongStr};
             [palaceData addObject:entry];
         }
 
-        // 4. 按地盘（子丑寅卯...）顺序进行排序
-        NSArray *diPanOrder = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
-        [palaceData sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-            NSString *diPan1 = obj1[@"diPan"];
-            NSString *diPan2 = obj2[@"diPan"];
-            NSUInteger index1 = [diPanOrder indexOfObject:diPan1];
-            NSUInteger index2 = [diPanOrder indexOfObject:diPan2];
-            return [@(index1) compare:@(index2)];
-        }];
-
-        // 5. 格式化输出
+        // 暂时不排序，直接按获取到的顺序输出，看看是不是子丑寅卯...
         NSMutableString *resultText = [NSMutableString string];
-        [resultText appendString:@"天地盤數據 (V13)\n\n"];
+        [resultText appendString:@"来自'課盤被動更新器'的数据 (V14)\n\n"];
         for (NSDictionary *entry in palaceData) {
-            [resultText appendFormat:@"%@宮: %@(%@)\n", entry[@"diPan"], entry[@"tianPan"], entry[@"tianJiang"]];
+            [resultText appendFormat:@"%@宮\n", entry[@"diPan"]];
         }
-
+        
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取结果" message:resultText preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
 
     } @catch (NSException *exception) {
-        // 安全网
+        // ...
     }
 }
 
