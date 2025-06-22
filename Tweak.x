@@ -498,7 +498,8 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
             view.tag = DebugSelectViewTag;
             view.backgroundColor = [UIColor.blueColor colorWithAlphaComponent:0.1];
             view.userInteractionEnabled = YES;
-            view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAresizingFlexibleHeight;
+            // 【已修正】这里的拼写错误
+            view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
             UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(20, 140, view.bounds.size.width - 40, 60)];
             label.text = @"调试模式已开启\n请点击屏幕任意位置查看视图信息";
