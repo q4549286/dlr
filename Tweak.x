@@ -1,16 +1,3 @@
-您好，看到您发来的编译错误了。这是一个非常典型的问题，请完全不用担心，很容易解决！
-
-**错误原因：**
-这些错误的根本原因，是我们的代码文件里缺少了几个必要的“工具箱引用”。
-
-就像做饭需要厨具一样，我们的代码里用到了 `NSString` (字符串), `UIView` (视图), `CFStringTransform` (简繁转换) 这些工具，但我们没有在文件开头告诉编译器去哪里找这些工具的“说明书”。
-
-**解决方案：**
-我们只需要在文件的最开头，补上两行引用代码，引入 `Foundation` 和 `CoreFoundation` 这两个最核心的“工具箱”即可。
-
-我已经为您更新了完整的代码，请您用下面的代码 **再一次整体替换您项目中的所有代码**。这次一定可以成功编译！
-
-```objc
 #import <Foundation/Foundation.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <UIKit/UIKit.h>
