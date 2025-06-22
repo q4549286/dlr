@@ -68,16 +68,20 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已修复闪退问题)
+// Section 3: 【最终修正版】
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
 static NSMutableDictionary *g_extractedData = nil;
+static void (^g_scrapeCompletionBlock)(void) = nil;
+static NSArray *g_selectorsToScrape = nil;
+static int g_scrapeSelectorIndex = 0;
 
 @interface UIViewController (CopyAiAddon)
 - (void)copyAiButtonTapped_FinalMethod;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
+- (void)scrapeNextPopup;
 @end
 
 %hook UIViewController
@@ -157,7 +161,10 @@ static NSMutableDictionary *g_extractedData = nil;
                  EchoLog(@"抓取到未知弹窗，内容被忽略。");
             }
             
-            [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+            [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
+                // 在弹窗关闭后，触发下一个弹窗的抓取
+                [self scrapeNextPopup];
+            }];
         });
         
         %orig(viewControllerToPresent, flag, completion);
@@ -193,6 +200,35 @@ static NSMutableDictionary *g_extractedData = nil;
 }
 
 %new
+- (void)scrapeNextPopup {
+    if (!g_selectorsToScrape || g_scrapeSelectorIndex >= g_selectorsToScrape.count) {
+        if (g_scrapeCompletionBlock) {
+            g_scrapeCompletionBlock();
+        }
+        g_scrapeCompletionBlock = nil;
+        g_selectorsToScrape = nil;
+        return;
+    }
+
+    NSString *selectorName = g_selectorsToScrape[g_scrapeSelectorIndex];
+    g_scrapeSelectorIndex++;
+    
+    SEL selector = NSSelectorFromString(selectorName);
+    if ([self respondsToSelector:selector]) {
+        EchoLog(@"正在串行抓取: %@", selectorName);
+        #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
+            _Pragma("clang diagnostic push") \
+            _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
+            code; \
+            _Pragma("clang diagnostic pop")
+        SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selector withObject:nil]);
+    } else {
+        // 如果选择器不存在，直接跳到下一个
+        [self scrapeNextPopup];
+    }
+}
+
+%new
 - (void)copyAiButtonTapped_FinalMethod {
     #define SafeString(str) (str ?: @"")
     
@@ -209,9 +245,7 @@ static NSMutableDictionary *g_extractedData = nil;
     g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
     EchoLog(@"主界面信息提取完毕。");
 
-    // ==========================================================
-    // 提取天地盘信息 (已修复闪退问题)
-    // ==========================================================
+    // 提取天地盘信息
     EchoLog(@"正在提取天地盘信息...");
     NSMutableString *tianDiPanInfo = [NSMutableString string];
     Class tianDiPanViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
@@ -220,35 +254,27 @@ static NSMutableDictionary *g_extractedData = nil;
         [self findSubviewsOfClass:tianDiPanViewClass inView:self.view andStoreIn:tianDiPanViews];
         if (tianDiPanViews.count > 0) {
             UIView *tianDiPanView = tianDiPanViews.firstObject;
-            
-            // 【关键激活步骤】强制视图立即完成布局和渲染，触发懒加载属性
-            EchoLog(@"正在使用 layoutIfNeeded 激活天地盘...");
             [tianDiPanView layoutIfNeeded];
-            EchoLog(@"激活完毕。");
-
-            // 【最终方案】使用 object_getIvar 直接读取内存，避免闪退
-            Ivar diGongIvar = class_getInstanceVariable([tianDiPanView class], "地宫名列");
-            Ivar tianShenGongIvar = class_getInstanceVariable([tianDiPanView class], "天神宫名列");
+            
+            // 【修正】尝试使用带下划线的 ivar 名称
+            Ivar diGongIvar = class_getInstanceVariable([tianDiPanView class], "_地宫名列");
+            Ivar tianShenGongIvar = class_getInstanceVariable([tianDiPanView class], "_天神宫名列");
 
             id diGong = diGongIvar ? object_getIvar(tianDiPanView, diGongIvar) : nil;
             id tianShenGong = tianShenGongIvar ? object_getIvar(tianDiPanView, tianShenGongIvar) : nil;
 
             if ([diGong isKindOfClass:[NSArray class]] && ((NSArray *)diGong).count > 0) {
-                [tianDiPanInfo appendFormat:@"地盘: %@\n", [diGong componentsJoinedByString:@" "]];
+                [tianDiPanInfo appendFormat:@"地盤: %@\n", [diGong componentsJoinedByString:@" "]];
             }
             if ([tianShenGong isKindOfClass:[NSArray class]] && ((NSArray *)tianShenGong).count > 0) {
-                [tianDiPanInfo appendFormat:@"天盘: %@", [tianShenGong componentsJoinedByString:@" "]];
+                [tianDiPanInfo appendFormat:@"天盤: %@", [tianShenGong componentsJoinedByString:@" "]];
             }
-            EchoLog(@"成功提取天地盘数据！");
-        } else {
-            EchoLog(@"未找到天地盘视图实例。");
+            EchoLog(@"成功提取天地盤数据！");
         }
-    } else {
-        EchoLog(@"未找到天地盘视图类。");
     }
-    g_extractedData[@"天地盘"] = tianDiPanInfo;
+    g_extractedData[@"天地盤"] = tianDiPanInfo;
     
-    // 四课和三传代码...
+    // 提取四课和三传
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -288,66 +314,51 @@ static NSMutableDictionary *g_extractedData = nil;
     }
     g_extractedData[@"三传"] = sanChuan;
     
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        EchoLog(@"开始异步无感抓取动态信息...");
+    // 【修正】使用串行逻辑抓取动态信息，避免信息丢失
+    g_selectorsToScrape = @[@"顯示法訣總覽", @"顯示格局總覽", @"顯示方法總覽", @"顯示七政信息WithSender:"];
+    g_scrapeSelectorIndex = 0;
+    g_scrapeCompletionBlock = [^{
+        EchoLog(@"所有信息收集完毕，正在组合最终文本...");
+            
+        NSString *tianDiPanOutput = g_extractedData[@"天地盤"] && ((NSString *)g_extractedData[@"天地盤"]).length > 0 ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"天地盤"]] : @"";
+        NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", g_extractedData[@"毕法"]] : @"";
+        NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"格局:\n%@\n\n", g_extractedData[@"格局"]] : @"";
+        NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
+        NSString *fangFaOutput = g_extractedData[@"方法"] ? [NSString stringWithFormat:@"方法:\n%@\n\n", g_extractedData[@"方法"]] : @"";
+
+        NSString *finalText = [NSString stringWithFormat:
+            @"%@\n\n"
+            @"月将: %@\n"
+            @"空亡: %@\n"
+            @"三宫时: %@\n"
+            @"昼夜: %@\n"
+            @"课体: %@\n\n"
+            @"%@" // 天地盤
+            @"%@%@%@%@" // 毕法, 格局, 方法, 七政四余
+            @"%@\n\n"
+            @"%@\n\n"
+            @"起课方式: %@",
+            SafeString(g_extractedData[@"时间块"]),
+            SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]), SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]),
+            tianDiPanOutput,
+            biFaOutput, geJuOutput, fangFaOutput, qiZhengOutput,
+            SafeString(g_extractedData[@"四课"]),
+            SafeString(g_extractedData[@"三传"]),
+            SafeString(g_extractedData[@"起课方式"])
+        ];
         
-        SEL selectorBiFa = NSSelectorFromString(@"顯示法訣總覽");
-        SEL selectorGeJu = NSSelectorFromString(@"顯示格局總覽");
-        SEL selectorQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:");
-        SEL selectorFangFa = NSSelectorFromString(@"顯示方法總覽");
-
-        #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
-            _Pragma("clang diagnostic push") \
-            _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
-            code; \
-            _Pragma("clang diagnostic pop")
-
-        if ([self respondsToSelector:selectorBiFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorBiFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
-        if ([self respondsToSelector:selectorGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorGeJu withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
-        if ([self respondsToSelector:selectorFangFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
-        if ([self respondsToSelector:selectorQiZheng]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
+        [UIPasteboard generalPasteboard].string = finalText;
         
-        dispatch_async(dispatch_get_main_queue(), ^{
-            EchoLog(@"所有信息收集完毕，正在组合最终文本...");
-            
-            NSString *tianDiPanOutput = g_extractedData[@"天地盘"] && ((NSString *)g_extractedData[@"天地盘"]).length > 0 ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"天地盘"]] : @"";
-            NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", g_extractedData[@"毕法"]] : @"";
-            NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"格局:\n%@\n\n", g_extractedData[@"格局"]] : @"";
-            NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
-            NSString *fangFaOutput = g_extractedData[@"方法"] ? [NSString stringWithFormat:@"方法:\n%@\n\n", g_extractedData[@"方法"]] : @"";
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        
+        [self presentViewController:alert animated:YES completion:^{
+             g_extractedData = nil;
+             EchoLog(@"--- 复制任务完成 ---");
+        }];
+    } copy];
 
-            NSString *finalText = [NSString stringWithFormat:
-                @"%@\n\n"
-                @"月将: %@\n"
-                @"空亡: %@\n"
-                @"三宫时: %@\n"
-                @"昼夜: %@\n"
-                @"课体: %@\n\n"
-                @"%@" // 天地盘
-                @"%@%@%@%@" // 毕法, 格局, 方法, 七政四余
-                @"%@\n\n"
-                @"%@\n\n"
-                @"起课方式: %@",
-                SafeString(g_extractedData[@"时间块"]),
-                SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]), SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]),
-                tianDiPanOutput,
-                biFaOutput, geJuOutput, fangFaOutput, qiZhengOutput,
-                SafeString(g_extractedData[@"四课"]),
-                SafeString(g_extractedData[@"三传"]),
-                SafeString(g_extractedData[@"起课方式"])
-            ];
-            
-            [UIPasteboard generalPasteboard].string = finalText;
-            
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-            
-            [self presentViewController:alert animated:YES completion:^{
-                 g_extractedData = nil;
-                 EchoLog(@"--- 复制任务完成 ---");
-            }];
-        });
-    });
+    [self scrapeNextPopup];
 }
 
 %end
