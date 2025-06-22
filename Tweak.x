@@ -19,7 +19,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已修复“毕法”和“方法”排版)
+// Section 3: 【最终版】一键复制到 AI (已修复毕法功能)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -74,27 +74,33 @@ static NSMutableDictionary *g_extractedData = nil;
             NSString *title = viewControllerToPresent.title ?: @"";
             if (title.length == 0 && labels.count > 0) { title = ((UILabel*)labels.firstObject).text; }
 
-            // 准备识别工具
             NSMutableArray *fangfaViews = [NSMutableArray array];
             Class fangfaViewClass = NSClassFromString(@"六壬大占.格局單元");
             if (fangfaViewClass) { [self findSubviewsOfClass:fangfaViewClass inView:viewControllerToPresent.view andStoreIn:fangfaViews]; }
 
-            // 【修复毕法】准备毕法识别工具
-            NSMutableArray *bifaViews = [NSMutableArray array];
-            Class bifaViewClass = NSClassFromString(@"六壬大占.毕法單元") ?: NSClassFromString(@"六壬大占.法诀單元"); // 尝试两个可能的类名
-            if (bifaViewClass) { [self findSubviewsOfClass:bifaViewClass inView:viewControllerToPresent.view andStoreIn:bifaViews]; }
-
             NSMutableArray* textParts = [NSMutableArray array];
             NSString* content = nil;
 
+            // 【关键修复】调整判断顺序，优先处理标题明确的弹窗
             if ([vcClassName containsString:@"七政"]) {
                 for (UILabel *label in labels) { if (label.text && label.text.length > 0) [textParts addObject:label.text]; }
                 content = [textParts componentsJoinedByString:@"\n"];
                 g_extractedData[@"七政四余"] = content;
                 EchoLog(@"成功抓取 [七政四余] 内容");
             }
+            else if ([title containsString:@"法诀"] || [title containsString:@"毕法"]) {
+                for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title]) { [textParts addObject:label.text]; } }
+                content = [textParts componentsJoinedByString:@"\n"];
+                g_extractedData[@"毕法"] = content;
+                EchoLog(@"成功抓取 [毕法] 内容");
+            }
+            else if ([title containsString:@"格局"]) {
+                for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title]) { [textParts addObject:label.text]; } }
+                content = [textParts componentsJoinedByString:@"\n"];
+                g_extractedData[@"格局"] = content;
+                EchoLog(@"成功抓取 [格局] 内容");
+            }
             else if (fangfaViews.count > 0) {
-                // 【修复方法排版】重构排版逻辑
                 NSMutableArray *leftColumn = [NSMutableArray array];
                 NSMutableArray *rightColumn = [NSMutableArray array];
                 CGFloat midX = viewControllerToPresent.view.bounds.size.width / 2;
@@ -108,19 +114,6 @@ static NSMutableDictionary *g_extractedData = nil;
                 content = [textParts componentsJoinedByString:@"\n"];
                 g_extractedData[@"方法"] = content;
                 EchoLog(@"成功抓取并重排版 [方法] 内容");
-            }
-            // 【修复毕法】使用更可靠的方式识别
-            else if (bifaViews.count > 0 || [title containsString:@"法诀"] || [title containsString:@"毕法"]) {
-                for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title]) { [textParts addObject:label.text]; } }
-                content = [textParts componentsJoinedByString:@"\n"];
-                g_extractedData[@"毕法"] = content;
-                EchoLog(@"成功抓取 [毕法] 内容");
-            }
-            else if ([title containsString:@"格局"]) { // 格局暂时还用标题识别
-                for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title]) { [textParts addObject:label.text]; } }
-                content = [textParts componentsJoinedByString:@"\n"];
-                g_extractedData[@"格局"] = content;
-                EchoLog(@"成功抓取 [格局] 内容");
             } else {
                  EchoLog(@"抓取到未知弹窗，内容被忽略。");
             }
