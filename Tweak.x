@@ -8,7 +8,7 @@
 #define EchoLog(format, ...) NSLog((@"[EchoAI] " format), ##__VA_ARGS__)
 
 // =========================================================================
-// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 保持不变
+// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 已修复编译错误
 // =========================================================================
 %hook UILabel
 - (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
@@ -16,7 +16,25 @@
 %end
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); CGContextRef context = UIGraphicsGetCurrentContext(); CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); CGContextRotateCTM(context, angle * M_PI / 180); NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; CGSize textSize = [text sizeWithAttributes:attributes]; CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); [text drawInRect:textRect withAttributes:attributes]; UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext(); return image; }
 %hook UIWindow
-- (void)layoutSubviews { %orig; if (self.windowLevel != UIWindowLevelNormal) { return; } NSInteger watermarkTag = 998877; if ([self viewWithTag:watermarkTag]) { return; } NSString *watermarkText = @"Echo定制"; UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; CGFloat rotationAngle = -30.0; CGSize tileSize = CGSizeMake(150, 100); UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; watermarkTag.tag = watermarkView; watermarkView.userInteractionEnabled = NO; watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; [self addSubview:watermarkView]; [self bringSubviewToFront:watermarkView]; }
+- (void)layoutSubviews { 
+    %orig; 
+    if (self.windowLevel != UIWindowLevelNormal) { return; } 
+    NSInteger watermarkTag = 998877; 
+    if ([self viewWithTag:watermarkTag]) { return; } 
+    NSString *watermarkText = @"Echo定制"; 
+    UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; 
+    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; 
+    CGFloat rotationAngle = -30.0; 
+    CGSize tileSize = CGSizeMake(150, 100); 
+    UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); 
+    UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; 
+    watermarkView.tag = watermarkTag; // <-- 修正编译错误
+    watermarkView.userInteractionEnabled = NO; 
+    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; 
+    watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; 
+    [self addSubview:watermarkView]; 
+    [self bringSubviewToFront:watermarkView]; 
+}
 %end
 
 
@@ -43,7 +61,6 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
         const char *name = ivar_getName(ivar);
         if (name) {
             NSString *ivarName = [NSString stringWithUTF8String:name];
-            // 使用繁体中文进行匹配
             if ([ivarName hasSuffix:ivarNameSuffix]) {
                 ptrdiff_t offset = ivar_getOffset(ivar);
                 void **ivar_ptr = (void **)((__bridge void *)object + offset);
@@ -68,7 +85,7 @@ static NSString* GetStringFromLayer(id layer) {
 @interface UIViewController (CopyAiAddon)
 - (void)copyAiButtonTapped_FinalMethod;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
-- (NSString *)extractTianDiPanInfo_V18; // 新的天地盘提取方法
+- (NSString *)extractTianDiPanInfo_V18;
 @end
 
 
@@ -175,41 +192,30 @@ static NSString* GetStringFromLayer(id layer) {
     return [textParts componentsJoinedByString:separator];
 }
 
-// =========================================================================
-// 新增：天地盘信息提取 (V18 - 终极版)
-// =========================================================================
 %new
 - (NSString *)extractTianDiPanInfo_V18 {
     @try {
-        // 1. 查找视图
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
         if (!plateViewClass) return @"天地盘提取失败: 找不到视图类";
-
         UIWindow *keyWindow = self.view.window;
         if (!keyWindow) return @"天地盘提取失败: 找不到keyWindow";
-        
         NSMutableArray *plateViews = [NSMutableArray array];
         FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
         if (plateViews.count == 0) return @"天地盘提取失败: 找不到视图实例";
-        
         UIView *plateView = plateViews.firstObject;
 
-        // 2. 获取字典对象
         NSDictionary *diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
         NSDictionary *tianShenDict = GetIvarValueSafely(plateView, @"天神宮名列");
         NSDictionary *tianJiangDict = GetIvarValueSafely(plateView, @"天將宮名列");
         if (!diGongDict || !tianShenDict || !tianJiangDict) return @"天地盘提取失败: 未能获取核心数据字典";
 
-        // 3. 安全地获取所有 CATextLayer
         NSArray *diGongLayers = [diGongDict allValues];
         NSArray *tianShenLayers = [tianShenDict allValues];
         NSArray *tianJiangLayers = [tianJiangDict allValues];
         if (diGongLayers.count != 12 || tianShenLayers.count != 12 || tianJiangLayers.count != 12) return @"天地盘提取失败: 数据长度不匹配";
 
-        // 4. 几何排序法
         NSMutableArray *allLayerInfos = [NSMutableArray array];
         CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
-
         void (^processLayers)(NSArray *, NSString *) = ^(NSArray *layers, NSString *type) {
             for (CALayer *layer in layers) {
                 if (![layer isKindOfClass:[CALayer class]]) continue;
@@ -227,7 +233,6 @@ static NSString* GetStringFromLayer(id layer) {
         processLayers(tianShenLayers, @"tianPan");
         processLayers(tianJiangLayers, @"tianJiang");
 
-        // 5. 分组
         NSMutableDictionary *palaceGroups = [NSMutableDictionary dictionary];
         for (NSDictionary *info in allLayerInfos) {
             BOOL foundGroup = NO;
@@ -239,7 +244,6 @@ static NSString* GetStringFromLayer(id layer) {
             if (!foundGroup) { palaceGroups[info[@"angle"]] = [NSMutableArray arrayWithObject:info];}
         }
         
-        // 6. 整理与排序
         NSMutableArray *palaceData = [NSMutableArray array];
         for (NSNumber *groupAngle in palaceGroups) {
             NSMutableArray *group = palaceGroups[groupAngle];
@@ -255,7 +259,6 @@ static NSString* GetStringFromLayer(id layer) {
             return [@([diPanOrder indexOfObject:o1[@"diPan"]]) compare:@([diPanOrder indexOfObject:o2[@"diPan"]])];
         }];
 
-        // 7. 输出
         NSMutableString *resultText = [NSMutableString stringWithString:@"天地盘:\n"];
         for (NSDictionary *entry in palaceData) {
             [resultText appendFormat:@"%@宫: %@(%@)\n", entry[@"diPan"], entry[@"tianPan"], entry[@"tianJiang"]];
@@ -283,10 +286,7 @@ static NSString* GetStringFromLayer(id layer) {
     g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
     g_extractedData[@"课体"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
     g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
-    
-    // 整合天地盘信息
     g_extractedData[@"天地盘"] = [self extractTianDiPanInfo_V18];
-    
     EchoLog(@"主界面信息提取完毕。");
 
     // 四课和三传代码...
@@ -365,19 +365,23 @@ static NSString* GetStringFromLayer(id layer) {
                 @"昼夜: %@\n"
                 @"课体: %@\n\n"
                 @"%@" // 天地盘
+                @"%@\n" // 四课
+                @"%@\n" // 三传
                 @"%@%@%@%@" // 毕法, 格局, 方法, 七政四余
-                @"%@\n\n"
-                @"%@\n\n"
                 @"起课方式: %@",
                 SafeString(g_extractedData[@"时间块"]),
                 SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]), SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]),
                 tianDiPanOutput,
-                biFaOutput, geJuOutput, fangFaOutput, qiZhengOutput,
                 SafeString(g_extractedData[@"四课"]),
                 SafeString(g_extractedData[@"三传"]),
+                biFaOutput, geJuOutput, fangFaOutput, qiZhengOutput,
                 SafeString(g_extractedData[@"起课方式"])
             ];
             
+            // 清理多余的换行
+            finalText = [finalText stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
+            finalText = [finalText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
             [UIPasteboard generalPasteboard].string = finalText;
             
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已复制到剪贴板" message:finalText preferredStyle:UIAlertControllerStyleAlert];
