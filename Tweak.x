@@ -19,7 +19,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已统一采用最可靠的排版方案)
+// Section 3: 【最终版】一键复制到 AI (已修正天地盘键名)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -29,6 +29,7 @@ static NSMutableDictionary *g_extractedData = nil;
 - (void)copyAiButtonTapped_FinalMethod;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
+- (NSString *)extractTianDiPanData;
 @end
 
 %hook UIViewController
@@ -80,7 +81,6 @@ static NSMutableDictionary *g_extractedData = nil;
             Class fangfaViewClass = NSClassFromString(@"六壬大占.格局單元");
             if (fangfaViewClass) { [self findSubviewsOfClass:fangfaViewClass inView:viewControllerToPresent.view andStoreIn:fangfaViews]; }
 
-            // 【关键修复】为所有模块统一使用简单可靠的“两列式”排版逻辑
             NSString* content = nil;
             NSMutableArray *leftColumn = [NSMutableArray array];
             NSMutableArray *rightColumn = [NSMutableArray array];
@@ -94,7 +94,6 @@ static NSMutableDictionary *g_extractedData = nil;
                 EchoLog(@"成功抓取 [七政四余] 内容 (单列排版)");
             }
             else if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"]) {
-                // 毕法和格局使用两列排版
                 for(UILabel *label in labels) { if (![label.text isEqualToString:title]) { if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } else { [rightColumn addObject:label.text]; } } }
                 for (int i=0; i < MIN(leftColumn.count, rightColumn.count); i++) { [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]]; }
                 content = [textParts componentsJoinedByString:@"\n"];
@@ -102,7 +101,6 @@ static NSMutableDictionary *g_extractedData = nil;
                 else { g_extractedData[@"毕法"] = content; EchoLog(@"成功抓取并重排版 [毕法] 内容"); }
             }
             else if (fangfaViews.count > 0) {
-                // 方法模块保持原有的两列排版
                 [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
                 for(UILabel *label in labels) { if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } else { [rightColumn addObject:label.text]; } }
                 for (int i=0; i < MIN(leftColumn.count, rightColumn.count); i++) { [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]]; }
@@ -148,6 +146,67 @@ static NSMutableDictionary *g_extractedData = nil;
 }
 
 %new
+// 【关键修复】使用繁体中文键名，并提取所有相关数据
+- (NSString *)extractTianDiPanData {
+    Class panViewClass = NSClassFromString(@"六壬大占.天地盘视图类");
+    if (!panViewClass) {
+        EchoLog(@"错误: 未找到 '六壬大占.天地盘视图类'");
+        return @"天地盘信息无法提取 (类未找到)";
+    }
+
+    NSMutableArray *panViewViews = [NSMutableArray array];
+    [self findSubviewsOfClass:panViewClass inView:self.view andStoreIn:panViewViews];
+
+    if (panViewViews.count == 0) {
+        EchoLog(@"提示: 主界面上未找到天地盘视图实例。");
+        return @"";
+    }
+
+    UIView *panView = panViewViews.firstObject;
+    NSMutableString *result = [NSMutableString string];
+
+    @try {
+        // 提取 天盤
+        id tianPan = [panView valueForKey:@"天盤"];
+        if (tianPan && [tianPan isKindOfClass:[NSArray class]]) {
+            [result appendFormat:@"天盘: %@\n", [tianPan componentsJoinedByString:@" "]];
+            EchoLog(@"成功提取 [天盘] 数据。");
+        } else {
+            EchoLog(@"警告: '天盤' 属性提取失败或格式不正确。");
+        }
+
+        // 提取 地盤
+        id diPan = [panView valueForKey:@"地盤"];
+        if (diPan && [diPan isKindOfClass:[NSArray class]]) {
+            [result appendFormat:@"地盘: %@\n", [diPan componentsJoinedByString:@" "]];
+            EchoLog(@"成功提取 [地盘] 数据。");
+        } else {
+            EchoLog(@"警告: '地盤' 属性提取失败或格式不正确。");
+        }
+        
+        // 提取 天盤神宮
+        id tianPanShenGong = [panView valueForKey:@"天盤神宮"];
+        if (tianPanShenGong && [tianPanShenGong isKindOfClass:[NSArray class]] && [tianPanShenGong count] == 12) {
+            NSArray *diZhi = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
+            NSMutableArray *tianPanParts = [NSMutableArray array];
+            for (int i = 0; i < 12; i++) {
+                [tianPanParts addObject:[NSString stringWithFormat:@"%@->%@", diZhi[i], tianPanShenGong[i]]];
+            }
+            [result appendFormat:@"天盘神宫: %@\n", [tianPanParts componentsJoinedByString:@", "]];
+            EchoLog(@"成功提取 [天盘神宫] 数据。");
+        } else {
+            EchoLog(@"警告: '天盤神宮' 属性提取失败或格式不正确。");
+        }
+
+    } @catch (NSException *exception) {
+        EchoLog(@"提取天地盘数据时发生异常: %@", exception);
+        return @"天地盘信息提取异常";
+    }
+
+    return result;
+}
+
+%new
 - (void)copyAiButtonTapped_FinalMethod {
     #define SafeString(str) (str ?: @"")
     
@@ -162,6 +221,9 @@ static NSMutableDictionary *g_extractedData = nil;
     g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
     g_extractedData[@"课体"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.課體視圖" separator:@" "];
     g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
+    
+    g_extractedData[@"天地盘"] = [self extractTianDiPanData];
+    
     EchoLog(@"主界面信息提取完毕。");
 
     // 四课和三传代码...
@@ -226,6 +288,7 @@ static NSMutableDictionary *g_extractedData = nil;
         dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
             
+            NSString *tianDiPanOutput = g_extractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_extractedData[@"天地盘"]] : @"";
             NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", g_extractedData[@"毕法"]] : @"";
             NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"格局:\n%@\n\n", g_extractedData[@"格局"]] : @"";
             NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
@@ -235,6 +298,7 @@ static NSMutableDictionary *g_extractedData = nil;
                 @"%@\n\n"
                 @"月将: %@\n"
                 @"空亡: %@\n"
+                @"%@" // 天地盘
                 @"三宫时: %@\n"
                 @"昼夜: %@\n"
                 @"课体: %@\n\n"
@@ -243,7 +307,9 @@ static NSMutableDictionary *g_extractedData = nil;
                 @"%@\n\n"
                 @"起课方式: %@",
                 SafeString(g_extractedData[@"时间块"]),
-                SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]), SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]),
+                SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]),
+                tianDiPanOutput,
+                SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]),
                 biFaOutput, geJuOutput, fangFaOutput, qiZhengOutput,
                 SafeString(g_extractedData[@"四课"]),
                 SafeString(g_extractedData[@"三传"]),
