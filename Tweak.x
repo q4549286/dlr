@@ -1,44 +1,56 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
-#import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 极简独立测试版 (V13 - 逐行探测版)
-// 目标: 不求成功，只为探测每一步的对象类型，定位闪退点
+// 极简独立测试版 (V14 - 方法调用版)
+// 目标: 放弃直接读取内存，改为调用属性的getter方法
 // =========================================================================
 
 #define EchoLog(format, ...) NSLog((@"[EchoAI-Debug] " format), ##__VA_ARGS__)
 
-// ... (辅助函数 FindSubviewsOfClassRecursive 和 GetIvarValueSafely 保持不变) ...
+// 辅助函数: 查找子视图
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
-static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
-    if (!object || !ivarNameSuffix) return nil;
-    unsigned int ivarCount;
-    Ivar *ivars = class_copyIvarList([object class], &ivarCount);
-    if (!ivars) return nil;
-    id value = nil;
-    for (unsigned int i = 0; i < ivarCount; i++) {
-        Ivar ivar = ivars[i];
-        const char *name = ivar_getName(ivar);
+
+// 新辅助函数: 动态查找并调用方法
+static id InvokeMethodBySuffix(id object, NSString *methodNameSuffix) {
+    unsigned int methodCount;
+    Method *methods = class_copyMethodList([object class], &methodCount);
+    if (!methods) return nil;
+
+    SEL targetSelector = NULL;
+    for (unsigned int i = 0; i < methodCount; i++) {
+        Method method = methods[i];
+        SEL selector = method_getName(method);
+        const char *name = sel_getName(selector);
         if (name) {
-            NSString *ivarName = [NSString stringWithUTF8String:name];
-            if ([ivarName hasSuffix:ivarNameSuffix]) {
-                ptrdiff_t offset = ivar_getOffset(ivar);
-                void **ivar_ptr = (void **)((__bridge void *)object + offset);
-                value = (__bridge id)(*ivar_ptr);
+            NSString *methodName = [NSString stringWithUTF8String:name];
+            // 匹配方法名后缀
+            if ([methodName hasSuffix:methodNameSuffix] && ![methodName containsString:@":"]) { // 确保是无参数的getter
+                targetSelector = selector;
+                EchoLog(@"找到匹配的方法: %@", methodName);
                 break;
             }
         }
     }
-    free(ivars);
-    return value;
+    free(methods);
+
+    if (targetSelector) {
+        // 使用 performSelector 调用
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        return [object performSelector:targetSelector];
+        #pragma clang diagnostic pop
+    }
+    EchoLog(@"未找到以 '%@' 结尾的无参方法", methodNameSuffix);
+    return nil;
 }
 
+
 @interface UIViewController (FinalTweak)
-- (void)runDebugProbe;
+- (void)runMethodProbe;
 @end
 
 %hook UIViewController
@@ -54,12 +66,12 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.tag = 12345;
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 120, 45, 110, 36);
-            [testButton setTitle:@"調試探测" forState:UIControlStateNormal];
+            [testButton setTitle:@"方法探测" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-            testButton.backgroundColor = [UIColor orangeColor];
-            [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            testButton.backgroundColor = [UIColor greenColor];
+            [testButton setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(runDebugProbe) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(runMethodProbe) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
             [keyWindow bringSubviewToFront:testButton];
         });
@@ -67,66 +79,67 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
 }
 
 %new
-- (void)runDebugProbe {
+- (void)runMethodProbe {
     NSMutableString *logOutput = [NSMutableString string];
-    [logOutput appendString:@"--- 开始执行V13探测 ---\n\n"];
-    EchoLog(@"--- 开始执行V13探测 ---");
+    [logOutput appendString:@"--- 开始执行V14方法探测 ---\n\n"];
     
     @try {
         // 1. 查找视图
-        [logOutput appendString:@"1. 正在查找天地盤視圖...\n"];
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
         if (!plateViewClass) { [logOutput appendString:@"失败: 找不到类定义。\n"]; goto show_log; }
         
         UIWindow *keyWindow = self.view.window;
-        if (!keyWindow) { [logOutput appendString:@"失败: 找不到keyWindow。\n"]; goto show_log; }
-
         NSMutableArray *plateViews = [NSMutableArray array];
         FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
         if (plateViews.count == 0) { [logOutput appendString:@"失败: 找不到视图实例。\n"]; goto show_log; }
         
         id plateView = plateViews.firstObject;
-        [logOutput appendFormat:@"成功: 找到视图实例: %@\n\n", plateView];
-        EchoLog(@"成功: 找到视图实例: %@", plateView);
+        [logOutput appendFormat:@"1. 找到视图实例: %@\n\n", plateView];
 
-        // 2. 获取 '地宮宮名列' 字典
-        [logOutput appendString:@"2. 正在获取 '地宮宮名列'...\n"];
-        id diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
-        if (!diGongDict) { [logOutput appendString:@"失败: '地宮宮名列' 为nil。\n"]; goto show_log; }
-        
-        [logOutput appendFormat:@"成功: 获取到对象, 类型: %@\n\n", NSStringFromClass([diGongDict class])];
-        EchoLog(@"成功: 获取到 '地宮宮名列' 对象, 类型: %@", NSStringFromClass([diGongDict class]));
-
-        // 3. 检查是否为字典并获取所有Keys
-        [logOutput appendString:@"3. 正在检查对象是否为NSDictionary并获取allKeys...\n"];
-        if (![diGongDict isKindOfClass:[NSDictionary class]]) {
-             [logOutput appendString:@"失败: 该对象不是一个NSDictionary。\n"]; goto show_log;
+        // 2. 尝试调用 '地宮宮名列' 的 getter 方法
+        [logOutput appendString:@"2. 尝试调用 '地宮宮名列' getter...\n"];
+        id diGongObj = InvokeMethodBySuffix(plateView, @"地宮宮名列");
+        if (!diGongObj) {
+            [logOutput appendString:@"失败: 未找到或调用失败。\n"];
+        } else {
+            [logOutput appendFormat:@"成功! 返回对象类型: %@\n", NSStringFromClass([diGongObj class])];
+            if ([diGongObj isKindOfClass:[NSDictionary class]]) {
+                 [logOutput appendFormat:@"数量: %ld\n", (unsigned long)((NSDictionary *)diGongObj).count];
+            }
         }
-        
-        NSArray *allKeys = [diGongDict allKeys];
-        if (!allKeys) { [logOutput appendString:@"失败: allKeys 返回nil。\n"]; goto show_log; }
-        
-        [logOutput appendFormat:@"成功: 获取到allKeys, 数量: %ld\n\n", (unsigned long)allKeys.count];
-        EchoLog(@"成功: 获取到allKeys, 数量: %ld", (unsigned long)allKeys.count);
-        
-        // 4. 遍历并打印每个Key的类型
-        [logOutput appendString:@"4. 正在探测每个Key的类型...\n"];
-        for (NSUInteger i = 0; i < allKeys.count; i++) {
-            id key = allKeys[i];
-            [logOutput appendFormat:@"Key[%ld] 的类型是: %@\n", (unsigned long)i, NSStringFromClass([key class])];
-            EchoLog(@"Key[%ld] 的类型是: %@", (unsigned long)i, NSStringFromClass([key class]));
-        }
-        [logOutput appendString:@"\n探测完成，没有闪退。\n"];
+        [logOutput appendString:@"\n"];
 
+        // 3. 尝试调用 '天神宮名列' 的 getter 方法
+        [logOutput appendString:@"3. 尝试调用 '天神宮名列' getter...\n"];
+        id tianShenObj = InvokeMethodBySuffix(plateView, @"天神宮名列");
+        if (!tianShenObj) {
+            [logOutput appendString:@"失败: 未找到或调用失败。\n"];
+        } else {
+            [logOutput appendFormat:@"成功! 返回对象类型: %@\n", NSStringFromClass([tianShenObj class])];
+             if ([tianShenObj isKindOfClass:[NSDictionary class]]) {
+                 [logOutput appendFormat:@"数量: %ld\n", (unsigned long)((NSDictionary *)tianShenObj).count];
+            }
+        }
+        [logOutput appendString:@"\n"];
+
+        // 4. 尝试调用 '天將宮名列' 的 getter 方法
+        [logOutput appendString:@"4. 尝试调用 '天將宮名列' getter...\n"];
+        id tianJiangObj = InvokeMethodBySuffix(plateView, @"天將宮名列");
+        if (!tianJiangObj) {
+            [logOutput appendString:@"失败: 未找到或调用失败。\n"];
+        } else {
+            [logOutput appendFormat:@"成功! 返回对象类型: %@\n", NSStringFromClass([tianJiangObj class])];
+             if ([tianJiangObj isKindOfClass:[NSDictionary class]]) {
+                 [logOutput appendFormat:@"数量: %ld\n", (unsigned long)((NSDictionary *)tianJiangObj).count];
+            }
+        }
 
     } @catch (NSException *exception) {
-        [logOutput appendFormat:@"\n!!! 在探测过程中捕获到异常 !!!\n\n名称: %@\n原因: %@\n", exception.name, exception.reason];
-        EchoLog(@"!!! 在探测过程中捕获到异常: %@, %@", exception.name, exception.reason);
+        [logOutput appendFormat:@"\n!!! 捕获到异常 !!!\n\n%@\n%@", exception.name, exception.reason];
     }
     
 show_log:;
-    // 无论如何，都弹出日志
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"V13探测日志" message:logOutput preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"V14方法探测日志" message:logOutput preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
