@@ -1,3 +1,113 @@
+#import <UIKit/UIKit.h>
+#import <objc/runtime.h>
+
+// =========================================================================
+// 日志宏定义
+// =========================================================================
+#define EchoLog(format, ...) NSLog((@"[EchoAI] " format), ##__VA_ARGS__)
+
+// =========================================================================
+// Section 1: 文本简繁转换 (UILabel) - 保持不变
+// =========================================================================
+
+%hook UILabel
+
+- (void)setText:(NSString *)text { 
+    if (!text) { 
+        %orig(text); 
+        return; 
+    } 
+    NSString *newString = nil; 
+    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { 
+        newString = @"Echo"; 
+    } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { 
+        newString = @"定制"; 
+    } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { 
+        newString = @"毕法"; 
+    } 
+    if (newString) { 
+        %orig(newString); 
+        return; 
+    } 
+    NSMutableString *simplifiedText = [text mutableCopy]; 
+    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); 
+    %orig(simplifiedText); 
+}
+
+- (void)setAttributedText:(NSAttributedString *)attributedText { 
+    if (!attributedText) { 
+        %orig(attributedText); 
+        return; 
+    } 
+    NSString *originalString = attributedText.string; 
+    NSString *newString = nil; 
+    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { 
+        newString = @"Echo"; 
+    } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { 
+        newString = @"定制"; 
+    } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { 
+        newString = @"毕法"; 
+    } 
+    if (newString) { 
+        NSMutableAttributedString *newAttr = [attributedText mutableCopy]; 
+        [newAttr.mutableString setString:newString]; 
+        %orig(newAttr); 
+        return; 
+    } 
+    NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; 
+    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); 
+    %orig(finalAttributedText); 
+}
+
+%end
+
+
+// =========================================================================
+// Section 2: 全局水印 (UIWindow) - 保持不变
+// =========================================================================
+
+static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { 
+    UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); 
+    CGContextRef context = UIGraphicsGetCurrentContext(); 
+    CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); 
+    CGContextRotateCTM(context, angle * M_PI / 180); 
+    NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; 
+    CGSize textSize = [text sizeWithAttributes:attributes]; 
+    CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); 
+    [text drawInRect:textRect withAttributes:attributes]; 
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); 
+    UIGraphicsEndImageContext(); 
+    return image; 
+}
+
+%hook UIWindow
+
+- (void)layoutSubviews { 
+    %orig; 
+    if (self.windowLevel != UIWindowLevelNormal) { 
+        return; 
+    } 
+    NSInteger watermarkTag = 998877; 
+    if ([self viewWithTag:watermarkTag]) { 
+        return; 
+    } 
+    NSString *watermarkText = @"Echo定制"; 
+    UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; 
+    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; 
+    CGFloat rotationAngle = -30.0; 
+    CGSize tileSize = CGSizeMake(150, 100); 
+    UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); 
+    UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; 
+    watermarkView.tag = watermarkTag; 
+    watermarkView.userInteractionEnabled = NO; 
+    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; 
+    watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; 
+    [self addSubview:watermarkView]; 
+    [self bringSubviewToFront:watermarkView]; 
+}
+
+%end
+
 // =========================================================================
 // Section 3: 【最终版】一键复制到 AI + 通用调试模块
 // =========================================================================
@@ -88,7 +198,7 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
     }
 }
 
-// 拦截弹窗的核心逻辑 (保持不变，但为天地盘信息做好了准备)
+// 拦截弹窗的核心逻辑
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f;
@@ -177,7 +287,7 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
     return [textParts componentsJoinedByString:separator];
 }
 
-// 【新增】天地盘信息提取核心函数
+// 天地盘信息提取核心函数
 %new
 - (NSString *)extractTianDiPanInfo {
     EchoLog(@"[天地盘] 开始提取信息...");
@@ -197,20 +307,15 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
     UIView *containerView = containerViews.firstObject;
 
     // --- 核心逻辑：获取关联对象 ---
-    // 通过遍历Ivar来寻找可能的关联对象管理器，并从中取出所有关联对象
-    // 这比猜测key更可靠
     id associatedObjects = nil;
     unsigned int ivarCount;
     Ivar *ivars = class_copyIvarList([NSObject class], &ivarCount);
     for (unsigned int i = 0; i < ivarCount; i++) {
         const char *ivarName = ivar_getName(ivars[i]);
         if (strcmp(ivarName, "isa") == 0) continue;
-        // 关联对象通常存储在名为 "associatedObjects" 或类似名称的 Ivar 中
-        // 不同的 runtime 版本可能名字不同，但这个名字是常见的一种
-        // 我们寻找一个字典类型的Ivar
+        
         id potentialDict = object_getIvar(containerView, ivars[i]);
         if ([potentialDict isKindOfClass:[NSDictionary class]] || [potentialDict isKindOfClass:NSClassFromString(@"NSMapTable")]) {
-             // 检查这个字典/map里是否包含我们想要的数组
              if ([potentialDict respondsToSelector:@selector(allValues)]) {
                  for (id obj in [potentialDict allValues]) {
                      if ([obj isKindOfClass:[NSArray class]] && ((NSArray *)obj).count > 0 && [[((NSArray *)obj) firstObject] isKindOfClass:[NSString class]]) {
@@ -241,14 +346,12 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
         if (![rawObject isKindOfClass:[NSString class]]) continue;
         NSString* rawString = (NSString*)rawObject;
 
-        // 解析字符串，只保留我们需要的部分
         NSString *infoPart = rawString;
-        NSRange frameRange = [rawString rangeOfString:@"; frame ="]; // 使用更精确的分隔符
+        NSRange frameRange = [rawString rangeOfString:@"; frame ="];
         if (frameRange.location != NSNotFound) {
             infoPart = [rawString substringToIndex:frameRange.location];
         }
         
-        // 解码 Unicode
         NSString *decodedString = decodeUnicodeString(infoPart);
         if (decodedString && decodedString.length > 0) {
             [allPalaceInfo addObject:decodedString];
@@ -276,7 +379,7 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
     g_extractedData[@"起课方式"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.九宗門視圖" separator:@" "];
     EchoLog(@"主界面信息提取完毕。");
 
-    // 四课和三传代码 (保持不变)
+    // 四课和三传代码
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -316,7 +419,6 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
     }
     g_extractedData[@"三传"] = sanChuan;
 
-    // 【新增】调用天地盘提取函数
     g_extractedData[@"天地盘"] = [self extractTianDiPanInfo];
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -380,10 +482,7 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
 }
 
 
-// =========================================================================
-// 新增：通用调试模块
-// =========================================================================
-
+// 通用调试模块
 %new
 - (void)debugButtonTapped_FinalMethod {
     UIButton *button = (UIButton *)[self.view.window viewWithTag:DebugButtonTag];
@@ -399,7 +498,7 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
             view.tag = DebugSelectViewTag;
             view.backgroundColor = [UIColor.blueColor colorWithAlphaComponent:0.1];
             view.userInteractionEnabled = YES;
-            view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAresizingFlexibleHeight;
 
             UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(20, 140, view.bounds.size.width - 40, 60)];
             label.text = @"调试模式已开启\n请点击屏幕任意位置查看视图信息";
@@ -418,7 +517,7 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
         }
         debugSelectView.hidden = NO;
         [self.view.window bringSubviewToFront:debugSelectView];
-        [self.view.window bringSubviewToFront:button]; // 确保调试按钮在最前
+        [self.view.window bringSubviewToFront:button];
     } else {
         EchoLog(@"[调试模式] 已关闭。");
         if (debugSelectView) {
@@ -432,9 +531,7 @@ static NSString *decodeUnicodeString(NSString *unicodeString) {
     CGPoint location = [recognizer locationInView:self.view.window];
     UIView *hitView = [self.view.window hitTest:location withEvent:nil];
 
-    // 避免点到调试覆盖层本身
     if (hitView.tag == DebugSelectViewTag || [[hitView superview] tag] == DebugSelectViewTag) {
-        // 如果点到覆盖层或者它的子视图(提示标签)，则穿透下去寻找下一层视图
         hitView.hidden = YES;
         hitView = [self.view.window hitTest:location withEvent:nil];
         ((UIView*)[recognizer view]).hidden = NO;
