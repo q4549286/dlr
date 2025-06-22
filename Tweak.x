@@ -3,8 +3,8 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 极简独立测试版 (V14.1 - 修复编译错误)
-// 目标: 从'課盤被動更新器'中提取数据
+// 极简独立测试版 (V15 - 单点诊断版)
+// 目标: 仅诊断'課盤被動更新器'本身，避免闪退
 // =========================================================================
 
 #define EchoLog(format, ...) NSLog((@"[EchoAI-Test] " format), ##__VA_ARGS__)
@@ -54,9 +54,9 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.tag = 12345;
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 120, 45, 110, 36);
-            [testButton setTitle:@"提取天地盤" forState:UIControlStateNormal];
+            [testButton setTitle:@"诊断更新器" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-            testButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
+            testButton.backgroundColor = [UIColor orangeColor]; // 使用醒目的橙色
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             [testButton addTarget:self action:@selector(runFinalExtraction) forControlEvents:UIControlEventTouchUpInside];
@@ -82,57 +82,26 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
         
         id plateView = plateViews.firstObject;
 
-        // 2. 从视图中获取'課盤被動更新器'对象
+        // 2. 诊断'課盤被動更新器'对象
         id dataSource = GetIvarValueSafely(plateView, @"課盤被動更新器");
         
+        NSString *resultText;
         if (!dataSource) {
-             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"測試失敗" message:@"未能獲取到'課盤被動更新器'對象。" preferredStyle:UIAlertControllerStyleAlert];
-             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-             [self presentViewController:alert animated:YES completion:nil];
-             return;
-        }
-        EchoLog(@"成功获取到数据源: %@", dataSource);
-
-        // 3. 从'課盤被動更新器'中提取数据
-        NSArray *diGong = GetIvarValueSafely(dataSource, @"地宮宮名列");
-        NSArray *tianShen = GetIvarValueSafely(dataSource, @"天神宮名列");
-        NSArray *tianJiang = GetIvarValueSafely(dataSource, @"天將宮名列");
-        
-        // 4. 检查数据并格式化
-        NSMutableString *resultText = [NSMutableString string];
-        BOOL isDataValid = YES;
-        
-        if (!diGong || ![diGong isKindOfClass:[NSArray class]] || [diGong count] != 12) {
-             [resultText appendFormat:@"地宮宫名列 数据异常!\n"];
-             isDataValid = NO;
-        }
-         if (!tianShen || ![tianShen isKindOfClass:[NSArray class]] || [tianShen count] != 12) {
-             [resultText appendFormat:@"天神宫名列 数据异常!\n"];
-             isDataValid = NO;
-        }
-         if (!tianJiang || ![tianJiang isKindOfClass:[NSArray class]] || [tianJiang count] != 12) {
-             [resultText appendFormat:@"天将宫名列 数据异常!\n"];
-             isDataValid = NO;
-        }
-
-        if (isDataValid) {
-            [resultText appendString:@"从'課盤被動更新器'提取成功！\n\n"];
-            for (int i = 0; i < 12; i++) {
-                NSString *dp = [diGong[i] isKindOfClass:[NSString class]] ? diGong[i] : @"?";
-                NSString *tp = [tianShen[i] isKindOfClass:[NSString class]] ? tianShen[i] : @"?";
-                NSString *tj = [tianJiang[i] isKindOfClass:[NSString class]] ? tianJiang[i] : @"??";
-                [resultText appendFormat:@"%@宮: %@(%@)\n", dp, tp, tj];
-            }
+             resultText = @"未能獲取到'課盤被動更新器'對象 (返回 nil)。";
         } else {
-             [resultText insertString:@"提取失败！\n\n" atIndex:0];
+             // 如果能成功获取，只打印它的基本信息，不进行任何操作
+             resultText = [NSString stringWithFormat:@"成功獲取到'課盤被動更新器'！\n\n地址: %p\n類名: %@", dataSource, NSStringFromClass([dataSource class])];
         }
-        
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取结果 (V14.1)" message:resultText preferredStyle:UIAlertControllerStyleAlert];
+
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"诊断结果 (V15)" message:resultText preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
 
     } @catch (NSException *exception) {
-        // ...
+        NSString *errorMsg = [NSString stringWithFormat:@"捕获到异常！\n\n%@\n%@", exception.name, exception.reason];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"闪退被捕获" message:errorMsg preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
     }
 }
 
