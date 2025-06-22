@@ -2,8 +2,8 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// 极简独立测试版 (V9 - 排序修正版)
-// 目标: 修复数据配对和排序问题
+// 极简独立测试版 (V10 - 索引匹配版)
+// 目标: 使用平行索引匹配来修复闪退问题
 // =========================================================================
 
 #define EchoLog(format, ...) NSLog((@"[EchoAI-Test] " format), ##__VA_ARGS__)
@@ -68,7 +68,7 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
 %new
 - (void)runFinalExtraction {
     @try {
-        // 1. 查找视图
+        // 1. 查找视图和字典
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
         if (!plateViewClass) return;
         
@@ -81,26 +81,35 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
         
         id plateView = plateViews.firstObject;
 
-        // 2. 获取三个核心字典
         NSDictionary *diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
         NSDictionary *tianShenDict = GetIvarValueSafely(plateView, @"天神宮名列");
         NSDictionary *tianJiangDict = GetIvarValueSafely(plateView, @"天將宮名列");
 
-        // 3. 检查字典有效性
         if (!diGongDict || !tianShenDict || !tianJiangDict ||
             ![diGongDict isKindOfClass:[NSDictionary class]] ||
-            ![tianShenDict isKindOfClass:[NSDictionary class]] ||
-            ![tianJiangDict isKindOfClass:[NSDictionary class]] ||
             diGongDict.count != 12) {
-             // ... 失败处理 ...
-             return;
+             return; // 静默失败
+        }
+        
+        // 2. 将字典转换为平行的key和value数组
+        NSArray *diGongKeys = [diGongDict allKeys];
+        NSArray *diGongValues = [diGongDict allValues];
+        NSArray *tianShenValues = [tianShenDict allValues];
+        NSArray *tianJiangValues = [tianJiangDict allValues];
+        
+        // 我们假设 allKeys 和 allValues 的顺序是对应的，但字典之间顺序不保证
+        // Swift 的字典转 allKeys/allValues 行为比较稳定，我们赌一把
+        if (diGongKeys.count != 12 || diGongValues.count != 12 || tianShenValues.count != 12 || tianJiangValues.count != 12) {
+            return; // 数据长度不匹配，静默失败
         }
 
-        // 4. 遍历地宫字典，用它的key去匹配其他字典，并组合数据
+        // 3. 重新配对数据
         NSMutableArray *palaceData = [NSMutableArray array];
-        [diGongDict enumerateKeysAndObjectsUsingBlock:^(id key, id diGongLayer, BOOL *stop) {
-            id tianShenLayer = tianShenDict[key];
-            id tianJiangLayer = tianJiangDict[key];
+        for (NSUInteger i = 0; i < 12; i++) {
+            // 获取图层对象
+            id diGongLayer = diGongValues[i];
+            id tianShenLayer = tianShenValues[i];
+            id tianJiangLayer = tianJiangValues[i];
             
             // 安全地从 layer 中提取 string
             NSString *diGongStr = @"?";
@@ -117,16 +126,15 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
                 tianJiangStr = [tianJiangLayer valueForKey:@"string"];
             }
             
-            // 将配对好的数据存入字典
             NSDictionary *entry = @{
                 @"diPan": diGongStr,
                 @"tianPan": tianShenStr,
                 @"tianJiang": tianJiangStr
             };
             [palaceData addObject:entry];
-        }];
+        }
         
-        // 5. 按地盘（子丑寅卯...）顺序进行排序
+        // 4. 按地盘（子丑寅卯...）顺序进行排序
         NSArray *diPanOrder = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
         [palaceData sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
             NSString *diPan1 = obj1[@"diPan"];
@@ -136,19 +144,23 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
             return [@(index1) compare:@(index2)];
         }];
 
-        // 6. 格式化最终输出
+        // 5. 格式化最终输出
         NSMutableString *resultText = [NSMutableString string];
-        [resultText appendString:@"天地盤數據提取成功！(已排序)\n\n"];
+        [resultText appendString:@"天地盤數據 (V10)\n\n"];
         for (NSDictionary *entry in palaceData) {
             [resultText appendFormat:@"%@宮: %@(%@)\n", entry[@"diPan"], entry[@"tianPan"], entry[@"tianJiang"]];
         }
         
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"成功！" message:resultText preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取成功" message:resultText preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
 
     } @catch (NSException *exception) {
-        // ... 异常捕获代码 ...
+        // 安全网，以防万一
+        NSString *errorMsg = [NSString stringWithFormat:@"捕获到异常！\n\n%@\n%@", exception.name, exception.reason];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"闪退被捕获" message:errorMsg preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
     }
 }
 
