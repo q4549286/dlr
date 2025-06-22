@@ -2,8 +2,8 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// 獨立測試版 (格局彈窗 - 繁體純淨探測版)
-// 目标: 逐層深入，安全探測'格局列'的內部結構 (無簡繁轉換)
+// 獨立測試版 (格局彈窗 - 繁體純淨探測版 V2)
+// 目標: 修复 keyWindow 编译错误
 // =========================================================================
 #define EchoLog(format, ...) NSLog((@"[EchoAI-Debug] " format), ##__VA_ARGS__)
 
@@ -32,32 +32,59 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
     return value;
 }
 
+// 新增辅助函数：获取当前活跃的Window
+static UIWindow *GetActiveWindow() {
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                // 有些App可能用了多个window，我们优先找 keyWindow，没有再找第一个
+                if ([scene.windows.firstObject isKeyWindow]) {
+                    return scene.windows.firstObject;
+                }
+                for (UIWindow *window in scene.windows) {
+                    if (window.isKeyWindow) {
+                        return window;
+                    }
+                }
+                // 如果实在没有keyWindow，返回第一个
+                if (scene.windows.count > 0) {
+                     return scene.windows.firstObject;
+                }
+            }
+        }
+    }
+    // iOS 13 以前的回退方案
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    return [UIApplication sharedApplication].keyWindow;
+    #pragma clang diagnostic pop
+}
+
+
 %hook UIViewController
 
 // Hook 彈窗方法
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     
+    // 注意：类名也使用繁体
     Class targetClass = NSClassFromString(@"六壬大占.格局總覽視圖");
     if (targetClass && [viewControllerToPresent isKindOfClass:targetClass]) {
         
-        // 延遲執行以確保VC和其數據已加載
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             NSMutableString *logOutput = [NSMutableString string];
             [logOutput appendString:@"--- 開始探測格局彈窗 ---\n\n"];
             
-            // ================= 探測核心 =================
             @try {
-                // 1. 獲取數據源數組
+                // 注意：变量名后缀使用繁体
                 id geJuLieObject = GetIvarValueSafely(viewControllerToPresent, @"格局列");
                 
                 if (!geJuLieObject) {
                     [logOutput appendString:@"1. '格局列' 結果: nil\n"];
-                    goto show_log; // 直接跳轉到顯示日誌
+                    goto show_log;
                 }
 
                 [logOutput appendFormat:@"1. '格局列' 類型: %@\n", NSStringFromClass([geJuLieObject class])];
                 
-                // 2. 探測數量
                 if (![geJuLieObject respondsToSelector:@selector(count)]) {
                     [logOutput appendString:@"2. 對象不支持 count 方法。\n"];
                     goto show_log;
@@ -65,9 +92,8 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
                 NSUInteger count = [(id)geJuLieObject count];
                 [logOutput appendFormat:@"2. 數量: %ld\n", (unsigned long)count];
 
-                // 3. 探測第一個元素
                 if (count == 0) {
-                     [logOutput appendString:@"3. 數組為空，無法探測第一個元素。\n"];
+                     [logOutput appendString:@"3. 數組為空。\n"];
                      goto show_log;
                 }
                 if (![geJuLieObject respondsToSelector:@selector(objectAtIndex:)]) {
@@ -81,7 +107,6 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
                 }
                 [logOutput appendFormat:@"3. 第一個元素的類型是: %@\n", NSStringFromClass([firstElement class])];
 
-                // 4. 探測第一個元素的內部實例變量
                 [logOutput appendString:@"\n4. 正在探測第一個元素的實例變量...\n"];
                 unsigned int ivarCount;
                 Ivar *ivars = class_copyIvarList([firstElement class], &ivarCount);
@@ -108,15 +133,15 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
             }
             
         show_log:;
-            // ============================================
 
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"格局彈窗探測日誌" message:logOutput preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-            // 使用主window的rootViewController來彈出，防止vc已經被dismiss
-            [[[[UIApplication sharedApplication] keyWindow] rootViewController] presentViewController:alert animated:YES completion:nil];
+            
+            // 使用新的安全方法来弹出
+            UIViewController *rootVC = GetActiveWindow().rootViewController;
+            [rootVC presentViewController:alert animated:YES completion:nil];
         });
         
-        // 阻止原彈窗顯示
         return; 
     }
     
