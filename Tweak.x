@@ -2,12 +2,23 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// 极简独立测试版
+// 极简独立测试版 (V2 - 已修复编译错误)
 // 目标: 专注测试天地盘数据提取功能
 // =========================================================================
 
 // 日志宏定义
 #define EchoLog(format, ...) NSLog((@"[EchoAI-Test] " format), ##__VA_ARGS__)
+
+// 辅助函数: 递归查找指定类的子视图
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
+    if ([view isKindOfClass:aClass]) {
+        [storage addObject:view];
+    }
+    for (UIView *subview in view.subviews) {
+        // 递归调用自身
+        FindSubviewsOfClassRecursive(aClass, subview, storage);
+    }
+}
 
 // 辅助函数: 通过繁体中文变量名后缀从对象中获取Ivar值
 static id GetIvarValueByTraditionalChineseSuffix(id object, NSString *ivarNameSuffix) {
@@ -26,7 +37,6 @@ static id GetIvarValueByTraditionalChineseSuffix(id object, NSString *ivarNameSu
         if (name) {
             NSString *ivarName = [NSString stringWithUTF8String:name];
             // 使用 hasSuffix: 来匹配Swift编译后的混淆变量名
-            // 例如, 匹配 "$s12六壬大占12天地盤視圖C4地盤SaySSGvg" 中的 "地盤"
             if ([ivarName hasSuffix:ivarNameSuffix]) {
                 value = object_getIvar(object, ivar);
                 EchoLog(@"成功匹配到变量 '%@' 并获取到值: %@", ivarName, value);
@@ -45,16 +55,6 @@ static id GetIvarValueByTraditionalChineseSuffix(id object, NSString *ivarNameSu
     return value;
 }
 
-// 递归查找指定类的子视图
-static void FindSubviewsOfClass(Class aClass, UIView *view, NSMutableArray *storage) {
-    if ([view isKindOfClass:aClass]) {
-        [storage addObject:view];
-    }
-    for (UIView *subview in view.subviews) {
-        FindSubviewsOfClass(aClass, view, storage); // 修正：应为 subview
-    }
-}
-
 
 @interface UIViewController (TianDiPanTest)
 - (void)runTianDiPanTest;
@@ -66,7 +66,7 @@ static void FindSubviewsOfClass(Class aClass, UIView *view, NSMutableArray *stor
 - (void)viewDidLoad {
     %orig;
     
-    // 目标控制器类名，根据App实际情况可能需要调整
+    // 目标控制器类名
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         // 延迟执行以确保window存在
@@ -74,12 +74,16 @@ static void FindSubviewsOfClass(Class aClass, UIView *view, NSMutableArray *stor
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) return;
             
+            // 为了防止重复添加，先移除旧的按钮
+            [[keyWindow viewWithTag:12345] removeFromSuperview];
+            
             // 创建测试按钮
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            testButton.tag = 12345;
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 120, 45, 110, 36);
-            [testButton setTitle:@"测试天地盘" forState:UIControlStateNormal];
+            [testButton setTitle:@"測試天地盤" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-            testButton.backgroundColor = [UIColor redColor]; // 使用醒目的红色
+            testButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             [testButton addTarget:self action:@selector(runTianDiPanTest) forControlEvents:UIControlEventTouchUpInside];
@@ -100,9 +104,9 @@ static void FindSubviewsOfClass(Class aClass, UIView *view, NSMutableArray *stor
     Class plateViewClass = NSClassFromString(plateViewClassName);
     
     if (!plateViewClass) {
-        NSString *errorMsg = [NSString stringWithFormat:@"测试失败: 找不到类 '%@'。", plateViewClassName];
+        NSString *errorMsg = [NSString stringWithFormat:@"測試失敗: 找不到類 '%@'。", plateViewClassName];
         EchoLog(@"%@", errorMsg);
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:errorMsg preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"錯誤" message:errorMsg preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
         return;
@@ -110,17 +114,12 @@ static void FindSubviewsOfClass(Class aClass, UIView *view, NSMutableArray *stor
 
     // 2. 在当前视图层级中查找目标视图实例
     NSMutableArray *plateViews = [NSMutableArray array];
-    // 修正：调用正确的递归函数
-    void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
-        if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
-        for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
-    }
     FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
 
     if (plateViews.count == 0) {
-        NSString *errorMsg = @"测试失败: 在当前界面找不到天地盘视图的实例。";
+        NSString *errorMsg = @"測試失敗: 在當前界面找不到天地盤視圖的實例。";
         EchoLog(@"%@", errorMsg);
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:errorMsg preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"錯誤" message:errorMsg preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
         return;
@@ -134,7 +133,7 @@ static void FindSubviewsOfClass(Class aClass, UIView *view, NSMutableArray *stor
     NSArray *tianPan = GetIvarValueByTraditionalChineseSuffix(plateView, @"天盤");
     NSArray *tianJiang = GetIvarValueByTraditionalChineseSuffix(plateView, @"天將");
     
-    // 备用名称，以防主名称不匹配
+    // 备用名称
     if (!tianJiang) {
         tianJiang = GetIvarValueByTraditionalChineseSuffix(plateView, @"天神宮名列表");
     }
@@ -142,15 +141,15 @@ static void FindSubviewsOfClass(Class aClass, UIView *view, NSMutableArray *stor
     // 4. 检查数据并格式化输出
     NSMutableString *resultText = [NSMutableString string];
     if (!diPan || !tianPan || !tianJiang || diPan.count != 12 || tianPan.count != 12 || tianJiang.count != 12) {
-        [resultText appendString:@"数据提取不完整或失败！\n\n"];
-        [resultText appendFormat:@"地盤: %@ (数量: %ld)\n", diPan ? @"获取成功" : @"获取失败", (unsigned long)diPan.count];
-        [resultText appendFormat:@"天盤: %@ (数量: %ld)\n", tianPan ? @"获取成功" : @"获取失败", (unsigned long)tianPan.count];
-        [resultText appendFormat:@"天將: %@ (数量: %ld)\n\n", tianJiang ? @"获取成功" : @"获取失败", (unsigned long)tianJiang.count];
-        [resultText appendString:@"请检查控制台日志获取详细错误信息。"];
+        [resultText appendString:@"數據提取不完整或失敗！\n\n"];
+        [resultText appendFormat:@"地盤: %@ (數量: %ld)\n", diPan ? @"獲取成功" : @"獲取失敗", (unsigned long)diPan.count];
+        [resultText appendFormat:@"天盤: %@ (數量: %ld)\n", tianPan ? @"獲取成功" : @"獲取失敗", (unsigned long)tianPan.count];
+        [resultText appendFormat:@"天將: %@ (數量: %ld)\n\n", tianJiang ? @"獲取成功" : @"獲取失敗", (unsigned long)tianJiang.count];
+        [resultText appendString:@"請檢查 Xcode 或設備日誌獲取詳細信息。"];
         EchoLog(@"数据检查失败: %@", resultText);
 
     } else {
-        [resultText appendString:@"天地盘数据提取成功！\n\n"];
+        [resultText appendString:@"天地盤數據提取成功！\n\n"];
         for (int i = 0; i < 12; i++) {
             NSString *dp = [diPan[i] isKindOfClass:[NSString class]] ? diPan[i] : @"-";
             NSString *tp = [tianPan[i] isKindOfClass:[NSString class]] ? tianPan[i] : @"-";
@@ -161,11 +160,11 @@ static void FindSubviewsOfClass(Class aClass, UIView *view, NSMutableArray *stor
     }
 
     // 5. 弹出结果
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"天地盘测试结果" message:resultText preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"复制并关闭" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"天地盤測試結果" message:resultText preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"複製並關閉" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [UIPasteboard generalPasteboard].string = resultText;
     }]];
-     [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
+     [alert addAction:[UIAlertAction actionWithTitle:@"關閉" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
