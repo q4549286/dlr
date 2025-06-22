@@ -3,10 +3,11 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 最终解决方案 (V15 - 整合推断版)
+// 极简独立测试版 (V12 - 以地盘为锚点)
+// 目标: 修复V9闪退，通过安全的Key-Value配对实现排序
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Final] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test] " format), ##__VA_ARGS__)
 
 // ... (辅助函数 FindSubviewsOfClassRecursive 和 GetIvarValueSafely 保持不变) ...
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
@@ -36,80 +37,17 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
     return value;
 }
 
-// 核心提取函数
-static NSString *ExtractTianDiPanInfo(id viewController) {
-    @try {
-        // 1. 查找视图
-        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
-        if (!plateViewClass) return @"错误: 找不到天地盘视图类。";
-        
-        UIWindow *keyWindow = [viewController view].window;
-        if (!keyWindow) return @"错误: 找不到keyWindow。";
-
-        NSMutableArray *plateViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
-        if (plateViews.count == 0) return @"错误: 找不到天地盘视图实例。";
-        
-        id plateView = plateViews.firstObject;
-
-        // 2. 获取 '課盤被動更新器' 对象
-        id updater = GetIvarValueSafely(plateView, @"課盤被動更新器");
-        if (!updater) return @"错误: 找不到'課盤被動更新器'对象。";
-
-        // 3. 从 '更新器' 对象中获取三个核心字典
-        NSDictionary *diGongDict = GetIvarValueSafely(updater, @"地宮宮名列");
-        NSDictionary *tianShenDict = GetIvarValueSafely(updater, @"天神宮名列");
-        NSDictionary *tianJiangDict = GetIvarValueSafely(updater, @"天將宮名列");
-
-        if (!diGongDict || !tianShenDict || !tianJiangDict ||
-            ![diGongDict isKindOfClass:[NSDictionary class]] || diGongDict.count != 12) {
-             return @"错误: 从更新器获取字典数据失败。";
+// 新增辅助函数：安全地从Layer中提取字符串
+static NSString* GetStringFromLayer(id layer) {
+    if (layer && [layer respondsToSelector:@selector(string)]) {
+        id stringValue = [layer valueForKey:@"string"];
+        if ([stringValue isKindOfClass:[NSString class]]) {
+            return stringValue;
+        } else if ([stringValue isKindOfClass:[NSAttributedString class]]) {
+            return ((NSAttributedString *)stringValue).string;
         }
-
-        // 4. 安全地获取所有 CATextLayer 的值
-        NSArray *diGongLayers = [diGongDict allValues];
-        NSArray *tianShenLayers = [tianShenDict allValues];
-        NSArray *tianJiangLayers = [tianJiangDict allValues];
-
-        if (diGongLayers.count != 12 || tianShenLayers.count != 12 || tianJiangLayers.count != 12) {
-            return @"错误: 字典值数组长度不匹配。";
-        }
-        
-        // 5. 强制平行匹配并提取字符串
-        NSMutableArray *palaceData = [NSMutableArray array];
-        for (NSUInteger i = 0; i < 12; i++) {
-            NSString *diGongStr = [[[diGongLayers objectAtIndex:i] valueForKey:@"string"] description] ?: @"?";
-            NSString *tianShenStr = [[[tianShenLayers objectAtIndex:i] valueForKey:@"string"] description] ?: @"?";
-            NSString *tianJiangStr = [[[tianJiangLayers objectAtIndex:i] valueForKey:@"string"] description] ?: @"??";
-
-            NSDictionary *entry = @{
-                @"diPan": diGongStr,
-                @"tianPan": tianShenStr,
-                @"tianJiang": tianJiangStr
-            };
-            [palaceData addObject:entry];
-        }
-
-        // 6. 按地盘（子丑寅卯...）顺序进行排序
-        NSArray *diPanOrder = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
-        [palaceData sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-            NSString *diPan1 = obj1[@"diPan"];
-            NSString *diPan2 = obj2[@"diPan"];
-            NSUInteger index1 = [diPanOrder indexOfObject:diPan1];
-            NSUInteger index2 = [diPanOrder indexOfObject:diPan2];
-            return [@(index1) compare:@(index2)];
-        }];
-
-        // 7. 格式化输出
-        NSMutableString *resultText = [NSMutableString stringWithString:@"天地盘:\n"];
-        for (NSDictionary *entry in palaceData) {
-            [resultText appendFormat:@"%@宫: %@(%@)\n", entry[@"diPan"], entry[@"tianPan"], entry[@"tianJiang"]];
-        }
-        return resultText;
-
-    } @catch (NSException *exception) {
-        return [NSString stringWithFormat:@"捕获到异常: %@", exception.reason];
     }
+    return @"?";
 }
 
 
@@ -144,10 +82,71 @@ static NSString *ExtractTianDiPanInfo(id viewController) {
 
 %new
 - (void)runFinalExtraction {
-    NSString *result = ExtractTianDiPanInfo(self);
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取结果" message:result preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    @try {
+        // 1. 查找视图和字典
+        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
+        if (!plateViewClass) return;
+        UIWindow *keyWindow = self.view.window;
+        if (!keyWindow) return;
+        NSMutableArray *plateViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
+        if (plateViews.count == 0) return;
+        id plateView = plateViews.firstObject;
+
+        NSDictionary *diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
+        NSDictionary *tianShenDict = GetIvarValueSafely(plateView, @"天神宮名列");
+        NSDictionary *tianJiangDict = GetIvarValueSafely(plateView, @"天將宮名列");
+
+        if (!diGongDict || !tianShenDict || !tianJiangDict || ![diGongDict isKindOfClass:[NSDictionary class]] || diGongDict.count != 12) {
+             return;
+        }
+
+        // 2. 遍历地宫字典，用它的key去匹配其他字典
+        NSMutableArray *palaceData = [NSMutableArray array];
+        NSArray *allDiGongKeys = [diGongDict allKeys];
+
+        for (id key in allDiGongKeys) {
+            // 安全地获取每个layer
+            id diGongLayer = [diGongDict objectForKey:key];
+            id tianShenLayer = [tianShenDict objectForKey:key];
+            id tianJiangLayer = [tianJiangDict objectForKey:key];
+
+            // 组合数据
+            NSDictionary *entry = @{
+                @"diPan": GetStringFromLayer(diGongLayer),
+                @"tianPan": GetStringFromLayer(tianShenLayer),
+                @"tianJiang": GetStringFromLayer(tianJiangLayer)
+            };
+            [palaceData addObject:entry];
+        }
+        
+        // 3. 按地盘（子丑寅卯...）顺序进行排序
+        NSArray *diPanOrder = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
+        [palaceData sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
+            NSString *diPan1 = obj1[@"diPan"];
+            NSString *diPan2 = obj2[@"diPan"];
+            NSUInteger index1 = [diPanOrder indexOfObject:diPan1];
+            NSUInteger index2 = [diPanOrder indexOfObject:diPan2];
+            return [@(index1) compare:@(index2)];
+        }];
+
+        // 4. 格式化最终输出
+        NSMutableString *resultText = [NSMutableString string];
+        [resultText appendString:@"天地盤數據 (V12)\n\n"];
+        for (NSDictionary *entry in palaceData) {
+            [resultText appendFormat:@"%@宮: %@(%@)\n", entry[@"diPan"], entry[@"tianPan"], entry[@"tianJiang"]];
+        }
+        
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取成功" message:resultText preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+
+    } @catch (NSException *exception) {
+        NSString *errorMsg = [NSString stringWithFormat:@"捕获到异常！\n\n%@\n%@", exception.name, exception.reason];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"闪退被捕获" message:errorMsg preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+    }
 }
 
 %end
