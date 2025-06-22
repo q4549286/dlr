@@ -1,22 +1,36 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-// =========================================================================
-// 日志宏定义
-// =========================================================================
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-V2] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Debug] " format), ##__VA_ARGS__)
 
-// =========================================================================
-// Section: 【V3 方案精准测试】直接从数据模型提取“法诀”字符串
-// =========================================================================
+// 辅助函数：递归查找当前显示的顶层 ViewController
+static UIViewController* getTopMostViewController() {
+    UIWindow *window = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *windowScene in [UIApplication sharedApplication].connectedScenes) {
+            if (windowScene.activationState == UISceneActivationStateForegroundActive) {
+                window = windowScene.windows.firstObject;
+                break;
+            }
+        }
+    } else {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        window = [[UIApplication sharedApplication] keyWindow];
+        #pragma clang diagnostic pop
+    }
+    
+    UIViewController *topViewController = window.rootViewController;
+    while (topViewController.presentedViewController) {
+        topViewController = topViewController.presentedViewController;
+    }
+    return topViewController;
+}
 
-// 用于标记我们的测试任务是否正在进行
-static BOOL g_isTestTaskRunning = NO;
 
-@interface UIViewController (BiFaExtraction_Test)
-- (void)copyBiFaOnlyButtonTapped_TestAction;
+@interface UIViewController (BiFaExtraction_Debug)
+- (void)debug_readBiFaData;
 @end
-
 
 %hook UIViewController
 
@@ -28,117 +42,73 @@ static BOOL g_isTestTaskRunning = NO;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window;
             NSInteger buttonTag = 445566; 
-            if (!keyWindow || [keyWindow viewWithTag:buttonTag]) { return; } // 防止重复添加
+            if ([keyWindow viewWithTag:buttonTag]) { return; }
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45 + 40, 90, 36);
             testButton.tag = buttonTag;
-            [testButton setTitle:@"测试复制法诀" forState:UIControlStateNormal];
-            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:12];
-            testButton.backgroundColor = [UIColor colorWithRed:0.9 green:0.4 blue:0.1 alpha:1.0];
+            [testButton setTitle:@"读取已打开法诀" forState:UIControlStateNormal]; // 按钮文字改了
+            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+            testButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:1.0]; // 按钮颜色改成绿色
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(copyBiFaOnlyButtonTapped_TestAction) forControlEvents:UIControlEventTouchUpInside];
+            // 按钮点击事件改成了新的调试方法
+            [testButton addTarget:self action:@selector(debug_readBiFaData) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
-            EchoLog(@"测试按钮已添加");
+            EchoLog(@"调试按钮已添加");
         });
     }
 }
 
-// 拦截弹窗的核心逻辑
-- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    if (!g_isTestTaskRunning) {
-        %orig(viewControllerToPresent, flag, completion);
-        return;
-    }
+// 我们暂时不 hook presentViewController，以避免崩溃
+// - (void)presentViewController... { ... }
+
+%new
+- (void)debug_readBiFaData {
+    EchoLog(@"开始执行'读取已打开法诀'调试任务...");
+
+    // 1. 手动点击App的“法诀”按钮，让它弹出来
+
+    // 2. 点击我们绿色的“读取已打开法诀”按钮
     
-    NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
+    // 3. 找到当前屏幕最上方的 ViewController
+    UIViewController *topVC = getTopMostViewController();
     
+    NSString *vcClassName = NSStringFromClass([topVC class]);
+    EchoLog(@"当前顶层控制器是: %@", vcClassName);
+    
+    // 4. 检查它是不是我们想要的控制器
     if ([vcClassName isEqualToString:@"六壬大占.格局總覽視圖"]) {
-        EchoLog(@"成功拦截到目标控制器: %@", vcClassName);
+        EchoLog(@"成功找到目标控制器，准备读取数据...");
         
-        viewControllerToPresent.view.alpha = 0.0f;
-        flag = NO;
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            id biFaData = [viewControllerToPresent valueForKey:@"法訣列"];
-            NSString *resultText = @"";
+        NSString *resultText = @"";
+        @try {
+            // 尝试用 KVC 读取数据
+            id biFaData = [topVC valueForKey:@"法訣列"];
             
             if (biFaData && [biFaData isKindOfClass:[NSString class]]) {
                 resultText = (NSString *)biFaData;
-                EchoLog(@"成功从数据模型获取到法诀字符串，长度: %lu", (unsigned long)resultText.length);
+                EchoLog(@"成功读取到法诀字符串，长度: %lu", (unsigned long)resultText.length);
             } else {
-                NSString *errorMsg = [NSString stringWithFormat:@"提取失败：'法訣列' 数据类型不符或为空。实际类型: %@", [biFaData class]];
-                EchoLog(@"%@", errorMsg);
-                resultText = errorMsg;
+                resultText = [NSString stringWithFormat:@"读取成功，但数据类型不符或为空。实际类型: %@", [biFaData class]];
+                EchoLog(@"%@", resultText);
             }
+        } @catch (NSException *exception) {
+            EchoLog(@"!!! 读取数据时发生异常: %@", exception);
+            resultText = [NSString stringWithFormat:@"读取时发生异常: %@", exception.reason];
+        }
 
-            [UIPasteboard generalPasteboard].string = resultText;
-            
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"法诀提取测试 (精准版)"
-                                                                           message:resultText
-                                                                    preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                g_isTestTaskRunning = NO;
-                EchoLog(@"测试任务结束。");
-            }]];
-            
-            // =========================================================
-            //  ↓↓↓ 这里是修改后的代码 ↓↓↓
-            // =========================================================
-            UIWindow *window = nil;
-            if (@available(iOS 13.0, *)) {
-                for (UIWindowScene *windowScene in [UIApplication sharedApplication].connectedScenes) {
-                    if (windowScene.activationState == UISceneActivationStateForegroundActive) {
-                        window = windowScene.windows.firstObject;
-                        break;
-                    }
-                }
-            } else {
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-                window = [[UIApplication sharedApplication] keyWindow];
-                #pragma clang diagnostic pop
-            }
-            if (!window) { // Fallback
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-                window = [[UIApplication sharedApplication] keyWindow];
-                #pragma clang diagnostic pop
-            }
-            // =========================================================
-            //  ↑↑↑ 这里是修改后的代码 ↑↑↑
-            // =========================================================
-            
-            [window.rootViewController presentViewController:alert animated:YES completion:nil];
-            [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
-        });
-        
-        %orig(viewControllerToPresent, flag, completion);
-        return;
-    }
+        // 5. 显示结果
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"调试读取结果"
+                                                                       message:resultText
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
 
-    %orig(viewControllerToPresent, flag, completion);
-}
-
-%new
-- (void)copyBiFaOnlyButtonTapped_TestAction {
-    EchoLog(@"测试按钮被点击，开始执行测试任务...");
-    
-    g_isTestTaskRunning = YES;
-    
-    SEL selectorBiFa = NSSelectorFromString(@"顯示法訣總覽");
-    if ([self respondsToSelector:selectorBiFa]) {
-        EchoLog(@"正在调用 '顯示法訣總覽' 方法...");
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:selectorBiFa withObject:nil];
-        #pragma clang diagnostic pop
     } else {
-        EchoLog(@"错误：在 %@ 上未找到方法 '顯示法訣總覽'", [self class]);
-        g_isTestTaskRunning = NO;
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"测试失败"
-                                                                       message:@"无法找到App内部的法诀显示方法。"
+        EchoLog(@"顶层控制器不是目标控制器。");
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"操作提示"
+                                                                       message:@"请先手动点击App内的“法诀”按钮，让法诀列表显示出来，然后再点击这个绿色按钮。"
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
