@@ -19,7 +19,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已修复毕法功能)
+// Section 3: 【终极版】一键复制到 AI (智能排版 + 稳定识别)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -29,6 +29,7 @@ static NSMutableDictionary *g_extractedData = nil;
 - (void)copyAiButtonTapped_FinalMethod;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
+- (NSString *)processLabelsInViewController:(UIViewController *)vc;
 @end
 
 %hook UIViewController
@@ -54,6 +55,7 @@ static NSMutableDictionary *g_extractedData = nil;
     }
 }
 
+// 【终极重构】使用统一的智能排版器和更可靠的识别逻辑
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         
@@ -62,60 +64,37 @@ static NSMutableDictionary *g_extractedData = nil;
         
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             
-            NSMutableArray *labels = [NSMutableArray array];
-            [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:labels];
-            [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-                if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
-                return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-            }];
-
             NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-            NSString *title = viewControllerToPresent.title ?: @"";
-            if (title.length == 0 && labels.count > 0) { title = ((UILabel*)labels.firstObject).text; }
-
+            NSString *content = [self processLabelsInViewController:viewControllerToPresent];
+            
+            // 准备识别工具
             NSMutableArray *fangfaViews = [NSMutableArray array];
             Class fangfaViewClass = NSClassFromString(@"六壬大占.格局單元");
             if (fangfaViewClass) { [self findSubviewsOfClass:fangfaViewClass inView:viewControllerToPresent.view andStoreIn:fangfaViews]; }
 
-            NSMutableArray* textParts = [NSMutableArray array];
-            NSString* content = nil;
+            NSMutableArray *bifaViews = [NSMutableArray array];
+            Class bifaViewClass = NSClassFromString(@"六壬大占.毕法單元") ?: NSClassFromString(@"六壬大占.法诀單元");
+            if (bifaViewClass) { [self findSubviewsOfClass:bifaViewClass inView:viewControllerToPresent.view andStoreIn:bifaViews]; }
 
-            // 【关键修复】调整判断顺序，优先处理标题明确的弹窗
+            // 按照最可靠的顺序进行判断
             if ([vcClassName containsString:@"七政"]) {
-                for (UILabel *label in labels) { if (label.text && label.text.length > 0) [textParts addObject:label.text]; }
-                content = [textParts componentsJoinedByString:@"\n"];
                 g_extractedData[@"七政四余"] = content;
                 EchoLog(@"成功抓取 [七政四余] 内容");
             }
-            else if ([title containsString:@"法诀"] || [title containsString:@"毕法"]) {
-                for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title]) { [textParts addObject:label.text]; } }
-                content = [textParts componentsJoinedByString:@"\n"];
-                g_extractedData[@"毕法"] = content;
-                EchoLog(@"成功抓取 [毕法] 内容");
-            }
-            else if ([title containsString:@"格局"]) {
-                for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title]) { [textParts addObject:label.text]; } }
-                content = [textParts componentsJoinedByString:@"\n"];
-                g_extractedData[@"格局"] = content;
-                EchoLog(@"成功抓取 [格局] 内容");
+            else if (bifaViews.count > 0) {
+                 g_extractedData[@"毕法"] = content;
+                 EchoLog(@"成功抓取 [毕法] 内容 (通过内部视图识别)");
             }
             else if (fangfaViews.count > 0) {
-                NSMutableArray *leftColumn = [NSMutableArray array];
-                NSMutableArray *rightColumn = [NSMutableArray array];
-                CGFloat midX = viewControllerToPresent.view.bounds.size.width / 2;
-                for(UILabel *label in labels) {
-                    if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } 
-                    else { [rightColumn addObject:label.text]; }
-                }
-                for (int i=0; i < MIN(leftColumn.count, rightColumn.count); i++) {
-                    [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]];
-                }
-                content = [textParts componentsJoinedByString:@"\n"];
-                g_extractedData[@"方法"] = content;
-                EchoLog(@"成功抓取并重排版 [方法] 内容");
-            } else {
-                 EchoLog(@"抓取到未知弹窗，内容被忽略。");
+                 g_extractedData[@"方法"] = content;
+                 EchoLog(@"成功抓取 [方法] 内容 (通过内部视图识别)");
+            }
+            else if ([viewControllerToPresent.title containsString:@"格局"]) { // 格局作为最后的备选
+                 g_extractedData[@"格局"] = content;
+                 EchoLog(@"成功抓取 [格局] 内容 (通过标题识别)");
+            }
+            else {
+                 EchoLog(@"抓取到未知弹窗 (%@), 内容被忽略。", vcClassName);
             }
             
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
@@ -126,6 +105,78 @@ static NSMutableDictionary *g_extractedData = nil;
     }
     %orig(viewControllerToPresent, flag, completion);
 }
+
+%new
+// 【新增】智能排版器
+- (NSString *)processLabelsInViewController:(UIViewController *)vc {
+    NSMutableArray *labels = [NSMutableArray array];
+    [self findSubviewsOfClass:[UILabel class] inView:vc.view andStoreIn:labels];
+    if (labels.count == 0) return @"";
+
+    // 移除标题Label
+    UILabel *titleLabel = nil;
+    NSString *title = vc.title;
+    for(UILabel *label in labels) {
+        if ([label.text isEqualToString:title]) {
+            titleLabel = label;
+            break;
+        }
+    }
+    if (titleLabel) [labels removeObject:titleLabel];
+    if (labels.count == 0) return @"";
+
+
+    // 按y,x排序
+    [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+        if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
+        if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+        return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+    }];
+
+    // 判断是单列还是双列布局
+    CGFloat firstX = ((UILabel*)labels.firstObject).frame.origin.x;
+    BOOL isDoubleColumn = NO;
+    if (labels.count > 1) {
+        CGFloat secondX = ((UILabel*)labels[1]).frame.origin.x;
+        if (fabs(firstX - secondX) > 50) { // 如果前两个label的x坐标差距很大，认为是双列
+            isDoubleColumn = YES;
+        }
+    }
+
+    NSMutableArray* textParts = [NSMutableArray array];
+    if (isDoubleColumn) {
+        // 双列排版
+        NSMutableArray *leftColumn = [NSMutableArray array];
+        NSMutableArray *rightColumn = [NSMutableArray array];
+        CGFloat midX = vc.view.bounds.size.width / 2;
+        
+        // 重新按x坐标分组
+        for(UILabel *label in labels) {
+            if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } 
+            else { [rightColumn addObject:label.text]; }
+        }
+
+        // 按行配对
+        for (int i=0; i < MIN(leftColumn.count, rightColumn.count); i++) {
+            [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]];
+        }
+        // 处理可能多出来的行
+        if(leftColumn.count > rightColumn.count) {
+             [textParts addObjectsFromArray:[leftColumn subarrayWithRange:NSMakeRange(rightColumn.count, leftColumn.count - rightColumn.count)]];
+        } else if (rightColumn.count > leftColumn.count) {
+             [textParts addObjectsFromArray:[rightColumn subarrayWithRange:NSMakeRange(leftColumn.count, rightColumn.count - leftColumn.count)]];
+        }
+
+    } else {
+        // 单列排版
+        for (UILabel *label in labels) {
+            if (label.text && label.text.length > 0) [textParts addObject:label.text];
+        }
+    }
+    
+    return [textParts componentsJoinedByString:@"\n"];
+}
+
 
 %new
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage {
