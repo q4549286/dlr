@@ -3,7 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 极简独立测试版 (V14 - 数据源探测版)
+// 极简独立测试版 (V14.1 - 修复编译错误)
 // 目标: 从'課盤被動更新器'中提取数据
 // =========================================================================
 
@@ -94,39 +94,40 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
         EchoLog(@"成功获取到数据源: %@", dataSource);
 
         // 3. 从'課盤被動更新器'中提取数据
-        // 注意：我们现在直接从 dataSource 中获取数据，而不是 plateView
         NSArray *diGong = GetIvarValueSafely(dataSource, @"地宮宮名列");
         NSArray *tianShen = GetIvarValueSafely(dataSource, @"天神宮名列");
         NSArray *tianJiang = GetIvarValueSafely(dataSource, @"天將宮名列");
         
         // 4. 检查数据并格式化
-        if (!diGong || ![diGong isKindOfClass:[NSArray class]] || diGong.count != 12) {
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取失败" message:@"从更新器中未能获取到正确的'地宮宮名列'。" preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:alert animated:YES completion:nil];
-            return;
-        }
-        // ... (对 tianShen 和 tianJiang 进行类似检查) ...
-
-        // 5. 排序和输出
-        NSMutableArray *palaceData = [NSMutableArray array];
-        for (NSUInteger i = 0; i < 12; i++) {
-            // 注意：这次我们直接使用数组，因为数据源里的数组很可能是已经排好序的
-            NSString *diGongStr = [diGong[i] isKindOfClass:[NSString class]] ? diGong[i] : @"?";
-            // 这里我们假设天神和天将也是排好序的数组，但它们可能不是，我们先做简单提取
-            // 为了安全，我们只显示地宫，验证数据是否正确和实时
-             NSDictionary *entry = @{@"diPan": diGongStr};
-            [palaceData addObject:entry];
-        }
-
-        // 暂时不排序，直接按获取到的顺序输出，看看是不是子丑寅卯...
         NSMutableString *resultText = [NSMutableString string];
-        [resultText appendString:@"来自'課盤被動更新器'的数据 (V14)\n\n"];
-        for (NSDictionary *entry in palaceData) {
-            [resultText appendFormat:@"%@宮\n", entry[@"diPan"]];
+        BOOL isDataValid = YES;
+        
+        if (!diGong || ![diGong isKindOfClass:[NSArray class]] || [diGong count] != 12) {
+             [resultText appendFormat:@"地宮宫名列 数据异常!\n"];
+             isDataValid = NO;
+        }
+         if (!tianShen || ![tianShen isKindOfClass:[NSArray class]] || [tianShen count] != 12) {
+             [resultText appendFormat:@"天神宫名列 数据异常!\n"];
+             isDataValid = NO;
+        }
+         if (!tianJiang || ![tianJiang isKindOfClass:[NSArray class]] || [tianJiang count] != 12) {
+             [resultText appendFormat:@"天将宫名列 数据异常!\n"];
+             isDataValid = NO;
+        }
+
+        if (isDataValid) {
+            [resultText appendString:@"从'課盤被動更新器'提取成功！\n\n"];
+            for (int i = 0; i < 12; i++) {
+                NSString *dp = [diGong[i] isKindOfClass:[NSString class]] ? diGong[i] : @"?";
+                NSString *tp = [tianShen[i] isKindOfClass:[NSString class]] ? tianShen[i] : @"?";
+                NSString *tj = [tianJiang[i] isKindOfClass:[NSString class]] ? tianJiang[i] : @"??";
+                [resultText appendFormat:@"%@宮: %@(%@)\n", dp, tp, tj];
+            }
+        } else {
+             [resultText insertString:@"提取失败！\n\n" atIndex:0];
         }
         
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取结果" message:resultText preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取结果 (V14.1)" message:resultText preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
 
