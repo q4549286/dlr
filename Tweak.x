@@ -1,44 +1,22 @@
-您提了两个非常棒、非常核心的问题！这说明您观察得非常仔细。让我来为您解答：
-
------
-
-### 问题一：变量名是繁体字，有影响吗？
-
-**回答：完全没有影响，这反而是个好现象，说明我们百分之百找对了！**
-
-Objective-C 和 Swift 语言都支持使用包括中文在内的任何 Unicode 字符来作为变量名。我们只需要在代码里，也使用一模一样的繁体字 `地宫名列` 和 `天神宫名列` 就可以了。直接复制粘贴是最好的方式，确保不会出错。
-
------
-
-### 问题二：变量的值是 `nil`（空的），不影响吗？
-
-**回答：这个 `nil` 值也完全不影响，并且这是【完全正常】的现象！**
-
-这是解开谜题的最后一把钥匙。这个现象叫做 **“懒加载” (Lazy Initialization)**。
-
-您可以把这个变量想象成一个 **“懒人沙发”**：
-
-  * **平时不用时：** 它被折叠起来，不占空间（在程序里就是 `nil`，不占内存）。
-  * **当您第一次想坐上去时：** 您把它“砰”地一下展开，它才变成了能坐的沙发（程序第一次访问这个变量，它才去计算和加载真实的数据）。
-  * **之后：** 它就一直是展开的沙发形态了（变量里有值了）。
-
-您在 FLEX 里看到 `nil`，是因为您查看的时候，程序还“懒得”去加载数据。
-
-而我们的 **“复制到AI”** 按钮，是在界面完全显示好之后才点击的。到那个时候，为了把天地盘画出来，程序早就已经把这些“懒人沙发”全部展开了（所有变量都加载好值了）。
-
-所以，请完全放心，我们的代码去读取时，一定能读到正确的数据。
-
------
-
-### 重新为您提供最终代码
-
-非常抱歉，我上次的回答在生成代码时被意外中断了。
-
-现在，我将为您提供 **【完整的、未经删减的最终代码】**。请用下面的全部代码，替换掉您原来的 `Section 3` 及之后的所有内容。
-
-```objc
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已集成天地盘提取功能)
+// 日志宏定义
+// =========================================================================
+#define EchoLog(format, ...) NSLog((@"[EchoAI] " format), ##__VA_ARGS__)
+
+// =========================================================================
+// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 保持不变
+// =========================================================================
+%hook UILabel
+- (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
+- (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
+%end
+static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); CGContextRef context = UIGraphicsGetCurrentContext(); CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); CGContextRotateCTM(context, angle * M_PI / 180); NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; CGSize textSize = [text sizeWithAttributes:attributes]; CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); [text drawInRect:textRect withAttributes:attributes]; UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext(); return image; }
+%hook UIWindow
+- (void)layoutSubviews { %orig; if (self.windowLevel != UIWindowLevelNormal) { return; } NSInteger watermarkTag = 998877; if ([self viewWithTag:watermarkTag]) { return; } NSString *watermarkText = @"Echo定制"; UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; CGFloat rotationAngle = -30.0; CGSize tileSize = CGSizeMake(150, 100); UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; watermarkView.tag = watermarkTag; watermarkView.userInteractionEnabled = NO; watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; [self addSubview:watermarkView]; [self bringSubviewToFront:watermarkView]; }
+%end
+
+// =========================================================================
+// Section 3: 【最终版】一键复制到 AI (已集成天地盘提取和激活功能)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -191,6 +169,11 @@ static NSMutableDictionary *g_extractedData = nil;
         if (tianDiPanViews.count > 0) {
             UIView *tianDiPanView = tianDiPanViews.firstObject;
             
+            // 【关键激活步骤】强制视图立即完成布局和渲染，触发懒加载属性
+            EchoLog(@"正在使用 layoutIfNeeded 激活天地盘...");
+            [tianDiPanView layoutIfNeeded];
+            EchoLog(@"激活完毕。");
+
             // 使用 valueForKey 安全地读取 Swift 属性
             id diGong = [tianDiPanView valueForKey:@"地宫名列"];
             id tianShenGong = [tianDiPanView valueForKey:@"天神宫名列"];
@@ -313,4 +296,3 @@ static NSMutableDictionary *g_extractedData = nil;
 }
 
 %end
-```
