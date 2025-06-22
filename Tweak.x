@@ -19,7 +19,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已修正所有问题)
+// Section 3: 【最终版】一键复制到 AI (已新增“方法”模块)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -54,14 +54,13 @@ static NSMutableDictionary *g_extractedData = nil;
     }
 }
 
-// 【终极修复】使用最可靠的方式识别弹窗
+// 拦截并处理所有弹窗
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         
         viewControllerToPresent.view.alpha = 0.0f;
         flag = NO;
 
-        // 增加诊断日志，打印出所有被拦截的弹窗的类名和标题
         EchoLog(@"捕获到弹窗, 类名: %@, 标题: %@", NSStringFromClass([viewControllerToPresent class]), viewControllerToPresent.title);
         
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -73,16 +72,28 @@ static NSMutableDictionary *g_extractedData = nil;
                 if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
                 return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
             }];
-            
+
             NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
             NSString *title = viewControllerToPresent.title ?: @"";
             if (title.length == 0 && labels.count > 0) { title = ((UILabel*)labels.firstObject).text; }
 
+            // 【新增】检查弹窗内是否存在"格局单元"视图，来识别"方法"弹窗
+            NSMutableArray *fangfaViews = [NSMutableArray array];
+            Class fangfaViewClass = NSClassFromString(@"六壬大占.格局单元");
+            if (fangfaViewClass) {
+                [self findSubviewsOfClass:fangfaViewClass inView:viewControllerToPresent.view andStoreIn:fangfaViews];
+            }
+
             NSMutableArray* textParts = [NSMutableArray array];
             NSString* content = nil;
 
-            // 【关键】直接检查弹出的 ViewController 的类名是否包含“七政”
-            if ([vcClassName containsString:@"七政"]) {
+            if (fangfaViews.count > 0) {
+                for (UILabel *label in labels) { if (label.text && label.text.length > 0 && ![label.text isEqualToString:title] && ![label.text isEqualToString:@"方法总览"] && ![label.text isEqualToString:@"方法總覽"]) [textParts addObject:label.text]; }
+                content = [textParts componentsJoinedByString:@"\n"];
+                g_extractedData[@"方法"] = content;
+                EchoLog(@"成功抓取 [方法] 内容 (通过 '格局单元' 视图识别)");
+            }
+            else if ([vcClassName containsString:@"七政"]) {
                 for (UILabel *label in labels) { if (label.text && label.text.length > 0) [textParts addObject:label.text]; }
                 content = [textParts componentsJoinedByString:@"\n"];
                 g_extractedData[@"七政四余"] = content;
@@ -195,6 +206,8 @@ static NSMutableDictionary *g_extractedData = nil;
         SEL selectorBiFa = NSSelectorFromString(@"顯示法訣總覽");
         SEL selectorGeJu = NSSelectorFromString(@"顯示格局總覽");
         SEL selectorQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:");
+        // 【新增】"方法"模块的触发器
+        SEL selectorFangFa = NSSelectorFromString(@"顯示方法總覽");
 
         #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
             _Pragma("clang diagnostic push") \
@@ -204,15 +217,19 @@ static NSMutableDictionary *g_extractedData = nil;
 
         if ([self respondsToSelector:selectorBiFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorBiFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:selectorGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorGeJu withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
-        if ([self respondsToSelector:selectorQiZheng]) { EchoLog(@"正在触发 '顯示七政信息WithSender:'..."); dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
-        else { EchoLog(@"错误: 未找到方法 '顯示七政信息WithSender:'"); }
+        if ([self respondsToSelector:selectorQiZheng]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
+        // 【新增】触发"方法"模块
+        if ([self respondsToSelector:selectorFangFa]) { EchoLog(@"正在触发 '顯示方法總覽'..."); dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
+        else { EchoLog(@"提示: 未找到方法 '顯示方法總覽'"); }
         
         dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
             
             NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", g_extractedData[@"毕法"]] : @"";
             NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"格局:\n%@\n\n", g_extractedData[@"格局"]] : @"";
-            NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
+            NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithformat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
+            // 【新增】准备"方法"模块的输出文本
+            NSString *fangFaOutput = g_extractedData[@"方法"] ? [NSString stringWithFormat:@"方法:\n%@\n\n", g_extractedData[@"方法"]] : @"";
             
             NSString *finalText = [NSString stringWithFormat:
                 @"%@\n\n"
@@ -221,13 +238,13 @@ static NSMutableDictionary *g_extractedData = nil;
                 @"三宫时: %@\n"
                 @"昼夜: %@\n"
                 @"课体: %@\n\n"
-                @"%@%@%@" // 毕法, 格局, 七政四余
+                @"%@%@%@%@" // 【新增】添加方法模块
                 @"%@\n\n"
                 @"%@\n\n"
                 @"起课方式: %@",
                 SafeString(g_extractedData[@"时间块"]),
                 SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]), SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]),
-                biFaOutput, geJuOutput, qiZhengOutput,
+                biFaOutput, geJuOutput, qiZhengOutput, fangFaOutput, // 【新增】添加方法变量
                 SafeString(g_extractedData[@"四课"]),
                 SafeString(g_extractedData[@"三传"]),
                 SafeString(g_extractedData[@"起课方式"])
