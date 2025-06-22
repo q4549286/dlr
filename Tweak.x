@@ -2,8 +2,8 @@
 #import <objc/runtime.h>
 
 // =========================================================================
-// 独立测试版 (V20 - 表格数据源探测)
-// 目标: 探测格局、毕法、方法弹窗的数据源
+// 独立测试版 (V21 - 兼容性修复)
+// 目标: 修复keyWindow过时警告，继续探测数据源
 // =========================================================================
 
 #define EchoLog(format, ...) NSLog((@"[EchoAI-Test] " format), ##__VA_ARGS__)
@@ -37,15 +37,14 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
 - (void)setText:(NSString *)text { 
     if (!text) { %orig(text); return; }
     NSMutableString *simplifiedText = [text mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, kCFStringTransformMandarinLatin, NO);
-    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, kCFStringTransformStripDiacritics, NO);
+    // 使用系统API进行简繁转换
+    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Traditional-Simplified"), NO);
     %orig(simplifiedText);
 }
 - (void)setAttributedText:(NSAttributedString *)attributedText {
     if (!attributedText) { %orig(attributedText); return; }
     NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, kCFStringTransformMandarinLatin, NO);
-    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, kCFStringTransformStripDiacritics, NO);
+    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Traditional-Simplified"), NO);
     %orig(finalAttributedText);
 }
 %end
@@ -55,20 +54,16 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
 
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     
-    // 我们只关心这个特定的ViewController
     Class targetClass = NSClassFromString(@"六壬大占.格局总览视图");
     if (targetClass && [viewControllerToPresent isKindOfClass:targetClass]) {
         
-        // 阻止原弹窗显示
         flag = NO;
         
-        // 延迟执行，确保VC内部数据已加载
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             
             NSMutableString *logOutput = [NSMutableString string];
             [logOutput appendFormat:@"探测目标: %@\n\n", NSStringFromClass([viewControllerToPresent class])];
 
-            // 探测 '格局列', '法诀列', '方法列'
             NSArray *ivarNames = @[@"格局列", @"法诀列", @"方法列"];
             BOOL foundData = NO;
 
@@ -78,13 +73,11 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
 
                 if (dataArray) {
                     foundData = YES;
-                    [logOutput appendFormat:@"成功! 类型: %@, 数量: %ld\n", NSStringFromClass([dataArray class]), (long)([(id)dataArray count] ?: 0)];
+                    [logOutput appendFormat:@"成功! 类型: %@, 数量: %ld\n", NSStringFromClass([dataArray class]), (long)([(id)dataArray respondsToSelector:@selector(count)] ? [(id)dataArray count] : 0)];
                     
                     if ([dataArray isKindOfClass:[NSArray class]] && [(NSArray *)dataArray count] > 0) {
                         id firstObject = [(NSArray *)dataArray firstObject];
                         [logOutput appendFormat:@"数组第一个元素的类型: %@\n", NSStringFromClass([firstObject class])];
-                        
-                        // 尝试打印第一个元素的内容
                         if ([firstObject isKindOfClass:[NSObject class]]) {
                              [logOutput appendFormat:@"内容: %@\n", [firstObject description]];
                         }
@@ -99,17 +92,36 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
                 [logOutput setString:@"所有已知的数据源变量(格局列, 法诀列, 方法列)都未找到。"];
             }
 
-            // 弹出探测日志
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"数据源探测日志" message:logOutput preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                // 手动关闭被我们拦截的VC
-                [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
-            }]];
-            // 在主VC上弹出我们的日志窗口
-            [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:alert animated:YES completion:nil];
+            // 获取当前活跃窗口的根视图控制器来 present
+            UIWindow *keyWindow = nil;
+            if (@available(iOS 13.0, *)) {
+                for (UIWindowScene *windowScene in [UIApplication sharedApplication].connectedScenes) {
+                    if (windowScene.activationState == UISceneActivationStateForegroundActive) {
+                        for (UIWindow *window in windowScene.windows) {
+                            if (window.isKeyWindow) {
+                                keyWindow = window;
+                                break;
+                            }
+                        }
+                        if(keyWindow) break;
+                    }
+                }
+            } else {
+                #pragma clang diagnostic push
+                #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                keyWindow = [UIApplication sharedApplication].keyWindow;
+                #pragma clang diagnostic pop
+            }
+
+            if (keyWindow.rootViewController) {
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"数据源探测日志" message:logOutput preferredStyle:UIAlertControllerStyleAlert];
+                [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                    [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+                }]];
+                [keyWindow.rootViewController presentViewController:alert animated:YES completion:nil];
+            }
         });
 
-        // 调用空的completion，因为我们自己处理了所有事情
         if (completion) {
             completion();
         }
