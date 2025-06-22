@@ -19,7 +19,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %end
 
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已修复所有排版问题)
+// Section 3: 【最终版】一键复制到 AI (已统一采用最可靠的排版方案)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -29,7 +29,6 @@ static NSMutableDictionary *g_extractedData = nil;
 - (void)copyAiButtonTapped_FinalMethod;
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
-- (NSString *)reformatMultiColumnTextFromLabels:(NSArray<UILabel *> *)labels toIgnore:(NSString *)titleToIgnore;
 @end
 
 %hook UIViewController
@@ -81,33 +80,32 @@ static NSMutableDictionary *g_extractedData = nil;
             Class fangfaViewClass = NSClassFromString(@"六壬大占.格局單元");
             if (fangfaViewClass) { [self findSubviewsOfClass:fangfaViewClass inView:viewControllerToPresent.view andStoreIn:fangfaViews]; }
 
-            // 【关键修复】只修改内容提取方式，不修改识别逻辑
+            // 【关键修复】为所有模块统一使用简单可靠的“两列式”排版逻辑
+            NSString* content = nil;
+            NSMutableArray *leftColumn = [NSMutableArray array];
+            NSMutableArray *rightColumn = [NSMutableArray array];
+            NSMutableArray *textParts = [NSMutableArray array];
+            CGFloat midX = viewControllerToPresent.view.bounds.size.width / 2;
+
             if ([vcClassName containsString:@"七政"]) {
-                g_extractedData[@"七政四余"] = [self reformatMultiColumnTextFromLabels:labels toIgnore:nil];
-                EchoLog(@"成功抓取并重排版 [七政四余] 内容");
+                [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+                for(UILabel *label in labels) { if (label.text.length > 0) [textParts addObject:label.text]; }
+                g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
+                EchoLog(@"成功抓取 [七政四余] 内容 (单列排版)");
             }
-            else if ([title containsString:@"法诀"] || [title containsString:@"毕法"]) {
-                g_extractedData[@"毕法"] = [self reformatMultiColumnTextFromLabels:labels toIgnore:title];
-                EchoLog(@"成功抓取并重排版 [毕法] 内容");
-            }
-            else if ([title containsString:@"格局"]) {
-                g_extractedData[@"格局"] = [self reformatMultiColumnTextFromLabels:labels toIgnore:title];
-                EchoLog(@"成功抓取并重排版 [格局] 内容");
+            else if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"]) {
+                // 毕法和格局使用两列排版
+                for(UILabel *label in labels) { if (![label.text isEqualToString:title]) { if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } else { [rightColumn addObject:label.text]; } } }
+                for (int i=0; i < MIN(leftColumn.count, rightColumn.count); i++) { [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]]; }
+                content = [textParts componentsJoinedByString:@"\n"];
+                if ([title containsString:@"格局"]) { g_extractedData[@"格局"] = content; EchoLog(@"成功抓取并重排版 [格局] 内容"); }
+                else { g_extractedData[@"毕法"] = content; EchoLog(@"成功抓取并重排版 [毕法] 内容"); }
             }
             else if (fangfaViews.count > 0) {
-                // "方法"模块的特殊两列排版逻辑保持不变
-                NSMutableArray *leftColumn = [NSMutableArray array];
-                NSMutableArray *rightColumn = [NSMutableArray array];
-                CGFloat midX = viewControllerToPresent.view.bounds.size.width / 2;
+                // 方法模块保持原有的两列排版
                 [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-                for(UILabel *label in labels) {
-                    if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } 
-                    else { [rightColumn addObject:label.text]; }
-                }
-                NSMutableArray *textParts = [NSMutableArray array];
-                for (int i=0; i < MIN(leftColumn.count, rightColumn.count); i++) {
-                    [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]];
-                }
+                for(UILabel *label in labels) { if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } else { [rightColumn addObject:label.text]; } }
+                for (int i=0; i < MIN(leftColumn.count, rightColumn.count); i++) { [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]]; }
                 g_extractedData[@"方法"] = [textParts componentsJoinedByString:@"\n"];
                 EchoLog(@"成功抓取并重排版 [方法] 内容");
             } else {
@@ -122,69 +120,6 @@ static NSMutableDictionary *g_extractedData = nil;
     }
     %orig(viewControllerToPresent, flag, completion);
 }
-
-%new
-// 【新增】通用的多列文本排版函数
-- (NSString *)reformatMultiColumnTextFromLabels:(NSArray<UILabel *> *)labels toIgnore:(NSString *)titleToIgnore {
-    if (labels.count == 0) return @"";
-
-    NSMutableDictionary<NSNumber *, NSMutableArray<UILabel *> *> *columns = [NSMutableDictionary dictionary];
-    
-    // 1. 按X坐标分组（自动检测列数）
-    for (UILabel *label in labels) {
-        if (titleToIgnore && [label.text isEqualToString:titleToIgnore]) continue; // 忽略标题
-        
-        BOOL foundColumn = NO;
-        for (NSNumber *key in columns.allKeys) {
-            // 如果label的X中点与该列的第一个label的X中点很接近，则视为同一列
-            if (fabs(CGRectGetMidX(label.frame) - CGRectGetMidX(columns[key].firstObject.frame)) < 10) {
-                [columns[key] addObject:label];
-                foundColumn = YES;
-                break;
-            }
-        }
-        if (!foundColumn) {
-            columns[@(CGRectGetMidX(label.frame))] = [NSMutableArray arrayWithObject:label];
-        }
-    }
-    
-    // 2. 对每列按Y坐标排序
-    for (NSNumber *key in columns.allKeys) {
-        [columns[key] sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
-            return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
-        }];
-    }
-    
-    // 3. 按列的X坐标排序
-    NSArray *sortedKeys = [columns.allKeys sortedArrayUsingComparator:^NSComparisonResult(id obj1, id obj2) {
-        return [obj1 compare:obj2];
-    }];
-    
-    // 4. 按行拼接所有列
-    NSMutableArray<NSString *> *resultLines = [NSMutableArray array];
-    NSUInteger maxRows = 0;
-    for (NSNumber *key in sortedKeys) {
-        if (columns[key].count > maxRows) {
-            maxRows = columns[key].count;
-        }
-    }
-    
-    for (int i = 0; i < maxRows; i++) {
-        NSMutableArray<NSString *> *rowParts = [NSMutableArray array];
-        for (NSNumber *key in sortedKeys) {
-            if (i < columns[key].count) {
-                [rowParts addObject:columns[key][i].text ?: @""];
-            } else {
-                [rowParts addObject:@""]; // 如果某行某列没有数据，则添加空字符串以对齐
-            }
-        }
-        // 用空格连接各列，并去除行尾可能的多余空格
-        [resultLines addObject:[[rowParts componentsJoinedByString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
-    }
-    
-    return [resultLines componentsJoinedByString:@"\n"];
-}
-
 
 %new
 - (void)findSubviewsOfClass:(Class)aClass inView:(UIView *)view andStoreIn:(NSMutableArray *)storage {
