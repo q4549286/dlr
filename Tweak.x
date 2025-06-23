@@ -284,7 +284,3 @@ static NSMutableDictionary *g_extractedData = nil;
 }
 
 %end
-
-
-
-%end
