@@ -101,7 +101,6 @@ static NSString* GetStringFromLayer(id layer) {
             UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
             copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
             copyButton.tag = CopyAiButtonTag;
-            // 【精修点 2】修改按钮文案
             [copyButton setTitle:@"提取课盘" forState:UIControlStateNormal];
             copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
             copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
@@ -113,7 +112,7 @@ static NSString* GetStringFromLayer(id layer) {
     }
 }
 
-// ========================[ 终极完美版 ]=========================
+// ========================[ 终极完美版 V2 ]=========================
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f;
@@ -150,14 +149,15 @@ static NSString* GetStringFromLayer(id layer) {
                 for (UIStackView *stackView in stackViews) {
                     NSArray *arrangedSubviews = stackView.arrangedSubviews;
                     
-                    // 【精修点 1】过滤掉幽灵标题：一个合法的条目必须至少有1个标题+1个描述
                     if (arrangedSubviews.count >= 2 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
                         
                         UILabel *titleLabel = arrangedSubviews[0];
                         NSString *rawTitle = titleLabel.text ?: @"";
-                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+                        // 【精修】更彻底地清洗标题
                         rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
                         rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""];
+                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""];
+                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
                         NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
                         NSMutableArray *descParts = [NSMutableArray array];
@@ -180,7 +180,7 @@ static NSString* GetStringFromLayer(id layer) {
                 if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content;
                 else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content;
                 else g_extractedData[@"毕法"] = content;
-                EchoLog(@"[完美版] 成功抓取 [%@]", title);
+                EchoLog(@"[完美版 V2] 成功抓取 [%@]", title);
             }
             else if ([vcClassName containsString:@"七政"]) {
                 NSMutableArray *allLabels = [NSMutableArray array];
@@ -191,7 +191,7 @@ static NSString* GetStringFromLayer(id layer) {
                     if (label.text.length > 0) [textParts addObject:label.text];
                 }
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
-                EchoLog(@"[完美版] 成功抓取 [七政四余]");
+                EchoLog(@"[完美版 V2] 成功抓取 [七政四余]");
             } else {
                  EchoLog(@"抓取到未知弹窗 [%@]，内容被忽略。", title);
             }
@@ -382,9 +382,20 @@ static NSString* GetStringFromLayer(id layer) {
         dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
             
-            NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"毕法"]] : @"";
-            NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"格局"]] : @"";
-            NSString *fangFaOutput = g_extractedData[@"方法"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"方法"]] : @"";
+            NSString *biFaOutput = g_extractedData[@"毕法"] ?: @"";
+            NSString *geJuOutput = g_extractedData[@"格局"] ?: @"";
+            NSString *fangFaOutput = g_extractedData[@"方法"] ?: @"";
+
+            // 【精修】对最终的字符串进行一次性的垃圾清理
+            biFaOutput = [biFaOutput stringByReplacingOccurrencesOfString:@"通类门 法诀→\n" withString:@""];
+            geJuOutput = [geJuOutput stringByReplacingOccurrencesOfString:@"通类门 格局→\n" withString:@""];
+            fangFaOutput = [fangFaOutput stringByReplacingOccurrencesOfString:@"通类门 方法→\n" withString:@""];
+            
+            // 增加空行，如果内容不为空
+            if(biFaOutput.length > 0) biFaOutput = [biFaOutput stringByAppendingString:@"\n\n"];
+            if(geJuOutput.length > 0) geJuOutput = [geJuOutput stringByAppendingString:@"\n\n"];
+            if(fangFaOutput.length > 0) fangFaOutput = [fangFaOutput stringByAppendingString:@"\n\n"];
+
             NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
             NSString *tianDiPanOutput = g_extractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_extractedData[@"天地盘"]] : @"";
 
