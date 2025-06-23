@@ -42,7 +42,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             testButton.tag = testButtonTag;
             [testButton setTitle:@"测试代理" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-            testButton.backgroundColor = [UIColor colorWithRed:0.8, 0.2, 0.5, 1.0]; // 紫色，以示区分
+            
+            // --- 【修复】修改颜色设置方法 ---
+            testButton.backgroundColor = [UIColor purpleColor];
+            
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             
