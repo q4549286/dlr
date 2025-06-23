@@ -6,22 +6,25 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V3-Fix] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V4-Fix] " format), ##__VA_ARGS__)
 
+// --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
+static NSInteger const ProgressViewTag = 556677; // 新增：进度视图的Tag
 static NSMutableDictionary *g_extractedData = nil;
 static BOOL g_isTestingNianMing = NO;
 static NSString *g_currentItemToExtract = nil;
 static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 
+// --- 辅助函数 (保持不变) ---
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) { if (!object || !ivarNameSuffix) return nil; unsigned int ivarCount; Ivar *ivars = class_copyIvarList([object class], &ivarCount); if (!ivars) { free(ivars); return nil; } id value = nil; for (unsigned int i = 0; i < ivarCount; i++) { Ivar ivar = ivars[i]; const char *name = ivar_getName(ivar); if (name) { NSString *ivarName = [NSString stringWithUTF8String:name]; if ([ivarName hasSuffix:ivarNameSuffix]) { ptrdiff_t offset = ivar_getOffset(ivar); void **ivar_ptr = (void **)((__bridge void *)object + offset); value = (__bridge id)(*ivar_ptr); break; } } } free(ivars); return value; }
 static NSString* GetStringFromLayer(id layer) { if (layer && [layer respondsToSelector:@selector(string)]) { id stringValue = [layer valueForKey:@"string"]; if ([stringValue isKindOfClass:[NSString class]]) return stringValue; if ([stringValue isKindOfClass:[NSAttributedString class]]) return ((NSAttributedString *)stringValue).string; } return @"?"; }
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); CGContextRef context = UIGraphicsGetCurrentContext(); CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); CGContextRotateCTM(context, angle * M_PI / 180); NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; CGSize textSize = [text sizeWithAttributes:attributes]; CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); [text drawInRect:textRect withAttributes:attributes]; UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext(); return image; }
 
 // =========================================================================
-// 2. 界面UI微调 Hooks (UILabel, UIWindow)
+// 2. 界面UI微调 Hooks (UILabel, UIWindow) - 保持不变
 // =========================================================================
 %hook UILabel
 - (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
@@ -120,13 +123,8 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                     UIView *contentView = viewControllerToPresent.view;
                     Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView"); NSMutableArray *tableViews = [NSMutableArray array]; if (tableViewClass) { FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews); }
                     UITableView *theTableView = tableViews.firstObject;
-                    
-                    // ====================== 【核心修正区域】 ======================
-                    // 不再依赖 visibleCells，而是遍历所有数据源中的行
                     if (theTableView && [theTableView.delegate respondsToSelector:@selector(tableView:didSelectRowAtIndexPath:)] && theTableView.dataSource) {
-                        id<UITableViewDelegate> delegate = theTableView.delegate;
-                        id<UITableViewDataSource> dataSource = theTableView.dataSource;
-                        
+                        id<UITableViewDelegate> delegate = theTableView.delegate; id<UITableViewDataSource> dataSource = theTableView.dataSource;
                         NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:theTableView] : 1;
                         for (NSInteger section = 0; section < sections; section++) {
                             NSInteger rows = [dataSource tableView:theTableView numberOfRowsInSection:section];
@@ -136,9 +134,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                             }
                         }
                     }
-                    // ==========================================================
-
-                    // 增加延迟以确保所有展开动画和UI更新完成
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
                         [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending; if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending; return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
@@ -161,26 +156,59 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 %new
 - (void)performCombinedAnalysis {
     EchoLog(@"--- 开始执行 [课盘解析] 联合任务 ---");
-    UIAlertController* workingAlert = [UIAlertController alertControllerWithTitle:@"正在解析..." message:@"第 1/2 步: 提取课盘信息...\n请稍候，此过程将自动完成。" preferredStyle:UIAlertControllerStyleAlert];
-    [self presentViewController:workingAlert animated:YES completion:nil];
+    
+    // ====================== 【核心修正区域】 ======================
+    // 使用非阻塞的自定义 UIView 作为进度提示，而不是 UIAlertController
+    UIWindow *keyWindow = self.view.window;
+    if (!keyWindow) return;
+
+    UIView *progressView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 200, 120)];
+    progressView.center = keyWindow.center;
+    progressView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.75];
+    progressView.layer.cornerRadius = 10;
+    progressView.tag = ProgressViewTag;
+
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+    spinner.center = CGPointMake(100, 45);
+    [spinner startAnimating];
+    [progressView addSubview:spinner];
+
+    UILabel *progressLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 80, 180, 30)];
+    progressLabel.textColor = [UIColor whiteColor];
+    progressLabel.textAlignment = NSTextAlignmentCenter;
+    progressLabel.font = [UIFont systemFontOfSize:14];
+    progressLabel.adjustsFontSizeToFitWidth = YES;
+    progressLabel.text = @"提取课盘信息...";
+    [progressView addSubview:progressLabel];
+
+    [keyWindow addSubview:progressView];
+    // ==========================================================
+
     [self extractKePanInfoWithCompletion:^(NSString *kePanText) {
         EchoLog(@"--- 课盘信息提取完成 ---");
-        workingAlert.message = @"第 2/2 步: 提取年命信息...\n请稍候，此过程可能需要一些时间。";
+        progressLabel.text = @"提取年命信息..."; // 更新进度文本
+
         [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
             EchoLog(@"--- 年命信息提取完成 ---");
-            [workingAlert dismissViewControllerAnimated:YES completion:^{
-                NSString *finalCombinedText;
-                if (nianmingText && nianmingText.length > 0) {
-                    finalCombinedText = [NSString stringWithFormat:@"%@\n\n====================\n【年命分析】\n====================\n\n%@", kePanText, nianmingText];
-                } else {
-                    finalCombinedText = kePanText;
-                }
-                [UIPasteboard generalPasteboard].string = finalCombinedText;
-                UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"解析完成" message:@"所有课盘及年命信息已合并，并成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
-                [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-                [self presentViewController:successAlert animated:YES completion:nil];
-                EchoLog(@"--- [课盘解析] 联合任务全部完成 ---");
-            }];
+            
+            // 移除进度视图
+            [[keyWindow viewWithTag:ProgressViewTag] removeFromSuperview];
+
+            NSString *finalCombinedText;
+            if (nianmingText && nianmingText.length > 0) {
+                finalCombinedText = [NSString stringWithFormat:@"%@\n\n====================\n【年命分析】\n====================\n\n%@", kePanText, nianmingText];
+            } else {
+                finalCombinedText = kePanText;
+            }
+            
+            [UIPasteboard generalPasteboard].string = finalCombinedText;
+            
+            // 所有任务完成后，再显示最终的成功提示Alert
+            UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"解析完成" message:@"所有课盘及年命信息已合并，并成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+            [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:successAlert animated:YES completion:nil];
+            
+            EchoLog(@"--- [课盘解析] 联合任务全部完成 ---");
         }];
     }];
 }
