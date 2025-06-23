@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v13] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v14] " format), ##__VA_ARGS__)
 
 static BOOL g_isTestingNianMing = NO;
 static NSString *g_currentItemToExtract = nil;
@@ -14,7 +14,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 @interface UIViewController (DelegateTestAddon)
-- (void)performFinalHybridExtractTest;
+- (void)performFinalUnifiedExtractTest;
 @end
 
 %hook UIViewController
@@ -27,22 +27,22 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) return;
             
-            NSInteger testButtonTag = 999013; // v13
+            NSInteger testButtonTag = 999014; // v14
             if ([keyWindow viewWithTag:testButtonTag]) return;
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 200, 45, 90, 36);
-            [testButton setTitle:@"混合提取测试" forState:UIControlStateNormal];
+            [testButton setTitle:@"统一提取测试" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-            testButton.backgroundColor = [UIColor systemGreenColor];
+            testButton.backgroundColor = [UIColor systemOrangeColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             testButton.tag = testButtonTag;
             
-            [testButton addTarget:self action:@selector(performFinalHybridExtractTest) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performFinalUnifiedExtractTest) forControlEvents:UIControlEventTouchUpInside];
             
             [keyWindow addSubview:testButton];
-            EchoLog(@"混合提取测试按钮 (v13) 已添加。");
+            EchoLog(@"统一提取测试按钮 (v14) 已添加。");
         });
     }
 }
@@ -61,94 +61,46 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         
-        if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
-            // 年命摘要页面结构简单，用通用提取逻辑即可
-            NSMutableString *t = [NSMutableString string];
+        // --- 统一提取逻辑 (适用于两个页面) ---
+        void (^extractAllLabels)(NSMutableArray *) = ^(NSMutableArray *storageArray) {
+            UIView *contentView = viewControllerToPresent.view;
             NSMutableArray *allLabels = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
-            [allLabels sortUsingComparator:^NSComparisonResult(UILabel* obj1, UILabel* obj2) {
-                return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
+            FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
+                // 使用四舍五入比较Y坐标，避免浮点数精度问题
+                if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
+                if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
+                // 如果Y坐标相同，按X坐标排序
+                return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
             }];
+
+            NSMutableArray *textParts = [NSMutableArray array];
             for (UILabel *label in allLabels) {
-                if (label.text && label.text.length > 0) { [t appendFormat:@"%@\n", label.text]; }
+                if (label.text && label.text.length > 0) {
+                    [textParts addObject:label.text];
+                }
             }
-            [g_capturedZhaiYaoArray addObject:[t stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+            NSString *finalContent = [textParts componentsJoinedByString:@"\n"];
+            [storageArray addObject:finalContent];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+        };
+
+        if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
+            extractAllLabels(g_capturedZhaiYaoArray);
             return;
-
         } else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
-            // ---【核心修正：V13 混合提取逻辑】---
-            @try {
-                UIView *contentView = viewControllerToPresent.view;
-                Class geJuCellClass = NSClassFromString(@"六壬大占.格局單元");
-                if (!geJuCellClass) { [g_capturedGeJuArray addObject:@"错误：找不到格局单元类"]; [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil]; return; }
-
-                NSMutableArray *contentElements = [NSMutableArray array];
-                NSMutableSet *labelsInCells = [NSMutableSet set];
-                
-                // 1. 找到所有格局单元格，并标记它们内部的UILabel
-                NSMutableArray *allCells = [NSMutableArray array];
-                FindSubviewsOfClassRecursive(geJuCellClass, contentView, allCells);
-                for (UIView *cell in allCells) {
-                    [contentElements addObject:cell];
-                    NSMutableArray *labels = [NSMutableArray array];
-                    FindSubviewsOfClassRecursive([UILabel class], cell, labels);
-                    for (UILabel *label in labels) { [labelsInCells addObject:label]; }
-                }
-
-                // 2. 找到所有独立的UILabel (即不在格局单元格内的)
-                NSMutableArray *allLabels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-                for (UILabel *label in allLabels) {
-                    if (![labelsInCells containsObject:label]) {
-                        [contentElements addObject:label];
-                    }
-                }
-
-                // 3. 按Y坐标排序所有内容元素
-                [contentElements sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-                    return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
-                }];
-
-                // 4. 遍历排序后的元素，生成最终文本
-                NSMutableArray *textParts = [NSMutableArray array];
-                for (UIView *element in contentElements) {
-                    if ([element isKindOfClass:geJuCellClass]) {
-                        // 如果是格局单元格，提取标题和内容
-                        NSMutableArray *labels = [NSMutableArray array];
-                        FindSubviewsOfClassRecursive([UILabel class], element, labels);
-                        if (labels.count >= 2) {
-                            [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
-                            NSString *title = ((UILabel *)labels[0]).text ?: @"";
-                            NSString *desc = ((UILabel *)labels[1]).text ?: @"";
-                            [textParts addObject:[NSString stringWithFormat:@"%@→%@", title, desc]];
-                        }
-                    } else if ([element isKindOfClass:[UILabel class]]) {
-                        // 如果是独立UILabel，直接添加文本
-                        NSString *text = ((UILabel *)element).text;
-                        if (text && text.length > 0) {
-                           [textParts addObject:text];
-                        }
-                    }
-                }
-                
-                NSString *finalContent = [textParts componentsJoinedByString:@"\n"];
-                [g_capturedGeJuArray addObject:[finalContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-                
-            } @catch (NSException *exception) {
-                [g_capturedGeJuArray addObject:[NSString stringWithFormat:@"提取异常: %@", exception.reason]];
-            } @finally {
-                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
-                 return;
-            }
+            // 【核心】对"格局方法"页面，也使用这个最简单、最强大的统一提取逻辑
+            extractAllLabels(g_capturedGeJuArray);
+            return;
         }
     }
     %orig(viewControllerToPresent, flag, completion);
 }
 
 %new
-- (void)performFinalHybridExtractTest {
-    // 这部分代码与v12完全相同
+- (void)performFinalUnifiedExtractTest {
+    // 这部分代码不变
     g_isTestingNianMing = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
     g_capturedGeJuArray = [NSMutableArray array];
@@ -202,7 +154,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 [finalResultString appendString:@"\n\n====================\n\n"];
             }
 
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"混合提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"统一提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:alert animated:YES completion:^{ g_isTestingNianMing = NO; }];
         });
