@@ -45,19 +45,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 static NSInteger const CopyAiButtonTag = 112233;
 static NSMutableDictionary *g_extractedData = nil;
 
-// =========================================================================
-// 【终极修复】使用状态标记来精确识别弹窗类型
-// =========================================================================
-typedef NS_ENUM(NSInteger, EchoPopupType) {
-    EchoPopupTypeNone,
-    EchoPopupTypeBiFa,
-    EchoPopupTypeGeJu,
-    EchoPopupTypeFangFa,
-    EchoPopupTypeQiZheng
-};
-static EchoPopupType g_currentPopupType = EchoPopupTypeNone;
-
-
 // 辅助函数
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
@@ -125,83 +112,105 @@ static NSString* GetStringFromLayer(id layer) {
     }
 }
 
-// ========================[ 终极修复版 V5 - 状态标记版 ]=========================
+// ========================[ 回归稳定版 + 精修 ]=========================
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f;
         flag = NO;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             
-            // 直接根据全局标记来决定如何处理，不再依赖title
-            switch (g_currentPopupType) {
-                case EchoPopupTypeBiFa:
-                case EchoPopupTypeGeJu:
-                case EchoPopupTypeFangFa: {
-                    NSMutableArray *stackViews = [NSMutableArray array];
-                    FindSubviewsOfClassRecursive([UIStackView class], viewControllerToPresent.view, stackViews);
-                    
-                    if (stackViews.count > 0) {
-                        NSMutableArray *textParts = [NSMutableArray array];
-                        [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-                            return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
-                        }];
+            NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
+            NSString *title = viewControllerToPresent.title ?: @"";
+            
+            // 尝试获取一个默认标题，以防万一
+            if (title.length == 0) {
+                 NSMutableArray *labels = [NSMutableArray array];
+                 FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, labels);
+                 if (labels.count > 0) {
+                     [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                         if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
+                         if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+                         return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+                     }];
+                     UILabel *firstLabel = labels.firstObject;
+                     // 根据经验，这些标题通常在视图的顶部
+                     if (firstLabel && firstLabel.frame.origin.y < 100) {
+                         title = firstLabel.text;
+                     }
+                 }
+            }
 
-                        for (UIStackView *stackView in stackViews) {
-                             NSArray *arrangedSubviews = stackView.arrangedSubviews;
-                             if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                                 UILabel *titleLabel = arrangedSubviews[0];
-                                 NSString *cleanTitle = [titleLabel.text stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
-                                 
-                                 NSMutableArray *descParts = [NSMutableArray array];
-                                 for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
-                                     if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
-                                         [descParts addObject:((UILabel *)arrangedSubviews[i]).text];
-                                     }
-                                 }
-                                 NSString *fullDesc = [descParts componentsJoinedByString:@""]; 
-                                 NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc];
-                                 [textParts addObject:pairString];
-                             }
-                        }
-                        NSString *content = [textParts componentsJoinedByString:@"\n"];
+            NSMutableArray *textParts = [NSMutableArray array];
+
+            // 【逻辑 1】统一处理“毕法”、“格局”、“方法”
+            // 它们都使用UIStackView，并且布局相似
+            if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
+                NSMutableArray *stackViews = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UIStackVew class], viewControllerToPresent.view, stackViews);
+
+                [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+                    return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
+                }];
+
+                for (UIStackView *stackView in stackViews) {
+                    NSArray *arrangedSubviews = stackView.arrangedSubviews;
+                    // 【核心修复】一个条目至少包含一个标题UILabel
+                    if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
                         
-                        // 根据标记存入正确的字典键
-                        if (g_currentPopupType == EchoPopupTypeBiFa) {
-                             g_extractedData[@"毕法"] = content;
-                             EchoLog(@"[状态标记] 成功抓取 [毕法]");
-                        } else if (g_currentPopupType == EchoPopupTypeGeJu) {
-                             g_extractedData[@"格局"] = content;
-                             EchoLog(@"[状态标记] 成功抓取 [格局]");
-                        } else if (g_currentPopupType == EchoPopupTypeFangFa) {
-                             g_extractedData[@"方法"] = content;
-                             EchoLog(@"[状态标记] 成功抓取 [方法]");
+                        // 第一个UILabel是标题
+                        UILabel *titleLabel = arrangedSubviews[0];
+                        NSString *cleanTitle = [titleLabel.text stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
+                        
+                        // 后续所有的UILabel都是描述部分
+                        NSMutableArray *descParts = [NSMutableArray array];
+                        for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
+                            if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
+                                [descParts addObject:((UILabel *)arrangedSubviews[i]).text];
+                            }
                         }
+                        // 将所有描述部分合并成一个无换行的字符串
+                        NSString *fullDesc = [descParts componentsJoinedByString:@""]; 
+                        
+                        // 格式化为 "标题→描述"
+                        NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc];
+                        [textParts addObject:pairString];
                     }
-                    break;
                 }
-                case EchoPopupTypeQiZheng: {
-                    NSMutableArray *textParts = [NSMutableArray array];
-                    NSMutableArray *allLabels = [NSMutableArray array];
-                    FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
-                    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-
-                    for(UILabel *label in allLabels) {
-                        if (label.text.length > 0) {
-                            NSString *cleanedText = [label.text stringByReplacingOccurrencesOfString:@"\n" withString:@""];
-                            [textParts addObject:cleanedText];
-                        }
+                
+                NSString *content = [textParts componentsJoinedByString:@"\n"];
+                
+                // 根据title存入正确的字典键
+                if ([title containsString:@"方法"]) {
+                    g_extractedData[@"方法"] = content;
+                    EchoLog(@"[稳定版] 成功抓取 [方法]");
+                } else if ([title containsString:@"格局"]) {
+                    g_extractedData[@"格局"] = content;
+                    EchoLog(@"[稳定版] 成功抓取 [格局]");
+                } else { // 默认为毕法/法诀
+                    g_extractedData[@"毕法"] = content;
+                    EchoLog(@"[稳定版] 成功抓取 [毕法]");
+                }
+            }
+            // 【逻辑 2】处理“七政四余”
+            else if ([vcClassName containsString:@"七政"]) {
+                NSMutableArray *allLabels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
+                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+                
+                // 跳过第一个作为标题的UILabel
+                for (NSUInteger i = 1; i < allLabels.count; i++) {
+                    UILabel *label = allLabels[i];
+                    if (label.text.length > 0) {
+                        NSString *cleanedText = [label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+                        [textParts addObject:cleanedText];
                     }
-                    g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
-                    EchoLog(@"[状态标记] 成功抓取 [七政四余]");
-                    break;
                 }
-                default:
-                    EchoLog(@"抓取到未知弹窗，或标记未设置，已忽略。");
-                    break;
+                g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
+                EchoLog(@"[稳定版] 成功抓取 [七政四余]");
+            } else {
+                 EchoLog(@"抓取到未知弹窗 [%@]，内容被忽略。", title);
             }
             
-            // 使用后立即重置标记，避免干扰
-            g_currentPopupType = EchoPopupTypeNone;
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
         });
         %orig(viewControllerToPresent, flag, completion);
@@ -380,11 +389,10 @@ static NSString* GetStringFromLayer(id layer) {
             code; \
             _Pragma("clang diagnostic pop")
 
-        // 【终极修复】在调用前，设置全局状态标记
-        if ([self respondsToSelector:selectorBiFa])   { g_currentPopupType = EchoPopupTypeBiFa;   dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorBiFa withObject:nil]); });   [NSThread sleepForTimeInterval:0.4]; }
-        if ([self respondsToSelector:selectorGeJu])   { g_currentPopupType = EchoPopupTypeGeJu;   dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorGeJu withObject:nil]); });   [NSThread sleepForTimeInterval:0.4]; }
-        if ([self respondsToSelector:selectorFangFa]) { g_currentPopupType = EchoPopupTypeFangFa; dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
-        if ([self respondsToSelector:selectorQiZheng]) { g_currentPopupType = EchoPopupTypeQiZheng; dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
+        if ([self respondsToSelector:selectorBiFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorBiFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
+        if ([self respondsToSelector:selectorGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorGeJu withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
+        if ([self respondsToSelector:selectorFangFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
+        if ([self respondsToSelector:selectorQiZheng]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
         
         dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
@@ -425,7 +433,6 @@ static NSString* GetStringFromLayer(id layer) {
             
             [self presentViewController:alert animated:YES completion:^{
                 g_extractedData = nil;
-                g_currentPopupType = EchoPopupTypeNone; // 最终清理
                 EchoLog(@"--- 复制任务完成 ---");
             }];
         });
