@@ -6,7 +6,7 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V8-Stable] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V9-Stable] " format), ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
@@ -294,7 +294,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     });
 }
 
-// ====================== 【V8 核心重构】 ======================
+// ====================== 【V9 核心重构】 ======================
 %new
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
     g_isExtractingNianming = YES;
@@ -311,23 +311,44 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
     if (allUnitCells.count == 0) { EchoLog(@"年命提取模块：行年单元数量为0，跳过。"); g_isExtractingNianming = NO; if (completion) { completion(@""); } return; }
 
-    // 1. 创建任务清单
-    NSMutableArray *workQueue = [NSMutableArray array];
-    for (NSUInteger i = 0; i < allUnitCells.count; i++) {
-        UICollectionViewCell *cell = allUnitCells[i];
-        [workQueue addObject:@{@"type": @"年命摘要", @"cell": cell, @"index": @(i)}];
-        [workQueue addObject:@{@"type": @"格局方法", @"cell": cell, @"index": @(i)}];
-    }
+    // 使用后台队列来执行整个同步流程，避免阻塞主线程太久
+    dispatch_queue_t serialQueue = dispatch_queue_create("com.echoai.nianming.serial", DISPATCH_QUEUE_SERIAL);
+    dispatch_async(serialQueue, ^{
+        // 使用信号量来同步异步的UI操作
+        dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
 
-    // 【闪退修复核心】使用 __weak self 避免循环引用
-    __weak typeof(self) weakSelf = self;
-    __block void (^processQueue)(void);
+        for (NSUInteger i = 0; i < allUnitCells.count; i++) {
+            UICollectionViewCell *cell = allUnitCells[i];
+            
+            // 提取摘要
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                EchoLog(@"正在处理 人员 %lu 的 [年命摘要]", (unsigned long)i + 1);
+                g_currentItemToExtract = @"年命摘要";
+                id delegate = targetCV.delegate;
+                NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
+                if (delegate && indexPath && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
+                    [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
+                }
+            });
+            // 等待摘要UI操作完成
+            [NSThread sleepForTimeInterval:1.0];
+            
+            // 提取格局
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                EchoLog(@"正在处理 人员 %lu 的 [格局方法]", (unsigned long)i + 1);
+                g_currentItemToExtract = @"格局方法";
+                id delegate = targetCV.delegate;
+                NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
+                if (delegate && indexPath && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
+                    [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
+                }
+            });
+            // 等待格局UI操作完成
+            [NSThread sleepForTimeInterval:1.2];
+        }
 
-    // 2. 创建线性任务处理器
-    processQueue = ^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || workQueue.count == 0) {
-            // 3. 所有任务完成，收尾
+        // 所有循环结束后，回到主线程整理并返回结果
+        dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有年命任务处理完毕。");
             NSMutableString *resultStr = [NSMutableString string];
             NSUInteger personCount = allUnitCells.count;
@@ -343,35 +364,10 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             }
             g_isExtractingNianming = NO;
             if (completion) { completion(resultStr); }
-            processQueue = nil; // 解除闭包
-            return;
-        }
-
-        // 4. 取出并执行下一个任务
-        NSDictionary *item = workQueue.firstObject;
-        [workQueue removeObjectAtIndex:0];
-        NSString *type = item[@"type"];
-        UICollectionViewCell *cell = item[@"cell"];
-        NSInteger index = [item[@"index"] integerValue];
-
-        EchoLog(@"正在处理 人员 %ld 的 [%@]", (long)index + 1, type);
-
-        g_currentItemToExtract = type;
-        id delegate = targetCV.delegate;
-        NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
-        if (delegate && indexPath && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
-            [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
-        }
-
-        // 5. 等待UI操作完成，然后递归处理下一个任务
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            processQueue();
         });
-    };
-
-    // 6. 启动任务队列
-    processQueue();
+    });
 }
+
 
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
