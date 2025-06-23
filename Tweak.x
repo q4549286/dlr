@@ -6,7 +6,7 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V11-Perfect] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V12-Final] " format), ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
@@ -163,57 +163,46 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 // 4. "高级技法解析" 功能实现
 // =========================================================================
 
-// ====================== 【V11 核心修复】 ======================
+// ====================== 【V12 核心修复】 ======================
 %new
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView {
-    NSMutableArray *allLabels = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-    if (allLabels.count == 0) return @"";
-
-    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
-        if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
-        if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
-        return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
+    // 找到所有可见的 TableViewCell
+    Class cellClass = NSClassFromString(@"六壬大占.格局單元");
+    if (!cellClass) return @"";
+    
+    NSMutableArray *cells = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(cellClass, contentView, cells);
+    [cells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+        return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
     }];
     
     NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array];
-    NSString *currentTitle = nil;
-    NSMutableString *currentContent = [NSMutableString string];
 
-    for (UILabel *label in allLabels) {
-        NSString *text = label.text ?: @"";
-        if ([text isEqualToString:@"年命格局"] || [text containsString:@"年生"]) {
-            continue; // 过滤掉不需要的头部信息
-        }
-
-        // 使用字号作为最可靠的判断标准
-        BOOL isTitle = (label.font.pointSize > 16.0);
+    // 遍历每一个Cell，将其视为一个独立的条目
+    for (UIView *cell in cells) {
+        NSMutableArray *labelsInCell = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UILabel class], cell, labelsInCell);
         
-        if (isTitle) {
-            // 当遇到新的标题时，保存上一个“标题-内容”对
-            if (currentTitle && currentContent.length > 0) {
-                NSString *pair = [NSString stringWithFormat:@"%@→%@", currentTitle, [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-                if (![formattedPairs containsObject:pair]) {
-                    [formattedPairs addObject:pair];
+        if (labelsInCell.count > 0) {
+            // 第一个label是标题
+            UILabel *titleLabel = labelsInCell[0];
+            NSString *title = [titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            
+            // 后续所有label都是内容
+            NSMutableString *contentString = [NSMutableString string];
+            if (labelsInCell.count > 1) {
+                for (NSUInteger i = 1; i < labelsInCell.count; i++) {
+                    UILabel *contentLabel = labelsInCell[i];
+                    [contentString appendString:contentLabel.text];
                 }
             }
-            // 开始记录新的标题和内容
-            currentTitle = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            [currentContent setString:@""]; // 重置内容
-        } else if (currentTitle) {
-            // 如果当前有标题，则将此label视为内容并追加
-            if (currentContent.length > 0) {
-                [currentContent appendString:@" "];
+            
+            NSString *content = [contentString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            
+            NSString *pair = [NSString stringWithFormat:@"%@→%@", title, content];
+            if (![formattedPairs containsObject:pair]) {
+                [formattedPairs addObject:pair];
             }
-            [currentContent appendString:text];
-        }
-    }
-
-    // 保存最后一个“标题-内容”对
-    if (currentTitle && currentContent.length > 0) {
-        NSString *pair = [NSString stringWithFormat:@"%@→%@", currentTitle, [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-        if (![formattedPairs containsObject:pair]) {
-            [formattedPairs addObject:pair];
         }
     }
     
@@ -261,7 +250,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (void)extractKePanInfoWithCompletion:(void (^)(NSString *kePanText))completion {
-    // ... 此方法内容保持不变 ...
     #define SafeString(str) (str ?: @"")
     g_extractedData = [NSMutableDictionary dictionary];
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
@@ -327,7 +315,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
-    // ... V8的稳定任务队列逻辑保持不变 ...
     g_isExtractingNianming = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
     g_capturedGeJuArray = [NSMutableArray array];
