@@ -6,11 +6,11 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V4-Fix] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V5-FinalFix] " format), ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
-static NSInteger const ProgressViewTag = 556677; // 新增：进度视图的Tag
+static NSInteger const ProgressViewTag = 556677;
 static NSMutableDictionary *g_extractedData = nil;
 static BOOL g_isTestingNianMing = NO;
 static NSString *g_currentItemToExtract = nil;
@@ -157,8 +157,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 - (void)performCombinedAnalysis {
     EchoLog(@"--- 开始执行 [课盘解析] 联合任务 ---");
     
-    // ====================== 【核心修正区域】 ======================
-    // 使用非阻塞的自定义 UIView 作为进度提示，而不是 UIAlertController
     UIWindow *keyWindow = self.view.window;
     if (!keyWindow) return;
 
@@ -168,7 +166,11 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     progressView.layer.cornerRadius = 10;
     progressView.tag = ProgressViewTag;
 
-    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+    // 【编译错误修复】使用 iOS 13+ 的现代 API
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    // 适配新的 Style，颜色需要手动设置
+    spinner.color = [UIColor whiteColor];
+    
     spinner.center = CGPointMake(100, 45);
     [spinner startAnimating];
     [progressView addSubview:spinner];
@@ -182,16 +184,14 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     [progressView addSubview:progressLabel];
 
     [keyWindow addSubview:progressView];
-    // ==========================================================
-
+    
     [self extractKePanInfoWithCompletion:^(NSString *kePanText) {
         EchoLog(@"--- 课盘信息提取完成 ---");
-        progressLabel.text = @"提取年命信息..."; // 更新进度文本
+        progressLabel.text = @"提取年命信息...";
 
         [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
             EchoLog(@"--- 年命信息提取完成 ---");
             
-            // 移除进度视图
             [[keyWindow viewWithTag:ProgressViewTag] removeFromSuperview];
 
             NSString *finalCombinedText;
@@ -203,7 +203,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             
             [UIPasteboard generalPasteboard].string = finalCombinedText;
             
-            // 所有任务完成后，再显示最终的成功提示Alert
             UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"解析完成" message:@"所有课盘及年命信息已合并，并成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
             [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:successAlert animated:YES completion:nil];
