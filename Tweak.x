@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v11] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v12] " format), ##__VA_ARGS__)
 
 static BOOL g_isTestingNianMing = NO;
 static NSString *g_currentItemToExtract = nil;
@@ -14,7 +14,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 @interface UIViewController (DelegateTestAddon)
-- (void)performFinalSimplifiedExtractTest;
+- (void)performFinalPreciseExtractTest;
 @end
 
 %hook UIViewController
@@ -27,22 +27,22 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) return;
             
-            NSInteger testButtonTag = 999010;
+            NSInteger testButtonTag = 999011;
             if ([keyWindow viewWithTag:testButtonTag]) return;
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 200, 45, 90, 36);
-            [testButton setTitle:@"最终简化测试" forState:UIControlStateNormal];
+            [testButton setTitle:@"最终精准测试" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-            testButton.backgroundColor = [UIColor systemIndigoColor];
+            testButton.backgroundColor = [UIColor colorWithRed:0 green:0.5 blue:0.5 alpha:1.0]; // 青色
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             testButton.tag = testButtonTag;
             
-            [testButton addTarget:self action:@selector(performFinalSimplifiedExtractTest) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performFinalPreciseExtractTest) forControlEvents:UIControlEventTouchUpInside];
             
             [keyWindow addSubview:testButton];
-            EchoLog(@"最终简化测试按钮已添加。");
+            EchoLog(@"最终精准测试按钮已添加。");
         });
     }
 }
@@ -62,36 +62,53 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         
         // ---【核心修正】---
-        // 提取文本的通用逻辑 (找到所有UILabel，按Y坐标排序)
-        NSString* (^extractAllLabels)(void) = ^NSString* {
-            NSMutableString *t = [NSMutableString string];
-            NSMutableArray *allLabels = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
-            [allLabels sortUsingComparator:^NSComparisonResult(UILabel* obj1, UILabel* obj2) {
-                if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
-                if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
-                return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
-            }];
-            for (UILabel *label in allLabels) {
-                if (label.text && label.text.length > 0) {
-                    // 避免重复添加完全相同的文本行 (比如有些标题会被重复渲染)
-                    if (![t containsString:[NSString stringWithFormat:@"%@\n", label.text]]) {
-                         [t appendFormat:@"%@\n", label.text];
+        if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
+            EchoLog(@"检测到 '年命格局视窗'，开始精准定位 '格局单元'...");
+            
+            NSMutableString *fullContent = [NSMutableString string];
+            Class gejuUnitClass = NSClassFromString(@"六壬大占.格局單元");
+            
+            if (gejuUnitClass) {
+                NSMutableArray *gejuUnits = [NSMutableArray array];
+                FindSubviewsOfClassRecursive(gejuUnitClass, viewControllerToPresent.view, gejuUnits);
+                [gejuUnits sortUsingComparator:^NSComparisonResult(UIView* obj1, UIView* obj2) {
+                    return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
+                }];
+                
+                EchoLog(@"找到 %lu 个 '格局单元'。", (unsigned long)gejuUnits.count);
+                
+                for (UIView *unitView in gejuUnits) {
+                    NSMutableArray *labelsInUnit = [NSMutableArray array];
+                    FindSubviewsOfClassRecursive([UILabel class], unitView, labelsInUnit);
+                     [labelsInUnit sortUsingComparator:^NSComparisonResult(UILabel* obj1, UILabel* obj2) {
+                        if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
+                        if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
+                        return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
+                    }];
+                    
+                    for (UILabel *label in labelsInUnit) {
+                        if (label.text && label.text.length > 0) {
+                            [fullContent appendFormat:@"%@\n", label.text];
+                        }
                     }
                 }
+            } else {
+                EchoLog(@"错误: 找不到 '六壬大占.格局單元' 类！");
+                [fullContent appendString:@"[错误: 找不到格局单元类]"];
             }
-            return [t copy];
-        };
 
-        if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
-            // 年命摘要使用通用提取逻辑
-            [g_capturedZhaiYaoArray addObject:extractAllLabels()];
+            [g_capturedGeJuArray addObject:[fullContent copy]];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             return;
 
-        } else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
-            // 格局方法也使用这个最可靠的通用提取逻辑
-            [g_capturedGeJuArray addObject:extractAllLabels()];
+        } else if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
+            // 年命摘要的提取方式保持不变 (这个之前已验证是正确的)
+            NSMutableString *t = [NSMutableString string];
+            NSMutableArray *allLabels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel* o1, UILabel* o2){return [@(o1.frame.origin.y)compare:@(o2.frame.origin.y)];}];
+            for(UILabel*l in allLabels){if(l.text&&l.text.length>0)[t appendFormat:@"%@\n",l.text];}
+            [g_capturedZhaiYaoArray addObject:[t copy]];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             return;
         }
@@ -100,8 +117,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)performFinalSimplifiedExtractTest {
-    // 这部分代码与v8/v9/v10完全相同
+- (void)performFinalPreciseExtractTest {
+    // 这部分循环逻辑已经稳定，无需修改
     g_isTestingNianMing = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
     g_capturedGeJuArray = [NSMutableArray array];
@@ -151,7 +168,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 [finalResultString appendString:geJu];
                 [finalResultString appendString:@"\n====================\n"];
             }
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"最终提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"精准提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:alert animated:YES completion:^{ g_isTestingNianMing = NO; }];
         });
