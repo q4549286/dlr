@@ -1,10 +1,10 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v8] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v9] " format), ##__VA_ARGS__)
 
 static BOOL g_isTestingNianMing = NO;
-static NSString *g_currentItemToExtract = nil; // "年命摘要" 或 "格局方法"
+static NSString *g_currentItemToExtract = nil;
 static NSMutableArray *g_capturedZhaiYaoArray = nil; 
 static NSMutableArray *g_capturedGeJuArray = nil;
 
@@ -14,7 +14,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 @interface UIViewController (DelegateTestAddon)
-- (void)performStepByStepExtractTest;
+- (void)performFinalExtractTest;
 @end
 
 %hook UIViewController
@@ -27,34 +27,33 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) return;
             
-            NSInteger testButtonTag = 999007;
+            NSInteger testButtonTag = 999008;
             if ([keyWindow viewWithTag:testButtonTag]) return;
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 200, 45, 90, 36);
-            [testButton setTitle:@"测试分步提取" forState:UIControlStateNormal];
+            [testButton setTitle:@"最终提取测试" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-            testButton.backgroundColor = [UIColor blackColor];
+            testButton.backgroundColor = [UIColor systemRedColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             testButton.tag = testButtonTag;
             
-            [testButton addTarget:self action:@selector(performStepByStepExtractTest) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performFinalExtractTest) forControlEvents:UIControlEventTouchUpInside];
             
             [keyWindow addSubview:testButton];
-            EchoLog(@"分步提取测试按钮已添加。");
+            EchoLog(@"最终提取测试按钮已添加。");
         });
     }
 }
 
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isTestingNianMing && g_currentItemToExtract) {
-        // 步骤2: 拦截操作表，只点击当前需要的一项
         if ([viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
             UIAlertController *alert = (UIAlertController *)viewControllerToPresent;
             UIAlertAction *targetAction = nil;
             for (UIAlertAction *action in alert.actions) {
-                if ([action.title isEqualToString:g_currentItemToExtract]) { // 只找当前目标的action
+                if ([action.title isEqualToString:g_currentItemToExtract]) {
                     targetAction = action;
                     break;
                 }
@@ -67,13 +66,11 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             }
         }
         
-        // 步骤3: 拦截内容页
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        NSString *vcTitle = viewControllerToPresent.title ?: @"";
         
-        NSString* (^extractTextFromVC)(void) = ^NSString* { /* ... 提取文本的实现 ... */
+        NSString* (^extractTextFromVC)(void) = ^NSString* {
             NSMutableString *t = [NSMutableString string];
-            if(vcTitle){ [t appendFormat:@"%@\n", vcTitle]; }
+            if(viewControllerToPresent.title){ [t appendFormat:@"%@\n", viewControllerToPresent.title]; }
             NSMutableArray *v = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIView class],viewControllerToPresent.view,v);
             [v filterUsingPredicate:[NSPredicate predicateWithBlock:^(id o,id b){return[o respondsToSelector:@selector(text)];}]];
             [v sortUsingComparator:^NSComparisonResult(UIView*v1,UIView*v2){return[@(v1.frame.origin.y)compare:@(v2.frame.origin.y)];}];
@@ -81,11 +78,13 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             return[t copy];
         };
 
+        // ---【核心修正】---
+        // 用类名来判断，更加准确可靠
         if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
             [g_capturedZhaiYaoArray addObject:extractTextFromVC()];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             return;
-        } else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcTitle containsString:@"格局方法"]) {
+        } else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
             [g_capturedGeJuArray addObject:extractTextFromVC()];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             return;
@@ -95,8 +94,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)performStepByStepExtractTest {
-    EchoLog(@"--- 开始(分步)提取所有年命信息测试 ---");
+- (void)performFinalExtractTest {
+    EchoLog(@"--- 开始(最终版)提取所有年命信息测试 ---");
     
     g_isTestingNianMing = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
@@ -114,7 +113,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
     EchoLog(@"找到 %lu 个行年单元。", (unsigned long)allUnitCells.count);
 
-    // 封装单项提取的循环逻辑
     void (^extractItem)(NSString *, void(^)(void)) = ^(NSString *itemNameToExtract, void(^completionBlock)(void)){
         dispatch_queue_t queue = dispatch_queue_create("com.echoai.extract.queue", DISPATCH_QUEUE_SERIAL);
         dispatch_async(queue, ^{
@@ -142,11 +140,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         });
     };
     
-    // 步骤1: 提取所有人的 "年命摘要"
     extractItem(@"年命摘要", ^{
-        // 步骤2: 年命摘要提取完后，接着提取所有人的 "格局方法"
         extractItem(@"格局方法", ^{
-            // 步骤3: 全部完成后，显示结果
             EchoLog(@"所有提取任务完成，显示最终结果。");
             
             NSMutableString *finalResultString = [NSMutableString string];
@@ -160,11 +155,12 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 [finalResultString appendString:@"\n====================\n"];
             }
             
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"分步提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"最终提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:alert animated:YES completion:nil];
             
-            g_isTestingNianMing = NO;
+            [self presentViewController:alert animated:YES completion:^{
+                 g_isTestingNianMing = NO;
+            }];
         });
     });
 }
