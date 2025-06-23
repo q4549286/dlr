@@ -4,7 +4,7 @@
 // =========================================================================
 // 日志宏定义
 // =========================================================================
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-V3] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-V4] " format), ##__VA_ARGS__)
 
 // =========================================================================
 // 全局变量
@@ -42,7 +42,7 @@ static NSMutableDictionary *g_testExtractedData = nil;
 }
 
 // -------------------------------------------------------------------------
-// 2. 拦截弹窗【终极修正版】
+// 2. 拦截弹窗 (无变化)
 // -------------------------------------------------------------------------
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_testExtractedData == nil || [viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
@@ -54,13 +54,9 @@ static NSMutableDictionary *g_testExtractedData = nil;
     viewControllerToPresent.view.alpha = 0.0f;
     flag = NO;
 
-    // 我们不再需要dispatch_after了，因为getter调用是同步的
     NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
     
     if ([vcClassName isEqualToString:@"六壬大占.格局總覽視圖"]) {
-        
-        // --- 【终极核心修改】 ---
-        // 我们要去调用的 getter 方法名
         SEL getterSelector = NSSelectorFromString(@"格局列");
         NSString *titleKey = @"標題";
         NSString *detailKey = @"解";
@@ -68,16 +64,11 @@ static NSMutableDictionary *g_testExtractedData = nil;
         id dataSource = nil;
         if ([viewControllerToPresent respondsToSelector:getterSelector]) {
             EchoLog(@"VC 响应 getter '%@'，准备调用...", NSStringFromSelector(getterSelector));
-            
-            // 使用 performSelector 来调用 getter 方法
-            // 这会强制触发懒加载并返回数据
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
             dataSource = [viewControllerToPresent performSelector:getterSelector];
             #pragma clang diagnostic pop
-            
             EchoLog(@"Getter 调用完毕，返回的数据: %@", dataSource);
-
         } else {
             EchoLog(@"致命错误: VC不响应getter '%@'。", NSStringFromSelector(getterSelector));
         }
@@ -89,15 +80,13 @@ static NSMutableDictionary *g_testExtractedData = nil;
                 id detailObj = [item valueForKey:detailKey];
                 NSString *title = [titleObj isKindOfClass:[NSString class]] ? titleObj : @"";
                 NSString *detail = [detailObj isKindOfClass:[NSString class]] ? detailObj : @"";
-                
                 if (title.length > 0 || detail.length > 0) {
                     [textParts addObject:[NSString stringWithFormat:@"%@: %@", title, detail]];
                 }
             }
-            
             if (textParts.count > 0) {
                 g_testExtractedData[@"格局"] = [textParts componentsJoinedByString:@"\n"];
-                EchoLog(@"[V3-Getter版] 提取成功! 共 %lu 条格局。", (unsigned long)textParts.count);
+                EchoLog(@"[V4-Fix] 提取成功! 共 %lu 条格局。", (unsigned long)textParts.count);
             } else {
                 g_testExtractedData[@"格局"] = @"提取成功，但数据源数组内容为空。";
             }
@@ -106,20 +95,16 @@ static NSMutableDictionary *g_testExtractedData = nil;
              g_testExtractedData[@"格局"] = errorMsg;
              EchoLog(@"%@", errorMsg);
         }
-
     } else {
          g_testExtractedData[@"格局"] = [NSString stringWithFormat:@"提取失败，拦截到了错误的VC: %@", vcClassName];
     }
     
-    // 静默关闭弹窗
     [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
-    
-    // 必须调用原始方法
     %orig(viewControllerToPresent, flag, completion);
 }
 
 // -------------------------------------------------------------------------
-// 3. 按钮点击事件 (无变化)
+// 3. 按钮点击事件 【已修复编译错误】
 // -------------------------------------------------------------------------
 %new
 - (void)testGeJuExtractionTapped {
@@ -130,14 +115,14 @@ static NSMutableDictionary *g_testExtractedData = nil;
     if (![self respondsToSelector:selectorGeJu]) {
         EchoLog(@"错误: 当前VC不响应'顯示格局總覽'方法。");
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:@"当前VC无法调用'顯示格局總覽'" preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertControllerStyleDefault handler:nil]];
+        // --- 【编译错误修复点 1】---
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
         g_testExtractedData = nil;
         return;
     }
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        
         dispatch_sync(dispatch_get_main_queue(), ^{
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
@@ -145,7 +130,6 @@ static NSMutableDictionary *g_testExtractedData = nil;
             #pragma clang diagnostic pop
         });
         
-        // 稍微等待一下，确保presentViewController的hook被调用
         [NSThread sleepForTimeInterval:0.2]; 
         
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -159,6 +143,7 @@ static NSMutableDictionary *g_testExtractedData = nil;
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"格局提取测试结果"
                                                                            message:resultText
                                                                     preferredStyle:UIAlertControllerStyleAlert];
+            // --- 【编译错误修复点 2】---
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             
             [self presentViewController:alert animated:YES completion:^{
