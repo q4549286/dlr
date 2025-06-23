@@ -112,8 +112,8 @@ static NSString* GetStringFromLayer(id layer) {
     }
 }
 
-// ========================[ 再次修复 ]=========================
-// 此处是本次修改的核心区域，修复了“法诀”提取不全的问题
+// ========================[ 最终修复版 ]=========================
+// 修复了“毕法”和“格局”的提取逻辑，并满足新的排版要求
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f;
@@ -139,86 +139,64 @@ static NSString* GetStringFromLayer(id layer) {
 
             NSString* content = nil;
             NSMutableArray *textParts = [NSMutableArray array];
-            CGFloat midX = viewControllerToPresent.view.bounds.size.width / 2;
-
+            
             if ([vcClassName containsString:@"七政"]) {
                 [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
                 for(UILabel *label in labels) { if (label.text.length > 0) [textParts addObject:label.text]; }
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
                 EchoLog(@"成功抓取 [七政四余] 内容");
             }
-            else if ([title containsString:@"格局"]) {
-                // "格局"页面是垂直列表布局，此逻辑保持不变
-                [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                     if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-                     if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+            // =========================================================================
+            // 【全新统一逻辑】处理“毕法”和“格局”
+            // 它们的布局都是“标题-描述”成对的垂直列表
+            // =========================================================================
+            else if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"]) {
+                NSMutableArray *contentLabels = [NSMutableArray array];
+                for (UILabel *label in labels) {
+                    if (label.text.length > 0 && ![label.text isEqualToString:title]) {
+                        [contentLabels addObject:label];
+                    }
+                }
+
+                // 核心排序：严格按照Y坐标排序，确保从上到下的顺序
+                [contentLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                     if (roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
+                     if (roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
                      return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
                 }];
-                for(UILabel *label in labels) {
-                    if (label.text.length > 0 && ![label.text isEqualToString:title]) {
-                        [textParts addObject:label.text];
-                    }
-                }
-                g_extractedData[@"格局"] = [textParts componentsJoinedByString:@"\n"];
-                EchoLog(@"成功抓取 [格局] 内容 (垂直列表模式)");
-            }
-            // =========================================================================
-            // 【修复】为“法诀/毕法”实现健壮的双栏提取逻辑
-            // =========================================================================
-            else if ([title containsString:@"法诀"] || [title containsString:@"毕法"]) {
-                NSMutableArray *leftLabels = [NSMutableArray array];
-                NSMutableArray *rightLabels = [NSMutableArray array];
-
-                // 1. 将UILabel对象（而非文本）放入左右两个数组
-                for(UILabel *label in labels) {
-                    if (label.text.length > 0 && ![label.text isEqualToString:title]) {
-                        if (CGRectGetMidX(label.frame) < midX) {
-                            [leftLabels addObject:label];
-                        } else {
-                            [rightLabels addObject:label];
-                        }
-                    }
-                }
                 
-                // 2.【关键修复】对左右两列分别进行垂直排序
-                NSComparator yComparator = ^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                    return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
-                };
-                [leftLabels sortUsingComparator:yComparator];
-                [rightLabels sortUsingComparator:yComparator];
-
-                // 3. 按行配对，现在可以确保是同一行的左右部分
-                for (NSUInteger i = 0; i < MIN(leftLabels.count, rightLabels.count); i++) {
-                    NSString *leftText = ((UILabel *)leftLabels[i]).text;
-                    NSString *rightText = ((UILabel *)rightLabels[i]).text;
-                    [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftText, rightText]];
+                // 按2个一组（成对）处理
+                for (NSUInteger i = 0; i < contentLabels.count; i += 2) {
+                    if (i + 1 < contentLabels.count) {
+                        UILabel *titleLabel = contentLabels[i];
+                        UILabel *descLabel = contentLabels[i+1];
+                        // 清理标题中可能存在的 " 毕法" 后缀
+                        NSString *cleanTitle = [titleLabel.text stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
+                        
+                        // 格式化为 "标题→描述"
+                        NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, descLabel.text];
+                        [textParts addObject:pairString];
+                    }
                 }
                 content = [textParts componentsJoinedByString:@"\n"];
-                g_extractedData[@"毕法"] = content;
-                EchoLog(@"成功抓取并重排版 [毕法] 内容 (已修复双栏排序问题)");
+
+                if ([title containsString:@"格局"]) {
+                    g_extractedData[@"格局"] = content;
+                    EchoLog(@"成功抓取 [格局] (A→B 配对模式)");
+                } else {
+                    g_extractedData[@"毕法"] = content;
+                    EchoLog(@"成功抓取 [毕法] (A→B 配对模式)");
+                }
             }
-            // =========================================================================
-            else if (fangfaViews.count > 0) { // “方法”页面的逻辑，看起来是双栏，也一并加固
-                NSMutableArray *leftLabels = [NSMutableArray array];
-                NSMutableArray *rightLabels = [NSMutableArray array];
-                
-                for(UILabel *label in labels) {
-                    if(label.text.length > 0) {
-                        if (CGRectGetMidX(label.frame) < midX) { [leftLabels addObject:label]; } else { [rightLabels addObject:label]; }
-                    }
-                }
-
-                NSComparator yComparator = ^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; };
-                [leftLabels sortUsingComparator:yComparator];
-                [rightLabels sortUsingComparator:yComparator];
-
-                for (NSUInteger i = 0; i < MIN(leftLabels.count, rightLabels.count); i++) {
-                    NSString *leftText = ((UILabel *)leftLabels[i]).text;
-                    NSString *rightText = ((UILabel *)rightLabels[i]).text;
-                    [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftText, rightText]];
-                }
+            else if (fangfaViews.count > 0) { // “方法”页面的逻辑暂时保留双栏，如果也有问题可以切换成上面的逻辑
+                CGFloat midX = viewControllerToPresent.view.bounds.size.width / 2;
+                NSMutableArray *leftColumn = [NSMutableArray array];
+                NSMutableArray *rightColumn = [NSMutableArray array];
+                [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+                for(UILabel *label in labels) { if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } else { [rightColumn addObject:label.text]; } }
+                for (NSUInteger i=0; i < MIN(leftColumn.count, rightColumn.count); i++) { [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]]; }
                 g_extractedData[@"方法"] = [textParts componentsJoinedByString:@"\n"];
-                EchoLog(@"成功抓取并重排版 [方法] 内容 (已修复双栏排序问题)");
+                EchoLog(@"成功抓取并重排版 [方法] 内容");
             } else {
                  EchoLog(@"抓取到未知弹窗，内容被忽略。");
             }
@@ -410,8 +388,13 @@ static NSString* GetStringFromLayer(id layer) {
         dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
             
-            NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"毕法:\n%@\n\n", g_extractedData[@"毕法"]] : @"";
-            NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"格局:\n%@\n\n", g_extractedData[@"格局"]] : @"";
+            // =========================================================================
+            // 【排版修复】去掉“毕法”和“格局”的标题，直接输出内容
+            // =========================================================================
+            NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"毕法"]] : @"";
+            NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"格局"]] : @"";
+            // =========================================================================
+            
             NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
             NSString *fangFaOutput = g_extractedData[@"方法"] ? [NSString stringWithFormat:@"方法:\n%@\n\n", g_extractedData[@"方法"]] : @"";
             NSString *tianDiPanOutput = g_extractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_extractedData[@"天地盘"]] : @"";
