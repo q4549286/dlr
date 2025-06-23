@@ -1,45 +1,28 @@
 #import <UIKit/UIKit.h>
-
 #import <objc/runtime.h>
 
-
-
 // =========================================================================
-
 // 日志宏定义
-
 // =========================================================================
-
 #define EchoLog(format, ...) NSLog((@"[EchoAI] " format), ##__VA_ARGS__)
 
-
-
 // =========================================================================
-
 // Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 保持不变
-
 // =========================================================================
-
 %hook UILabel
-
 - (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
-
 - (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
-
 %end
 
 static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); CGContextRef context = UIGraphicsGetCurrentContext(); CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); CGContextRotateCTM(context, angle * M_PI / 180); NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; CGSize textSize = [text sizeWithAttributes:attributes]; CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); [text drawInRect:textRect withAttributes:attributes]; UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext(); return image; }
 
 %hook UIWindow
-
 - (void)layoutSubviews { %orig; if (self.windowLevel != UIWindowLevelNormal) { return; } NSInteger watermarkTag = 998877; if ([self viewWithTag:watermarkTag]) { return; } NSString *watermarkText = @"Echo定制"; UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; CGFloat rotationAngle = -30.0; CGSize tileSize = CGSizeMake(150, 100); UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; watermarkView.tag = watermarkTag; watermarkView.userInteractionEnabled = NO; watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; [self addSubview:watermarkView]; [self bringSubviewToFront:watermarkView]; }
-
 %end
 
 
-
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已统一采用最可靠的排版方案)
+// Section 3: 【最终优化版】一键复制到 AI (已统一采用最可靠的排版方案)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -74,6 +57,7 @@ static NSMutableDictionary *g_extractedData = nil;
     }
 }
 
+// 【关键优化】重构此方法以使用更稳健的UI结构抓取逻辑
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         
@@ -82,54 +66,80 @@ static NSMutableDictionary *g_extractedData = nil;
         
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             
-            NSMutableArray *labels = [NSMutableArray array];
-            [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:labels];
-            
             NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
             NSString *title = viewControllerToPresent.title ?: @"";
-            if (title.length == 0 && labels.count > 0) {
-                 [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                     if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-                     if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
-                     return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-                 }];
-                 title = ((UILabel*)labels.firstObject).text;
+            
+            Class fangfaViewClass = NSClassFromString(@"六壬大占.格局單元");
+            BOOL isFangFa = NO;
+            if (fangfaViewClass) {
+                NSMutableArray *fangfaViews = [NSMutableArray array];
+                [self findSubviewsOfClass:fangfaViewClass inView:viewControllerToPresent.view andStoreIn:fangfaViews];
+                if (fangfaViews.count > 0) {
+                    isFangFa = YES;
+                }
             }
 
-            NSMutableArray *fangfaViews = [NSMutableArray array];
-            Class fangfaViewClass = NSClassFromString(@"六壬大占.格局單元");
-            if (fangfaViewClass) { [self findSubviewsOfClass:fangfaViewClass inView:viewControllerToPresent.view andStoreIn:fangfaViews]; }
+            // 【新逻辑】统一处理所有基于列表的弹窗 (毕法, 格局, 方法)
+            if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || isFangFa) {
+                EchoLog(@"正在为 [%@] 采用基于UIStackView的精准提取方案...", title);
+                
+                // 1. 优先寻找UIStackView作为最精确的容器
+                NSMutableArray *stackViews = [NSMutableArray array];
+                [self findSubviewsOfClass:[UIStackView class] inView:viewControllerToPresent.view andStoreIn:stackViews];
+                
+                UIView *searchTargetView = viewControllerToPresent.view; // 默认在整个视图中搜索
+                if (stackViews.count > 0) {
+                    searchTargetView = stackViews.firstObject; // 找到StackView，就只在它内部搜索
+                    EchoLog(@"成功定位到UIStackView容器, 将在此容器内查找UILabel。");
+                } else {
+                    EchoLog(@"警告: 未找到UIStackView, 将在整个弹窗视图内查找UILabel (备用方案)。");
+                }
 
-            // 【关键修复】为所有模块统一使用简单可靠的“两列式”排版逻辑
-            NSString* content = nil;
-            NSMutableArray *leftColumn = [NSMutableArray array];
-            NSMutableArray *rightColumn = [NSMutableArray array];
-            NSMutableArray *textParts = [NSMutableArray array];
-            CGFloat midX = viewControllerToPresent.view.bounds.size.width / 2;
+                // 2. 从目标容器中获取所有UILabel
+                NSMutableArray *allLabels = [NSMutableArray array];
+                [self findSubviewsOfClass:[UILabel class] inView:searchTargetView andStoreIn:allLabels];
+                
+                // 3. 按Y坐标排序，保证从上到下的顺序
+                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                    return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
+                }];
 
-            if ([vcClassName containsString:@"七政"]) {
+                // 4. 提取并格式化文本
+                NSMutableArray *textParts = [NSMutableArray array];
+                for (UILabel *label in allLabels) {
+                    if (label.text.length > 0 && ![label.text isEqualToString:title]) {
+                        // 关键处理: 将文本中的制表符(\t)替换为更美观的分隔符
+                        NSString *cleanedText = [label.text stringByReplacingOccurrencesOfString:@"\t" withString:@": "];
+                        [textParts addObject:cleanedText];
+                    }
+                }
+                NSString *content = [textParts componentsJoinedByString:@"\n"];
+                
+                // 5. 存储到对应的键
+                if ([title containsString:@"格局"]) {
+                    g_extractedData[@"格局"] = content;
+                    EchoLog(@"成功抓取并重排版 [格局] 内容");
+                } else if (isFangFa) {
+                    g_extractedData[@"方法"] = content;
+                    EchoLog(@"成功抓取并重排版 [方法] 内容");
+                } else { // 包含"法诀"和"毕法"
+                    g_extractedData[@"毕法"] = content;
+                    EchoLog(@"成功抓取并重排版 [毕法] 内容");
+                }
+            }
+            // 【保留】处理七政弹窗的逻辑
+            else if ([vcClassName containsString:@"七政"]) {
+                NSMutableArray *labels = [NSMutableArray array];
+                [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:labels];
                 [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+                NSMutableArray *textParts = [NSMutableArray array];
                 for(UILabel *label in labels) { if (label.text.length > 0) [textParts addObject:label.text]; }
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
                 EchoLog(@"成功抓取 [七政四余] 内容 (单列排版)");
             }
-            else if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"]) {
-                // 毕法和格局使用两列排版
-                for(UILabel *label in labels) { if (![label.text isEqualToString:title]) { if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } else { [rightColumn addObject:label.text]; } } }
-                for (int i=0; i < MIN(leftColumn.count, rightColumn.count); i++) { [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]]; }
-                content = [textParts componentsJoinedByString:@"\n"];
-                if ([title containsString:@"格局"]) { g_extractedData[@"格局"] = content; EchoLog(@"成功抓取并重排版 [格局] 内容"); }
-                else { g_extractedData[@"毕法"] = content; EchoLog(@"成功抓取并重排版 [毕法] 内容"); }
-            }
-            else if (fangfaViews.count > 0) {
-                // 方法模块保持原有的两列排版
-                [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-                for(UILabel *label in labels) { if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } else { [rightColumn addObject:label.text]; } }
-                for (int i=0; i < MIN(leftColumn.count, rightColumn.count); i++) { [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]]; }
-                g_extractedData[@"方法"] = [textParts componentsJoinedByString:@"\n"];
-                EchoLog(@"成功抓取并重排版 [方法] 内容");
-            } else {
-                EchoLog(@"抓取到未知弹窗，内容被忽略。");
+            // 【保留】处理未知弹窗
+            else {
+                EchoLog(@"抓取到未知弹窗，内容被忽略。Class: %@, Title: %@", vcClassName, title);
             }
             
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
