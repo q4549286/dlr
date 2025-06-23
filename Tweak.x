@@ -17,7 +17,7 @@ static NSString *g_currentItemToExtract = nil;
 static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 
-// --- 【新增】自定义文本块 ---
+// --- 自定义文本块 ---
 static NSString * const CustomFooterText = @"\n\n"
 "--- 自定义注意事项 ---\n"
 "1. 本解析结果仅供参考。\n"
@@ -114,7 +114,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         %orig(viewControllerToPresent, flag, completion); return;
     }
     else if (g_isExtractingNianming && g_currentItemToExtract) {
-        __weak typeof(self) weakSelf = self;
+        __weak typeof(self) weakSelf = self; // 闪退修复
         if ([viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
             UIAlertController *alert = (UIAlertController *)viewControllerToPresent; UIAlertAction *targetAction = nil;
             for (UIAlertAction *action in alert.actions) { if ([action.title isEqualToString:g_currentItemToExtract]) { targetAction = action; break; } }
@@ -130,9 +130,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    __strong typeof(weakSelf) strongSelf = weakSelf;
-                    if (!strongSelf) return;
-
+                    __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                     UIView *contentView = viewControllerToPresent.view;
                     Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView"); NSMutableArray *tableViews = [NSMutableArray array]; if (tableViewClass) { FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews); }
                     UITableView *theTableView = tableViews.firstObject;
@@ -148,8 +146,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                         }
                     }
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
-                        if (!strongSelf2) return;
+                        __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) return;
                         NSString *formattedGeju = [strongSelf2 formatNianmingGejuFromView:contentView];
                         [g_capturedGeJuArray addObject:formattedGeju];
                         [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
@@ -174,13 +171,13 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array];
     NSString *currentTitle = nil;
     for (UILabel *label in allLabels) {
-        NSString *text = label.text;
+        NSString *text = label.text ?: @"";
         if ([text containsString:@"年生"] || [text containsString:@"行年"] || [text containsString:@"本命"]) continue;
 
-        BOOL isTitle = (label.frame.size.height < 25 && ![text containsString:@" "]);
-        if (isTitle && label.frame.origin.x < 50) {
+        BOOL isTitle = (label.frame.origin.x < 50) && (label.frame.size.height < 30) && ![text containsString:@" "];
+        if (isTitle) {
             currentTitle = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        } else if (currentTitle) {
+        } else if (currentTitle && text.length > 0) {
             NSString *content = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             NSString *pair = [NSString stringWithFormat:@"%@→%@", currentTitle, content];
             if (![formattedPairs containsObject:pair]) {
@@ -207,15 +204,11 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     
     __weak typeof(self) weakSelf = self;
     [self extractKePanInfoWithCompletion:^(NSString *kePanText) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-
+        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
         EchoLog(@"--- 课盘信息提取完成 ---");
         progressLabel.text = @"提取年命信息...";
         [strongSelf extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
-             __strong typeof(weakSelf) strongSelf2 = weakSelf;
-             if (!strongSelf2) return;
-
+             __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) return;
             EchoLog(@"--- 年命信息提取完成 ---");
             [[keyWindow viewWithTag:ProgressViewTag] removeFromSuperview];
             nianmingText = [nianmingText stringByReplacingOccurrencesOfString:@"【年命格局】" withString:@""];
@@ -237,7 +230,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (void)extractKePanInfoWithCompletion:(void (^)(NSString *kePanText))completion {
-    // ... 此方法内容保持不变 ...
     #define SafeString(str) (str ?: @"")
     g_extractedData = [NSMutableDictionary dictionary];
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
@@ -322,9 +314,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     __block void (^processItem)(NSString*, NSInteger, void(^)(void));
 
     processItem = ^(NSString *itemName, NSInteger index, void(^itemCompletion)(void)) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-
+        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
         g_currentItemToExtract = itemName;
         UICollectionViewCell *cell = allUnitCells[index];
         id delegate = targetCV.delegate;
@@ -338,9 +328,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     };
 
     extractForCellAtIndex = ^(NSInteger index) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-
+        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
         if (index >= allUnitCells.count) {
             NSMutableString *resultStr = [NSMutableString string];
             for (NSUInteger i = 0; i < allUnitCells.count; i++) {
@@ -355,8 +343,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             }
             g_isExtractingNianming = NO;
             if (completion) { completion(resultStr); }
-            extractForCellAtIndex = nil;
-            processItem = nil;
+            extractForCellAtIndex = nil; processItem = nil;
             return;
         }
 
@@ -374,7 +361,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
-    // ... 此方法内容保持不变 ...
     Class targetViewClass = NSClassFromString(className); if (!targetViewClass) { EchoLog(@"类名 '%@' 未找到。", className); return @""; }
     NSMutableArray *targetViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(targetViewClass, self.view, targetViews);
     if (targetViews.count == 0) return @"";
@@ -385,7 +371,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 }
 %new
 - (NSString *)extractTianDiPanInfo_V18 {
-    // ... 此方法内容保持不变 ...
     @try {
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類"); if (!plateViewClass) return @"天地盘提取失败: 找不到视图类";
         UIWindow *keyWindow = self.view.window; if (!keyWindow) return @"天地盘提取失败: 找不到keyWindow";
