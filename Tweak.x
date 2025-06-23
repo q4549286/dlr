@@ -6,7 +6,7 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V7-Stable] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V8-Stable] " format), ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
@@ -114,7 +114,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         %orig(viewControllerToPresent, flag, completion); return;
     }
     else if (g_isExtractingNianming && g_currentItemToExtract) {
-        __weak typeof(self) weakSelf = self; // 闪退修复
+        __weak typeof(self) weakSelf = self;
         if ([viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
             UIAlertController *alert = (UIAlertController *)viewControllerToPresent; UIAlertAction *targetAction = nil;
             for (UIAlertAction *action in alert.actions) { if ([action.title isEqualToString:g_currentItemToExtract]) { targetAction = action; break; } }
@@ -204,11 +204,11 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     
     __weak typeof(self) weakSelf = self;
     [self extractKePanInfoWithCompletion:^(NSString *kePanText) {
-        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
+        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) { [[keyWindow viewWithTag:ProgressViewTag] removeFromSuperview]; return; }
         EchoLog(@"--- 课盘信息提取完成 ---");
         progressLabel.text = @"提取年命信息...";
         [strongSelf extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
-             __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) return;
+             __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) { [[keyWindow viewWithTag:ProgressViewTag] removeFromSuperview]; return; }
             EchoLog(@"--- 年命信息提取完成 ---");
             [[keyWindow viewWithTag:ProgressViewTag] removeFromSuperview];
             nianmingText = [nianmingText stringByReplacingOccurrencesOfString:@"【年命格局】" withString:@""];
@@ -230,6 +230,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (void)extractKePanInfoWithCompletion:(void (^)(NSString *kePanText))completion {
+    // ... 此方法内容保持不变 ...
     #define SafeString(str) (str ?: @"")
     g_extractedData = [NSMutableDictionary dictionary];
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
@@ -293,6 +294,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     });
 }
 
+// ====================== 【V8 核心重构】 ======================
 %new
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
     g_isExtractingNianming = YES;
@@ -309,29 +311,27 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
     if (allUnitCells.count == 0) { EchoLog(@"年命提取模块：行年单元数量为0，跳过。"); g_isExtractingNianming = NO; if (completion) { completion(@""); } return; }
 
+    // 1. 创建任务清单
+    NSMutableArray *workQueue = [NSMutableArray array];
+    for (NSUInteger i = 0; i < allUnitCells.count; i++) {
+        UICollectionViewCell *cell = allUnitCells[i];
+        [workQueue addObject:@{@"type": @"年命摘要", @"cell": cell, @"index": @(i)}];
+        [workQueue addObject:@{@"type": @"格局方法", @"cell": cell, @"index": @(i)}];
+    }
+
+    // 【闪退修复核心】使用 __weak self 避免循环引用
     __weak typeof(self) weakSelf = self;
-    __block void (^extractForCellAtIndex)(NSInteger);
-    __block void (^processItem)(NSString*, NSInteger, void(^)(void));
+    __block void (^processQueue)(void);
 
-    processItem = ^(NSString *itemName, NSInteger index, void(^itemCompletion)(void)) {
-        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
-        g_currentItemToExtract = itemName;
-        UICollectionViewCell *cell = allUnitCells[index];
-        id delegate = targetCV.delegate;
-        NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
-        if (delegate && indexPath && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
-            [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
-        }
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (itemCompletion) itemCompletion();
-        });
-    };
-
-    extractForCellAtIndex = ^(NSInteger index) {
-        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
-        if (index >= allUnitCells.count) {
+    // 2. 创建线性任务处理器
+    processQueue = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || workQueue.count == 0) {
+            // 3. 所有任务完成，收尾
+            EchoLog(@"所有年命任务处理完毕。");
             NSMutableString *resultStr = [NSMutableString string];
-            for (NSUInteger i = 0; i < allUnitCells.count; i++) {
+            NSUInteger personCount = allUnitCells.count;
+            for (NSUInteger i = 0; i < personCount; i++) {
                 NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[年命摘要未提取到]";
                 NSString *geJu = (i < g_capturedGeJuArray.count) ? g_capturedGeJuArray[i] : @"[年命格局未提取到]";
                 [resultStr appendFormat:@"--- 人员 %lu ---\n", (unsigned long)i+1];
@@ -339,24 +339,38 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                 [resultStr appendString:zhaiYao];
                 [resultStr appendString:@"\n\n【格局方法】\n"];
                 [resultStr appendString:geJu];
-                if (i < allUnitCells.count - 1) { [resultStr appendString:@"\n\n--------------------\n\n"]; }
+                if (i < personCount - 1) { [resultStr appendString:@"\n\n--------------------\n\n"]; }
             }
             g_isExtractingNianming = NO;
             if (completion) { completion(resultStr); }
-            extractForCellAtIndex = nil; processItem = nil;
+            processQueue = nil; // 解除闭包
             return;
         }
 
-        EchoLog(@"开始处理人员 %ld...", (long)index + 1);
-        processItem(@"年命摘要", index, ^{
-            EchoLog(@"人员 %ld 摘要提取完成。", (long)index + 1);
-            processItem(@"格局方法", index, ^{
-                EchoLog(@"人员 %ld 格局提取完成。", (long)index + 1);
-                extractForCellAtIndex(index + 1);
-            });
+        // 4. 取出并执行下一个任务
+        NSDictionary *item = workQueue.firstObject;
+        [workQueue removeObjectAtIndex:0];
+        NSString *type = item[@"type"];
+        UICollectionViewCell *cell = item[@"cell"];
+        NSInteger index = [item[@"index"] integerValue];
+
+        EchoLog(@"正在处理 人员 %ld 的 [%@]", (long)index + 1, type);
+
+        g_currentItemToExtract = type;
+        id delegate = targetCV.delegate;
+        NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
+        if (delegate && indexPath && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
+            [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
+        }
+
+        // 5. 等待UI操作完成，然后递归处理下一个任务
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            processQueue();
         });
     };
-    extractForCellAtIndex(0);
+
+    // 6. 启动任务队列
+    processQueue();
 }
 
 %new
