@@ -115,24 +115,23 @@ static void processNextNianMingButton(void) {
     EchoLog(@"[年命流程] 正在处理下一个年命按钮...");
     g_currentPopupType = EchoPopupTypeNianMingActionSheet;
     
-    // 模拟点击 - 找到并触发已有的手势识别器
+    // 【编译修复】使用更稳定和兼容ARC的模拟点击方式
+    BOOL didTap = NO;
     for (UIGestureRecognizer *recognizer in button.gestureRecognizers) {
         if ([recognizer isKindOfClass:[UITapGestureRecognizer class]]) {
-            // 通过KVC获取target和action来模拟点击
-            id target = [recognizer valueForKey:@"_targets"];
-            if (target && [target count] > 0) {
-                id targetProxy = [target firstObject];
-                id realTarget = [targetProxy valueForKey:@"_target"];
-                SEL action = (SEL)[targetProxy valueForKey:@"_action"];
-                if (realTarget && action) {
-                    [realTarget performSelector:action withObject:recognizer];
-                    return;
-                }
-            }
+            EchoLog(@"[年命流程] 找到Tap Gesture, 正在模拟点击...");
+            // 模拟手势状态变化来触发点击
+            [recognizer setState:UIGestureRecognizerStateBegan];
+            [recognizer setState:UIGestureRecognizerStateEnded];
+            didTap = YES;
+            break; // 找到一个就够了
         }
     }
-    EchoLog(@"[年命流程] 未能找到合适的TapGesture来模拟点击，跳过此按钮。");
-    processNextNianMingButton(); // 继续处理下一个
+
+    if (!didTap) {
+        EchoLog(@"[年命流程] 未能找到合适的TapGesture来模拟点击，跳过此按钮。");
+        processNextNianMingButton(); // 继续处理下一个
+    }
 }
 
 
@@ -167,7 +166,6 @@ static void processNextNianMingButton(void) {
 }
 
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    // 【新功能】处理年命提取的弹窗
     if (g_currentPopupType == EchoPopupTypeNianMingActionSheet && [viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         flag = NO;
         viewControllerToPresent.view.alpha = 0.0f;
@@ -180,18 +178,13 @@ static void processNextNianMingButton(void) {
                     void (^handler)(UIAlertAction *) = [action valueForKey:@"handler"];
                     if (handler) {
                         handler(action);
-                    } else { // 如果handler为空，尝试手动dismiss再继续
-                        [actionSheet dismissViewControllerAnimated:NO completion:^{
-                            processNextNianMingButton();
-                        }];
+                    } else { 
+                        [actionSheet dismissViewControllerAnimated:NO completion:^{ processNextNianMingButton(); }];
                     }
                     return;
                 }
             }
-             // 如果没找到“年命摘要”，也要继续下一个
-            [actionSheet dismissViewControllerAnimated:NO completion:^{
-                 processNextNianMingButton();
-            }];
+            [actionSheet dismissViewControllerAnimated:NO completion:^{ processNextNianMingButton(); }];
         });
         %orig(viewControllerToPresent, flag, completion);
         return;
@@ -215,7 +208,6 @@ static void processNextNianMingButton(void) {
             EchoLog(@"[年命流程] 成功提取一个年命摘要内容。");
 
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                // 处理完一个详情页后，继续处理下一个按钮
                 processNextNianMingButton();
             }];
         });
@@ -223,13 +215,11 @@ static void processNextNianMingButton(void) {
         return;
     }
 
-    // 处理毕法、格局等旧流程
     if (g_extractedData && (g_currentPopupType == EchoPopupTypeBiFa || g_currentPopupType == EchoPopupTypeGeJu || g_currentPopupType == EchoPopupTypeFangFa || g_currentPopupType == EchoPopupTypeQiZheng)) {
         viewControllerToPresent.view.alpha = 0.0f;
         flag = NO;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            
-            NSString *title = viewControllerToPresent.title ?: @"";
+            NSString *title = @"";
             switch (g_currentPopupType) {
                 case EchoPopupTypeBiFa: title = @"毕法"; break;
                 case EchoPopupTypeGeJu: title = @"格局"; break;
@@ -270,6 +260,7 @@ static void processNextNianMingButton(void) {
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
             }
             
+            g_currentPopupType = EchoPopupTypeNone; 
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
         });
         %orig(viewControllerToPresent, flag, completion);
@@ -436,7 +427,6 @@ static void processNextNianMingButton(void) {
     }
     g_extractedData[@"三传"] = sanChuan;
     
-    // 使用后台队列执行所有异步无感抓取
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         EchoLog(@"开始异步无感抓取动态信息...");
         
@@ -456,10 +446,6 @@ static void processNextNianMingButton(void) {
         if ([self respondsToSelector:selectorFangFa]) { g_currentPopupType = EchoPopupTypeFangFa; dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
         if ([self respondsToSelector:selectorQiZheng]) { g_currentPopupType = EchoPopupTypeQiZheng; dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; } 
         
-        // 【新功能】开始提取年命信息
-        EchoLog(@"[年命流程] 准备提取年命信息...");
-        
-        // 准备一个block，在所有年命信息提取完毕后执行
         __block UIViewController *weakSelf = self;
         g_finalCompletionBlock = [^{
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -473,7 +459,6 @@ static void processNextNianMingButton(void) {
                 if(geJuOutput.length > 0) geJuOutput = [NSString stringWithFormat:@"%@\n\n", geJuOutput];
                 if(fangFaOutput.length > 0) fangFaOutput = [NSString stringWithFormat:@"%@\n\n", fangFaOutput];
 
-                // 拼接年命信息
                 NSString *nianMingOutput = @"";
                 NSArray *nianMingArray = g_extractedData[@"年命"];
                 if (nianMingArray && nianMingArray.count > 0) {
@@ -516,24 +501,21 @@ static void processNextNianMingButton(void) {
             });
         } copy];
         
-        // 在主线程找到所有年命按钮，并启动处理流程
         dispatch_async(dispatch_get_main_queue(), ^{
             NSMutableArray *nianMingButtons = [NSMutableArray array];
-            // 【精确制导】使用您提供的准确类名
             Class nianMingContainerClass = NSClassFromString(@"六壬大占.神煞行年視圖");
             if (nianMingContainerClass) {
                 NSMutableArray *containerViews = [NSMutableArray array];
                 FindSubviewsOfClassRecursive(nianMingContainerClass, weakSelf.view, containerViews);
                 if (containerViews.count > 0) {
                     UIView *container = containerViews.firstObject;
-                    // 直接获取其子视图作为按钮列表
                     [nianMingButtons addObjectsFromArray:container.subviews];
                 }
             }
             
             if (nianMingButtons.count == 0) {
                  EchoLog(@"[年命流程] 未找到年命按钮，直接执行最终拼接。");
-                 processNextNianMingButton(); // 也会触发最终的拼接回调
+                 processNextNianMingButton(); 
             } else {
                  g_nianMingButtonsToProcess = [nianMingButtons mutableCopy];
                  processNextNianMingButton();
