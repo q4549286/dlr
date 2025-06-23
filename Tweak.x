@@ -110,7 +110,6 @@ static NSString* GetStringFromLayer(id layer) {
     }
 }
 
-// ========================[ 终极完美最终版 ]=========================
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f;
@@ -156,7 +155,6 @@ static NSString* GetStringFromLayer(id layer) {
                         NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
                         NSMutableArray *descParts = [NSMutableArray array];
-                        // 只有一个元素的是分组标题，不需要描述
                         if (arrangedSubviews.count > 1) {
                             for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
                                 if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
@@ -179,8 +177,8 @@ static NSString* GetStringFromLayer(id layer) {
                 if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content;
                 else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content;
                 else g_extractedData[@"毕法"] = content;
-            }
-            else if ([vcClassName containsString:@"七政"]) {
+
+            } else if ([vcClassName containsString:@"七政"]) {
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
                 [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
@@ -379,11 +377,18 @@ static NSString* GetStringFromLayer(id layer) {
         dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
             
-            // 【终极清理】在最后一步，精准移除所有已知的垃圾文本
-            NSString *biFaOutput = [g_extractedData[@"毕法"] stringByReplacingOccurrencesOfString:@"通类门→\n" withString:@""];
-            NSString *geJuOutput = [g_extractedData[@"格局"] stringByReplacingOccurrencesOfString:@"通类门→\n" withString:@""];
-            NSString *fangFaOutput = [g_extractedData[@"方法"] stringByReplacingOccurrencesOfString:@"通类门→\n" withString:@""];
+            NSString *biFaOutput = g_extractedData[@"毕法"] ?: @"";
+            NSString *geJuOutput = g_extractedData[@"格局"] ?: @"";
+            NSString *fangFaOutput = g_extractedData[@"方法"] ?: @"";
             
+            // --- 【终极强力清洁】---
+            NSArray *trashList = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
+            for (NSString *trash in trashList) {
+                biFaOutput = [biFaOutput stringByReplacingOccurrencesOfString:trash withString:@""];
+                geJuOutput = [geJuOutput stringByReplacingOccurrencesOfString:trash withString:@""];
+                fangFaOutput = [fangFaOutput stringByReplacingOccurrencesOfString:trash withString:@""];
+            }
+
             if(biFaOutput.length > 0) biFaOutput = [NSString stringWithFormat:@"%@\n\n", biFaOutput];
             if(geJuOutput.length > 0) geJuOutput = [NSString stringWithFormat:@"%@\n\n", geJuOutput];
             if(fangFaOutput.length > 0) fangFaOutput = [NSString stringWithFormat:@"%@\n\n", fangFaOutput];
