@@ -4,7 +4,7 @@
 // =========================================================================
 // 日志宏定义
 // =========================================================================
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-V8-Stable] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-V9-FINAL] " format), ##__VA_ARGS__)
 
 // =========================================================================
 // 全局变量
@@ -23,13 +23,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// -------------------------------------------------------------------------
-// 【新增】一个专门用于安全获取Ivar值的辅助函数
-// -------------------------------------------------------------------------
 static id GetIvarValueFromObject(id object, const char *ivarName) {
     Ivar ivar = class_getInstanceVariable([object class], ivarName);
     if (ivar) {
-        // 使用 object_getIvar 直接从内存读取，这是最安全的方式
         return object_getIvar(object, ivar);
     }
     return nil;
@@ -50,16 +46,16 @@ static id GetIvarValueFromObject(id object, const char *ivarName) {
         if ([self.view.window viewWithTag:45678]) return;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window;
-            if (!keyWindow) return;
+            if (!keyWindow) return; // 这里用self.view.window没问题，因为它是在viewDidLoad之后
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(10, 45, 120, 36);
             testButton.tag = 45678;
-            [testButton setTitle:@"格局提取(V8)" forState:UIControlStateNormal];
+            [testButton setTitle:@"格局提取(V9)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
             testButton.backgroundColor = [UIColor systemTealColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(testGeJuExtractionTapped_V8) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(testGeJuExtractionTapped_V9) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
         });
     }
@@ -79,12 +75,9 @@ static id GetIvarValueFromObject(id object, const char *ivarName) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         
         if ([vcClassName isEqualToString:@"六壬大占.格局總覽視圖"]) {
-            EchoLog(@"[V8] 拦截到格局VC，准备进行防闪退UI解析...");
-
             Class cellClass = NSClassFromString(@"六壬大占.格局單元");
             if (!cellClass) {
                 g_testExtractedData[@"格局"] = @"提取失败: 找不到'六壬大占.格局單元'类。";
-                // dismiss, 以免卡住
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
                 return;
             }
@@ -99,15 +92,10 @@ static id GetIvarValueFromObject(id object, const char *ivarName) {
             if (cells.count > 0) {
                 NSMutableArray *textParts = [NSMutableArray array];
                 for (id cell in cells) {
-                    // --- 【核心修改】 ---
-                    // 使用 object_getIvar 的安全辅助函数，替代 valueForKey:
                     id titleObj = GetIvarValueFromObject(cell, "標題");
                     id detailObj = GetIvarValueFromObject(cell, "解");
-
-                    // 确保取出的值是NSString
                     NSString *title = [titleObj isKindOfClass:[NSString class]] ? titleObj : @"";
                     NSString *detail = [detailObj isKindOfClass:[NSString class]] ? detailObj : @"";
-
                     if (title.length > 0 || detail.length > 0) {
                         [textParts addObject:[NSString stringWithFormat:@"%@: %@", title, detail]];
                     }
@@ -115,15 +103,14 @@ static id GetIvarValueFromObject(id object, const char *ivarName) {
                 
                 if (textParts.count > 0) {
                     g_testExtractedData[@"格局"] = [textParts componentsJoinedByString:@"\n"];
-                    EchoLog(@"[V8] 防闪退解析成功! 提取了 %lu 个Cell。", (unsigned long)cells.count);
                 } else {
-                    g_testExtractedData[@"格局"] = @"防闪退解析成功，但未能从Cell中提取到有效文本。";
+                    g_testExtractedData[@"格局"] = @"解析成功，但未能提取到有效文本。";
                 }
             } else {
-                 g_testExtractedData[@"格局"] = @"防闪退解析失败: 未能在VC中找到任何'六壬大占.格局單元'。";
+                 g_testExtractedData[@"格局"] = @"解析失败: 未找到任何'格局單元'Cell。";
             }
         } else {
-             g_testExtractedData[@"格局"] = [NSString stringWithFormat:@"提取失败，拦截到了错误的VC: %@", vcClassName];
+             g_testExtractedData[@"格局"] = [NSString stringWithFormat:@"提取失败，拦截到错误的VC: %@", vcClassName];
         }
 
         [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
@@ -131,16 +118,15 @@ static id GetIvarValueFromObject(id object, const char *ivarName) {
 }
 
 // -------------------------------------------------------------------------
-// 3. 按钮点击事件
+// 3. 按钮点击事件【已修复编译错误】
 // -------------------------------------------------------------------------
 %new
-- (void)testGeJuExtractionTapped_V8 {
-    EchoLog(@"--- V8: 开始触发格局弹窗 ---");
+- (void)testGeJuExtractionTapped_V9 {
+    EchoLog(@"--- V9: 开始触发格局弹窗 ---");
     g_testExtractedData = [NSMutableDictionary dictionary];
 
     SEL selectorGeJu = NSSelectorFromString(@"顯示格局總覽");
     if (![self respondsToSelector:selectorGeJu]) {
-        // ... 错误处理
         return;
     }
     
@@ -153,14 +139,38 @@ static id GetIvarValueFromObject(id object, const char *ivarName) {
         NSString *resultText = g_testExtractedData[@"格局"] ?: @"提取失败，未捕获到任何内容。";
         
         [UIPasteboard generalPasteboard].string = resultText;
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"格局提取(V8)结果"
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"格局提取(V9)结果"
                                                                        message:resultText
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         
-        // 确保在主VC上弹出Alert
-        UIViewController *rootVC = [UIApplication sharedApplication].keyWindow.rootViewController;
-        [rootVC presentViewController:alert animated:YES completion:^{
+        // --- 【核心编译错误修复】 ---
+        // 使用现代API获取最顶层的ViewController来弹出Alert
+        UIViewController *presentingVC = self;
+        if (@available(iOS 13.0, *)) {
+            for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+                if (scene.activationState == UISceneActivationStateForegroundActive) {
+                    if ([scene.delegate respondsToSelector:@selector(window)]) {
+                        UIWindow *window = [(id <UIWindowSceneDelegate>)scene.delegate window];
+                        if (window) {
+                           presentingVC = window.rootViewController;
+                           while (presentingVC.presentedViewController) {
+                               presentingVC = presentingVC.presentedViewController;
+                           }
+                        }
+                    }
+                    break;
+                }
+            }
+        } else {
+            // Fallback on earlier versions
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            presentingVC = [UIApplication sharedApplication].keyWindow.rootViewController;
+            #pragma clang diagnostic pop
+        }
+
+        [presentingVC presentViewController:alert animated:YES completion:^{
             g_testExtractedData = nil;
         }];
     });
