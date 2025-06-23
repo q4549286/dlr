@@ -6,7 +6,7 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V14-Final] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V13-Compact] " format), ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
@@ -53,7 +53,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
 - (NSString *)extractTianDiPanInfo_V18;
-- (NSString *)formatStackViewContentFromView:(UIView *)contentView;
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView;
 @end
 
@@ -80,52 +79,56 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     }
 }
 
-// ====================== 【V14 核心修复】 ======================
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    __weak typeof(self) weakSelf = self;
-    
-    // 课盘提取的无感弹窗
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f; flag = NO;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
             NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
             NSString *title = viewControllerToPresent.title ?: @"";
-            
+            if (title.length == 0) {
+                 NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, labels);
+                 if (labels.count > 0) { [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending; if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending; return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; UILabel *firstLabel = labels.firstObject; if (firstLabel && firstLabel.frame.origin.y < 100) { title = firstLabel.text; } }
+            }
+            NSMutableArray *textParts = [NSMutableArray array];
             if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
-                NSString *content = [strongSelf formatStackViewContentFromView:viewControllerToPresent.view];
-                if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content;
-                else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content;
-                else g_extractedData[@"毕法"] = content;
+                NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], viewControllerToPresent.view, stackViews); [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
+                for (UIStackView *stackView in stackViews) {
+                    NSArray *arrangedSubviews = stackView.arrangedSubviews;
+                    if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
+                        UILabel *titleLabel = arrangedSubviews[0]; NSString *rawTitle = titleLabel.text ?: @""; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
+                        NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                        NSMutableArray *descParts = [NSMutableArray array]; if (arrangedSubviews.count > 1) { for (NSUInteger i = 1; i < arrangedSubviews.count; i++) { if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) { [descParts addObject:((UILabel *)arrangedSubviews[i]).text]; } } }
+                        NSString *fullDesc = [[descParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+                        [textParts addObject:[NSString stringWithFormat:@"%@→%@", cleanTitle, [fullDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]];
+                    }
+                }
+                NSString *content = [textParts componentsJoinedByString:@"\n"];
+                if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content; else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content; else g_extractedData[@"毕法"] = content;
             } else if ([vcClassName containsString:@"七政"]) {
-                NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
-                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-                NSMutableArray *textParts = [NSMutableArray array];
+                NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels); [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
                 for (UILabel *label in allLabels) { if (label.text.length > 0) [textParts addObject:label.text]; }
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
             } else { EchoLog(@"[课盘提取] 抓取到未知弹窗 [%@]，内容被忽略。", title); }
-            
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
         });
         %orig(viewControllerToPresent, flag, completion); return;
     }
-    // 年命提取的无感弹窗
     else if (g_isExtractingNianming && g_currentItemToExtract) {
+        __weak typeof(self) weakSelf = self;
         if ([viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
             UIAlertController *alert = (UIAlertController *)viewControllerToPresent; UIAlertAction *targetAction = nil;
             for (UIAlertAction *action in alert.actions) { if ([action.title isEqualToString:g_currentItemToExtract]) { targetAction = action; break; } }
             if (targetAction) { id handler = [targetAction valueForKey:@"handler"]; if (handler) { ((void (^)(UIAlertAction *))handler)(targetAction); } return; }
         }
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        
-        // 【V14 核心修复】年命摘要和格局方法使用统一的提取逻辑
         if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
-            __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
-            NSString *formattedZhaiYao = [strongSelf formatStackViewContentFromView:viewControllerToPresent.view];
-            [g_capturedZhaiYaoArray addObject:formattedZhaiYao];
+            UIView *contentView = viewControllerToPresent.view; NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels); [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
+            NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in allLabels) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } }
+            // 【紧凑化修改】
+            NSString *compactText = [[textParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+            [g_capturedZhaiYaoArray addObject:compactText];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil]; return;
-        } 
-        else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
+        } else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -162,71 +165,41 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 // 4. "高级技法解析" 功能实现
 // =========================================================================
 
-%new
-- (NSString *)formatStackViewContentFromView:(UIView *)contentView {
-    NSMutableArray *stackViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
-    [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-        return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
-    }];
-    
-    NSMutableArray<NSString *> *textParts = [NSMutableArray array];
-    for (UIStackView *stackView in stackViews) {
-        NSArray *arrangedSubviews = stackView.arrangedSubviews;
-        if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-            UILabel *titleLabel = arrangedSubviews[0];
-            NSString *rawTitle = titleLabel.text ?: @"";
-            NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            
-            // 过滤掉年命摘要中不需要的标题
-            if ([cleanTitle isEqualToString:@"年命摘要"] || [cleanTitle containsString:@"年生"]) continue;
-
-            NSMutableString *contentString = [NSMutableString string];
-            if (arrangedSubviews.count > 1) {
-                for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
-                    if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
-                        if (contentString.length > 0) [contentString appendString:@" "];
-                        [contentString appendString:((UILabel *)arrangedSubviews[i]).text];
-                    }
-                }
-            }
-            
-            NSString *fullDesc = [contentString stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-            fullDesc = [fullDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            
-            [textParts addObject:[NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc]];
-        }
-    }
-    return [textParts componentsJoinedByString:@"\n"];
-}
-
+// ====================== 【V13 核心修复】 ======================
 %new
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView {
+    // 找到所有可见的 TableViewCell，它们是天然的条目分隔
     Class cellClass = NSClassFromString(@"六壬大占.格局單元");
     if (!cellClass) return @"";
     
     NSMutableArray *cells = [NSMutableArray array];
     FindSubviewsOfClassRecursive(cellClass, contentView, cells);
-    [cells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
+    [cells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+        return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
+    }];
     
     NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array];
+
     for (UIView *cell in cells) {
         NSMutableArray *labelsInCell = [NSMutableArray array];
         FindSubviewsOfClassRecursive([UILabel class], cell, labelsInCell);
         
         if (labelsInCell.count > 0) {
+            // 第一个label是标题
             UILabel *titleLabel = labelsInCell[0];
-            NSString *title = [titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            NSString *title = [[titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
             
+            // 后续所有label都是内容
             NSMutableString *contentString = [NSMutableString string];
             if (labelsInCell.count > 1) {
                 for (NSUInteger i = 1; i < labelsInCell.count; i++) {
-                     if (contentString.length > 0) [contentString appendString:@" "];
-                    [contentString appendString:((UILabel *)labelsInCell[i]).text];
+                    UILabel *contentLabel = labelsInCell[i];
+                    [contentString appendString:contentLabel.text];
                 }
             }
-            NSString *content = [contentString stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-            content = [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            
+            // 【紧凑化修改】
+            NSString *content = [[contentString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
             
             NSString *pair = [NSString stringWithFormat:@"%@→%@", title, content];
             if (![formattedPairs containsObject:pair]) {
@@ -234,6 +207,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             }
         }
     }
+    
     return [formattedPairs componentsJoinedByString:@"\n"];
 }
 
