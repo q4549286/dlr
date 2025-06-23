@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v15] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v16] " format), ##__VA_ARGS__)
 
 static BOOL g_isTestingNianMing = NO;
 static NSString *g_currentItemToExtract = nil;
@@ -14,7 +14,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 @interface UIViewController (DelegateTestAddon)
-- (void)performFinalPreciseExtractTest;
+- (void)performFinalPreciseCompileFixTest;
 @end
 
 %hook UIViewController
@@ -27,22 +27,22 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) return;
             
-            NSInteger testButtonTag = 999015; // v15
+            NSInteger testButtonTag = 999016; // v16
             if ([keyWindow viewWithTag:testButtonTag]) [[keyWindow viewWithTag:testButtonTag] removeFromSuperview];
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 200, 45, 90, 36);
-            [testButton setTitle:@"精准提取测试" forState:UIControlStateNormal];
+            [testButton setTitle:@"编译修复测试" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-            testButton.backgroundColor = [UIColor systemRedColor];
+            testButton.backgroundColor = [UIColor systemPurpleColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             testButton.tag = testButtonTag;
             
-            [testButton addTarget:self action:@selector(performFinalPreciseExtractTest) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performFinalPreciseCompileFixTest) forControlEvents:UIControlEventTouchUpInside];
             
             [keyWindow addSubview:testButton];
-            EchoLog(@"精准提取测试按钮 (v15) 已添加。");
+            EchoLog(@"编译修复测试按钮 (v16) 已添加。");
         });
     }
 }
@@ -61,7 +61,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
 
-        // --- 统一的、简单的提取逻辑 (适用于 年命摘要視圖) ---
         void (^extractSimplePage)(NSMutableArray *) = ^(NSMutableArray *storageArray) {
             UIView *contentView = viewControllerToPresent.view;
             NSMutableArray *allLabels = [NSMutableArray array];
@@ -84,21 +83,17 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             return;
 
         } else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
-            // ---【核心修正 V15：精准定位提取逻辑】---
             @try {
                 UIView *contentView = viewControllerToPresent.view;
                 NSMutableDictionary *elementsByYPos = [NSMutableDictionary dictionary];
                 
-                // 1. 定位 TableView
                 Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
                 NSMutableArray *tableViews = [NSMutableArray array];
                 if (tableViewClass) { FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews); }
 
-                // 2. 从 TableView 提取格局单元
                 UITableView *theTableView = tableViews.firstObject;
                 if (theTableView && [theTableView isKindOfClass:[UITableView class]]) {
                     for (UITableViewCell *cell in theTableView.visibleCells) {
-                        // 确认是 格局单元
                         if ([cell isKindOfClass:NSClassFromString(@"六壬大占.格局單元")]) {
                             NSMutableArray *labelsInCell = [NSMutableArray array];
                             FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
@@ -107,13 +102,13 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                                 NSString *title = ((UILabel *)labelsInCell[0]).text ?: @"";
                                 NSString *desc = ((UILabel *)labelsInCell[1]).text ?: @"";
                                 NSString *formattedText = [NSString stringWithFormat:@"%@→%@", title, desc];
-                                [elementsByYPos @(cell.frame.origin.y)] = formattedText;
+                                // --- 编译修复 ---
+                                [elementsByYPos setObject:formattedText forKey:@(cell.frame.origin.y)];
                             }
                         }
                     }
                 }
                 
-                // 3. 提取所有独立的 UILabel (不在 TableView 里的)
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
                 for (UILabel *label in allLabels) {
@@ -121,11 +116,11 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     if (theTableView) { isInsideTableView = [label isDescendantOfView:theTableView]; }
                     
                     if (!isInsideTableView && label.text.length > 0) {
-                        [elementsByYPos @(label.frame.origin.y)] = label.text;
+                        // --- 编译修复 ---
+                        [elementsByYPos setObject:label.text forKey:@(label.frame.origin.y)];
                     }
                 }
 
-                // 4. 按 Y 坐标排序并组合
                 NSArray *sortedKeys = [[elementsByYPos allKeys] sortedArrayUsingComparator:^NSComparisonResult(id obj1, id obj2) {
                     return [obj1 compare:obj2];
                 }];
@@ -147,7 +142,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)performFinalPreciseExtractTest {
+- (void)performFinalPreciseCompileFixTest {
     // 触发逻辑不变
     g_isTestingNianMing = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
