@@ -143,10 +143,10 @@ static NSString* GetStringFromLayer(id layer) {
             NSMutableArray *textParts = [NSMutableArray array];
 
             // 【逻辑 1】统一处理“毕法”、“格局”、“方法”
-            // 它们都使用UIStackView，并且布局相似
             if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
                 NSMutableArray *stackViews = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UIStackVew class], viewControllerToPresent.view, stackViews);
+                // 【编译错误修复】修正了这里的拼写错误
+                FindSubviewsOfClassRecursive([UIStackView class], viewControllerToPresent.view, stackViews);
 
                 [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
                     return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
@@ -154,24 +154,19 @@ static NSString* GetStringFromLayer(id layer) {
 
                 for (UIStackView *stackView in stackViews) {
                     NSArray *arrangedSubviews = stackView.arrangedSubviews;
-                    // 【核心修复】一个条目至少包含一个标题UILabel
                     if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
                         
-                        // 第一个UILabel是标题
                         UILabel *titleLabel = arrangedSubviews[0];
                         NSString *cleanTitle = [titleLabel.text stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
                         
-                        // 后续所有的UILabel都是描述部分
                         NSMutableArray *descParts = [NSMutableArray array];
                         for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
                             if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
                                 [descParts addObject:((UILabel *)arrangedSubviews[i]).text];
                             }
                         }
-                        // 将所有描述部分合并成一个无换行的字符串
                         NSString *fullDesc = [descParts componentsJoinedByString:@""]; 
                         
-                        // 格式化为 "标题→描述"
                         NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc];
                         [textParts addObject:pairString];
                     }
@@ -179,14 +174,13 @@ static NSString* GetStringFromLayer(id layer) {
                 
                 NSString *content = [textParts componentsJoinedByString:@"\n"];
                 
-                // 根据title存入正确的字典键
                 if ([title containsString:@"方法"]) {
                     g_extractedData[@"方法"] = content;
                     EchoLog(@"[稳定版] 成功抓取 [方法]");
                 } else if ([title containsString:@"格局"]) {
                     g_extractedData[@"格局"] = content;
                     EchoLog(@"[稳定版] 成功抓取 [格局]");
-                } else { // 默认为毕法/法诀
+                } else { 
                     g_extractedData[@"毕法"] = content;
                     EchoLog(@"[稳定版] 成功抓取 [毕法]");
                 }
@@ -197,7 +191,6 @@ static NSString* GetStringFromLayer(id layer) {
                 FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
                 [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
                 
-                // 跳过第一个作为标题的UILabel
                 for (NSUInteger i = 1; i < allLabels.count; i++) {
                     UILabel *label = allLabels[i];
                     if (label.text.length > 0) {
