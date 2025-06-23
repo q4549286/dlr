@@ -6,7 +6,7 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V7-Final] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V8-Fix] " format), ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
@@ -116,7 +116,9 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in allLabels) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } }
             [g_capturedZhaiYaoArray addObject:[textParts componentsJoinedByString:@"\n"]];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil]; return;
-        } else if ([g_currentItemToExtract isEqualToString:@"年命格局"] && [vcClassName containsString:@"年命格局視圖"]) {
+        } 
+        // 【关键修复点】使用 `vcClassName` 来判断，而不是 `g_currentItemToExtract`
+        else if ([vcClassName containsString:@"年命格局視圖"]) {
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -141,9 +143,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                             NSString *text = [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                             if (!text || text.length == 0) continue;
                             if ([text isEqualToString:@"年命格局"]) continue;
-
                             BOOL isTitle = [text hasSuffix:@"格"] || [text hasSuffix:@"课"];
-                            
                             if (isTitle) {
                                 if (currentTitle) { [formattedGeJuPairs addObject:currentTitle]; }
                                 currentTitle = text;
@@ -152,11 +152,8 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                             }
                         }
                         if (currentTitle) { [formattedGeJuPairs addObject:currentTitle]; }
-
-                        // 优化点 1：替换“年命格局//”为空
-                        NSString *finalGeJuText = [[formattedGeJuPairs componentsJoinedByString:@"\n"] stringByReplacingOccurrencesOfString:@"年命格局\n" withString:@""];
-                        finalGeJuText = [finalGeJuText stringByReplacingOccurrencesOfString:@"年命格局" withString:@""];
-
+                        
+                        NSString *finalGeJuText = [formattedGeJuPairs componentsJoinedByString:@"\n"];
                         [g_capturedGeJuArray addObject:finalGeJuText];
                         [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
                     });
@@ -208,7 +205,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             } else {
                 finalCombinedText = [NSString stringWithFormat:@"%@%@", kePanText, customFooter];
             }
-            [UIPasteboard generalPasteboard].string = finalCombinedText;
+            [UIPasteboard generalPasteboard].string: finalCombinedText;
             UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"解析完成" message:@"所有高级技法信息已合并，并成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
             [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:successAlert animated:YES completion:nil];
@@ -288,12 +285,18 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     g_isTestingNianMing = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
     g_capturedGeJuArray = [NSMutableArray array];
-    
     UICollectionView *targetCV = nil;
     Class unitClass = NSClassFromString(@"六壬大占.行年單元");
-    NSMutableArray *cvs = [NSMutableArray array]; FindSubviewsOfClassRecursive([UICollectionView class], self.view, cvs);
-    for (UICollectionView *cv in cvs) { if ([cv.visibleCells.firstObject isKindOfClass:unitClass]) { targetCV = cv; break; } }
-    if (!targetCV) { EchoLog(@"年命提取模块：未找到行年单元，跳过。"); g_isTestingNianMing = NO; if (completion) { completion(@""); } return; }
+    NSMutableArray *cvs = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], self.view, cvs); // Find UILabels to get a reference to the main view
+    if (cvs.count == 0) { EchoLog(@"年命提取模块：未找到任何UILabel，无法定位CollectionView，跳过。"); g_isTestingNianMing = NO; if (completion) { completion(@""); } return; }
+    
+    // Find collection view from a reliable view reference
+    UIView *refView = cvs[0];
+    NSMutableArray* allCVs = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UICollectionView class], refView.window, allCVs);
+    for (UICollectionView *cv in allCVs) { if ([cv.visibleCells.firstObject isKindOfClass:unitClass]) { targetCV = cv; break; } }
+    
+    if (!targetCV) { EchoLog(@"年命提取模块：未找到行年单元的CollectionView，跳过。"); g_isTestingNianMing = NO; if (completion) { completion(@""); } return; }
     
     id<UICollectionViewDataSource> dataSource = targetCV.dataSource;
     if (!dataSource || ![dataSource respondsToSelector:@selector(collectionView:numberOfItemsInSection:)]) { EchoLog(@"年命提取模块：无法获取 DataSource，跳过。"); g_isTestingNianMing = NO; if (completion) { completion(@""); } return; }
@@ -301,73 +304,49 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     if (totalItems == 0) { EchoLog(@"年命提取模块：行年单元数量为0，跳过。"); g_isTestingNianMing = NO; if (completion) { completion(@""); } return; }
 
     dispatch_queue_t serialQueue = dispatch_queue_create("com.echoai.nianming.serial.queue", DISPATCH_QUEUE_SERIAL);
-    
-    // 使用 __block 修饰符以便在 block 内部修改
     __block void (^processPersonAtIndex)(NSInteger) = nil;
     
     processPersonAtIndex = ^(NSInteger index) {
         if (index >= totalItems) {
-            // 所有人员处理完毕，组合最终文本并回调
             dispatch_async(dispatch_get_main_queue(), ^{
                 NSMutableString *resultStr = [NSMutableString string];
                 for (NSUInteger i = 0; i < totalItems; i++) {
                     NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[年命摘要未提取到]";
                     NSString *geJu = (i < g_capturedGeJuArray.count) ? g_capturedGeJuArray[i] : @"";
-                    
                     [resultStr appendFormat:@"--- 人员 %lu ---\n", (unsigned long)i+1];
                     [resultStr appendString:@"【年命摘要】\n"];
                     [resultStr appendString:zhaiYao];
-                    
-                    if (geJu.length > 0) {
-                        [resultStr appendString:@"\n\n【年命格局】\n"];
-                        [resultStr appendString:geJu];
-                    }
+                    if (geJu.length > 0) { [resultStr appendFormat:@"\n\n【年命格局】\n%@", geJu]; }
                     if (i < totalItems - 1) { [resultStr appendString:@"\n\n--------------------\n\n"]; }
                 }
                 g_isTestingNianMing = NO;
-                processPersonAtIndex = nil; // 解除循环引用
+                processPersonAtIndex = nil;
                 if (completion) { completion(resultStr); }
             });
             return;
         }
 
-        // --- 按顺序处理单个人员 ---
         NSIndexPath *indexPath = [NSIndexPath indexPathForItem:index inSection:0];
         id delegate = targetCV.delegate;
 
-        // 1. 滚动到目标并提取摘要
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            [targetCV scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally animated:NO];
-        });
-        [NSThread sleepForTimeInterval:0.2];
         g_currentItemToExtract = @"年命摘要";
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) { [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath]; }
-        });
+        dispatch_sync(dispatch_get_main_queue(), ^{ [targetCV scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally animated:NO]; });
+        [NSThread sleepForTimeInterval:0.2];
+        dispatch_sync(dispatch_get_main_queue(), ^{ if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) { [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath]; } });
         [NSThread sleepForTimeInterval:1.2];
 
-        // 2. 再次滚动到目标（以防UI状态变化）并提取格局
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            [targetCV scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally animated:NO];
-        });
+        // 【关键修复】使用正确的触发器名称 "格局方法"
+        g_currentItemToExtract = @"格局方法";
+        dispatch_sync(dispatch_get_main_queue(), ^{ [targetCV scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally animated:NO]; });
         [NSThread sleepForTimeInterval:0.2];
-        // 优化点 2: 使用 "年命格局" 作为触发器
-        g_currentItemToExtract = @"年命格局";
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) { [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath]; }
-        });
+        dispatch_sync(dispatch_get_main_queue(), ^{ if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) { [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath]; } });
         [NSThread sleepForTimeInterval:1.2];
         
-        // 3. 递归处理下一个人
         processPersonAtIndex(index + 1);
     };
 
-    // 启动处理流程
-    dispatch_async(serialQueue, ^{
-        processPersonAtIndex(0);
-    });
+    dispatch_async(serialQueue, ^{ processPersonAtIndex(0); });
 }
-
 
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
