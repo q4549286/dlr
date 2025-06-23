@@ -1,7 +1,8 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <QuartzCore/QuartzCore.h> // 为坐标转换引入
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v16] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v17] " format), ##__VA_ARGS__)
 
 static BOOL g_isTestingNianMing = NO;
 static NSString *g_currentItemToExtract = nil;
@@ -14,7 +15,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 @interface UIViewController (DelegateTestAddon)
-- (void)performFinalPreciseCompileFixTest;
+- (void)performFinalCoordinateFixTest;
 @end
 
 %hook UIViewController
@@ -27,22 +28,22 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) return;
             
-            NSInteger testButtonTag = 999016; // v16
+            NSInteger testButtonTag = 999017; // v17
             if ([keyWindow viewWithTag:testButtonTag]) [[keyWindow viewWithTag:testButtonTag] removeFromSuperview];
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 200, 45, 90, 36);
-            [testButton setTitle:@"编译修复测试" forState:UIControlStateNormal];
+            [testButton setTitle:@"坐标修复测试" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-            testButton.backgroundColor = [UIColor systemPurpleColor];
+            testButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.7 blue:0.7 alpha:1.0]; // Teal color
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             testButton.tag = testButtonTag;
             
-            [testButton addTarget:self action:@selector(performFinalPreciseCompileFixTest) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performFinalCoordinateFixTest) forControlEvents:UIControlEventTouchUpInside];
             
             [keyWindow addSubview:testButton];
-            EchoLog(@"编译修复测试按钮 (v16) 已添加。");
+            EchoLog(@"坐标修复测试按钮 (v17) 已添加。");
         });
     }
 }
@@ -62,6 +63,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
 
         void (^extractSimplePage)(NSMutableArray *) = ^(NSMutableArray *storageArray) {
+             // ... [omitted for brevity, same as before] ...
             UIView *contentView = viewControllerToPresent.view;
             NSMutableArray *allLabels = [NSMutableArray array];
             FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
@@ -71,9 +73,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
             }];
             NSMutableArray *textParts = [NSMutableArray array];
-            for (UILabel *label in allLabels) {
-                if (label.text && label.text.length > 0) { [textParts addObject:label.text]; }
-            }
+            for (UILabel *label in allLabels) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } }
             [storageArray addObject:[textParts componentsJoinedByString:@"\n"]];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
         };
@@ -83,15 +83,17 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             return;
 
         } else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
+            // ---【核心修正 V17：统一坐标系提取逻辑】---
             @try {
                 UIView *contentView = viewControllerToPresent.view;
-                NSMutableDictionary *elementsByYPos = [NSMutableDictionary dictionary];
-                
+                NSMutableArray *elementsWithFrames = [NSMutableArray array];
+
                 Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
                 NSMutableArray *tableViews = [NSMutableArray array];
                 if (tableViewClass) { FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews); }
-
                 UITableView *theTableView = tableViews.firstObject;
+
+                // 1. 从 TableView 提取格局单元，并转换坐标
                 if (theTableView && [theTableView isKindOfClass:[UITableView class]]) {
                     for (UITableViewCell *cell in theTableView.visibleCells) {
                         if ([cell isKindOfClass:NSClassFromString(@"六壬大占.格局單元")]) {
@@ -102,13 +104,16 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                                 NSString *title = ((UILabel *)labelsInCell[0]).text ?: @"";
                                 NSString *desc = ((UILabel *)labelsInCell[1]).text ?: @"";
                                 NSString *formattedText = [NSString stringWithFormat:@"%@→%@", title, desc];
-                                // --- 编译修复 ---
-                                [elementsByYPos setObject:formattedText forKey:@(cell.frame.origin.y)];
+                                
+                                // **坐标转换**
+                                CGRect frameInContent = [cell.superview convertRect:cell.frame toView:contentView];
+                                [elementsWithFrames addObject:@{@"text": formattedText, @"frame": [NSValue valueWithCGRect:frameInContent]}];
                             }
                         }
                     }
                 }
                 
+                // 2. 提取独立的 UILabel，并转换坐标
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
                 for (UILabel *label in allLabels) {
@@ -116,17 +121,24 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     if (theTableView) { isInsideTableView = [label isDescendantOfView:theTableView]; }
                     
                     if (!isInsideTableView && label.text.length > 0) {
-                        // --- 编译修复 ---
-                        [elementsByYPos setObject:label.text forKey:@(label.frame.origin.y)];
+                        // **坐标转换**
+                        CGRect frameInContent = [label.superview convertRect:label.frame toView:contentView];
+                         [elementsWithFrames addObject:@{@"text": label.text, @"frame": [NSValue valueWithCGRect:frameInContent]}];
                     }
                 }
 
-                NSArray *sortedKeys = [[elementsByYPos allKeys] sortedArrayUsingComparator:^NSComparisonResult(id obj1, id obj2) {
-                    return [obj1 compare:obj2];
+                // 3. 在统一坐标系下排序
+                [elementsWithFrames sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
+                    CGRect frame1 = [obj1[@"frame"] CGRectValue];
+                    CGRect frame2 = [obj2[@"frame"] CGRectValue];
+                    if (CGRectGetMinY(frame1) < CGRectGetMinY(frame2)) return NSOrderedAscending;
+                    if (CGRectGetMinY(frame1) > CGRectGetMinY(frame2)) return NSOrderedDescending;
+                    return [@(CGRectGetMinX(frame1)) compare:@(CGRectGetMinX(frame2))];
                 }];
 
+                // 4. 组合最终文本
                 NSMutableArray *finalParts = [NSMutableArray array];
-                for (NSNumber *key in sortedKeys) { [finalParts addObject:elementsByYPos[key]]; }
+                for (NSDictionary *element in elementsWithFrames) { [finalParts addObject:element[@"text"]]; }
                 
                 [g_capturedGeJuArray addObject:[finalParts componentsJoinedByString:@"\n"]];
 
@@ -142,7 +154,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)performFinalPreciseCompileFixTest {
+- (void)performFinalCoordinateFixTest {
     // 触发逻辑不变
     g_isTestingNianMing = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
@@ -192,7 +204,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 [finalResultString appendString:geJu];
                 [finalResultString appendString:@"\n\n====================\n\n"];
             }
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"精准提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"坐标修复成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:alert animated:YES completion:^{ g_isTestingNianMing = NO; }];
         });
