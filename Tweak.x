@@ -112,94 +112,86 @@ static NSString* GetStringFromLayer(id layer) {
     }
 }
 
-// ========================[ UIStackView 终极版 ]=========================
-// 根据您的新发现，使用 UIStackView 进行提取，完美解决配对问题
+// ========================[ 终极版 - 根据您的最终要求重构 ]=========================
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f;
         flag = NO;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            NSMutableArray *labels = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, labels);
             
             NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
             NSString *title = viewControllerToPresent.title ?: @"";
-            if (title.length == 0 && labels.count > 0) {
-                 [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                     if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-                     if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
-                     return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-                 }];
-                 title = ((UILabel*)labels.firstObject).text;
-            }
             
             NSMutableArray *textParts = [NSMutableArray array];
 
+            // =========================================================================
+            // 【逻辑 1】处理“七政四余”
+            // =========================================================================
             if ([vcClassName containsString:@"七政"]) {
-                [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-                for(UILabel *label in labels) { if (label.text.length > 0) [textParts addObject:label.text]; }
+                NSMutableArray *allLabels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
+                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+
+                for(UILabel *label in allLabels) {
+                    if (label.text.length > 0 && ![label.text isEqualToString:title]) {
+                        // 移除UILabel内部可能存在的换行符，并拼接
+                        NSString *cleanedText = [label.text stringByReplacingOccurrencesOfString:@"\n" withString:@""];
+                        [textParts addObject:cleanedText];
+                    }
+                }
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
-                EchoLog(@"成功抓取 [七政四余] 内容");
+                EchoLog(@"成功抓取 [七政四余] 内容，已移除内部空行");
             }
             // =========================================================================
-            // 【全新终极逻辑】基于 UIStackView 提取“毕法”和“格局”
+            // 【逻辑 2】统一处理“毕法”、“格局”、“方法”
             // =========================================================================
-            else if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"]) {
+            else if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
                 NSMutableArray *stackViews = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UIStackView class], viewControllerToPresent.view, stackViews);
 
-                // 1. 先将所有UIStackView从上到下排序，保证整体条目顺序正确
                 [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
                     return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
                 }];
 
-                // 2. 遍历每个UIStackView，它内部的arrangedSubviews顺序是可靠的
                 for (UIStackView *stackView in stackViews) {
                     NSArray *arrangedSubviews = stackView.arrangedSubviews;
-                    // 每个条目都由一个标题和一个描述构成，所以应该有两个子视图
-                    if (arrangedSubviews.count == 2 &&
-                        [arrangedSubviews[0] isKindOfClass:[UILabel class]] &&
-                        [arrangedSubviews[1] isKindOfClass:[UILabel class]])
-                    {
-                        UILabel *titleLabel = arrangedSubviews[0];
-                        UILabel *descLabel = arrangedSubviews[1];
+                    // 一个条目至少包含一个标题和一个描述部分
+                    if (arrangedSubviews.count >= 2 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
                         
-                        // 清理标题中可能存在的 " 毕法" 后缀
+                        // 第一个UILabel是标题
+                        UILabel *titleLabel = arrangedSubviews[0];
                         NSString *cleanTitle = [titleLabel.text stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
                         
+                        // 后续所有的UILabel都是描述部分
+                        NSMutableArray *descParts = [NSMutableArray array];
+                        for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
+                            if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
+                                [descParts addObject:((UILabel *)arrangedSubviews[i]).text];
+                            }
+                        }
+                        // 将所有描述部分合并成一个无换行的字符串
+                        NSString *fullDesc = [descParts componentsJoinedByString:@""]; 
+                        
                         // 格式化为 "标题→描述"
-                        NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, descLabel.text];
+                        NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc];
                         [textParts addObject:pairString];
                     }
                 }
                 
                 NSString *content = [textParts componentsJoinedByString:@"\n"];
-
-                if ([title containsString:@"格局"]) {
+                
+                if ([title containsString:@"方法"]) {
+                    g_extractedData[@"方法"] = content;
+                    EchoLog(@"成功抓取 [方法] (终极多行合并模式)");
+                } else if ([title containsString:@"格局"]) {
                     g_extractedData[@"格局"] = content;
-                    EchoLog(@"成功抓取 [格局] (UIStackView终极模式)");
+                    EchoLog(@"成功抓取 [格局] (终极多行合并模式)");
                 } else {
                     g_extractedData[@"毕法"] = content;
-                    EchoLog(@"成功抓取 [毕法] (UIStackView终极模式)");
+                    EchoLog(@"成功抓取 [毕法] (终极多行合并模式)");
                 }
-            }
-            else { // 其他情况暂时保留旧逻辑
-                 NSMutableArray *fangfaViews = [NSMutableArray array];
-                 Class fangfaViewClass = NSClassFromString(@"六壬大占.格局單元");
-                 if (fangfaViewClass) { FindSubviewsOfClassRecursive(fangfaViewClass, viewControllerToPresent.view, fangfaViews); }
-                 
-                 if (fangfaViews.count > 0) {
-                     CGFloat midX = viewControllerToPresent.view.bounds.size.width / 2;
-                     NSMutableArray *leftColumn = [NSMutableArray array];
-                     NSMutableArray *rightColumn = [NSMutableArray array];
-                     [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-                     for(UILabel *label in labels) { if (CGRectGetMidX(label.frame) < midX) { [leftColumn addObject:label.text]; } else { [rightColumn addObject:label.text]; } }
-                     for (NSUInteger i=0; i < MIN(leftColumn.count, rightColumn.count); i++) { [textParts addObject:[NSString stringWithFormat:@"%@: %@", leftColumn[i], rightColumn[i]]]; }
-                     g_extractedData[@"方法"] = [textParts componentsJoinedByString:@"\n"];
-                     EchoLog(@"成功抓取并重排版 [方法] 内容");
-                 } else {
-                      EchoLog(@"抓取到未知弹窗，内容被忽略。");
-                 }
+            } else {
+                 EchoLog(@"抓取到未知弹窗 [%@]，内容被忽略。", title);
             }
             
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
@@ -389,10 +381,14 @@ static NSString* GetStringFromLayer(id layer) {
         dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
             
+            // =========================================================================
+            // 【排版终极版】按您的要求，移除毕法、格局、方法的标题，只保留内容
+            // =========================================================================
             NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"毕法"]] : @"";
             NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"格局"]] : @"";
+            NSString *fangFaOutput = g_extractedData[@"方法"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"方法"]] : @"";
+            // 七政四余保留标题
             NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
-            NSString *fangFaOutput = g_extractedData[@"方法"] ? [NSString stringWithFormat:@"方法:\n%@\n\n", g_extractedData[@"方法"]] : @"";
             NSString *tianDiPanOutput = g_extractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_extractedData[@"天地盘"]] : @"";
 
             NSString *finalText = [NSString stringWithFormat:
@@ -404,7 +400,7 @@ static NSString* GetStringFromLayer(id layer) {
                 @"课体: %@\n\n"
                 @"%@" // 天地盘
                 @"%@\n" // 四课
-                @"%@\n\n" // 三传
+                @"%@\n\n" // 三传 (增加一个换行)
                 @"%@%@%@%@" // 毕法, 格局, 方法, 七政四余
                 @"起课方式: %@",
                 SafeString(g_extractedData[@"时间块"]),
@@ -416,8 +412,6 @@ static NSString* GetStringFromLayer(id layer) {
                 SafeString(g_extractedData[@"起课方式"])
             ];
             
-            // 清理多余的换行
-            finalText = [finalText stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
             finalText = [finalText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
             [UIPasteboard generalPasteboard].string = finalText;
