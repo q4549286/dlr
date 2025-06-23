@@ -1,43 +1,3 @@
-#import <UIKit/UIKit.h>
-#import <objc/runtime.h>
-#import <QuartzCore/QuartzCore.h> // 为CALayer坐标转换引入
-
-// =========================================================================
-// 日志宏定义
-// =========================================================================
-#define EchoLog(format, ...) NSLog((@"[EchoAI] " format), ##__VA_ARGS__)
-
-// =========================================================================
-// Section 1 & 2: 您的原始代码 (UILabel, UIWindow) - 已修复编译错误
-// =========================================================================
-%hook UILabel
-- (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
-- (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
-%end
-static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); CGContextRef context = UIGraphicsGetCurrentContext(); CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); CGContextRotateCTM(context, angle * M_PI / 180); NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; CGSize textSize = [text sizeWithAttributes:attributes]; CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); [text drawInRect:textRect withAttributes:attributes]; UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext(); return image; }
-%hook UIWindow
-- (void)layoutSubviews { 
-    %orig; 
-    if (self.windowLevel != UIWindowLevelNormal) { return; } 
-    NSInteger watermarkTag = 998877; 
-    if ([self viewWithTag:watermarkTag]) { return; } 
-    NSString *watermarkText = @"Echo定制"; 
-    UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; 
-    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; 
-    CGFloat rotationAngle = -30.0; 
-    CGSize tileSize = CGSizeMake(150, 100); 
-    UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); 
-    UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; 
-    watermarkView.tag = watermarkTag; // <-- 修正编译错误
-    watermarkView.userInteractionEnabled = NO; 
-    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; 
-    watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; 
-    [self addSubview:watermarkView]; 
-    [self bringSubviewToFront:watermarkView]; 
-}
-%end
-
-
 // =========================================================================
 // Section 3: 【最终版】一键复制到 AI (已整合天地盘 V18 逻辑)
 // =========================================================================
@@ -112,8 +72,7 @@ static NSString* GetStringFromLayer(id layer) {
     }
 }
 
-// ========================[ 终极完美版 V3 ]=========================
-// 识别并保留分组标题，彻底解决幽灵字符问题
+// ========================[ 终极完美最终版 ]=========================
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f;
@@ -149,10 +108,7 @@ static NSString* GetStringFromLayer(id layer) {
 
                 for (UIStackView *stackView in stackViews) {
                     NSArray *arrangedSubviews = stackView.arrangedSubviews;
-                    
-                    // 【终极方案】根据UIStackView内的元素数量区分内容和分组标题
-                    if (arrangedSubviews.count >= 2 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                        // 这是一个“内容条目”
+                    if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
                         UILabel *titleLabel = arrangedSubviews[0];
                         NSString *rawTitle = titleLabel.text ?: @"";
                         rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
@@ -162,32 +118,21 @@ static NSString* GetStringFromLayer(id layer) {
                         NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
                         NSMutableArray *descParts = [NSMutableArray array];
-                        for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
-                            if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
-                                [descParts addObject:((UILabel *)arrangedSubviews[i]).text];
+                        // 只有一个元素的是分组标题，不需要描述
+                        if (arrangedSubviews.count > 1) {
+                            for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
+                                if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
+                                    [descParts addObject:((UILabel *)arrangedSubviews[i]).text];
+                                }
                             }
                         }
+                        
                         NSString *fullDesc = [descParts componentsJoinedByString:@" "];
                         fullDesc = [fullDesc stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
                         fullDesc = [fullDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                         
                         NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc];
                         [textParts addObject:pairString];
-
-                    } else if (arrangedSubviews.count == 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                        // 这是一个“分组标题”
-                        UILabel *groupTitleLabel = arrangedSubviews[0];
-                        NSString *rawGroupTitle = groupTitleLabel.text ?: @"";
-                        // 同样进行简繁转换和清洗
-                        NSMutableString *simplifiedGroupTitle = [rawGroupTitle mutableCopy];
-                        CFStringTransform((__bridge CFMutableStringRef)simplifiedGroupTitle, NULL, CFSTR("Hant-Hans"), false);
-                        simplifiedGroupTitle = [[simplifiedGroupTitle stringByReplacingOccurrencesOfString:@"法诀" withString:@""] mutableCopy];
-                        simplifiedGroupTitle = [[simplifiedGroupTitle stringByReplacingOccurrencesOfString:@"格局" withString:@""] mutableCopy];
-                        simplifiedGroupTitle = [[simplifiedGroupTitle stringByReplacingOccurrencesOfString:@"方法" withString:@""] mutableCopy];
-                        NSString *cleanGroupTitle = [simplifiedGroupTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                        
-                        // 格式化为带换行的独立标题
-                        [textParts addObject:[NSString stringWithFormat:@"\n%@:", cleanGroupTitle]];
                     }
                 }
                 
@@ -196,7 +141,6 @@ static NSString* GetStringFromLayer(id layer) {
                 if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content;
                 else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content;
                 else g_extractedData[@"毕法"] = content;
-                EchoLog(@"[完美版 V3] 成功抓取 [%@]", title);
             }
             else if ([vcClassName containsString:@"七政"]) {
                 NSMutableArray *allLabels = [NSMutableArray array];
@@ -207,7 +151,6 @@ static NSString* GetStringFromLayer(id layer) {
                     if (label.text.length > 0) [textParts addObject:label.text];
                 }
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
-                EchoLog(@"[完美版 V3] 成功抓取 [七政四余]");
             } else {
                  EchoLog(@"抓取到未知弹窗 [%@]，内容被忽略。", title);
             }
@@ -398,9 +341,15 @@ static NSString* GetStringFromLayer(id layer) {
         dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
             
-            NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"毕法"]] : @"";
-            NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"格局"]] : @"";
-            NSString *fangFaOutput = g_extractedData[@"方法"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"方法"]] : @"";
+            // 【终极清理】在最后一步，精准移除所有已知的垃圾文本
+            NSString *biFaOutput = [g_extractedData[@"毕法"] stringByReplacingOccurrencesOfString:@"通类门→\n" withString:@""];
+            NSString *geJuOutput = [g_extractedData[@"格局"] stringByReplacingOccurrencesOfString:@"通类门→\n" withString:@""];
+            NSString *fangFaOutput = [g_extractedData[@"方法"] stringByReplacingOccurrencesOfString:@"通类门→\n" withString:@""];
+            
+            if(biFaOutput.length > 0) biFaOutput = [NSString stringWithFormat:@"%@\n\n", biFaOutput];
+            if(geJuOutput.length > 0) geJuOutput = [NSString stringWithFormat:@"%@\n\n", geJuOutput];
+            if(fangFaOutput.length > 0) fangFaOutput = [NSString stringWithFormat:@"%@\n\n", fangFaOutput];
+
             NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
             NSString *tianDiPanOutput = g_extractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_extractedData[@"天地盘"]] : @"";
 
@@ -425,8 +374,6 @@ static NSString* GetStringFromLayer(id layer) {
             ];
             
             finalText = [finalText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            finalText = [finalText stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
-
 
             [UIPasteboard generalPasteboard].string = finalText;
             
