@@ -6,7 +6,7 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V9-FinalFormat] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V10-Final] " format), ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
@@ -163,7 +163,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 // 4. "高级技法解析" 功能实现
 // =========================================================================
 
-// ====================== 【V9 核心修复】 ======================
+// ====================== 【V10 核心修复】 ======================
 %new
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView {
     NSMutableArray *allLabels = [NSMutableArray array];
@@ -176,57 +176,50 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
     }];
 
-    NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array];
-    
-    // 过滤掉顶部的用户信息
-    CGFloat firstGejuY = CGFLOAT_MAX;
+    // 1. 分类：将所有label分为标题和内容两组
+    NSMutableArray<UILabel *> *titleCandidates = [NSMutableArray array];
+    NSMutableArray<UILabel *> *contentCandidates = [NSMutableArray array];
     for (UILabel *label in allLabels) {
-        if ([label.text isEqualToString:@"年命格局"]) {
-            firstGejuY = CGRectGetMaxY(label.frame);
-            break;
+        NSString *text = label.text ?: @"";
+        if ([text containsString:@"年生"] || [text containsString:@"行年"] || [text containsString:@"本命"] || [text isEqualToString:@"年命格局"]) {
+            continue; // 过滤掉不需要的信息
+        }
+        // 根据X坐标区分标题和内容
+        if (label.frame.origin.x < 100) {
+            [titleCandidates addObject:label];
+        } else {
+            [contentCandidates addObject:label];
         }
     }
 
-    NSMutableArray<UILabel *> *titleLabels = [NSMutableArray array];
-    NSMutableArray<UILabel *> *contentLabels = [NSMutableArray array];
-    for (UILabel *label in allLabels) {
-        if (CGRectGetMinY(label.frame) < firstGejuY) continue; // 只处理“年命格局”标题下的内容
-        // 根据 X 坐标和字体（如果能判断）来区分标题和内容
-        // 标题通常在左边 (X < 100)，内容在右边 (X > 100)
-        if (label.frame.origin.x < 100) {
-            [titleLabels addObject:label];
-        } else {
-            [contentLabels addObject:label];
-        }
-    }
-    
-    for (UILabel *titleLabel in titleLabels) {
+    // 2. 智能匹配
+    NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array];
+    for (UILabel *titleLabel in titleCandidates) {
         NSString *title = [titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if (title.length == 0) continue;
         
-        // 为当前标题找到最匹配的内容
-        UILabel *bestContentLabel = nil;
+        UILabel *bestMatch = nil;
         CGFloat minDistance = CGFLOAT_MAX;
-        
-        for (UILabel *contentLabel in contentLabels) {
-            CGFloat yDistance = fabs(titleLabel.frame.origin.y - contentLabel.frame.origin.y);
+
+        // 寻找Y坐标最接近的内容
+        for (UILabel *contentLabel in contentCandidates) {
+            CGFloat yDistance = fabs(CGRectGetMidY(titleLabel.frame) - CGRectGetMidY(contentLabel.frame));
             if (yDistance < minDistance) {
                 minDistance = yDistance;
-                bestContentLabel = contentLabel;
+                bestMatch = contentLabel;
             }
         }
         
-        if (bestContentLabel) {
-            NSString *content = [bestContentLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-             NSString *pair = [NSString stringWithFormat:@"%@→%@", title, content];
-             if (![formattedPairs containsObject:pair]) {
-                 [formattedPairs addObject:pair];
-             }
-             // 从内容列表中移除已使用的，避免重复匹配
-             [contentLabels removeObject:bestContentLabel];
+        NSString *content = @""; // 默认为空，处理没有内容的情况
+        if (bestMatch && minDistance < 50) { // 增加一个距离阈值，防止错误匹配
+            content = [bestMatch.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            [contentCandidates removeObject:bestMatch]; // 移除已匹配的内容
         }
+        
+        NSString *pair = [NSString stringWithFormat:@"%@→%@", title, content];
+        [formattedPairs addObject:pair];
     }
-
+    
     return [formattedPairs componentsJoinedByString:@"\n"];
 }
 
