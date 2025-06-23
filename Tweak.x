@@ -101,7 +101,8 @@ static NSString* GetStringFromLayer(id layer) {
             UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
             copyButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45, 90, 36);
             copyButton.tag = CopyAiButtonTag;
-            [copyButton setTitle:@"复制到AI" forState:UIControlStateNormal];
+            // 【精修点 2】修改按钮文案
+            [copyButton setTitle:@"提取课盘" forState:UIControlStateNormal];
             copyButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
             copyButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0];
             [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -112,7 +113,7 @@ static NSString* GetStringFromLayer(id layer) {
     }
 }
 
-// ========================[ 终极精修版 ]=========================
+// ========================[ 终极完美版 ]=========================
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f;
@@ -138,7 +139,6 @@ static NSString* GetStringFromLayer(id layer) {
 
             NSMutableArray *textParts = [NSMutableArray array];
 
-            // 【逻辑 1】统一处理“毕法”、“格局”、“方法”
             if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
                 NSMutableArray *stackViews = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UIStackView class], viewControllerToPresent.view, stackViews);
@@ -149,44 +149,49 @@ static NSString* GetStringFromLayer(id layer) {
 
                 for (UIStackView *stackView in stackViews) {
                     NSArray *arrangedSubviews = stackView.arrangedSubviews;
-                    if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                        UILabel *titleLabel = arrangedSubviews[0];
-                        NSString *cleanTitle = [titleLabel.text stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
+                    
+                    // 【精修点 1】过滤掉幽灵标题：一个合法的条目必须至少有1个标题+1个描述
+                    if (arrangedSubviews.count >= 2 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
                         
+                        UILabel *titleLabel = arrangedSubviews[0];
+                        NSString *rawTitle = titleLabel.text ?: @"";
+                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
+                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""];
+                        NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
                         NSMutableArray *descParts = [NSMutableArray array];
                         for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
                             if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
                                 [descParts addObject:((UILabel *)arrangedSubviews[i]).text];
                             }
                         }
-                        // 【空行修复】合并描述部分，保留条目间的换行
-                        NSString *fullDesc = [descParts componentsJoinedByString:@" "]; // 用空格合并，去除内部换行
+                        NSString *fullDesc = [descParts componentsJoinedByString:@" "];
                         fullDesc = [fullDesc stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+                        fullDesc = [fullDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                         
                         NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc];
                         [textParts addObject:pairString];
                     }
                 }
                 
-                NSString *content = [textParts componentsJoinedByString:@"\n"]; // 每个条目之间用换行符分隔
+                NSString *content = [textParts componentsJoinedByString:@"\n"];
                 
                 if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content;
                 else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content;
                 else g_extractedData[@"毕法"] = content;
-                EchoLog(@"[精修版] 成功抓取 [%@]", title);
+                EchoLog(@"[完美版] 成功抓取 [%@]", title);
             }
-            // 【逻辑 2】处理“七政四余”
             else if ([vcClassName containsString:@"七政"]) {
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
                 [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
                 
-                // 【七政修复】恢复之前的格式
                 for (UILabel *label in allLabels) {
                     if (label.text.length > 0) [textParts addObject:label.text];
                 }
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
-                EchoLog(@"[精修版] 成功抓取 [七政四余]");
+                EchoLog(@"[完美版] 成功抓取 [七政四余]");
             } else {
                  EchoLog(@"抓取到未知弹窗 [%@]，内容被忽略。", title);
             }
@@ -383,7 +388,6 @@ static NSString* GetStringFromLayer(id layer) {
             NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
             NSString *tianDiPanOutput = g_extractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_extractedData[@"天地盘"]] : @"";
 
-            // 【排版精修】调整九宗门的位置
             NSString *finalText = [NSString stringWithFormat:
                 @"%@\n\n"
                 @"月将: %@\n"
@@ -392,11 +396,10 @@ static NSString* GetStringFromLayer(id layer) {
                 @"昼夜: %@\n"
                 @"课体: %@\n"
                 @"九宗门: %@\n\n"
-                @"%@" // 天地盘
-                @"%@\n" // 四课
-                @"%@\n\n" // 三传
-                @"%@%@%@%@" // 毕法, 格局, 方法, 七政四余
-                @"",
+                @"%@"
+                @"%@\n"
+                @"%@\n\n"
+                @"%@%@%@%@",
                 SafeString(g_extractedData[@"时间块"]),
                 SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]), SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]), SafeString(g_extractedData[@"九宗门"]),
                 tianDiPanOutput,
