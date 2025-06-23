@@ -4,34 +4,29 @@
 // =========================================================================
 // 日志宏定义
 // =========================================================================
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-V2] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-V3] " format), ##__VA_ARGS__)
 
 // =========================================================================
-// 全局变量，用于在不同方法间传递状态
+// 全局变量
 // =========================================================================
 static NSMutableDictionary *g_testExtractedData = nil;
 
 // =========================================================================
-//  Hook UIViewController 来添加按钮和实现提取逻辑
+//  Hook UIViewController
 // =========================================================================
 %hook UIViewController
 
 // -------------------------------------------------------------------------
-// 1. 在主界面添加一个测试按钮
+// 1. 添加测试按钮 (无变化)
 // -------------------------------------------------------------------------
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        // 确保按钮不重复添加
-        if ([self.view.window viewWithTag:45678]) {
-            return;
-        }
-
+        if ([self.view.window viewWithTag:45678]) return;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) return;
-
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(10, 45, 120, 36);
             testButton.tag = 45678;
@@ -41,92 +36,90 @@ static NSMutableDictionary *g_testExtractedData = nil;
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             [testButton addTarget:self action:@selector(testGeJuExtractionTapped) forControlEvents:UIControlEventTouchUpInside];
-            
             [keyWindow addSubview:testButton];
         });
     }
 }
 
 // -------------------------------------------------------------------------
-// 2. 拦截弹窗，这是我们的核心逻辑【已修正】
+// 2. 拦截弹窗【终极修正版】
 // -------------------------------------------------------------------------
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    // 如果不是我们的测试任务在执行，则正常处理
     if (g_testExtractedData == nil || [viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         %orig(viewControllerToPresent, flag, completion);
         return;
     }
     
     EchoLog(@"拦截到弹窗: %@", NSStringFromClass([viewControllerToPresent class]));
-
-    // 无感处理：隐藏弹窗，取消动画
     viewControllerToPresent.view.alpha = 0.0f;
     flag = NO;
 
-    // 将延迟时间从0.1秒增加到0.2秒，给懒加载更充分的时间
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // 我们不再需要dispatch_after了，因为getter调用是同步的
+    NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
+    
+    if ([vcClassName isEqualToString:@"六壬大占.格局總覽視圖"]) {
         
-        NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        
-        if ([vcClassName isEqualToString:@"六壬大占.格局總覽視圖"]) {
-            
-            // --- 【核心修改】 ---
-            // 直接使用Flex里看到的、最原始的、最精确的懒加载变量名
-            NSString *preciseIvarName = @"$_lazy_storage_$_格局列";
-            NSString *titleKey = @"標題";
-            NSString *detailKey = @"解";
-            
-            // 使用 class_getInstanceVariable 来获取 Ivar，这是最底层的访问方式
-            Ivar ivar = class_getInstanceVariable([viewControllerToPresent class], [preciseIvarName UTF8String]);
-            
-            id dataSource = nil;
-            if (ivar) {
-                // 如果能找到ivar，就用 object_getIvar 来获取它的值
-                dataSource = object_getIvar(viewControllerToPresent, ivar);
-                EchoLog(@"成功通过精确名称 '%@' 找到Ivar。", preciseIvarName);
-            } else {
-                 EchoLog(@"致命错误: 无法在类 %@ 中找到名为 '%@' 的Ivar。", vcClassName, preciseIvarName);
-            }
+        // --- 【终极核心修改】 ---
+        // 我们要去调用的 getter 方法名
+        SEL getterSelector = NSSelectorFromString(@"格局列");
+        NSString *titleKey = @"標題";
+        NSString *detailKey = @"解";
 
-            if (dataSource && [dataSource isKindOfClass:[NSArray class]]) {
-                NSMutableArray *textParts = [NSMutableArray array];
-                for (id item in (NSArray *)dataSource) {
-                    id titleObj = [item valueForKey:titleKey]; 
-                    id detailObj = [item valueForKey:detailKey];
-                    NSString *title = [titleObj isKindOfClass:[NSString class]] ? titleObj : @"";
-                    NSString *detail = [detailObj isKindOfClass:[NSString class]] ? detailObj : @"";
-                    
-                    if (title.length > 0 || detail.length > 0) {
-                        [textParts addObject:[NSString stringWithFormat:@"%@: %@", title, detail]];
-                    }
-                }
-                
-                if (textParts.count > 0) {
-                    g_testExtractedData[@"格局"] = [textParts componentsJoinedByString:@"\n"];
-                    EchoLog(@"[修正版] 提取成功! 共 %lu 条格局。", (unsigned long)textParts.count);
-                } else {
-                    g_testExtractedData[@"格局"] = @"提取成功，但数据源数组内容为空。";
-                }
-            } else {
-                 NSString *errorMsg = [NSString stringWithFormat:@"提取失败。Ivar '%@' 的值不是有效的NSArray或为nil。实际值: %@", preciseIvarName, dataSource];
-                 g_testExtractedData[@"格局"] = errorMsg;
-                 EchoLog(@"%@", errorMsg);
-            }
+        id dataSource = nil;
+        if ([viewControllerToPresent respondsToSelector:getterSelector]) {
+            EchoLog(@"VC 响应 getter '%@'，准备调用...", NSStringFromSelector(getterSelector));
+            
+            // 使用 performSelector 来调用 getter 方法
+            // 这会强制触发懒加载并返回数据
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            dataSource = [viewControllerToPresent performSelector:getterSelector];
+            #pragma clang diagnostic pop
+            
+            EchoLog(@"Getter 调用完毕，返回的数据: %@", dataSource);
+
         } else {
-             g_testExtractedData[@"格局"] = [NSString stringWithFormat:@"提取失败，拦截到了错误的VC: %@", vcClassName];
+            EchoLog(@"致命错误: VC不响应getter '%@'。", NSStringFromSelector(getterSelector));
         }
         
-        // 处理完毕后，静默关闭这个弹窗
-        [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
-    });
+        if (dataSource && [dataSource isKindOfClass:[NSArray class]]) {
+            NSMutableArray *textParts = [NSMutableArray array];
+            for (id item in (NSArray *)dataSource) {
+                id titleObj = [item valueForKey:titleKey]; 
+                id detailObj = [item valueForKey:detailKey];
+                NSString *title = [titleObj isKindOfClass:[NSString class]] ? titleObj : @"";
+                NSString *detail = [detailObj isKindOfClass:[NSString class]] ? detailObj : @"";
+                
+                if (title.length > 0 || detail.length > 0) {
+                    [textParts addObject:[NSString stringWithFormat:@"%@: %@", title, detail]];
+                }
+            }
+            
+            if (textParts.count > 0) {
+                g_testExtractedData[@"格局"] = [textParts componentsJoinedByString:@"\n"];
+                EchoLog(@"[V3-Getter版] 提取成功! 共 %lu 条格局。", (unsigned long)textParts.count);
+            } else {
+                g_testExtractedData[@"格局"] = @"提取成功，但数据源数组内容为空。";
+            }
+        } else {
+             NSString *errorMsg = [NSString stringWithFormat:@"提取失败。Getter '%@' 返回的值不是有效的NSArray或为nil。实际值: %@", NSStringFromSelector(getterSelector), dataSource];
+             g_testExtractedData[@"格局"] = errorMsg;
+             EchoLog(@"%@", errorMsg);
+        }
 
-    // 必须调用原始方法，否则App可能卡住
+    } else {
+         g_testExtractedData[@"格局"] = [NSString stringWithFormat:@"提取失败，拦截到了错误的VC: %@", vcClassName];
+    }
+    
+    // 静默关闭弹窗
+    [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+    
+    // 必须调用原始方法
     %orig(viewControllerToPresent, flag, completion);
 }
 
-
 // -------------------------------------------------------------------------
-// 3. 按钮的点击事件
+// 3. 按钮点击事件 (无变化)
 // -------------------------------------------------------------------------
 %new
 - (void)testGeJuExtractionTapped {
@@ -135,9 +128,9 @@ static NSMutableDictionary *g_testExtractedData = nil;
 
     SEL selectorGeJu = NSSelectorFromString(@"顯示格局總覽");
     if (![self respondsToSelector:selectorGeJu]) {
-        EchoLog(@"错误: 当前ViewController不响应'顯示格局總覽'方法。");
+        EchoLog(@"错误: 当前VC不响应'顯示格局總覽'方法。");
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:@"当前VC无法调用'顯示格局總覽'" preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertControllerStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
         g_testExtractedData = nil;
         return;
@@ -152,7 +145,8 @@ static NSMutableDictionary *g_testExtractedData = nil;
             #pragma clang diagnostic pop
         });
         
-        [NSThread sleepForTimeInterval:0.5]; 
+        // 稍微等待一下，确保presentViewController的hook被调用
+        [NSThread sleepForTimeInterval:0.2]; 
         
         dispatch_async(dispatch_get_main_queue(), ^{
             NSString *resultText = g_testExtractedData[@"格局"];
@@ -161,9 +155,7 @@ static NSMutableDictionary *g_testExtractedData = nil;
             }
             
             EchoLog(@"--- 测试完成，准备显示结果 ---");
-
             [UIPasteboard generalPasteboard].string = resultText;
-
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"格局提取测试结果"
                                                                            message:resultText
                                                                     preferredStyle:UIAlertControllerStyleAlert];
