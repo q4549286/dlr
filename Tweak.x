@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v10] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v11] " format), ##__VA_ARGS__)
 
 static BOOL g_isTestingNianMing = NO;
 static NSString *g_currentItemToExtract = nil;
@@ -14,7 +14,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 @interface UIViewController (DelegateTestAddon)
-- (void)performFinalRefinedExtractTest;
+- (void)performFinalSimplifiedExtractTest;
 @end
 
 %hook UIViewController
@@ -27,22 +27,22 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) return;
             
-            NSInteger testButtonTag = 999009;
+            NSInteger testButtonTag = 999010;
             if ([keyWindow viewWithTag:testButtonTag]) return;
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 200, 45, 90, 36);
-            [testButton setTitle:@"精细提取测试" forState:UIControlStateNormal];
+            [testButton setTitle:@"最终简化测试" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-            testButton.backgroundColor = [UIColor darkGrayColor];
+            testButton.backgroundColor = [UIColor systemIndigoColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             testButton.tag = testButtonTag;
             
-            [testButton addTarget:self action:@selector(performFinalRefinedExtractTest) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performFinalSimplifiedExtractTest) forControlEvents:UIControlEventTouchUpInside];
             
             [keyWindow addSubview:testButton];
-            EchoLog(@"精细提取测试按钮已添加。");
+            EchoLog(@"最终简化测试按钮已添加。");
         });
     }
 }
@@ -61,60 +61,37 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         
-        // 【核心修正】为“格局方法”页面实现精细化提取逻辑
-        if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
-            EchoLog(@"检测到 '年命格局视窗'，开始精细化提取...");
-            NSMutableArray *textParts = [NSMutableArray array];
-            
-            // 查找所有的 StackView
-            NSMutableArray *stackViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UIStackView class], viewControllerToPresent.view, stackViews);
-            [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
-            
-            // 提取前置信息 (不在StackView内的Label)
-            NSMutableArray *prefixLabels = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, prefixLabels);
-             // 过滤掉已经在StackView中的label
-            [prefixLabels filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(UILabel *label, id bindings) {
-                UIView *superview = label.superview;
-                while (superview) {
-                    if ([superview isKindOfClass:[UIStackView class]]) return NO;
-                    superview = superview.superview;
-                }
-                return YES;
-            }]];
-            [prefixLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
-            for(UILabel *label in prefixLabels) {
-                if(label.text && label.text.length > 0) [textParts addObject:label.text];
-            }
-
-
-            for (UIStackView *stackView in stackViews) {
-                NSArray *arrangedSubviews = stackView.arrangedSubviews;
-                if (arrangedSubviews.count >= 2 && [arrangedSubviews[0] isKindOfClass:[UILabel class]] && [arrangedSubviews[1] isKindOfClass:[UILabel class]]) {
-                    NSString *title = ((UILabel *)arrangedSubviews[0]).text ?: @"";
-                    NSString *desc = ((UILabel *)arrangedSubviews[1]).text ?: @"";
-                    // 组合成 "标题→内容" 的格式
-                    [textParts addObject:[NSString stringWithFormat:@"%@→%@", title, desc]];
+        // ---【核心修正】---
+        // 提取文本的通用逻辑 (找到所有UILabel，按Y坐标排序)
+        NSString* (^extractAllLabels)(void) = ^NSString* {
+            NSMutableString *t = [NSMutableString string];
+            NSMutableArray *allLabels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel* obj1, UILabel* obj2) {
+                if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
+                if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
+                return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
+            }];
+            for (UILabel *label in allLabels) {
+                if (label.text && label.text.length > 0) {
+                    // 避免重复添加完全相同的文本行 (比如有些标题会被重复渲染)
+                    if (![t containsString:[NSString stringWithFormat:@"%@\n", label.text]]) {
+                         [t appendFormat:@"%@\n", label.text];
+                    }
                 }
             }
-            
-            NSString *fullContent = [textParts componentsJoinedByString:@"\n"];
-            [g_capturedGeJuArray addObject:fullContent];
-            
+            return [t copy];
+        };
+
+        if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
+            // 年命摘要使用通用提取逻辑
+            [g_capturedZhaiYaoArray addObject:extractAllLabels()];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             return;
 
-        } else if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
-            // 年命摘要使用通用提取逻辑
-            NSMutableString *t = [NSMutableString string];
-            if(viewControllerToPresent.title){ [t appendFormat:@"%@\n", viewControllerToPresent.title]; }
-            NSMutableArray *v = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIView class],viewControllerToPresent.view,v);
-            [v filterUsingPredicate:[NSPredicate predicateWithBlock:^(id o,id b){return[o respondsToSelector:@selector(text)];}]];
-            [v sortUsingComparator:^NSComparisonResult(UIView*v1,UIView*v2){return[@(v1.frame.origin.y)compare:@(v2.frame.origin.y)];}];
-            for(UIView*view in v){NSString*text=[view valueForKey:@"text"];if(text&&text.length>0&&![t containsString:text]){[t appendFormat:@"%@\n",text];}}
-
-            [g_capturedZhaiYaoArray addObject:[t copy]];
+        } else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
+            // 格局方法也使用这个最可靠的通用提取逻辑
+            [g_capturedGeJuArray addObject:extractAllLabels()];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             return;
         }
@@ -123,8 +100,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)performFinalRefinedExtractTest {
-    // 这部分代码与v8/v9完全相同，只是调用了一个新的名字
+- (void)performFinalSimplifiedExtractTest {
+    // 这部分代码与v8/v9/v10完全相同
     g_isTestingNianMing = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
     g_capturedGeJuArray = [NSMutableArray array];
@@ -174,7 +151,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 [finalResultString appendString:geJu];
                 [finalResultString appendString:@"\n====================\n"];
             }
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"精细提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"最终提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:alert animated:YES completion:^{ g_isTestingNianMing = NO; }];
         });
