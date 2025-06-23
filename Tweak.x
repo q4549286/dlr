@@ -6,7 +6,7 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V6-Final] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V7-Stable] " format), ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
@@ -53,7 +53,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
 - (NSString *)extractTianDiPanInfo_V18;
-- (NSString *)formatNianmingGejuFromView:(UIView *)contentView; // 新增辅助函数
+- (NSString *)formatNianmingGejuFromView:(UIView *)contentView;
 @end
 
 %hook UIViewController
@@ -65,10 +65,8 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
             if ([keyWindow viewWithTag:CombinedButtonTag]) { [[keyWindow viewWithTag:CombinedButtonTag] removeFromSuperview]; }
-            
-            // 按钮文字修改
             UIButton *combinedButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            combinedButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36); // 增加宽度以适应新文字
+            combinedButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
             combinedButton.tag = CombinedButtonTag;
             [combinedButton setTitle:@"高级技法解析" forState:UIControlStateNormal];
             combinedButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
@@ -116,6 +114,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         %orig(viewControllerToPresent, flag, completion); return;
     }
     else if (g_isExtractingNianming && g_currentItemToExtract) {
+        __weak typeof(self) weakSelf = self;
         if ([viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
             UIAlertController *alert = (UIAlertController *)viewControllerToPresent; UIAlertAction *targetAction = nil;
             for (UIAlertAction *action in alert.actions) { if ([action.title isEqualToString:g_currentItemToExtract]) { targetAction = action; break; } }
@@ -131,6 +130,9 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    __strong typeof(weakSelf) strongSelf = weakSelf;
+                    if (!strongSelf) return;
+
                     UIView *contentView = viewControllerToPresent.view;
                     Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView"); NSMutableArray *tableViews = [NSMutableArray array]; if (tableViewClass) { FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews); }
                     UITableView *theTableView = tableViews.firstObject;
@@ -146,8 +148,9 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                         }
                     }
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        // 【格式化修正】调用新的格式化函数
-                        NSString *formattedGeju = [self formatNianmingGejuFromView:contentView];
+                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                        if (!strongSelf2) return;
+                        NSString *formattedGeju = [strongSelf2 formatNianmingGejuFromView:contentView];
                         [g_capturedGeJuArray addObject:formattedGeju];
                         [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
                     });
@@ -166,37 +169,24 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView {
     NSMutableArray *allLabels = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
-        if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
-        if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
-        return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
-    }];
+    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending; if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending; return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
 
     NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array];
-    for (int i = 0; i < allLabels.count; i++) {
-        UILabel *currentLabel = allLabels[i];
-        NSString *currentText = currentLabel.text;
-        
-        // 过滤掉不必要的信息，例如用户信息行
-        if ([currentText containsString:@"年生"] || [currentText containsString:@"行年"] || [currentText containsString:@"本命"]) {
-            continue;
-        }
+    NSString *currentTitle = nil;
+    for (UILabel *label in allLabels) {
+        NSString *text = label.text;
+        if ([text containsString:@"年生"] || [text containsString:@"行年"] || [text containsString:@"本命"]) continue;
 
-        // 判断是否为标题（通常较短，且下一个label的y坐标明显大于它）
-        if (i + 1 < allLabels.count) {
-            UILabel *nextLabel = allLabels[i+1];
-            // 检查Y坐标差异和X坐标，简单的标题-内容配对逻辑
-            if (fabs(currentLabel.frame.origin.y - nextLabel.frame.origin.y) > 5.0 && currentLabel.frame.origin.x < nextLabel.frame.origin.x) {
-                 NSString *title = [currentText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                 NSString *content = [nextLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                 
-                 // 避免重复添加
-                 NSString *pair = [NSString stringWithFormat:@"%@→%@", title, content];
-                 if (![formattedPairs containsObject:pair]) {
-                    [formattedPairs addObject:pair];
-                 }
-                 i++; // 跳过下一个label，因为它已经被用作内容
+        BOOL isTitle = (label.frame.size.height < 25 && ![text containsString:@" "]);
+        if (isTitle && label.frame.origin.x < 50) {
+            currentTitle = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        } else if (currentTitle) {
+            NSString *content = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            NSString *pair = [NSString stringWithFormat:@"%@→%@", currentTitle, content];
+            if (![formattedPairs containsObject:pair]) {
+                [formattedPairs addObject:pair];
             }
+            currentTitle = nil;
         }
     }
     return [formattedPairs componentsJoinedByString:@"\n"];
@@ -215,27 +205,31 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     progressLabel.text = @"提取课盘信息..."; [progressView addSubview:progressLabel];
     [keyWindow addSubview:progressView];
     
+    __weak typeof(self) weakSelf = self;
     [self extractKePanInfoWithCompletion:^(NSString *kePanText) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
         EchoLog(@"--- 课盘信息提取完成 ---");
         progressLabel.text = @"提取年命信息...";
-        [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
+        [strongSelf extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
+             __strong typeof(weakSelf) strongSelf2 = weakSelf;
+             if (!strongSelf2) return;
+
             EchoLog(@"--- 年命信息提取完成 ---");
             [[keyWindow viewWithTag:ProgressViewTag] removeFromSuperview];
-
-            // 文本替换
             nianmingText = [nianmingText stringByReplacingOccurrencesOfString:@"【年命格局】" withString:@""];
             nianmingText = [nianmingText stringByReplacingOccurrencesOfString:@"【格局方法】" withString:@"【年命格局】"];
-
             NSString *finalCombinedText;
             if (nianmingText && nianmingText.length > 0) {
                 finalCombinedText = [NSString stringWithFormat:@"%@\n\n====================\n【年命分析】\n====================\n\n%@%@", kePanText, nianmingText, CustomFooterText];
             } else {
                 finalCombinedText = [NSString stringWithFormat:@"%@%@", kePanText, CustomFooterText];
             }
-            [UIPasteboard generalPasteboard].string = finalCombinedText;
+            [UIPasteboard generalPasteboard].string = [finalCombinedText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"解析完成" message:@"所有高级技法信息已合并，并成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
             [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:successAlert animated:YES completion:nil];
+            [strongSelf2 presentViewController:successAlert animated:YES completion:nil];
             EchoLog(@"--- [高级技法解析] 联合任务全部完成 ---");
         }];
     }];
@@ -243,6 +237,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (void)extractKePanInfoWithCompletion:(void (^)(NSString *kePanText))completion {
+    // ... 此方法内容保持不变 ...
     #define SafeString(str) (str ?: @"")
     g_extractedData = [NSMutableDictionary dictionary];
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
@@ -317,29 +312,19 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     for (UICollectionView *cv in cvs) { if ([cv.visibleCells.firstObject isKindOfClass:unitClass]) { targetCV = cv; break; } }
     if (!targetCV) { EchoLog(@"年命提取模块：未找到行年单元，跳过。"); g_isExtractingNianming = NO; if (completion) { completion(@""); } return; }
     
-    // 【时序修正】获取完整的 cell 列表，而不仅仅是可见的
     NSMutableArray *allUnitCells = [NSMutableArray array];
-    for (NSInteger i = 0; i < [targetCV numberOfItemsInSection:0]; i++) {
-        UICollectionViewCell *cell = [targetCV cellForItemAtIndexPath:[NSIndexPath indexPathForItem:i inSection:0]];
-        if (cell && [cell isKindOfClass:unitClass]) {
-            [allUnitCells addObject:cell];
-        }
-    }
-    // 如果cell不在屏幕上，cellForItemAtIndexPath会返回nil，所以还是用visibleCells并排序来保证顺序
-    if (allUnitCells.count == 0) {
-        for (UIView *cell in targetCV.visibleCells) {
-            if([cell isKindOfClass:unitClass]){ [allUnitCells addObject:cell]; }
-        }
-        [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
-    }
-
+    for (UIView *cell in targetCV.visibleCells) { if([cell isKindOfClass:unitClass]){ [allUnitCells addObject:cell]; } }
+    [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
     if (allUnitCells.count == 0) { EchoLog(@"年命提取模块：行年单元数量为0，跳过。"); g_isExtractingNianming = NO; if (completion) { completion(@""); } return; }
 
-    // 【时序修正】使用递归和完成回调来严格串行化任务
+    __weak typeof(self) weakSelf = self;
     __block void (^extractForCellAtIndex)(NSInteger);
     __block void (^processItem)(NSString*, NSInteger, void(^)(void));
 
     processItem = ^(NSString *itemName, NSInteger index, void(^itemCompletion)(void)) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
         g_currentItemToExtract = itemName;
         UICollectionViewCell *cell = allUnitCells[index];
         id delegate = targetCV.delegate;
@@ -347,15 +332,16 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         if (delegate && indexPath && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
             [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
         }
-        // 使用 dispatch_after 代替 sleep，避免阻塞主线程
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            itemCompletion();
+            if (itemCompletion) itemCompletion();
         });
     };
 
     extractForCellAtIndex = ^(NSInteger index) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
         if (index >= allUnitCells.count) {
-            // 所有 cell 处理完毕
             NSMutableString *resultStr = [NSMutableString string];
             for (NSUInteger i = 0; i < allUnitCells.count; i++) {
                 NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[年命摘要未提取到]";
@@ -363,32 +349,32 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                 [resultStr appendFormat:@"--- 人员 %lu ---\n", (unsigned long)i+1];
                 [resultStr appendString:@"【年命摘要】\n"];
                 [resultStr appendString:zhaiYao];
-                [resultStr appendString:@"\n\n【格局方法】\n"]; // 这里会被外层替换
+                [resultStr appendString:@"\n\n【格局方法】\n"];
                 [resultStr appendString:geJu];
                 if (i < allUnitCells.count - 1) { [resultStr appendString:@"\n\n--------------------\n\n"]; }
             }
             g_isExtractingNianming = NO;
             if (completion) { completion(resultStr); }
-            extractForCellAtIndex = nil; // 解除循环引用
+            extractForCellAtIndex = nil;
             processItem = nil;
             return;
         }
 
-        // 依次处理摘要和格局
+        EchoLog(@"开始处理人员 %ld...", (long)index + 1);
         processItem(@"年命摘要", index, ^{
+            EchoLog(@"人员 %ld 摘要提取完成。", (long)index + 1);
             processItem(@"格局方法", index, ^{
-                // 处理完一个 cell 的两个项目后，递归到下一个 cell
+                EchoLog(@"人员 %ld 格局提取完成。", (long)index + 1);
                 extractForCellAtIndex(index + 1);
             });
         });
     };
-
-    // 启动处理流程
     extractForCellAtIndex(0);
 }
 
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
+    // ... 此方法内容保持不变 ...
     Class targetViewClass = NSClassFromString(className); if (!targetViewClass) { EchoLog(@"类名 '%@' 未找到。", className); return @""; }
     NSMutableArray *targetViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(targetViewClass, self.view, targetViews);
     if (targetViews.count == 0) return @"";
@@ -399,6 +385,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 }
 %new
 - (NSString *)extractTianDiPanInfo_V18 {
+    // ... 此方法内容保持不变 ...
     @try {
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類"); if (!plateViewClass) return @"天地盘提取失败: 找不到视图类";
         UIWindow *keyWindow = self.view.window; if (!keyWindow) return @"天地盘提取失败: 找不到keyWindow";
