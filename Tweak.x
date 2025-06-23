@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v12] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v13] " format), ##__VA_ARGS__)
 
 static BOOL g_isTestingNianMing = NO;
 static NSString *g_currentItemToExtract = nil;
@@ -14,7 +14,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 @interface UIViewController (DelegateTestAddon)
-- (void)performFinalSimplifiedExtractTest;
+- (void)performFinalHybridExtractTest;
 @end
 
 %hook UIViewController
@@ -27,22 +27,22 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) return;
             
-            NSInteger testButtonTag = 999011; // v12
-            if ([keyWindow viewWithTag:testButtonTag]) return;
+            NSInteger testButtonTag = 999013; // v13
+            if ([keyWindow viewWithTag:testButtonTag]) [[keyWindow viewWithTag:testButtonTag] removeFromSuperview];
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 200, 45, 90, 36);
-            [testButton setTitle:@"格局专项测试" forState:UIControlStateNormal];
+            [testButton setTitle:@"混合布局测试" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-            testButton.backgroundColor = [UIColor systemIndigoColor];
+            testButton.backgroundColor = [UIColor systemRedColor]; // 使用醒目的红色
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             testButton.tag = testButtonTag;
             
-            [testButton addTarget:self action:@selector(performFinalSimplifiedExtractTest) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performFinalHybridExtractTest) forControlEvents:UIControlEventTouchUpInside];
             
             [keyWindow addSubview:testButton];
-            EchoLog(@"格局专项测试按钮 (v12) 已添加。");
+            EchoLog(@"混合布局测试按钮 (v13) 已添加。");
         });
     }
 }
@@ -66,66 +66,59 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             NSMutableString *t = [NSMutableString string];
             NSMutableArray *allLabels = [NSMutableArray array];
             FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
-            [allLabels sortUsingComparator:^NSComparisonResult(UILabel* obj1, UILabel* obj2) {
-                if (roundf(obj1.frame.origin.y) < roundf(obj2.frame.origin.y)) return NSOrderedAscending;
-                if (roundf(obj1.frame.origin.y) > roundf(obj2.frame.origin.y)) return NSOrderedDescending;
-                return [@(obj1.frame.origin.x) compare:@(obj2.frame.origin.x)];
-            }];
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel* obj1, UILabel* obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
             for (UILabel *label in allLabels) {
-                if (label.text && label.text.length > 0) {
-                     [t appendFormat:@"%@\n", label.text];
-                }
+                if (label.text && label.text.length > 0) { [t appendFormat:@"%@\n", label.text]; }
             }
             [g_capturedZhaiYaoArray addObject:[t stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             return;
 
         } else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
-            // ---【核心修正：引入 StackView 提取逻辑】---
-            // 此页面布局复杂，必须使用与主脚本相同的StackView解析逻辑
-            NSMutableArray *textParts = [NSMutableArray array];
-            NSMutableArray *stackViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UIStackView class], viewControllerToPresent.view, stackViews);
-
-            // 按垂直位置排序StackView，确保内容顺序正确
-            [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+            // ---【V13 核心修正：混合布局提取器】---
+            NSMutableArray *allContentParts = [NSMutableArray array];
+            NSMutableSet *processedLabels = [NSMutableSet set];
+            
+            NSMutableArray *allRelevantViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UIStackView class], viewControllerToPresent.view, allRelevantViews);
+            FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allRelevantViews);
+            
+            // 按Y坐标排序，还原屏幕视觉顺序
+            [allRelevantViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
                 return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
             }];
-
-            if (stackViews.count > 0) {
-                 // 提取StackView中的内容
-                for (UIStackView *stackView in stackViews) {
-                    NSArray *arrangedSubviews = stackView.arrangedSubviews;
-                    if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                        UILabel *titleLabel = arrangedSubviews[0];
-                        NSString *cleanTitle = [titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-                        NSMutableArray *descParts = [NSMutableArray array];
-                        if (arrangedSubviews.count > 1) {
-                            for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
-                                if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
-                                    [descParts addObject:((UILabel *)arrangedSubviews[i]).text];
-                                }
-                            }
-                        }
-                        NSString *fullDesc = [descParts componentsJoinedByString:@" "];
-                        NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc];
-                        [textParts addObject:pairString];
+            
+            for (UIView *view in allRelevantViews) {
+                if ([view isKindOfClass:[UIStackView class]]) {
+                    UIStackView *stackView = (UIStackView *)view;
+                    UILabel *titleLabel = nil;
+                    UILabel *descLabel = nil;
+                    if (stackView.arrangedSubviews.count >= 2) {
+                         // 假设第一个是标题，第二个是内容
+                        if ([stackView.arrangedSubviews[0] isKindOfClass:[UILabel class]]) titleLabel = stackView.arrangedSubviews[0];
+                        if ([stackView.arrangedSubviews[1] isKindOfClass:[UILabel class]]) descLabel = stackView.arrangedSubviews[1];
                     }
-                }
-            } else {
-                // 如果没有StackView，作为备用方案，抓取所有UILabel
-                NSMutableArray *allLabels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
-                [allLabels sortUsingComparator:^NSComparisonResult(UILabel* obj1, UILabel* obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }];
-                for (UILabel *label in allLabels) {
-                    if (label.text && label.text.length > 0) {
-                        [textParts addObject:label.text];
+                    if (titleLabel && descLabel) {
+                        NSString *pairString = [NSString stringWithFormat:@"%@→%@", titleLabel.text ?: @"", descLabel.text ?: @""];
+                        [allContentParts addObject:pairString];
+                        // 标记这两个label已处理，防止被重复提取
+                        [processedLabels addObject:titleLabel];
+                        [processedLabels addObject:descLabel];
+                    }
+                } else if ([view isKindOfClass:[UILabel class]]) {
+                    UILabel *label = (UILabel *)view;
+                    // 如果这个label未被任何StackView处理过，则它是一个独立的label
+                    if (![processedLabels containsObject:label]) {
+                        if (label.text && label.text.length > 0) {
+                            [allContentParts addObject:label.text];
+                            // 标记为已处理
+                            [processedLabels addObject:label];
+                        }
                     }
                 }
             }
-
-            NSString *finalContent = [textParts componentsJoinedByString:@"\n"];
+            
+            NSString *finalContent = [allContentParts componentsJoinedByString:@"\n"];
             [g_capturedGeJuArray addObject:[finalContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             return;
@@ -135,7 +128,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)performFinalSimplifiedExtractTest {
+- (void)performFinalHybridExtractTest {
     g_isTestingNianMing = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
     g_capturedGeJuArray = [NSMutableArray array];
@@ -167,22 +160,19 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                         }
                     }
                 });
-                [NSThread sleepForTimeInterval:0.5]; // 增加一点延时确保弹窗完成
+                [NSThread sleepForTimeInterval:0.5];
             }
             g_currentItemToExtract = nil;
             if (completionBlock) { dispatch_async(dispatch_get_main_queue(), completionBlock); }
         });
     };
     
-    // 依次执行提取任务
     extractItem(@"年命摘要", ^{
         extractItem(@"格局方法", ^{
             NSMutableString *finalResultString = [NSMutableString string];
             for (NSUInteger i = 0; i < allUnitCells.count; i++) {
                 NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[年命摘要未提取到]";
                 NSString *geJu = (i < g_capturedGeJuArray.count) ? g_capturedGeJuArray[i] : @"[格局方法未提取到]";
-                
-                // 为了清晰展示，加一些分隔符
                 [finalResultString appendFormat:@"--- 人员 %lu ---\n", (unsigned long)i+1];
                 [finalResultString appendString:@"【年命摘要】\n"];
                 [finalResultString appendString:zhaiYao];
@@ -190,8 +180,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 [finalResultString appendString:geJu];
                 [finalResultString appendString:@"\n\n====================\n\n"];
             }
-
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"专项提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"混合布局提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:alert animated:YES completion:^{ g_isTestingNianMing = NO; }];
         });
