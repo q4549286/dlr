@@ -6,7 +6,7 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V10-Final] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V11-Perfect] " format), ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
@@ -163,7 +163,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 // 4. "高级技法解析" 功能实现
 // =========================================================================
 
-// ====================== 【V10 核心修复】 ======================
+// ====================== 【V11 核心修复】 ======================
 %new
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView {
     NSMutableArray *allLabels = [NSMutableArray array];
@@ -175,49 +175,46 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
         return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
     }];
+    
+    NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array];
+    NSString *currentTitle = nil;
+    NSMutableString *currentContent = [NSMutableString string];
 
-    // 1. 分类：将所有label分为标题和内容两组
-    NSMutableArray<UILabel *> *titleCandidates = [NSMutableArray array];
-    NSMutableArray<UILabel *> *contentCandidates = [NSMutableArray array];
     for (UILabel *label in allLabels) {
         NSString *text = label.text ?: @"";
-        if ([text containsString:@"年生"] || [text containsString:@"行年"] || [text containsString:@"本命"] || [text isEqualToString:@"年命格局"]) {
-            continue; // 过滤掉不需要的信息
+        if ([text isEqualToString:@"年命格局"] || [text containsString:@"年生"]) {
+            continue; // 过滤掉不需要的头部信息
         }
-        // 根据X坐标区分标题和内容
-        if (label.frame.origin.x < 100) {
-            [titleCandidates addObject:label];
-        } else {
-            [contentCandidates addObject:label];
+
+        // 使用字号作为最可靠的判断标准
+        BOOL isTitle = (label.font.pointSize > 16.0);
+        
+        if (isTitle) {
+            // 当遇到新的标题时，保存上一个“标题-内容”对
+            if (currentTitle && currentContent.length > 0) {
+                NSString *pair = [NSString stringWithFormat:@"%@→%@", currentTitle, [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                if (![formattedPairs containsObject:pair]) {
+                    [formattedPairs addObject:pair];
+                }
+            }
+            // 开始记录新的标题和内容
+            currentTitle = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            [currentContent setString:@""]; // 重置内容
+        } else if (currentTitle) {
+            // 如果当前有标题，则将此label视为内容并追加
+            if (currentContent.length > 0) {
+                [currentContent appendString:@" "];
+            }
+            [currentContent appendString:text];
         }
     }
 
-    // 2. 智能匹配
-    NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array];
-    for (UILabel *titleLabel in titleCandidates) {
-        NSString *title = [titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (title.length == 0) continue;
-        
-        UILabel *bestMatch = nil;
-        CGFloat minDistance = CGFLOAT_MAX;
-
-        // 寻找Y坐标最接近的内容
-        for (UILabel *contentLabel in contentCandidates) {
-            CGFloat yDistance = fabs(CGRectGetMidY(titleLabel.frame) - CGRectGetMidY(contentLabel.frame));
-            if (yDistance < minDistance) {
-                minDistance = yDistance;
-                bestMatch = contentLabel;
-            }
+    // 保存最后一个“标题-内容”对
+    if (currentTitle && currentContent.length > 0) {
+        NSString *pair = [NSString stringWithFormat:@"%@→%@", currentTitle, [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        if (![formattedPairs containsObject:pair]) {
+            [formattedPairs addObject:pair];
         }
-        
-        NSString *content = @""; // 默认为空，处理没有内容的情况
-        if (bestMatch && minDistance < 50) { // 增加一个距离阈值，防止错误匹配
-            content = [bestMatch.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            [contentCandidates removeObject:bestMatch]; // 移除已匹配的内容
-        }
-        
-        NSString *pair = [NSString stringWithFormat:@"%@→%@", title, content];
-        [formattedPairs addObject:pair];
     }
     
     return [formattedPairs componentsJoinedByString:@"\n"];
@@ -264,6 +261,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (void)extractKePanInfoWithCompletion:(void (^)(NSString *kePanText))completion {
+    // ... 此方法内容保持不变 ...
     #define SafeString(str) (str ?: @"")
     g_extractedData = [NSMutableDictionary dictionary];
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
@@ -329,6 +327,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
+    // ... V8的稳定任务队列逻辑保持不变 ...
     g_isExtractingNianming = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
     g_capturedGeJuArray = [NSMutableArray array];
