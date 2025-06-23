@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v19-Final] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-v20-Activation] " format), ##__VA_ARGS__)
 
 static BOOL g_isTestingNianMing = NO;
 static NSString *g_currentItemToExtract = nil;
@@ -13,8 +13,36 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
+// 模拟点击一个视图的辅助函数
+static void SimulateTapOnView(UIView *view) {
+    if (!view) return;
+    for (UIGestureRecognizer *recognizer in view.gestureRecognizers) {
+        if ([recognizer isKindOfClass:[UITapGestureRecognizer class]]) {
+            EchoLog(@"找到并准备触发Tap手势。");
+            // 这是一个技巧，直接获取target和action来执行
+            unsigned int count = 0;
+            Ivar ivar = class_getInstanceVariable([UIGestureRecognizer class], "_targets");
+            if (ivar) {
+                id targets = object_getIvar(recognizer, ivar);
+                if (targets && [targets count] > 0) {
+                    id targetContainer = [targets firstObject];
+                    id target = [targetContainer valueForKey:@"_target"];
+                    SEL action = (SEL)[targetContainer valueForKey:@"_action"];
+                    if (target && action) {
+                        EchoLog(@"成功触发点击激活！Target: %@, Action: %@", NSStringFromClass([target class]), NSStringFromSelector(action));
+                        [target performSelector:action withObject:recognizer];
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    EchoLog(@"警告：在视图 %@ 上未找到可直接触发的Tap手势。", view);
+}
+
+
 @interface UIViewController (DelegateTestAddon)
-- (void)performCoordinateFixTest;
+- (void)performActivationExtractTest;
 @end
 
 %hook UIViewController
@@ -27,22 +55,22 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) return;
             
-            NSInteger testButtonTag = 999019; // v19
+            NSInteger testButtonTag = 999020; // v20
             if ([keyWindow viewWithTag:testButtonTag]) [[keyWindow viewWithTag:testButtonTag] removeFromSuperview];
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 200, 45, 90, 36);
-            [testButton setTitle:@"坐标修复测试" forState:UIControlStateNormal];
+            [testButton setTitle:@"激活提取测试" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-            testButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.5 blue:0.5 alpha:1.0]; // Teal
+            testButton.backgroundColor = [UIColor systemGreenColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             testButton.tag = testButtonTag;
             
-            [testButton addTarget:self action:@selector(performCoordinateFixTest) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performActivationExtractTest) forControlEvents:UIControlEventTouchUpInside];
             
             [keyWindow addSubview:testButton];
-            EchoLog(@"坐标修复测试按钮 (v19) 已添加。");
+            EchoLog(@"激活提取测试按钮 (v20) 已添加。");
         });
     }
 }
@@ -50,19 +78,15 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isTestingNianMing && g_currentItemToExtract) {
         if ([viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
-            UIAlertController *alert = (UIAlertController *)viewControllerToPresent;
             UIAlertAction *targetAction = nil;
             for (UIAlertAction *action in alert.actions) { if ([action.title isEqualToString:g_currentItemToExtract]) { targetAction = action; break; } }
-            if (targetAction) {
-                id handler = [targetAction valueForKey:@"handler"]; if (handler) { ((void (^)(UIAlertAction *))handler)(targetAction); }
-                return;
-            }
+            if (targetAction) { id handler = [targetAction valueForKey:@"handler"]; if (handler) { ((void (^)(UIAlertAction *))handler)(targetAction); } return; }
         }
         
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
 
         if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
-            // 这个页面结构简单，保持原样
+            // 这个页面依然简单，直接提取
             UIView *contentView = viewControllerToPresent.view;
             NSMutableArray *allLabels = [NSMutableArray array];
             FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
@@ -74,56 +98,52 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             return;
 
         } else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
-            // ---【核心修正 V19：绝对坐标排序法】---
-            @try {
-                UIView *contentView = viewControllerToPresent.view;
-                NSMutableArray *textElements = [NSMutableArray array];
-                NSMutableSet *labelsInCells = [NSMutableSet set]; // 用于标记已处理的标签
+            // ---【核心修正 V20：模拟点击激活】---
+            // 先让VC呈现出来，但不在这里提取和关闭
+            // completion block 里才是我们的主战场
+            void (^newCompletion)(void) = ^{
+                if (completion) { completion(); }
 
-                // 1. 找到所有 格局单元格 并处理
-                Class geJuCellClass = NSClassFromString(@"六壬大占.格局單元");
-                if (geJuCellClass) {
+                // 延迟 0.2 秒，确保视图完全加载
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    UIView *contentView = viewControllerToPresent.view;
+
+                    // 1. 找到需要点击的单元格 (格局单元)
+                    Class geJuCellClass = NSClassFromString(@"六壬大占.格局單元");
                     NSMutableArray *cells = [NSMutableArray array];
-                    FindSubviewsOfClassRecursive(geJuCellClass, contentView, cells);
+                    if (geJuCellClass) { FindSubviewsOfClassRecursive(geJuCellClass, contentView, cells); }
+                    
+                    // 模拟点击所有找到的格局单元格
                     for (UIView *cell in cells) {
-                        NSMutableArray *labels = [NSMutableArray array];
-                        FindSubviewsOfClassRecursive([UILabel class], cell, labels);
-                        if (labels.count >= 2) {
-                            [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
-                            NSString *title = ((UILabel *)labels[0]).text ?: @"";
-                            NSString *desc = ((UILabel *)labels[1]).text ?: @"";
-                            NSString *formattedText = [NSString stringWithFormat:@"%@→%@", title, desc];
-                            CGRect absoluteRect = [cell convertRect:cell.bounds toView:nil];
-                            [textElements addObject:@{@"text": formattedText, @"y": @(absoluteRect.origin.y)}];
-                            // 标记这些标签已被处理
-                            [labelsInCells addObjectsFromArray:labels];
+                        SimulateTapOnView(cell);
+                    }
+                    
+                    // 延迟 0.3 秒，等待点击后的UI更新 (内容展开)
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        
+                        // 2. 此刻，所有内容已激活，使用最可靠的UILabel抓取法
+                        NSMutableArray *allLabels = [NSMutableArray array];
+                        FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+                        [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
+                            if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
+                            if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
+                            return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
+                        }];
+
+                        NSMutableArray *textParts = [NSMutableArray array];
+                        for (UILabel *label in allLabels) {
+                            if (label.text && label.text.length > 0) { [textParts addObject:label.text]; }
                         }
-                    }
-                }
-
-                // 2. 找到所有未被处理过的独立UILabel
-                NSMutableArray *allLabels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-                for (UILabel *label in allLabels) {
-                    if (![labelsInCells containsObject:label] && label.text.length > 0) {
-                        CGRect absoluteRect = [label convertRect:label.bounds toView:nil];
-                        [textElements addObject:@{@"text": label.text, @"y": @(absoluteRect.origin.y)}];
-                    }
-                }
-
-                // 3. 按绝对Y坐标排序
-                [textElements sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-                    return [obj1[@"y"] compare:obj2[@"y"]];
-                }];
-                
-                // 4. 提取排序后的文本
-                [g_capturedGeJuArray addObject:[[textElements valueForKey:@"text"] componentsJoinedByString:@"\n"]];
-
-            } @catch (NSException *exception) {
-                [g_capturedGeJuArray addObject:[NSString stringWithFormat:@"提取异常: %@", exception.reason]];
-            } @finally {
-                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
-            }
+                        
+                        [g_capturedGeJuArray addObject:[textParts componentsJoinedByString:@"\n"]];
+                        
+                        // 3. 提取完毕，关闭视图
+                        [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+                    });
+                });
+            };
+            // 用我们自己的completion block替换原来的
+            %orig(viewControllerToPresent, flag, newCompletion);
             return;
         }
     }
@@ -131,7 +151,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)performCoordinateFixTest {
+- (void)performActivationExtractTest {
     // 触发逻辑不变
     g_isTestingNianMing = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
@@ -161,7 +181,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                         SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([delegate performSelector:@selector(collectionView:didSelectItemAtIndexPath:) withObject:targetCollectionView withObject:indexPath];);
                     }
                 });
-                [NSThread sleepForTimeInterval:0.5];
+                // 增加延时以等待动画和网络操作
+                [NSThread sleepForTimeInterval:1.0]; 
             }
             g_currentItemToExtract = nil;
             if (completionBlock) { dispatch_async(dispatch_get_main_queue(), completionBlock); }
@@ -181,7 +202,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 [finalResultString appendString:geJu];
                 [finalResultString appendString:@"\n\n====================\n\n"];
             }
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"终极提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"激活提取成功 (%lu人)", (unsigned long)allUnitCells.count] message:finalResultString preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:alert animated:YES completion:^{ g_isTestingNianMing = NO; }];
         });
