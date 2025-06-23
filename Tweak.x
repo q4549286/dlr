@@ -22,7 +22,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 
 // =========================================================================
-// Section 3: 【最终修复版】一键复制到 AI (已修复识别逻辑)
+// Section 3: 【最终修复版】一键复制到 AI (已恢复并优化标题识别逻辑)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -68,19 +68,21 @@ static NSMutableDictionary *g_extractedData = nil;
             NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
             NSString *title = viewControllerToPresent.title ?: @"";
             
-            // 【关键修复】如果VC的title属性为空, 从顶部的UILabel推断标题
-            if (title.length == 0) {
-                NSMutableArray *allLabelsInView = [NSMutableArray array];
-                [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:allLabelsInView];
-                if (allLabelsInView.count > 0) {
-                    [allLabelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                        if (roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-                        if (roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
-                        return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-                    }];
-                    title = ((UILabel*)allLabelsInView.firstObject).text;
-                    EchoLog(@"ViewController title为空, 从UILabel推断出标题: '%@'", title);
-                }
+            // 【关键修复】恢复并优化了标题推断逻辑
+            // 先获取所有UILabel，为标题推断和内容提取做准备
+            NSMutableArray *allLabelsInView = [NSMutableArray array];
+            [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:allLabelsInView];
+            
+            // 如果VC的title属性为空, 则从界面顶部的UILabel推断标题 (这是之前可以工作的关键)
+            if (title.length == 0 && allLabelsInView.count > 0) {
+                [allLabelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                    if (roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
+                    if (roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+                    return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+                }];
+                // 假设第一个UILabel就是标题
+                title = ((UILabel*)allLabelsInView.firstObject).text ?: @"";
+                EchoLog(@"ViewController.title为空, 从UILabel推断出标题: '%@'", title);
             }
 
             Class fangfaViewClass = NSClassFromString(@"六壬大占.格局單元");
@@ -97,23 +99,25 @@ static NSMutableDictionary *g_extractedData = nil;
                 NSMutableArray *stackViews = [NSMutableArray array];
                 [self findSubviewsOfClass:[UIStackView class] inView:viewControllerToPresent.view andStoreIn:stackViews];
                 
-                UIView *searchTargetView = viewControllerToPresent.view;
+                // 确定搜索范围：优先在UIStackView中，否则在整个视图中
+                UIView *searchTargetView = (stackViews.count > 0) ? stackViews.firstObject : viewControllerToPresent.view;
                 if (stackViews.count > 0) {
-                    searchTargetView = stackViews.firstObject;
                     EchoLog(@"成功定位到UIStackView容器。");
                 } else {
                     EchoLog(@"警告: 未找到UIStackView, 将在整个弹窗视图内搜索 (备用方案)。");
                 }
 
-                NSMutableArray *allLabels = [NSMutableArray array];
-                [self findSubviewsOfClass:[UILabel class] inView:searchTargetView andStoreIn:allLabels];
+                // 在目标范围内获取所有UILabel
+                NSMutableArray *contentLabels = [NSMutableArray array];
+                [self findSubviewsOfClass:[UILabel class] inView:searchTargetView andStoreIn:contentLabels];
                 
-                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                [contentLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
                     return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
                 }];
 
                 NSMutableArray *textParts = [NSMutableArray array];
-                for (UILabel *label in allLabels) {
+                for (UILabel *label in contentLabels) {
+                    // 过滤掉作为标题的UILabel和空文本
                     if (label.text.length > 0 && ![label.text isEqualToString:title]) {
                         NSString *cleanedText = [label.text stringByReplacingOccurrencesOfString:@"\t" withString:@": "];
                         [textParts addObject:cleanedText];
@@ -121,23 +125,23 @@ static NSMutableDictionary *g_extractedData = nil;
                 }
                 NSString *content = [textParts componentsJoinedByString:@"\n"];
                 
+                // 根据标题存储内容
                 if ([title containsString:@"格局"]) {
                     g_extractedData[@"格局"] = content;
                     EchoLog(@"成功抓取并重排版 [格局] 内容");
                 } else if (isFangFa) {
                     g_extractedData[@"方法"] = content;
                     EchoLog(@"成功抓取并重排版 [方法] 内容");
-                } else {
+                } else { // 包含"法诀"和"毕法"的情况
                     g_extractedData[@"毕法"] = content;
                     EchoLog(@"成功抓取并重排版 [毕法] 内容");
                 }
             }
             else if ([vcClassName containsString:@"七政"]) {
-                NSMutableArray *labels = [NSMutableArray array];
-                [self findSubviewsOfClass:[UILabel class] inView:viewControllerToPresent.view andStoreIn:labels];
-                [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+                // 七政弹窗逻辑保持不变，因为它结构简单
+                [allLabelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
                 NSMutableArray *textParts = [NSMutableArray array];
-                for(UILabel *label in labels) { if (label.text.length > 0) [textParts addObject:label.text]; }
+                for(UILabel *label in allLabelsInView) { if (label.text.length > 0) [textParts addObject:label.text]; }
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
                 EchoLog(@"成功抓取 [七政四余] 内容 (单列排版)");
             }
