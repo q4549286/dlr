@@ -1,118 +1,96 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Debug] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-V4-Test] " format), ##__VA_ARGS__)
 
-// 辅助函数：递归查找当前显示的顶层 ViewController
-static UIViewController* getTopMostViewController() {
-    UIWindow *window = nil;
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *windowScene in [UIApplication sharedApplication].connectedScenes) {
-            if (windowScene.activationState == UISceneActivationStateForegroundActive) {
-                window = windowScene.windows.firstObject;
-                break;
-            }
-        }
-    } else {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        window = [[UIApplication sharedApplication] keyWindow];
-        #pragma clang diagnostic pop
-    }
-    
-    UIViewController *topViewController = window.rootViewController;
-    while (topViewController.presentedViewController) {
-        topViewController = topViewController.presentedViewController;
-    }
-    return topViewController;
-}
-
-
-@interface UIViewController (BiFaExtraction_Debug)
-- (void)debug_readBiFaData;
+@interface UIViewController (BiFaExtraction_V4)
+- (void)final_copyBiFaData_testAction;
 @end
 
 %hook UIViewController
 
-// 在主界面添加一个“只复制法诀”的测试按钮
+// 在主界面添加一个“最终方案”的测试按钮
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window;
-            NSInteger buttonTag = 445566; 
-            if ([keyWindow viewWithTag:buttonTag]) { return; }
+            NSInteger buttonTag = 778899; // 使用新的 tag
+            if (!keyWindow || [keyWindow viewWithTag:buttonTag]) { return; }
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 100, 45 + 40, 90, 36);
             testButton.tag = buttonTag;
-            [testButton setTitle:@"读取已打开法诀" forState:UIControlStateNormal]; // 按钮文字改了
-            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-            testButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:1.0]; // 按钮颜色改成绿色
+            [testButton setTitle:@"测试最终方案" forState:UIControlStateNormal];
+            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:12];
+            // 使用一个全新的颜色，比如紫色
+            testButton.backgroundColor = [UIColor colorWithRed:0.5 green:0.2 blue:0.8 alpha:1.0];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            // 按钮点击事件改成了新的调试方法
-            [testButton addTarget:self action:@selector(debug_readBiFaData) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(final_copyBiFaData_testAction) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
-            EchoLog(@"调试按钮已添加");
+            EchoLog(@"V4 测试按钮已添加");
         });
     }
 }
 
-// 我们暂时不 hook presentViewController，以避免崩溃
-// - (void)presentViewController... { ... }
+// 这次我们不再需要 hook presentViewController 了
 
 %new
-- (void)debug_readBiFaData {
-    EchoLog(@"开始执行'读取已打开法诀'调试任务...");
-
-    // 1. 手动点击App的“法诀”按钮，让它弹出来
-
-    // 2. 点击我们绿色的“读取已打开法诀”按钮
+- (void)final_copyBiFaData_testAction {
+    EchoLog(@"开始执行 V4 最终方案测试...");
     
-    // 3. 找到当前屏幕最上方的 ViewController
-    UIViewController *topVC = getTopMostViewController();
+    // 1. 获取目标 ViewController 的类
+    Class targetVCClass = NSClassFromString(@"六壬大占.格局總覽視圖");
+    if (!targetVCClass) {
+        EchoLog(@"错误：找不到'六壬大占.格局總覽視圖'类。");
+        // 弹窗提示错误
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"测试失败" message:@"找不到目标控制器类。" preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
     
-    NSString *vcClassName = NSStringFromClass([topVC class]);
-    EchoLog(@"当前顶层控制器是: %@", vcClassName);
+    // 2. 在内存中创建这个类的实例
+    // 我们需要将主VC(`self`)作为某些依赖项传入，这是一种常见的模式
+    // 该控制器可能需要一个初始化方法，比如 initWithCoder: 或者其他自定义的
+    // 我们先尝试最简单的 alloc/init，如果崩溃，再研究它的初始化方法
+    UIViewController *dataVC = nil;
+    NSString *resultText = @"";
     
-    // 4. 检查它是不是我们想要的控制器
-    if ([vcClassName isEqualToString:@"六壬大占.格局總覽視圖"]) {
-        EchoLog(@"成功找到目标控制器，准备读取数据...");
+    @try {
+        EchoLog(@"正在内存中创建 '%@' 的实例...", NSStringFromClass(targetVCClass));
+        dataVC = [[targetVCClass alloc] init];
         
-        NSString *resultText = @"";
-        @try {
-            // 尝试用 KVC 读取数据
-            id biFaData = [topVC valueForKey:@"法訣列"];
-            
-            if (biFaData && [biFaData isKindOfClass:[NSString class]]) {
-                resultText = (NSString *)biFaData;
-                EchoLog(@"成功读取到法诀字符串，长度: %lu", (unsigned long)resultText.length);
-            } else {
-                resultText = [NSString stringWithFormat:@"读取成功，但数据类型不符或为空。实际类型: %@", [biFaData class]];
-                EchoLog(@"%@", resultText);
-            }
-        } @catch (NSException *exception) {
-            EchoLog(@"!!! 读取数据时发生异常: %@", exception);
-            resultText = [NSString stringWithFormat:@"读取时发生异常: %@", exception.reason];
+        // 关键步骤：访问懒加载属性来触发数据计算
+        // 这一步是核心，如果崩溃，问题就出在这里
+        EchoLog(@"正在访问 '法訣列' 属性...");
+        id biFaData = [dataVC valueForKey:@"法訣列"];
+        
+        if (biFaData && [biFaData isKindOfClass:[NSString class]]) {
+            resultText = (NSString *)biFaData;
+            EchoLog(@"成功从内存实例中获取到法诀字符串，长度: %lu", (unsigned long)resultText.length);
+        } else {
+            resultText = [NSString stringWithFormat:@"数据类型不符或为空。实际类型: %@", [biFaData class]];
+            EchoLog(@"%@", resultText);
         }
 
-        // 5. 显示结果
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"调试读取结果"
-                                                                       message:resultText
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-
-    } else {
-        EchoLog(@"顶层控制器不是目标控制器。");
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"操作提示"
-                                                                       message:@"请先手动点击App内的“法诀”按钮，让法诀列表显示出来，然后再点击这个绿色按钮。"
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
+    } @catch (NSException *exception) {
+        EchoLog(@"!!! 在内存中操作实例时发生异常: %@", exception);
+        resultText = [NSString stringWithFormat:@"操作时发生异常: %@", exception.reason];
+    } @finally {
+        // 无论成功与否，我们都不再需要这个实例了
+        dataVC = nil; 
     }
+
+    // 3. 显示结果
+    [UIPasteboard generalPasteboard].string = resultText;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"V4 方案测试结果"
+                                                                   message:resultText
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 %end
