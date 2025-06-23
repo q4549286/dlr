@@ -28,7 +28,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     CGSize tileSize = CGSizeMake(150, 100); 
     UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); 
     UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; 
-    watermarkView.tag = watermarkTag; // <-- 修正编译错误
+    watermarkView.tag = watermarkTag;
     watermarkView.userInteractionEnabled = NO; 
     watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; 
     watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; 
@@ -37,7 +37,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 }
 %end
 // =========================================================================
-// Section 3: 【最终版】一键复制到 AI (已整合天地盘 V18 逻辑)
+// Section 3: 【最终版】一键复制到 AI (已整合天地盘 V18 和 年命提取)
 // =========================================================================
 
 static NSInteger const CopyAiButtonTag = 112233;
@@ -79,7 +79,6 @@ static NSString* GetStringFromLayer(id layer) {
     return @"?";
 }
 
-
 @interface UIViewController (CopyAiAddon)
 - (void)copyAiButtonTapped_FinalMethod;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
@@ -111,93 +110,122 @@ static NSString* GetStringFromLayer(id layer) {
 }
 
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
-        viewControllerToPresent.view.alpha = 0.0f;
-        flag = NO;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            
-            NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-            NSString *title = viewControllerToPresent.title ?: @"";
-            
-            if (title.length == 0) {
-                 NSMutableArray *labels = [NSMutableArray array];
-                 FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, labels);
-                 if (labels.count > 0) {
-                     [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                         if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-                         if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
-                         return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-                     }];
-                     UILabel *firstLabel = labels.firstObject;
-                     if (firstLabel && firstLabel.frame.origin.y < 100) { title = firstLabel.text; }
-                 }
+    if (g_extractedData) {
+        // 拦截并处理 UIAlertController（例如 "年命摘要" 的操作表）
+        if ([viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
+            UIAlertController *alert = (UIAlertController *)viewControllerToPresent;
+            UIAlertAction *targetAction = nil;
+            for (UIAlertAction *action in alert.actions) {
+                if ([action.title isEqualToString:@"年命摘要"]) {
+                    targetAction = action;
+                    break;
+                }
             }
-
-            NSMutableArray *textParts = [NSMutableArray array];
-
-            if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
-                NSMutableArray *stackViews = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UIStackView class], viewControllerToPresent.view, stackViews);
-
-                [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-                    return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
-                }];
-
-                for (UIStackView *stackView in stackViews) {
-                    NSArray *arrangedSubviews = stackView.arrangedSubviews;
-                    if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                        UILabel *titleLabel = arrangedSubviews[0];
-                        NSString *rawTitle = titleLabel.text ?: @"";
-                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
-                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""];
-                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""];
-                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
-                        NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-                        NSMutableArray *descParts = [NSMutableArray array];
-                        if (arrangedSubviews.count > 1) {
-                            for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
-                                if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
-                                    [descParts addObject:((UILabel *)arrangedSubviews[i]).text];
-                                }
-                            }
-                        }
-                        
-                        NSString *fullDesc = [descParts componentsJoinedByString:@" "];
-                        fullDesc = [fullDesc stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-                        fullDesc = [fullDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                        
-                        NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc];
-                        [textParts addObject:pairString];
+            // 如果找到了 "年命摘要" 按钮
+            if (targetAction) {
+                EchoLog(@"检测到 '年命摘要' 操作表，将自动点击并拦截。");
+                // 使用 KVC 安全地获取 handler
+                void (^handler)(UIAlertAction *) = [targetAction valueForKey:@"handler"];
+                // 先将 alert 关闭，避免它显示出来
+                [self dismissViewControllerAnimated:NO completion:nil];
+                // 如果 handler 存在，则执行它，这将触发“年命摘要视图”的 present
+                if (handler) {
+                    handler(targetAction);
+                }
+                // 阻止原始的 present 调用
+                return;
+            }
+        }
+        // 拦截内容视图
+        else {
+            viewControllerToPresent.view.alpha = 0.0f;
+            flag = NO; // 无动画
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                
+                NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
+                NSString *title = viewControllerToPresent.title ?: @"";
+                
+                if (title.length == 0) {
+                    NSMutableArray *labels = [NSMutableArray array];
+                    FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, labels);
+                    if (labels.count > 0) {
+                        [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                            if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
+                            if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+                            return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+                        }];
+                        UILabel *firstLabel = labels.firstObject;
+                        if (firstLabel && firstLabel.frame.origin.y < 100) { title = firstLabel.text; }
                     }
                 }
                 
-                NSString *content = [textParts componentsJoinedByString:@"\n"];
-                
-                if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content;
-                else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content;
-                else g_extractedData[@"毕法"] = content;
+                NSMutableArray *textParts = [NSMutableArray array];
 
-            } else if ([vcClassName containsString:@"七政"]) {
-                NSMutableArray *allLabels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
-                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-                
-                for (UILabel *label in allLabels) {
-                    if (label.text.length > 0) [textParts addObject:label.text];
+                // --- 处理毕法、格局、方法 ---
+                if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
+                    NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], viewControllerToPresent.view, stackViews);
+                    [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
+                    for (UIStackView *stackView in stackViews) {
+                        NSArray *arrangedSubviews = stackView.arrangedSubviews;
+                        if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
+                            UILabel *titleLabel = arrangedSubviews[0]; NSString *rawTitle = titleLabel.text ?: @"";
+                            rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
+                            NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                            NSMutableArray *descParts = [NSMutableArray array];
+                            if (arrangedSubviews.count > 1) { for (NSUInteger i = 1; i < arrangedSubviews.count; i++) { if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) { [descParts addObject:((UILabel *)arrangedSubviews[i]).text]; } } }
+                            NSString *fullDesc = [[descParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "]; fullDesc = [fullDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                            NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc]; [textParts addObject:pairString];
+                        }
+                    }
+                    NSString *content = [textParts componentsJoinedByString:@"\n"];
+                    if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content;
+                    else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content;
+                    else g_extractedData[@"毕法"] = content;
+                } 
+                // --- 处理七政 ---
+                else if ([vcClassName containsString:@"七政"]) {
+                    NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels);
+                    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+                    for (UILabel *label in allLabels) { if (label.text.length > 0) [textParts addObject:label.text]; }
+                    g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
                 }
-                g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
-            } else {
-                 EchoLog(@"抓取到未知弹窗 [%@]，内容被忽略。", title);
-            }
-            
-            [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
-        });
-        %orig(viewControllerToPresent, flag, completion);
-        return;
+                // --- 【新增】处理年命摘要 ---
+                else if ([vcClassName containsString:@"年命摘要視圖"]) {
+                    EchoLog(@"抓取到 '年命摘要' 页面: %@", title);
+                    NSMutableArray *contentLabels = [NSMutableArray array];
+                    // UITextView 继承自 UIScrollView, UILabel/UITextView 继承自 UIView
+                    FindSubviewsOfClassRecursive([UIView class], viewControllerToPresent.view, contentLabels);
+                    [contentLabels filterUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id evaluatedObject, NSDictionary *bindings) {
+                        return [evaluatedObject respondsToSelector:@selector(text)];
+                    }]];
+
+                    [contentLabels sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+                        return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
+                    }];
+                    
+                    for (UIView *view in contentLabels) {
+                        NSString *text = [view valueForKey:@"text"];
+                        if (text && text.length > 0) { [textParts addObject:text]; }
+                    }
+                    NSString *fullContent = [textParts componentsJoinedByString:@"\n"];
+                    NSString *finalNianMingEntry = [NSString stringWithFormat:@"%@\n%@", title, fullContent];
+                    
+                    // 将提取到的内容加入年命数组
+                    [g_extractedData[@"年命"] addObject:finalNianMingEntry];
+                }
+                else {
+                    EchoLog(@"抓取到未知弹窗 [%@]，内容被忽略。", title);
+                }
+                
+                [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+            });
+            %orig(viewControllerToPresent, flag, completion);
+            return;
+        }
     }
     %orig(viewControllerToPresent, flag, completion);
 }
+
 
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator {
@@ -304,6 +332,7 @@ static NSString* GetStringFromLayer(id layer) {
     
     EchoLog(@"--- 开始执行复制到AI任务 ---");
     g_extractedData = [NSMutableDictionary dictionary];
+    g_extractedData[@"年命"] = [NSMutableArray array]; // 【新增】初始化用于存储年命信息的数组
 
     EchoLog(@"正在提取主界面静态信息...");
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
@@ -316,6 +345,7 @@ static NSString* GetStringFromLayer(id layer) {
     g_extractedData[@"天地盘"] = [self extractTianDiPanInfo_V18];
     EchoLog(@"主界面信息提取完毕。");
 
+    // 四课提取
     NSMutableString *siKe = [NSMutableString string];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if(siKeViewClass){
@@ -336,6 +366,7 @@ static NSString* GetStringFromLayer(id layer) {
     }
     g_extractedData[@"四课"] = siKe;
     
+    // 三传提取
     NSMutableString *sanChuan = [NSMutableString string];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
@@ -358,16 +389,49 @@ static NSString* GetStringFromLayer(id layer) {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         EchoLog(@"开始异步无感抓取动态信息...");
         
-        SEL selectorBiFa = NSSelectorFromString(@"顯示法訣總覽");
-        SEL selectorGeJu = NSSelectorFromString(@"顯示格局總覽");
-        SEL selectorQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:");
-        SEL selectorFangFa = NSSelectorFromString(@"顯示方法總覽");
-
         #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
             _Pragma("clang diagnostic push") \
             _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
             code; \
             _Pragma("clang diagnostic pop")
+
+        // --- 【新增】抓取年命信息 ---
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            Class xingNianUnitClass = NSClassFromString(@"六壬大占.行年單元");
+            if (xingNianUnitClass) {
+                EchoLog(@"检测到 '行年单元' 类，开始查找实例...");
+                NSMutableArray *xingNianUnits = [NSMutableArray array];
+                FindSubviewsOfClassRecursive(xingNianUnitClass, self.view, xingNianUnits);
+                
+                // 按x坐标排序，确保按 A, B, C... 的顺序点击
+                [xingNianUnits sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+                    return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)];
+                }];
+
+                if (xingNianUnits.count > 0) {
+                    EchoLog(@"找到 %ld 个行年单元，将依次处理。", (long)xingNianUnits.count);
+                    for (UIView *unitView in xingNianUnits) {
+                        NSMutableArray *buttons = [NSMutableArray array];
+                        FindSubviewsOfClassRecursive([UIButton class], unitView, buttons);
+                        if (buttons.firstObject) {
+                            UIButton *profileButton = buttons.firstObject;
+                            EchoLog(@"正在模拟点击按钮: %@", profileButton.titleLabel.text);
+                            [profileButton sendActionsForControlEvents:UIControlEventTouchUpInside];
+                            // 等待alert和内容页的呈现与抓取过程完成
+                            [NSThread sleepForTimeInterval:0.6];
+                        }
+                    }
+                } else {
+                    EchoLog(@"未找到 '行年单元' 实例，跳过年命提取。");
+                }
+            }
+        });
+
+        // --- 抓取毕法、格局等信息 ---
+        SEL selectorBiFa = NSSelectorFromString(@"顯示法訣總覽");
+        SEL selectorGeJu = NSSelectorFromString(@"顯示格局總覽");
+        SEL selectorQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:");
+        SEL selectorFangFa = NSSelectorFromString(@"顯示方法總覽");
 
         if ([self respondsToSelector:selectorBiFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorBiFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:selectorGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:selectorGeJu withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
@@ -381,7 +445,6 @@ static NSString* GetStringFromLayer(id layer) {
             NSString *geJuOutput = g_extractedData[@"格局"] ?: @"";
             NSString *fangFaOutput = g_extractedData[@"方法"] ?: @"";
             
-            // --- 【终极强力清洁】---
             NSArray *trashList = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
             for (NSString *trash in trashList) {
                 biFaOutput = [biFaOutput stringByReplacingOccurrencesOfString:trash withString:@""];
@@ -395,6 +458,13 @@ static NSString* GetStringFromLayer(id layer) {
 
             NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
             NSString *tianDiPanOutput = g_extractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_extractedData[@"天地盘"]] : @"";
+            
+            // --- 【新增】组合年命信息 ---
+            NSString *nianMingOutput = @"";
+            NSArray *nianMingEntries = g_extractedData[@"年命"];
+            if (nianMingEntries && nianMingEntries.count > 0) {
+                nianMingOutput = [NSString stringWithFormat:@"年命:\n%@\n\n", [nianMingEntries componentsJoinedByString:@"\n\n"]];
+            }
 
             NSString *finalText = [NSString stringWithFormat:
                 @"%@\n\n"
@@ -407,12 +477,14 @@ static NSString* GetStringFromLayer(id layer) {
                 @"%@"
                 @"%@\n"
                 @"%@\n\n"
+                @"%@" // 年命信息
                 @"%@%@%@%@",
                 SafeString(g_extractedData[@"时间块"]),
                 SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]), SafeString(g_extractedData[@"三宫时"]), SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]), SafeString(g_extractedData[@"九宗门"]),
                 tianDiPanOutput,
                 SafeString(g_extractedData[@"四课"]),
                 SafeString(g_extractedData[@"三传"]),
+                nianMingOutput, // 【新增】在此处插入年命信息
                 biFaOutput, geJuOutput, fangFaOutput, qiZhengOutput
             ];
             
