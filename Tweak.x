@@ -6,7 +6,7 @@
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
 
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V13-Final] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V14-Final] " format), ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
@@ -53,7 +53,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
 - (NSString *)extractTianDiPanInfo_V18;
-- (NSString *)formatStackViewContentFromView:(UIView *)contentView; // 统一的StackView格式化函数
+- (NSString *)formatStackViewContentFromView:(UIView *)contentView;
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView;
 @end
 
@@ -80,6 +80,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     }
 }
 
+// ====================== 【V14 核心修复】 ======================
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     __weak typeof(self) weakSelf = self;
     
@@ -91,7 +92,6 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
             NSString *title = viewControllerToPresent.title ?: @"";
             
-            // 对于毕法、格局、方法等，统一使用StackView格式化函数
             if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
                 NSString *content = [strongSelf formatStackViewContentFromView:viewControllerToPresent.view];
                 if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content;
@@ -118,7 +118,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         }
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         
-        // 【V13 核心修复】年命摘要也使用StackView格式化
+        // 【V14 核心修复】年命摘要和格局方法使用统一的提取逻辑
         if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
             __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
             NSString *formattedZhaiYao = [strongSelf formatStackViewContentFromView:viewControllerToPresent.view];
@@ -185,12 +185,12 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             if (arrangedSubviews.count > 1) {
                 for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
                     if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
+                        if (contentString.length > 0) [contentString appendString:@" "];
                         [contentString appendString:((UILabel *)arrangedSubviews[i]).text];
                     }
                 }
             }
             
-            // 【V13 核心修复】将内容中的换行符替换为空格
             NSString *fullDesc = [contentString stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
             fullDesc = [fullDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             
@@ -221,6 +221,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             NSMutableString *contentString = [NSMutableString string];
             if (labelsInCell.count > 1) {
                 for (NSUInteger i = 1; i < labelsInCell.count; i++) {
+                     if (contentString.length > 0) [contentString appendString:@" "];
                     [contentString appendString:((UILabel *)labelsInCell[i]).text];
                 }
             }
