@@ -112,7 +112,8 @@ static NSString* GetStringFromLayer(id layer) {
     }
 }
 
-// ========================[ 终极完美版 V2 ]=========================
+// ========================[ 终极完美版 V3 ]=========================
+// 识别并保留分组标题，彻底解决幽灵字符问题
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_extractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f;
@@ -149,11 +150,11 @@ static NSString* GetStringFromLayer(id layer) {
                 for (UIStackView *stackView in stackViews) {
                     NSArray *arrangedSubviews = stackView.arrangedSubviews;
                     
+                    // 【终极方案】根据UIStackView内的元素数量区分内容和分组标题
                     if (arrangedSubviews.count >= 2 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                        
+                        // 这是一个“内容条目”
                         UILabel *titleLabel = arrangedSubviews[0];
                         NSString *rawTitle = titleLabel.text ?: @"";
-                        // 【精修】更彻底地清洗标题
                         rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
                         rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""];
                         rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""];
@@ -172,6 +173,21 @@ static NSString* GetStringFromLayer(id layer) {
                         
                         NSString *pairString = [NSString stringWithFormat:@"%@→%@", cleanTitle, fullDesc];
                         [textParts addObject:pairString];
+
+                    } else if (arrangedSubviews.count == 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
+                        // 这是一个“分组标题”
+                        UILabel *groupTitleLabel = arrangedSubviews[0];
+                        NSString *rawGroupTitle = groupTitleLabel.text ?: @"";
+                        // 同样进行简繁转换和清洗
+                        NSMutableString *simplifiedGroupTitle = [rawGroupTitle mutableCopy];
+                        CFStringTransform((__bridge CFMutableStringRef)simplifiedGroupTitle, NULL, CFSTR("Hant-Hans"), false);
+                        simplifiedGroupTitle = [[simplifiedGroupTitle stringByReplacingOccurrencesOfString:@"法诀" withString:@""] mutableCopy];
+                        simplifiedGroupTitle = [[simplifiedGroupTitle stringByReplacingOccurrencesOfString:@"格局" withString:@""] mutableCopy];
+                        simplifiedGroupTitle = [[simplifiedGroupTitle stringByReplacingOccurrencesOfString:@"方法" withString:@""] mutableCopy];
+                        NSString *cleanGroupTitle = [simplifiedGroupTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                        
+                        // 格式化为带换行的独立标题
+                        [textParts addObject:[NSString stringWithFormat:@"\n%@:", cleanGroupTitle]];
                     }
                 }
                 
@@ -180,7 +196,7 @@ static NSString* GetStringFromLayer(id layer) {
                 if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content;
                 else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content;
                 else g_extractedData[@"毕法"] = content;
-                EchoLog(@"[完美版 V2] 成功抓取 [%@]", title);
+                EchoLog(@"[完美版 V3] 成功抓取 [%@]", title);
             }
             else if ([vcClassName containsString:@"七政"]) {
                 NSMutableArray *allLabels = [NSMutableArray array];
@@ -191,7 +207,7 @@ static NSString* GetStringFromLayer(id layer) {
                     if (label.text.length > 0) [textParts addObject:label.text];
                 }
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
-                EchoLog(@"[完美版 V2] 成功抓取 [七政四余]");
+                EchoLog(@"[完美版 V3] 成功抓取 [七政四余]");
             } else {
                  EchoLog(@"抓取到未知弹窗 [%@]，内容被忽略。", title);
             }
@@ -382,20 +398,9 @@ static NSString* GetStringFromLayer(id layer) {
         dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"所有信息收集完毕，正在组合最终文本...");
             
-            NSString *biFaOutput = g_extractedData[@"毕法"] ?: @"";
-            NSString *geJuOutput = g_extractedData[@"格局"] ?: @"";
-            NSString *fangFaOutput = g_extractedData[@"方法"] ?: @"";
-
-            // 【精修】对最终的字符串进行一次性的垃圾清理
-            biFaOutput = [biFaOutput stringByReplacingOccurrencesOfString:@"通类门 法诀→\n" withString:@""];
-            geJuOutput = [geJuOutput stringByReplacingOccurrencesOfString:@"通类门 格局→\n" withString:@""];
-            fangFaOutput = [fangFaOutput stringByReplacingOccurrencesOfString:@"通类门 方法→\n" withString:@""];
-            
-            // 增加空行，如果内容不为空
-            if(biFaOutput.length > 0) biFaOutput = [biFaOutput stringByAppendingString:@"\n\n"];
-            if(geJuOutput.length > 0) geJuOutput = [geJuOutput stringByAppendingString:@"\n\n"];
-            if(fangFaOutput.length > 0) fangFaOutput = [fangFaOutput stringByAppendingString:@"\n\n"];
-
+            NSString *biFaOutput = g_extractedData[@"毕法"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"毕法"]] : @"";
+            NSString *geJuOutput = g_extractedData[@"格局"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"格局"]] : @"";
+            NSString *fangFaOutput = g_extractedData[@"方法"] ? [NSString stringWithFormat:@"%@\n\n", g_extractedData[@"方法"]] : @"";
             NSString *qiZhengOutput = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_extractedData[@"七政四余"]] : @"";
             NSString *tianDiPanOutput = g_extractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_extractedData[@"天地盘"]] : @"";
 
@@ -420,6 +425,8 @@ static NSString* GetStringFromLayer(id layer) {
             ];
             
             finalText = [finalText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            finalText = [finalText stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
+
 
             [UIPasteboard generalPasteboard].string = finalText;
             
