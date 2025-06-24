@@ -7,18 +7,13 @@
 static BOOL g_isListeningForWei = NO;
 static NSMutableArray *g_capturedWeiValues = nil;
 
-// 【【【语法修正】】】
-// 将函数恢复为正常的多行格式，以修复编译错误。
 static UIViewController* getTopmostViewController() {
     UIWindow *keyWindow = nil;
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *scene in [[UIApplication sharedApplication] connectedScenes]) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
                 for (UIWindow *window in scene.windows) {
-                    if (window.isKeyWindow) {
-                        keyWindow = window;
-                        break;
-                    }
+                    if (window.isKeyWindow) { keyWindow = window; break; }
                 }
             }
         }
@@ -35,18 +30,16 @@ static UIViewController* getTopmostViewController() {
     return topController;
 }
 
-
 // =========================================================================
-// 2. 核心捕获逻辑：回归王道，直击Action
+// 2. 核心捕获逻辑
 // =========================================================================
-@interface UIViewController (WeiHunterHook)
-- (void)my_hooked_showSummary:(id)sender;
+@interface NSObject (TheFinalTruth)
+- (void)my_hooked_showKeChuanSummary:(id)sender;
 @end
 
-@implementation UIViewController (WeiHunterHook)
-- (void)my_hooked_showSummary:(id)sender {
-    // 首先，让原始方法执行。
-    [self my_hooked_showSummary:sender];
+@implementation NSObject (TheFinalTruth)
+- (void)my_hooked_showKeChuanSummary:(id)sender {
+    [self my_hooked_showKeChuanSummary:sender]; // 调用原始实现
 
     if (g_isListeningForWei) {
         @try {
@@ -71,7 +64,6 @@ static UIViewController* getTopmostViewController() {
 }
 @end
 
-
 // =========================================================================
 // 3. UI注入与控制
 // =========================================================================
@@ -88,18 +80,8 @@ static UIViewController* getTopmostViewController() {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *window = self.view.window; if (!window) return;
             [[window viewWithTag:202701] removeFromSuperview]; [[window viewWithTag:202702] removeFromSuperview];
-            
-            UIButton *startButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            startButton.frame = CGRectMake(self.view.frame.size.width - 230, 50, 100, 44); startButton.tag = 202701;
-            [startButton setTitle:@"捕获'位'" forState:UIControlStateNormal]; startButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; startButton.backgroundColor = [UIColor systemIndigoColor]; [startButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; startButton.layer.cornerRadius = 22;
-            [startButton addTarget:self action:@selector(startWeiHunting) forControlEvents:UIControlEventTouchUpInside];
-            [window addSubview:startButton];
-            
-            UIButton *finishButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            finishButton.frame = CGRectMake(self.view.frame.size.width - 120, 50, 110, 44); finishButton.tag = 202702;
-            [finishButton setTitle:@"完成并复制" forState:UIControlStateNormal]; finishButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; finishButton.backgroundColor = [UIColor systemOrangeColor]; [finishButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; finishButton.layer.cornerRadius = 22;
-            [finishButton addTarget:self action:@selector(finishWeiHunting) forControlEvents:UIControlEventTouchUpInside];
-            [window addSubview:finishButton];
+            UIButton *startButton = [UIButton buttonWithType:UIButtonTypeSystem]; startButton.frame = CGRectMake(self.view.frame.size.width - 230, 50, 100, 44); startButton.tag = 202701; [startButton setTitle:@"捕获'位'" forState:UIControlStateNormal]; startButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; startButton.backgroundColor = [UIColor systemIndigoColor]; [startButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; startButton.layer.cornerRadius = 22; [startButton addTarget:self action:@selector(startWeiHunting) forControlEvents:UIControlEventTouchUpInside]; [window addSubview:startButton];
+            UIButton *finishButton = [UIButton buttonWithType:UIButtonTypeSystem]; finishButton.frame = CGRectMake(self.view.frame.size.width - 120, 50, 110, 44); finishButton.tag = 202702; [finishButton setTitle:@"完成并复制" forState:UIControlStateNormal]; finishButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; finishButton.backgroundColor = [UIColor systemOrangeColor]; [finishButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; finishButton.layer.cornerRadius = 22; [finishButton addTarget:self action:@selector(finishWeiHunting) forControlEvents:UIControlEventTouchUpInside]; [window addSubview:finishButton];
         });
     }
 }
@@ -108,20 +90,24 @@ static UIViewController* getTopmostViewController() {
 %end
 
 // =========================================================================
-// 4. 手动方法交换：使用终极武器攻击正确目标
+// 4. 手动方法交换：用您纠正的、绝对正确的名字
 // =========================================================================
 %ctor {
     %init;
 
-    Class targetClass = [UIViewController class];
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     
-    SEL originalSelector = NSSelectorFromString(@"顯示課傳摘要WithSender:");
-    SEL newSelector = @selector(my_hooked_showSummary:);
-    
-    Method originalMethod = class_getInstanceMethod(targetClass, originalSelector);
-    Method newMethod = class_getInstanceMethod(targetClass, newSelector);
-    
-    if (originalMethod && newMethod) {
-        method_exchangeImplementations(originalMethod, newMethod);
+    if (targetClass) {
+        // 【【【最终的、由您亲自纠正的、绝对正确的修正】】】
+        // 使用您指出的、正确的“顯示課傳摘要WithSender:”
+        SEL originalSelector = NSSelectorFromString(@"顯示課傳摘要WithSender:");
+        SEL newSelector = @selector(my_hooked_showKeChuanSummary:);
+        
+        Method originalMethod = class_getInstanceMethod(targetClass, originalSelector);
+        Method newMethod = class_getInstanceMethod([NSObject class], newSelector);
+        
+        if (originalMethod && newMethod) {
+            method_exchangeImplementations(originalMethod, newMethod);
+        }
     }
 }
