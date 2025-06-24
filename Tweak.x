@@ -115,12 +115,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     %orig(viewControllerToPresent, flag, completion);
 }
 
-%new
-- (void)createOrShowControlPanel_Truth { /* ... UI创建代码保持不变 ... */ }
-- (void)copyAndClose_Truth { /* ... 复制关闭代码保持不变 ... */ }
+// 【【【 关键修正：删除了此处的空方法定义 】】】
 
-// --- UI创建和复制的辅助方法（为了简洁，从主逻辑中移出）---
 %new
+// --- UI创建和复制的辅助方法 ---
 - (void)createOrShowControlPanel_Truth {
     UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
     NSInteger panelTag = 556692;
@@ -193,7 +191,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 if(labels.count >= 2) {
                     UILabel *dizhiLabel = labels[labels.count-2]; UILabel *tianjiangLabel = labels[labels.count-1];
                     
-                    // 【关键修改】队列中存储包含上下文的字典
                     NSDictionary *dizhiTask = @{ @"label": dizhiLabel, @"contextView": chuanView, @"contextIvarName": @"傳視圖" };
                     NSDictionary *tianjiangTask = @{ @"label": tianjiangLabel, @"contextView": chuanView, @"contextIvarName": @"傳視圖" };
                     
@@ -246,7 +243,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         g_isExtractingKeChuanDetail = NO; return;
     }
   
-    // --- 【核心逻辑修正】 ---
     NSDictionary *task = g_keChuanWorkQueue.firstObject; [g_keChuanWorkQueue removeObjectAtIndex:0];
     NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
     
