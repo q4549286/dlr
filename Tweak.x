@@ -1,44 +1,8 @@
-#import <UIKit/UIKit.h>
-#import <objc/runtime.h>
-#import <QuartzCore/QuartzCore.h>
-
-// =========================================================================
-// 1. 宏定义、全局变量与辅助函数
-// =========================================================================
-#define EchoLog(format, ...) NSLog((@"[KeChuan-Test-Final] " format), ##VA_ARGS)
-
-// --- 全局状态变量 for this test ---
-static NSInteger const TestButtonTag = 556680; // Use a new tag
-static BOOL g_isTestingKeChuan = NO;
-static NSMutableArray *g_capturedTestDetails = nil;
-
-// --- 辅助函数 ---
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
-    if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
-    for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
-}
-
-// 新增一个更强大的 ivar 获取函数，因为有些 ivar 可能在父类中
-static id GetIvarFromObject(id object, const char *ivarName) {
-    Ivar ivar = class_getInstanceVariable([object class], ivarName);
-    if (ivar) {
-        return object_getIvar(object, ivar);
-    }
-    return nil;
-}
-
-// =========================================================================
-// 2. 主功能区：创建测试入口和核心逻辑
-// =========================================================================
-@interface UIViewController (EchoAITestAddons_Final)
-- (void)performKeChuanDetailExtractionTest_Final;
-@end
-
 %hook UIViewController
 
 // --- 2.1: 添加独立的测试按钮 ---
 (void)viewDidLoad {
-    %orig;
+    %orig; // This is correct
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -59,11 +23,12 @@ static id GetIvarFromObject(id object, const char *ivarName) {
     }
 }
 
-// --- 2.2: 拦截弹窗 (保持不变，已很稳定) ---
+// --- 2.2: 拦截弹窗 (修正版逻辑) ---
 (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isTestingKeChuan) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
+            // 这是我们要拦截的弹窗
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 UIView *contentView = viewControllerToPresent.view;
                 NSMutableArray *allLabels = [NSMutableArray array];
@@ -76,15 +41,20 @@ static id GetIvarFromObject(id object, const char *ivarName) {
                 NSString *fullDetail = [textParts componentsJoinedByString:@"\n"];
                 [g_capturedTestDetails addObject:fullDetail];
             });
-            %orig(viewControllerToPresent, NO, completion);
+            // 我们不调用 %orig，而是自己 dismiss，从而“吞掉”这个弹窗
+            [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+            // 并且因为我们已经处理了，所以直接返回，不执行后续的 %orig
             return;
         }
     }
+    
+    // 如果不是我们要拦截的弹窗，或者 g_isTestingKeChuan 为 NO，就正常执行原始方法
     %orig(viewControllerToPresent, flag, completion);
 }
 
 %new
 // --- 2.3: 核心测试流程 (终极版) ---
+// (这部分代码保持不变，因为它是 %new 的，没有 %orig)
 (void)performKeChuanDetailExtractionTest_Final {
     EchoLog(@"--- 开始执行 [课传详情] 最终版测试 ---");
     g_isTestingKeChuan = YES;
