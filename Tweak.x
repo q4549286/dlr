@@ -43,7 +43,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * SEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // 【【【编译错误修复】】】 SEC_PER_SEC -> NSEC_PER_SEC
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *window = self.view.window; if (!window) return;
             NSInteger buttonTag = 555888; // 最终版Tag
             [[window viewWithTag:buttonTag] removeFromSuperview];
@@ -63,7 +64,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// --- presentViewController: 核心拦截逻辑 (无需修改) ---
+// --- presentViewController: 核心拦截逻辑 ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtracting) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
@@ -82,6 +83,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 for (UILabel *label in labels) { if (label.text.length > 0) [texts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]; }
                 [g_capturedDetails addObject:[texts componentsJoinedByString:@"\n"]];
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
+                    // 【【【编译错误修复】】】 SEC_PER_SEC -> NSEC_PER_SEC
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         [self processNextSpatialQueueItem];
                     });
@@ -103,14 +105,11 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     g_titleQueue = [NSMutableArray array];
     g_capturedDetails = [NSMutableArray array];
 
-    // 1. 获取关键的手势类
     Class gestureTargetClass = NSClassFromString(@"_TtCC12六壬大占14ViewController18課傳觸摸手勢");
     if (!gestureTargetClass) {
-        // ... 错误处理 ...
         g_isExtracting = NO; return;
     }
     
-    // 2. 全局扫描：在整个VC的视图中找出所有目标手势
     NSMutableArray *allGesturesOnScreen = [NSMutableArray array];
     FindGesturesOfTypeRecursive(gestureTargetClass, self.view, allGesturesOnScreen);
     
@@ -121,8 +120,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         g_isExtracting = NO; return;
     }
 
-    // 3. 空间关联逻辑
-    // --- 三传 ---
     Class sanChuanClass = NSClassFromString(@"六壬大占.三傳視圖");
     if (sanChuanClass) {
         NSMutableArray *views = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanClass, self.view, views);
@@ -132,11 +129,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             for (int i=0; i<3; ++i) {
                 UIView *chuanView = object_getIvar(container, class_getInstanceVariable(sanChuanClass, ivars[i]));
                 if(chuanView){
-                    // 获取此“传”在屏幕上的绝对坐标区域
                     CGRect regionRect = [chuanView.superview convertRect:chuanView.frame toView:nil];
                     NSMutableArray *gesturesInRegion = [NSMutableArray array];
-
-                    // 遍历所有找到的手势，看哪个的中心点落在这个区域里
                     for (UIGestureRecognizer *gesture in allGesturesOnScreen) {
                         UIView *tappedView = gesture.view;
                         CGPoint centerInWindow = [tappedView.superview convertPoint:tappedView.center toView:nil];
@@ -163,7 +157,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             }
         }
     }
-    // ... 四课逻辑可以同理添加 ...
     
     if (g_workQueue.count == 0) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:@"空间关联失败，未能将手势与课传区域匹配。" preferredStyle:UIAlertControllerStyleAlert];
@@ -176,10 +169,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-// --- processNextSpatialQueueItem: 队列处理器 (无需修改) ---
+// --- processNextSpatialQueueItem: 队列处理器 ---
 - (void)processNextSpatialQueueItem {
     if (g_workQueue.count == 0) {
-        // 结束流程
         NSMutableString *result = [NSMutableString string];
         for (NSUInteger i = 0; i < g_titleQueue.count; i++) {
             NSString *title = g_titleQueue[i];
