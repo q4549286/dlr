@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog(@"[EchoAI-Test-KCD-V4] " format, ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog(@"[EchoAI-Test-KCD-V4.1] " format, ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static BOOL g_isTestingKeChuanDetail = NO;
@@ -60,7 +60,7 @@ static id GetIvarView(id object, const char *ivarName) {
     }
 }
 
-// 2. 拦截详情窗口 (逻辑不变)
+// 2. 拦截详情窗口
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isTestingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
@@ -117,37 +117,29 @@ static id GetIvarView(id object, const char *ivarName) {
 %new
 // 3. 核心测试逻辑 (最终版)
 - (void)performKeChuanDetailTest {
-    EchoLog(@"--- 开始测试四课三传详情提取 V4 ---");
+    EchoLog(@"--- 开始测试四课三传详情提取 V4.1 ---");
     g_isTestingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanTaskQueue = [NSMutableArray array];
 
-    // --- 精确获取四课视图 ---
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
         NSMutableArray *siKeViews = [NSMutableArray array]; 
         FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
         if (siKeViews.count > 0) {
             id siKeViewInstance = siKeViews.firstObject;
-            
-            // 基于截图的实例变量名，按第一至第四课顺序排列
             NSArray *ivarNames = @[@"_日上", @"_日阴", @"_辰上", @"_辰阴"];
-            
             for (NSString *ivarNameStr in ivarNames) {
                 UIView *keView = GetIvarView(siKeViewInstance, [ivarNameStr UTF8String]);
-                if (keView) {
-                    [g_keChuanTaskQueue addObject:keView];
-                }
+                if (keView) { [g_keChuanTaskQueue addObject:keView]; }
             }
         }
     }
     
-    // --- 精确获取三传视图 ---
     NSMutableArray *sanChuanTasksMutable = [NSMutableArray array];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if(sanChuanViewClass){
         FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, sanChuanTasksMutable);
-        // 按Y坐标排序，确保是初传、中传、末传的顺序
         [sanChuanTasksMutable sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
         [g_keChuanTaskQueue addObjectsFromArray:sanChuanTasksMutable];
     }
@@ -186,12 +178,7 @@ static id GetIvarView(id object, const char *ivarName) {
 }
 
 %new
-- (void)triggerTapOnView:(UIView *)view { /* ... 保持V2/V3版本不变 ... */ }
-%new
-- (NSString *)extractTextFromViewHierachy:(UIView *)view { /* ... 保持V2/V3版本不变 ... */ }
-
-// V2/V3版本的函数实现需要复制过来
-%new
+// 4. 模拟点击手势
 - (void)triggerTapOnView:(UIView *)view {
     if (!view) return;
     
@@ -235,6 +222,7 @@ static id GetIvarView(id object, const char *ivarName) {
 }
 
 %new
+// 5. 提取文本
 - (NSString *)extractTextFromViewHierachy:(UIView *)view {
     NSMutableArray *allLabels = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UILabel class], view, allLabels);
