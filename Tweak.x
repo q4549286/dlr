@@ -3,11 +3,26 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数
+// 1. 私有API声明 & 辅助函数
 // =========================================================================
+
+// 声明我们将要使用的私有方法，以避免编译器警告
+@interface UITouch (Private)
+- (void)setPhase:(UITouchPhase)phase;
+- (void)setTimestamp:(NSTimeInterval)timestamp;
+- (void)_setLocationInWindow:(CGPoint)location resetPrevious:(BOOL)reset;
+@end
+
+@interface UIEvent (Private)
+- (void)_addTouch:(UITouch *)touch forDelayedDelivery:(BOOL)delayed;
+@end
+
+@interface UIApplication (Private)
+- (UIEvent *)_touchesEvent;
+@end
+
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
-// 【重要】工作队列现在存储字典，包含所有需要的信息
 static NSMutableArray<NSDictionary *> *g_workQueue = nil;
 static NSMutableArray *g_keChuanTitleQueue = nil;
 
@@ -16,34 +31,39 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
-// 模拟系统触摸事件的函数，作为最终的保障手段
-@interface UITouch (Private)
-- (void)setPhase:(UITouchPhase)phase;
-- (void)setTimestamp:(NSTimeInterval)timestamp;
-- (void)_setLocationInWindow:(CGPoint)location resetPrevious:(BOOL)reset;
-@end
-@interface UIEvent (Private)
-- (void)_addTouch:(UITouch *)touch forDelayedDelivery:(BOOL)delayed;
-@end
-@interface UIApplication (Private)
-- (UIEvent *)_touchesEvent;
-@end
-
+// 【【【核心修正区：修复编译错误】】】
 static void SimulateTapOnView(UIView *view) {
-    if (!view || !view.window) return;
+    if (!view || !view.window) {
+        NSLog(@"[SimulateTap] Error: View is not in a window.");
+        return;
+    }
+
+    // 获取触摸事件对象
     UIEvent *event = [[UIApplication sharedApplication] _touchesEvent];
+    CGPoint touchPoint = [view convertPoint:CGPointMake(view.bounds.size.width / 2.0, view.bounds.size.height / 2.0) toView:view.window];
+
+    // 创建一个触摸对象
     UITouch *touch = [[UITouch alloc] init];
-    [touch setWindow:view.window];
-    [touch setView:view];
-    [touch setTapCount:1];
+
+    // 【关键修正】使用 KVC (setValue:forKey:) 来设置 readonly 属性，绕过编译器检查
+    [touch setValue:view.window forKey:@"window"];
+    [touch setValue:view forKey:@"view"];
+    [touch setValue:@(1) forKey:@"tapCount"]; // 注意要将基本类型包装成 NSNumber
+
+    // 这些是私有方法，不是属性，所以可以直接调用
     [touch setTimestamp:[NSDate timeIntervalSinceReferenceDate]];
-    CGPoint point = [view convertPoint:CGPointMake(view.bounds.size.width/2, view.bounds.size.height/2) toView:view.window];
-    [touch _setLocationInWindow:point resetPrevious:YES];
+    [touch _setLocationInWindow:touchPoint resetPrevious:YES];
+
+    // 模拟按下
     [touch setPhase:UITouchPhaseBegan];
     [event _addTouch:touch forDelayedDelivery:NO];
     [[UIApplication sharedApplication] sendEvent:event];
+
+    // 模拟抬起
     [touch setPhase:UITouchPhaseEnded];
     [[UIApplication sharedApplication] sendEvent:event];
+    
+    // 短暂延迟以确保事件处理完成
     [NSThread sleepForTimeInterval:0.05];
 }
 
@@ -70,7 +90,7 @@ static void SimulateTapOnView(UIView *view) {
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"课传提取(最终稳定)" forState:UIControlStateNormal];
+            [testButton setTitle:@"课传提取(最终编译版)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
             testButton.backgroundColor = [UIColor blackColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -81,7 +101,7 @@ static void SimulateTapOnView(UIView *view) {
     }
 }
 
-// --- presentViewController: (逻辑简化, 只负责抓取和关闭) ---
+// --- presentViewController: (无变化) ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtractingKeChuanDetail && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
@@ -112,7 +132,7 @@ static void SimulateTapOnView(UIView *view) {
 }
 
 %new
-// --- performKeChuanDetailExtraction_Truth: 构建任务队列 ---
+// --- performKeChuanDetailExtraction_Truth: (无变化) ---
 - (void)performKeChuanDetailExtraction_Truth {
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
@@ -131,7 +151,6 @@ static void SimulateTapOnView(UIView *view) {
             for (int i = 0; ivarNames[i] != NULL; ++i) {
                 Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarNames[i]);
                 if (ivar) {
-                    // 获取代表“初传”、“中传”或“末传”的容器视图
                     UIView *chuanView = object_getIvar(sanChuanContainer, ivar);
                     if (chuanView) {
                         NSMutableArray *labels = [NSMutableArray array];
@@ -141,7 +160,7 @@ static void SimulateTapOnView(UIView *view) {
                             UILabel *dizhiLabel = labels[labels.count-2];
                             UILabel *tianjiangLabel = labels[labels.count-1];
                             
-                            // 【关键】将所有需要的信息打包成字典放入队列
+                            // 我们点击的是整个容器视图，而不是UILabel
                             [g_workQueue addObject:@{@"view": chuanView, @"type": @"dizhi"}];
                             [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
                             
@@ -160,7 +179,7 @@ static void SimulateTapOnView(UIView *view) {
 }
 
 %new
-// --- processKeChuanQueue_Truth: 【【【复刻你的成功模式】】】 ---
+// --- processKeChuanQueue_Truth: (无变化) ---
 - (void)processKeChuanQueue_Truth {
     if (g_workQueue.count == 0) {
         // ... 结束逻辑 ...
@@ -188,8 +207,6 @@ static void SimulateTapOnView(UIView *view) {
     UIView *targetView = task[@"view"];
     NSString *type = task[@"type"];
     
-    // 我们不再直接调用方法，而是触发点击
-    // 选择目标方法
     SEL actionToPerform = nil;
     if ([type isEqualToString:@"dizhi"]) {
         actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
@@ -197,20 +214,16 @@ static void SimulateTapOnView(UIView *view) {
         actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
     }
     
-    // 优先尝试安全的 performSelector，如果 App 不闪退，这是最高效的方式
     if ([self respondsToSelector:actionToPerform]) {
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         [self performSelector:actionToPerform withObject:targetView];
         #pragma clang diagnostic pop
     } else {
-        // 如果方法不存在，或者我们怀疑它导致闪退，就使用最稳定的系统事件模拟
-        // 在这个最终版本，我们直接用它作为后备
-        NSLog(@"[课传提取] 备用方案: 模拟系统触摸事件于视图 %@", targetView);
+        // 后备方案
         SimulateTapOnView(targetView);
     }
     
-    // 【【【核心：硬性等待，解耦流程】】】
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [self processKeChuanQueue_Truth];
     });
