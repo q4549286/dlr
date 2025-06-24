@@ -162,9 +162,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 }
             }
             g_isExtracting = NO;
-            // ============ FIX: 这里是修正的地方 ============
             if (completion) { completion([resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
-            // ============================================
             processQueue = nil;
             return;
         }
@@ -186,7 +184,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 EchoLog(@"触发点击 -> Target: %@, Action: %@", NSStringFromClass([target class]), actionString);
                 #pragma clang diagnostic push
                 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                [target performSelector:action withObject:itemView];
+                // ============ FIX v2: 传递手势识别器本身作为参数 ============
+                [target performSelector:action withObject:tap];
+                // =======================================================
                 #pragma clang diagnostic pop
             } else {
                 EchoLog(@"[错误] 无法触发点击。Target: %@, Action: %@", target, actionString);
