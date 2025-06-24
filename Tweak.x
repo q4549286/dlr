@@ -3,14 +3,14 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数 (与V6相同)
+// 1. 全局变量与辅助函数 (与V6/V7相同)
 // =========================================================================
 static UITextView *g_screenLogger = nil;
 
 #define EchoLog(format, ...) \
     do { \
         NSString *logMessage = [NSString stringWithFormat:format, ##__VA_ARGS__]; \
-        NSLog(@"[KeChuan-Test-Truth-V7-OrderTest] %@", logMessage); \
+        NSLog(@"[KeChuan-Test-Truth-V8-Responder] %@", logMessage); \
         if (g_screenLogger) { \
             dispatch_async(dispatch_get_main_queue(), ^{ \
                 NSString *newText = [NSString stringWithFormat:@"%@\n- %@", g_screenLogger.text, logMessage]; \
@@ -43,7 +43,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %hook UIViewController
 
-// viewDidLoad 和 presentViewController 保持和V6一致
+// viewDidLoad 和 presentViewController 保持稳定
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
@@ -54,9 +54,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"测试课传(V7顺序)" forState:UIControlStateNormal];
+            [testButton setTitle:@"测试课传(V8决战)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor systemOrangeColor];
+            testButton.backgroundColor = [UIColor systemRedColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Truth) forControlEvents:UIControlEventTouchUpInside];
@@ -65,10 +65,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UITextView *logger = [[UITextView alloc] initWithFrame:CGRectMake(10, 45, keyWindow.bounds.size.width - 170, 150)];
             logger.tag = LoggerViewTag;
             logger.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7];
-            logger.textColor = [UIColor orangeColor];
+            logger.textColor = [UIColor redColor];
             logger.font = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular];
             logger.editable = NO;
-            logger.layer.borderColor = [UIColor orangeColor].CGColor;
+            logger.layer.borderColor = [UIColor redColor].CGColor;
             logger.layer.borderWidth = 1.0;
             logger.layer.cornerRadius = 5;
             g_screenLogger = logger;
@@ -85,13 +85,11 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 expectedTitle = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
             }
             EchoLog(@"捕获弹窗 for [%@]", expectedTitle);
-            viewControllerToPresent.view.alpha = 0.0f;
-            flag = NO;
+            viewControllerToPresent.view.alpha = 0.0f; flag = NO;
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
                 UIView *contentView = viewControllerToPresent.view;
-                NSMutableArray *allLabels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+                NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
                 [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
                     if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
                     if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
@@ -111,17 +109,16 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
+// performKeChuanDetailExtractionTest_Truth 保持稳定，只构建队列
 - (void)performKeChuanDetailExtractionTest_Truth {
-    g_screenLogger.text = @""; // 清空日志
-    EchoLog(@"开始V7顺序颠倒测试...");
+    g_screenLogger.text = @"";
+    EchoLog(@"开始V8决战测试...");
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
-
-    NSMutableArray *tempTasks = [NSMutableArray array];
-
-    // --- Part A: 三传解析 ---
+    
+    // 省略四课逻辑，专注三传
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
     NSMutableArray *sanChuanContainers = [NSMutableArray array];
     if (sanChuanContainerClass) { FindSubviewsOfClassRecursive(sanChuanContainerClass, self.view, sanChuanContainers); }
@@ -145,82 +142,21 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 UILabel *dizhiLabel = labels[labels.count - 2];
                 UILabel *tianjiangLabel = labels[labels.count - 1];
                 NSString *dizhiTitle = [NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text];
-                [tempTasks addObject:@{@"item": dizhiLabel, @"title": dizhiTitle}];
+                [g_keChuanWorkQueue addObject:@{@"item": dizhiLabel, @"title": dizhiTitle}];
+                [g_keChuanTitleQueue addObject:dizhiTitle];
                 NSString *tianjiangTitle = [NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text];
-                [tempTasks addObject:@{@"item": tianjiangLabel, @"title": tianjiangTitle}];
+                [g_keChuanWorkQueue addObject:@{@"item": tianjiangLabel, @"title": tianjiangTitle}];
+                [g_keChuanTitleQueue addObject:tianjiangTitle];
             }
         }
     }
-
-    // --- Part B: 四课解析 ---
-    Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
-    if (siKeViewClass) {
-        NSMutableArray *skViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeViewClass, self.view, skViews);
-        if (skViews.count > 0) {
-            UIView *siKeContainer = skViews.firstObject;
-            NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], siKeContainer, allLabels);
-            NSMutableDictionary *cols = [NSMutableDictionary dictionary];
-            for (UILabel *label in allLabels) { NSString *key = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))]; if (!cols[key]) { cols[key] = [NSMutableArray array]; } [cols[key] addObject:label]; }
-            if (cols.allKeys.count == 4) {
-                NSArray *sortedKeys = [cols.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *o1, NSString *o2) { return [@([o1 floatValue]) compare:@([o2 floatValue])]; }];
-                NSArray *colTitles = @[@"第四课", @"第三课", @"第二课", @"第一课"];
-                for (NSUInteger i = 0; i < sortedKeys.count; i++) {
-                    NSMutableArray *colLabels = cols[sortedKeys[i]]; [colLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-                    if (colLabels.count >= 2) {
-                        UILabel *tianjiangLabel = colLabels[0]; UILabel *dizhiLabel = colLabels[1];
-                        NSString *dizhiTitle = [NSString stringWithFormat:@"%@ - 地支(%@)", colTitles[i], dizhiLabel.text];
-                        [tempTasks addObject:@{@"item": dizhiLabel, @"title": dizhiTitle}];
-                        NSString *tianjiangTitle = [NSString stringWithFormat:@"%@ - 天将(%@)", colTitles[i], tianjiangLabel.text];
-                        [tempTasks addObject:@{@"item": tianjiangLabel, @"title": tianjiangTitle}];
-                    }
-                }
-            }
-        }
-    }
-    
-    // ================== 【核心修改：打乱顺序】 ==================
-    // 原始顺序: 初(2) -> 中(2) -> 末(2) -> 四课(8)  (共14项)
-    // 我们的新顺序: 先处理中传(2项)，再处理末传(2项)，再处理四课(8项)，最后处理初传(2项)
-    EchoLog(@"构建原始任务列表，共%lu项", (unsigned long)tempTasks.count);
-
-    if (tempTasks.count == 14) { // 仅在识别出所有14个项目时才进行重排
-        NSRange middleRange = NSMakeRange(2, 2);
-        NSRange lastRange = NSMakeRange(4, 2);
-        NSRange sikeRange = NSMakeRange(6, 8);
-        NSRange firstRange = NSMakeRange(0, 2);
-
-        NSArray *middleTasks = [tempTasks subarrayWithRange:middleRange];
-        NSArray *lastTasks = [tempTasks subarrayWithRange:lastRange];
-        NSArray *sikeTasks = [tempTasks subarrayWithRange:sikeRange];
-        NSArray *firstTasks = [tempTasks subarrayWithRange:firstRange];
-
-        [g_keChuanWorkQueue addObjectsFromArray:middleTasks];
-        [g_keChuanWorkQueue addObjectsFromArray:lastTasks];
-        [g_keChuanWorkQueue addObjectsFromArray:sikeTasks];
-        [g_keChuanWorkQueue addObjectsFromArray:firstTasks];
-
-        // 标题队列也要按新顺序重排
-        for (NSDictionary *task in g_keChuanWorkQueue) {
-            [g_keChuanTitleQueue addObject:task[@"title"]];
-        }
-        EchoLog(@"任务顺序已重排! 新顺序: 中传 -> 末传 -> 四课 -> 初传");
-    } else {
-        // 如果识别不完整，则按原始顺序执行以进行基本测试
-        EchoLog(@"任务项不完整(%lu/14), 按原始顺序执行", (unsigned long)tempTasks.count);
-        g_keChuanWorkQueue = [tempTasks mutableCopy];
-        for (NSDictionary *task in g_keChuanWorkQueue) {
-            [g_keChuanTitleQueue addObject:task[@"title"]];
-        }
-    }
-    // =======================================================
-    
-    if (g_keChuanWorkQueue.count == 0) { EchoLog(@"测试失败: 未构建任何任务队列."); g_isExtractingKeChuanDetail = NO; return; }
-    EchoLog(@"最终队列构建完成，共%lu项。开始处理...", (unsigned long)g_keChuanWorkQueue.count);
+    if (g_keChuanWorkQueue.count == 0) { EchoLog(@"测试失败: 未构建队列."); g_isExtractingKeChuanDetail = NO; return; }
+    EchoLog(@"队列构建完成,共%lu项。开始处理...", (unsigned long)g_keChuanWorkQueue.count);
     [self processKeChuanQueue_Truth];
 }
 
-// processKeChuanQueue_Truth 保持和V6一致
 %new
+// ================== 【【【V8核心修改：响应者追溯】】】 ==================
 - (void)processKeChuanQueue_Truth {
     if (g_keChuanWorkQueue.count == 0) {
         EchoLog(@"所有任务完成! 生成结果.");
@@ -235,20 +171,44 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         [UIPasteboard generalPasteboard].string = resultStr;
         return;
     }
+    
     NSDictionary *task = g_keChuanWorkQueue.firstObject; [g_keChuanWorkQueue removeObjectAtIndex:0];
-    UIView *itemToClick = task[@"item"]; NSString *title = task[@"title"];
-    EchoLog(@"处理任务: %@\n将点击: <%@: %p>", title, [itemToClick class], itemToClick);
+    UIView *itemToClick = task[@"item"];
+    NSString *title = task[@"title"];
+    
+    EchoLog(@"处理任务: %@", title);
+
     SEL actionToPerform = nil;
     if ([title containsString:@"地支"]) { actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:"); }
     else if ([title containsString:@"天将"]) { actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:"); }
-    if (actionToPerform && [self respondsToSelector:actionToPerform]) {
+
+    if (!actionToPerform) {
+        EchoLog(@"错误: 无法确定要执行的action. 跳过.");
+        [self processKeChuanQueue_Truth];
+        return;
+    }
+
+    // --- 响应者追溯逻辑 ---
+    id responder = nil;
+    UIResponder *next = itemToClick;
+    while (next) {
+        if ([next respondsToSelector:actionToPerform]) {
+            responder = next;
+            break;
+        }
+        next = [next nextResponder];
+    }
+    // --- 追溯结束 ---
+
+    if (responder) {
+        EchoLog(@"找到响应者: <%@: %p>\n将在此对象上执行点击", [responder class], responder);
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:actionToPerform withObject:itemToClick];
+        [responder performSelector:actionToPerform withObject:itemToClick];
         #pragma clang diagnostic pop
     } else {
-        EchoLog(@"警告: 未找到点击方法! 跳过.");
-        [self processKeChuanQueue_Truth];
+        EchoLog(@"警告: 未找到任何能响应 %@ 的对象! 脚本可能失败.", NSStringFromSelector(actionToPerform));
+        [self processKeChuanQueue_Truth]; // 即使找不到也继续，避免卡住
     }
 }
 %end
