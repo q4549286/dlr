@@ -37,7 +37,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"课传提取(胜利版)" forState:UIControlStateNormal];
+            [testButton setTitle:@"课传提取(谢罪版)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
             testButton.backgroundColor = [UIColor systemGreenColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -98,34 +98,45 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         FindSubviewsOfClassRecursive(sanChuanContainerClass, self.view, containers);
         if (containers.count > 0) {
             UIView *sanChuanContainer = containers.firstObject;
+            
+            // 【【【最关键的修正】】】 使用正确的繁体中文ivar名
             const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL};
             NSString *rowTitles[] = {@"初传", @"中传", @"末传"};
             
             for (int i = 0; ivarNames[i] != NULL; ++i) {
                 Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarNames[i]);
                 if (ivar) {
+                    // 从ivar获取傳視圖实例
                     UIView *chuanView = object_getIvar(sanChuanContainer, ivar);
                     if (chuanView) {
-                        // 【胜利核心】任务队列存储的是傳視圖本身！
-                        [g_keChuanWorkQueue addObject:@{@"context": chuanView, @"type": @"dizhi"}];
-                        [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支", rowTitles[i]]];
-                        
-                        [g_keChuanWorkQueue addObject:@{@"context": chuanView, @"type": @"tianjiang"}];
-                        [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将", rowTitles[i]]];
+                        NSMutableArray *labels = [NSMutableArray array];
+                        FindSubviewsOfClassRecursive([UILabel class], chuanView, labels);
+                        [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
+                        if(labels.count >= 2) {
+                            UILabel *dizhiLabel = labels[labels.count-2];
+                            UILabel *tianjiangLabel = labels[labels.count-1];
+                            
+                            // 队列中存储UILabel本身
+                            [g_keChuanWorkQueue addObject:dizhiLabel];
+                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
+                            
+                            [g_keChuanWorkQueue addObject:tianjiangLabel];
+                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
+                        }
                     }
                 }
             }
         }
     }
     
-    // Part B: 四课 (为简化，暂时省略，可以后续添加)
+    // Part B: 四课 (为简化，暂时省略)
 
     if (g_keChuanWorkQueue.count == 0) { g_isExtractingKeChuanDetail = NO; return; }
     [self processKeChuanQueue_Truth];
 }
 
 %new
-// --- processKeChuanQueue_Truth: 使用正确的上下文(sender)调用方法 ---
+// --- processKeChuanQueue_Truth: 使用UILabel作为sender调用方法 ---
 - (void)processKeChuanQueue_Truth {
     if (g_keChuanWorkQueue.count == 0) {
         // ... 结束逻辑 ...
@@ -146,24 +157,22 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         return;
     }
     
-    NSDictionary *task = g_keChuanWorkQueue.firstObject;
+    UILabel *itemToClick = g_keChuanWorkQueue.firstObject;
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     
-    UIView *contextView = task[@"context"]; // 正确的上下文！
-    NSString *type = task[@"type"];
+    NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
 
     SEL actionToPerform = nil;
-    if ([type isEqualToString:@"dizhi"]) {
+    if ([title containsString:@"地支"]) {
         actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
     } else {
         actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
     }
-
-    // 响应者是self (ViewController)，但传递的sender是正确的上下文
+    
     if ([self respondsToSelector:actionToPerform]) {
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:actionToPerform withObject:contextView];
+        [self performSelector:actionToPerform withObject:itemToClick];
         #pragma clang diagnostic pop
     } else {
         [self processKeChuanQueue_Truth];
