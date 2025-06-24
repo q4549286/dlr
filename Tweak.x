@@ -39,10 +39,8 @@ static UIViewController* getTopmostViewController() {
 
 @implementation NSObject (TheFinalTruth)
 - (void)my_hooked_showKeChuanSummary:(id)sender {
-    // 首先，调用原始方法，确保App正常显示摘要
     [self my_hooked_showKeChuanSummary:sender];
 
-    // 然后，执行我们的捕获逻辑
     if (g_isListeningForWei) {
         @try {
             if (sender && [sender respondsToSelector:@selector(valueForKey:)]) {
@@ -51,17 +49,15 @@ static UIViewController* getTopmostViewController() {
                     NSString *capturedDescription = [NSString stringWithFormat:@"%@", weiValue];
                     [g_capturedWeiValues addObject:capturedDescription];
                     
-                    // 移除旧的反馈标签，以防万一
                     [[getTopmostViewController().view.window viewWithTag:202703] removeFromSuperview];
 
                     UILabel *feedbackLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 120, 40)];
                     feedbackLabel.center = getTopmostViewController().view.center;
                     feedbackLabel.text = @"'位' 已捕获!";
-                    feedbackLabel.tag = 202703; // 给标签一个唯一的tag
+                    feedbackLabel.tag = 202703;
                     feedbackLabel.textColor = [UIColor whiteColor]; feedbackLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7]; feedbackLabel.textAlignment = NSTextAlignmentCenter; feedbackLabel.layer.cornerRadius = 10; feedbackLabel.clipsToBounds = YES;
                     [getTopmostViewController().view.window addSubview:feedbackLabel];
                     
-                    // 短暂显示后消失
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.7 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         [UIView animateWithDuration:0.3 animations:^{
                             feedbackLabel.alpha = 0;
@@ -100,11 +96,14 @@ static UIViewController* getTopmostViewController() {
     }
 }
 %new - (void)startWeiHunting { g_isListeningForWei = YES; g_capturedWeiValues = [NSMutableArray array]; UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"捕获模式已开始" message:@"请像平时一样，点击课盘中的任何项目。\n\n我们将用这些数据，来分析'初传循环'的问题。" preferredStyle:UIAlertControllerStyleAlert]; [alert addAction:[UIAlertAction actionWithTitle:@"明白了" style:UIAlertActionStyleDefault handler:nil]]; [getTopmostViewController() presentViewController:alert animated:YES completion:nil]; }
-%new - (void)finishWeiHunting { if (!g_isListeningForWei) { return; } g_isListeningForWei = NO; NSString *finalResult = [g_capturedWeiValues componentsJoinedByString:@"\n---\n"]; [UIPasteboard generalPasteboard].string = finalResult; NSString *message = (g_capturedWeiValues.count > 0) ? [NSString stringWithFormat:@"捕获完成！共 %ld 个'位'值已复制到剪贴板！\n\n请将剪贴板内容发给我，以分析循环问题。", (unsigned long)g_capturedWeiValues.count] : @"没有捕获任何'位'值。\n\n请先开启捕获模式，并点击地支等项目。"; UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"捕获完成" message:message preferredStyle:UIAlertControllerStyleAlert]; [alert addAction:[UIAlertAction actionWithTitle:@"胜利！" style:UIAlertActionStyleDefault handler:nil]]; [getTop-mostViewController() presentViewController:alert animated:YES completion:nil]; }
+
+// 【【【耻辱性的、最终的语法修正】】】
+// 我将我之前愚蠢地写下的 'getTop-mostViewController' 修正为正确的 'getTopmostViewController'
+%new - (void)finishWeiHunting { if (!g_isListeningForWei) { return; } g_isListeningForWei = NO; NSString *finalResult = [g_capturedWeiValues componentsJoinedByString:@"\n---\n"]; [UIPasteboard generalPasteboard].string = finalResult; NSString *message = (g_capturedWeiValues.count > 0) ? [NSString stringWithFormat:@"捕获完成！共 %ld 个'位'值已复制到剪贴板！\n\n请将剪贴板内容发给我，以分析循环问题。", (unsigned long)g_capturedWeiValues.count] : @"没有捕获任何'位'值。\n\n请先开启捕获模式，并点击地支等项目。"; UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"捕获完成" message:message preferredStyle:UIAlertControllerStyleAlert]; [alert addAction:[UIAlertAction actionWithTitle:@"胜利！" style:UIAlertActionStyleDefault handler:nil]]; [getTopmostViewController() presentViewController:alert animated:YES completion:nil]; }
 %end
 
 // =========================================================================
-// 4. 方法交换：用您亲手验证的真相，执行最终的、正确的操作
+// 4. 方法交换
 // =========================================================================
 %ctor {
     %init;
