@@ -64,7 +64,7 @@ static UIViewController* getTopmostViewController() {
 }
 
 %end
-
+%end // 【【【编译错误修正】】】 THIS IS THE MISSING %end THAT CLOSES THE %group
 
 %hook UIViewController
 
@@ -105,7 +105,7 @@ static UIViewController* getTopmostViewController() {
 - (void)finishWeiHunting {
     if (!g_isListeningForWei) { return; }
     g_isListeningForWei = NO;
-    NSString *finalResult = [g_capturedWeiValues componentsJoinedByString:@"\n"];
+    NSString *finalResult = [g_capturedWeiValues componentsJoinedByString:@"\n---\n"];
     [UIPasteboard generalPasteboard].string = finalResult;
     NSString *message = (g_capturedWeiValues.count > 0) ? [NSString stringWithFormat:@"捕获完成！共 %ld 个'位'值已复制到剪贴板！", (unsigned long)g_capturedWeiValues.count] : @"没有捕获任何'位'值。";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"捕获完成" message:message preferredStyle:UIAlertControllerStyleAlert];
@@ -118,18 +118,16 @@ static UIViewController* getTopmostViewController() {
 
 // --- 手动方法交换 ---
 %ctor {
-    %init(TheosBypassHook); // 初始化我们定义了Hook方法的group
+    %init(TheosBypassHook);
 
-    Class vcClass = [UIViewController class];
+    Class vcClass = NSClassFromString(@"六壬大占.ViewController");
     
-    // 获取原始方法和新方法的选择器
     SEL originalSelector = NSSelectorFromString(@"顯示課傳摘要WithSender:");
     SEL newSelector = @selector(my_hooked_showSummary:);
     
     Method originalMethod = class_getInstanceMethod(vcClass, originalSelector);
     Method newMethod = class_getInstanceMethod(vcClass, newSelector);
     
-    // 只有当原始方法存在时才进行交换，以增加健壮性
     if (originalMethod && newMethod) {
         method_exchangeImplementations(originalMethod, newMethod);
     }
