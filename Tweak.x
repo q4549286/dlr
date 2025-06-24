@@ -3,15 +3,14 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数
+// 1. 全局变量与辅助函数 (唯一的、正确的宏定义)
 // =========================================================================
 static UITextView *g_screenLogger = nil;
-#define EchoLog(format, ...) do { /* ... 与V15.1相同 ... */ } while(0)
-// ... 其他全局变量和辅助函数 ...
+
 #define EchoLog(format, ...) \
     do { \
         NSString *logMessage = [NSString stringWithFormat:format, ##__VA_ARGS__]; \
-        NSLog(@"[KeChuan-Test-Recon-V15.2] %@", logMessage); \
+        NSLog(@"[KeChuan-Test-Recon-V15.3] %@", logMessage); \
         if (g_screenLogger) { \
             dispatch_async(dispatch_get_main_queue(), ^{ \
                 NSString *newText = [NSString stringWithFormat:@"%@\n- %@", g_screenLogger.text, logMessage]; \
@@ -30,6 +29,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
+// =========================================================================
+// 2. 主功能区
+// =========================================================================
 @interface UIViewController (EchoAITestAddons_Truth)
 - (void)performDeepIvarReconnaissance;
 @end
@@ -75,7 +77,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 // --- 核心深度侦查方法 ---
 - (void)performDeepIvarReconnaissance {
     g_screenLogger.text = @""; // 清空日志
-    EchoLog(@"开始V15.2 深度Ivar侦查(修正)...");
+    EchoLog(@"开始V15.3 深度Ivar侦查(修正)...");
     
     // 1. 找到'三傳視圖'实例
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
@@ -86,7 +88,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     UIView *sanChuanContainer = containers.firstObject;
     EchoLog(@"找到三传容器: %p", sanChuanContainer);
 
-    // 2. 【【【核心修正】】】使用正确的繁体中文ivar名
+    // 2. 【核心修正】使用正确的繁体中文ivar名
     const char *sanChuanIvarNames[] = {"初傳", "中傳", "末傳", NULL};
     NSMutableArray *chuanViews = [NSMutableArray array];
     for (int i = 0; sanChuanIvarNames[i] != NULL; ++i) {
@@ -115,7 +117,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     
     for (int i = 0; i < chuanViews.count; i++) {
         UIView *chuanView = chuanViews[i];
-        EchoLog(@"\n===== 正在侦查 %s (%p) =====", sanChuanIvarNames[i], chuanView);
+        EchoLog(@"\n===== 正在侦查 '%s' (%p) =====", sanChuanIvarNames[i], chuanView);
         
         unsigned int ivarCount;
         Ivar *ivars = class_copyIvarList(chuanViewClass, &ivarCount);
