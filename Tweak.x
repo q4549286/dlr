@@ -8,14 +8,13 @@ static BOOL g_isExtracting = NO;
 static NSMutableArray *g_workQueue = nil;
 static NSMutableArray *g_titleQueue = nil;
 static NSMutableString *g_finalResultString = nil;
-static NSInteger g_clickIndex = 0; // 全局计数器，用于设置'位'属性
 
 // =========================================================================
 // 2. 主功能实现
 // =========================================================================
-@interface UIViewController (TheRosettaStone)
-- (void)startFinalExtraction;
-- (void)processNextQueueItem;
+@interface UIViewController (TheFinalVictory)
+- (void)startTheFinalExtraction;
+- (void)processTheNextQueueItem;
 @end
 
 %hook UIViewController
@@ -25,19 +24,19 @@ static NSInteger g_clickIndex = 0; // 全局计数器，用于设置'位'属性
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *window = self.view.window; if (!window) return;
-            NSInteger buttonTag = 1337;
+            NSInteger buttonTag = 2024;
             [[window viewWithTag:buttonTag] removeFromSuperview];
             UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
             button.frame = CGRectMake(self.view.center.x - 110, 50, 220, 44);
             button.tag = buttonTag;
-            [button setTitle:@"提取课传(最终答案)" forState:UIControlStateNormal];
+            [button setTitle:@"提取课传(胜利版)" forState:UIControlStateNormal];
             button.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-            button.backgroundColor = [UIColor colorWithRed:0.1 green:0.7 blue:0.3 alpha:1.0]; // 胜利的绿色
+            button.backgroundColor = [UIColor orangeColor];
             [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             button.layer.cornerRadius = 22;
-            [button addTarget:self action:@selector(startFinalExtraction) forControlEvents:UIControlEventTouchUpInside];
+            [button addTarget:self action:@selector(startTheFinalExtraction) forControlEvents:UIControlEventTouchUpInside];
             [window addSubview:button];
         });
     }
@@ -67,8 +66,8 @@ static NSInteger g_clickIndex = 0; // 全局计数器，用于设置'位'属性
                 [g_finalResultString appendFormat:@"--- %@ ---\n%@\n\n", currentTitle, capturedDetail];
 
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        [self processNextQueueItem];
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        [self processTheNextQueueItem];
                     });
                 }];
             };
@@ -81,9 +80,9 @@ static NSInteger g_clickIndex = 0; // 全局计数器，用于设置'位'属性
 
 %new
 // --- 流程起点：空间关联 ---
-- (void)startFinalExtraction {
+- (void)startTheFinalExtraction {
     if (g_isExtracting) { return; }
-    g_isExtracting = YES; g_workQueue = [NSMutableArray array]; g_titleQueue = [NSMutableArray array]; g_finalResultString = [NSMutableString string]; g_clickIndex = 0;
+    g_isExtracting = YES; g_workQueue = [NSMutableArray array]; g_titleQueue = [NSMutableArray array]; g_finalResultString = [NSMutableString string];
 
     NSMutableArray<NSValue *> *landmarkRegions = [NSMutableArray array];
     NSMutableArray<NSString *> *landmarkTitles = [NSMutableArray array];
@@ -141,17 +140,23 @@ static NSInteger g_clickIndex = 0; // 全局计数器，用于设置'位'属性
         }
     }
 
-    if (g_workQueue.count == 0) { g_isExtracting = NO; return; }
-    [self processNextQueueItem];
+    if (g_workQueue.count == 0) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"启动失败" message:@"未能找到任何可提取的标签。请确保课盘已显示。" preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        g_isExtracting = NO; return;
+    }
+    [self processTheNextQueueItem];
 }
 
 %new
-// --- 队列处理器：最终的答案 ---
-- (void)processNextQueueItem {
+// --- 队列处理器：最终的、纯粹的派发 ---
+- (void)processTheNextQueueItem {
     if (g_workQueue.count == 0) {
         [UIPasteboard generalPasteboard].string = g_finalResultString;
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已复制到剪贴板！" preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成！" message:[NSString stringWithFormat:@"所有 %lu 项详情已复制到剪贴板！", (unsigned long)g_finalResultString.length] preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"胜利！" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
         g_isExtracting = NO; return;
     }
 
@@ -173,12 +178,9 @@ static NSInteger g_clickIndex = 0; // 全局计数器，用于设置'位'属性
                 SEL realAction = NSSelectorFromString([targetActionPair valueForKey:@"action"]);
                 if(realTarget && realAction && [realTarget respondsToSelector:realAction]){
                     
-                    // 【【【最终的、关键的修正】】】
-                    // 1. 设置'位'属性，我们猜测它是整数索引
-                    [realGesture setValue:@(g_clickIndex) forKey:@"位"];
-                    g_clickIndex++; // 增加计数器
-                    
-                    // 2. 设置'state'属性
+                    // 【【【最终的、纯粹的逻辑】】】
+                    // 1. 不触碰'位'属性，保留其原始值。
+                    // 2. 只设置'state'属性。
                     [realGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
                     
                     // 3. 派发！
@@ -187,15 +189,19 @@ static NSInteger g_clickIndex = 0; // 全局计数器，用于设置'位'属性
                     [realTarget performSelector:realAction withObject:realGesture];
                     #pragma clang diagnostic pop
                     
-                    // 4. 恢复手势状态，以防万一
+                    // 4. 恢复手势状态。
                     [realGesture setValue:@(UIGestureRecognizerStatePossible) forKey:@"state"];
-                    return;
+                    return; // 等待拦截器驱动下一次循环
                 }
             }
         }
     }
-    // 如果失败，直接跳到下一个
-    [self processNextQueueItem];
+    
+    // 如果上面的任何一步失败，或者找不到手势，记录错误并继续
+    NSString *currentTitle = (g_titleQueue.count > 0) ? g_titleQueue.firstObject : @"[未知标题]";
+    if (g_titleQueue.count > 0) { [g_titleQueue removeObjectAtIndex:0]; }
+    [g_finalResultString appendFormat:@"--- %@ ---\n[提取失败：未能触发手势]\n\n", currentTitle];
+    [self processTheNextQueueItem]; // 保持链条不断
 }
 
 %end
