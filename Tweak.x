@@ -37,7 +37,7 @@ static UIViewController* getTopmostViewController() {
 - (void)finishWeiHunting;
 @end
 
-// 我们将Hook代码放在一个单独的 %group 中，以便于手动交换
+// 我们将手动交换的Hook代码放在一个单独的 %group 中
 %group TheosBypassHook
 %hook UIViewController
 
@@ -59,16 +59,15 @@ static UIViewController* getTopmostViewController() {
             [g_capturedWeiValues addObject:[NSString stringWithFormat:@"[捕获异常: %@]", exception.reason]];
         }
     }
-    // 调用原始实现 (因为方法已交换，所以调用自己就是调用原始)
     [self my_hooked_showSummary:sender];
 }
 
 %end
-%end // 【【【编译错误修正】】】 THIS IS THE MISSING %end THAT CLOSES THE %group
+%end
 
+// 默认组，用于UI注入
 %hook UIViewController
 
-// --- 注入最终的“猎人”工具栏 ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
@@ -118,7 +117,10 @@ static UIViewController* getTopmostViewController() {
 
 // --- 手动方法交换 ---
 %ctor {
-    %init(TheosBypassHook);
+    // 【【【编译错误修正】】】
+    // 初始化所有我们使用到的hook组
+    %init(TheosBypassHook); // 初始化我们用于手动交换的命名组
+    %init;                 // 初始化默认的、未命名的组 (用于UI注入)
 
     Class vcClass = NSClassFromString(@"六壬大占.ViewController");
     
