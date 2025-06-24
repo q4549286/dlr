@@ -2,53 +2,44 @@
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 
-// =========================================================================
-// 1. 全局变量与辅助函数 (保持不变)
-// =========================================================================
+// 全局变量与辅助函数 (保持不变)
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
 static NSMutableArray *g_keChuanWorkQueue = nil;
 static NSMutableArray *g_keChuanTitleQueue = nil;
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
-    if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
-    for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
-}
-
-// =========================================================================
-// 2. 主功能区
-// =========================================================================
-@interface UIViewController (EchoAITestAddons_Resurrection)
-- (void)performKeChuanDetailExtractionTest_Resurrection;
-- (void)processKeChuanQueue_Resurrection;
+@interface UIViewController (EchoAITestAddons_FinalBlow)
+- (void)performKeChuanDetailExtractionTest_FinalBlow;
+- (void)processKeChuanQueue_FinalBlow;
 @end
 
 %hook UIViewController
 
-// --- viewDidLoad: 创建按钮 (调用新方法) ---
+// viewDidLoad: 创建按钮 (调用新方法)
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
-            NSInteger TestButtonTag = 556694;
+            NSInteger TestButtonTag = 556695; // A new tag for the final blow
             if ([keyWindow viewWithTag:TestButtonTag]) { [[keyWindow viewWithTag:TestButtonTag] removeFromSuperview]; }
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"课传提取(复活)" forState:UIControlStateNormal];
+            [testButton setTitle:@"课传提取(终)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor orangeColor];
+            testButton.backgroundColor = [UIColor blackColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Resurrection) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_FinalBlow) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
         });
     }
 }
 
-// --- presentViewController: 捕获弹窗并驱动队列 (调用新处理器) ---
+// presentViewController: 捕获弹窗并驱动队列 (调用新处理器)
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtractingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
@@ -65,7 +56,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 [g_capturedKeChuanDetailArray addObject:fullDetail];
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        [self processKeChuanQueue_Resurrection];
+                        [self processKeChuanQueue_FinalBlow];
                     });
                 }];
             };
@@ -77,8 +68,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-// --- performKeChuanDetailExtractionTest_Resurrection: 构建更智能的任务队列 ---
-- (void)performKeChuanDetailExtractionTest_Resurrection {
+// performKeChuanDetailExtractionTest_FinalBlow: 构建任务队列 (逻辑不变)
+- (void)performKeChuanDetailExtractionTest_FinalBlow {
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
@@ -111,13 +102,14 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         }
     }
     if (g_keChuanWorkQueue.count == 0) { g_isExtractingKeChuanDetail = NO; return; }
-    [self processKeChuanQueue_Resurrection];
+    [self processKeChuanQueue_FinalBlow];
 }
 
 %new
-// --- processKeChuanQueue_Resurrection: 执行正确的两步操作 ---
-- (void)processKeChuanQueue_Resurrection {
+// processKeChuanQueue_FinalBlow: 对“时机”的最后一击
+- (void)processKeChuanQueue_FinalBlow {
     if (g_keChuanWorkQueue.count == 0) {
+        // 结束逻辑 (保持不变)
         NSMutableString *resultStr = [NSMutableString string];
         for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) { [resultStr appendFormat:@"--- %@ ---\n%@\n\n", g_keChuanTitleQueue[i], (i < g_capturedKeChuanDetailArray.count) ? g_capturedKeChuanDetailArray[i] : @"[信息提取失败]"]; }
         [UIPasteboard generalPasteboard].string = resultStr;
@@ -132,39 +124,44 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     UILabel *targetLabel = task[@"label"];
     NSInteger rowIndex = [task[@"index"] integerValue];
     NSString *type = task[@"type"];
+
     UICollectionView *collectionView = nil;
     Class sanChuanCellClass = NSClassFromString(@"六壬大占.傳視圖");
     if(sanChuanCellClass) {
         NSMutableArray *allCVs = [NSMutableArray array]; FindSubviewsOfClassRecursive([UICollectionView class], self.view, allCVs);
         for (UICollectionView *cv in allCVs) {
-            // 【【【最后的、也是最耻辱的语法修正】】】
-            // 直接比较对象指针，而不是比较不兼容的类型。
-            if ((id)cv.delegate == self && [cv.visibleCells.firstObject isKindOfClass:sanChuanCellClass]) {
-                collectionView = cv;
-                break;
-            }
+            if ((id)cv.delegate == self && [cv.visibleCells.firstObject isKindOfClass:sanChuanCellClass]) { collectionView = cv; break; }
         }
     }
-    if (!collectionView) { [self processKeChuanQueue_Resurrection]; return; }
+    if (!collectionView) { [self processKeChuanQueue_FinalBlow]; return; }
+
+    // 【【【最终的、对“时机”的攻击】】】
+    // 步骤一：告知选中
     NSIndexPath *indexPath = [NSIndexPath indexPathForRow:rowIndex inSection:0];
     id<UICollectionViewDelegate> delegate = collectionView.delegate;
     if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
         [delegate collectionView:collectionView didSelectItemAtIndexPath:indexPath];
     }
-    SEL actionToPerform = nil;
-    if ([type isEqualToString:@"地支"]) {
-        actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
-    } else {
-        actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
-    }
-    if ([self respondsToSelector:actionToPerform]) {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:actionToPerform withObject:targetLabel];
-        #pragma clang diagnostic pop
-    } else {
-        [self processKeChuanQueue_Resurrection];
-    }
+    
+    // 步骤二：强制等待下一个UI刷新周期，然后再触发弹窗
+    dispatch_async(dispatch_get_main_queue(), ^{
+        SEL actionToPerform = nil;
+        if ([type isEqualToString:@"地支"]) {
+            actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
+        } else {
+            actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
+        }
+        
+        if ([self respondsToSelector:actionToPerform]) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            [self performSelector:actionToPerform withObject:targetLabel];
+            #pragma clang diagnostic pop
+        } else {
+            // 如果方法不存在，也需要驱动队列继续
+            [self processKeChuanQueue_FinalBlow];
+        }
+    });
 }
 
 %end
