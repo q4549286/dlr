@@ -1,8 +1,8 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-// [修正] 使用更健壮的宏定义来避免编译错误
-#define EchoLog(format, ...) NSLog([NSString stringWithFormat:@"[EchoAI-Test-KCD] %@", format], ##__VA_ARGS__)
+// [最终修正] 彻底解决编译警告和错误
+#define EchoLog(format, ...) NSLog(@"[EchoAI-Test-KCD] " format, ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static BOOL g_isTestingKeChuanDetail = NO;
@@ -46,7 +46,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             }
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 90, 140, 36); // y=90, 避免和主按钮重叠
+            testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 90, 140, 36); // y=90
             testButton.tag = testButtonTag;
             [testButton setTitle:@"测试课传详情" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
@@ -93,27 +93,24 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     NSMutableArray *taskQueue = [NSMutableArray array];
     NSMutableArray *siKeTasksMutable = [NSMutableArray array];
     
-    // 找到四课视图并获取其可点击区域
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
         NSMutableArray *siKeViews = [NSMutableArray array];
         FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
         if (siKeViews.count > 0) {
             UIView *siKeContainer = siKeViews.firstObject;
-            NSArray *keViews = siKeContainer.subviews;
-            [siKeTasksMutable addObjectsFromArray:keViews];
-            EchoLog(@"找到了四课视图，包含 %lu 个可点击区域。", (unsigned long)keViews.count);
+            [siKeTasksMutable addObjectsFromArray:siKeContainer.subviews];
+            EchoLog(@"找到了四课视图，包含 %lu 个可点击区域。", (unsigned long)siKeTasksMutable.count);
         }
     }
     
-    // 找到三传视图并获取其可点击区域
     NSMutableArray *sanChuanTasksMutable = [NSMutableArray array];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if(sanChuanViewClass){
         NSMutableArray *scViews = [NSMutableArray array];
         FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, scViews);
         [sanChuanTasksMutable addObjectsFromArray:scViews];
-        EchoLog(@"找到了三传视图，包含 %lu 个可点击区域。", (unsigned long)scViews.count);
+        EchoLog(@"找到了三传视图，包含 %lu 个可点击区域。", (unsigned long)sanChuanTasksMutable.count);
     }
 
     if (siKeTasksMutable.count == 0 && sanChuanTasksMutable.count == 0) {
@@ -122,12 +119,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         return;
     }
     
-    // 按X坐标排序四课（从右到左）
     [siKeTasksMutable sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
         return [@(v2.frame.origin.x) compare:@(v1.frame.origin.x)];
     }];
 
-    // 按Y坐标排序三传（从上到下）
     [sanChuanTasksMutable sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) {
         return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
     }];
@@ -180,34 +175,31 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-// 4. 模拟点击手势
+// 4. 模拟点击手势 (已优化)
 - (void)triggerTapOnView:(UIView *)view {
     if (!view) return;
     
-    // 优先检查视图本身的手势
+    // 遍历视图上的所有手势识别器
     for (UIGestureRecognizer *recognizer in view.gestureRecognizers) {
         if ([recognizer isKindOfClass:[UITapGestureRecognizer class]]) {
-            unsigned int count;
-            Ivar ivar = class_getInstanceVariable([UIGestureRecognizer class], "_targets");
-            id targets = object_getIvar(recognizer, ivar);
-            if (targets && [targets count] > 0) {
-                id targetContainer = [targets firstObject];
-                id target = [targetContainer valueForKey:@"_target"];
-                SEL action = NSSelectorFromString([targetContainer valueForKey:@"_action"]);
-                if (target && action && [target respondsToSelector:action]) {
-                    #pragma clang diagnostic push
-                    #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                    [target performSelector:action withObject:recognizer];
-                    #pragma clang diagnostic pop
-                    return;
-                }
+            // 直接将手势状态设置为END，这通常会触发其action
+            [recognizer setState:UIGestureRecognizerStateEnded];
+             return; // 找到并触发后就返回
+        }
+    }
+    // 如果视图本身没有，检查其子视图
+    for(UIView *subview in view.subviews) {
+        for (UIGestureRecognizer *recognizer in subview.gestureRecognizers) {
+            if ([recognizer isKindOfClass:[UITapGestureRecognizer class]]) {
+                [recognizer setState:UIGestureRecognizerStateEnded];
+                return;
             }
         }
     }
 }
 
 %new
-// 5. 从详情视图中提取文本
+// 5. 从详情视图中提取文本 (已优化)
 - (NSString *)extractTextFromKeChuanDetailView:(UIView *)detailView {
     NSMutableArray *allTextParts = [NSMutableArray array];
 
@@ -220,12 +212,11 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         for (UIView *arrangedSubview in mainStackView.arrangedSubviews) {
             NSMutableArray *subLabels = [NSMutableArray array];
             FindSubviewsOfClassRecursive([UILabel class], arrangedSubview, subLabels);
-                
+            
+            // 使用视图在父视图中的绝对坐标进行排序，更可靠
             [subLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
-                UIView *superview1 = l1.superview;
-                UIView *superview2 = l2.superview;
-                CGPoint p1 = [l1 convertPoint:CGPointZero toView:detailView];
-                CGPoint p2 = [l2 convertPoint:CGPointZero toView:detailView];
+                CGPoint p1 = [l1.superview convertPoint:l1.frame.origin toView:nil];
+                CGPoint p2 = [l2.superview convertPoint:l2.frame.origin toView:nil];
 
                 if (roundf(p1.y) < roundf(p2.y)) return NSOrderedAscending;
                 if (roundf(p1.y) > roundf(p2.y)) return NSOrderedDescending;
@@ -236,14 +227,17 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 
             for (UILabel *subLabel in subLabels) {
                  if (subLabel.text && subLabel.text.length > 0) {
-                    [allTextParts addObject:[subLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                    NSString *trimmedText = [subLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    // 防止重复添加完全相同的文本
+                    if (![allTextParts.lastObject isEqualToString:trimmedText]) {
+                        [allTextParts addObject:trimmedText];
+                    }
                 }
             }
         }
     }
 
     NSString *rawText = [allTextParts componentsJoinedByString:@"\n"];
-    // 使用正则表达式来移除多余的空行，并将多个换行符合并为一个
     NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"\n{2,}" options:0 error:nil];
     NSString *cleanedText = [regex stringByReplacingMatchesInString:rawText options:0 range:NSMakeRange(0, rawText.length) withTemplate:@"\n"];
     return cleanedText;
