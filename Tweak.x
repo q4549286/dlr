@@ -35,28 +35,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
-static Ivar getIvarForClassName(Class targetClass, NSString *ivarClassName) {
-    unsigned int ivarCount;
-    Ivar *ivars = class_copyIvarList(targetClass, &ivarCount);
-    if (!ivars) return nil;
-
-    Ivar foundIvar = nil;
-    NSString *expectedTypeEncoding = [NSString stringWithFormat:@"@\"%@\"", ivarClassName];
-    
-    for (unsigned int i = 0; i < ivarCount; i++) {
-        Ivar ivar = ivars[i];
-        const char *typeEncoding = ivar_getTypeEncoding(ivar);
-        if (typeEncoding && strcmp(typeEncoding, [expectedTypeEncoding UTF8String]) == 0) {
-            foundIvar = ivar;
-            break;
-        }
-    }
-    
-    free(ivars);
-    return foundIvar;
-}
-
-
 // =========================================================================
 // 2. 主功能区
 // =========================================================================
@@ -82,9 +60,9 @@ static Ivar getIvarForClassName(Class targetClass, NSString *ivarClassName) {
             UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
             controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
             controlButton.tag = controlButtonTag;
-            [controlButton setTitle:@"提取(终极版)" forState:UIControlStateNormal];
+            [controlButton setTitle:@"提取(最终版)" forState:UIControlStateNormal];
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            controlButton.backgroundColor = [UIColor purpleColor];
+            controlButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.5 blue:0.2 alpha:1.0]; // 深绿色
             [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             controlButton.layer.cornerRadius = 8;
             [controlButton addTarget:self action:@selector(createOrShowControlPanel_Truth) forControlEvents:UIControlEventTouchUpInside];
@@ -188,7 +166,6 @@ static Ivar getIvarForClassName(Class targetClass, NSString *ivarClassName) {
 }
 
 %new
-// --- startExtraction_Truth: 构建带有上下文的任务队列 ---
 - (void)startExtraction_Truth {
     if (g_isExtractingKeChuanDetail) { LogMessage(@"错误：提取任务已在进行中。"); return; }
     
@@ -265,22 +242,13 @@ static Ivar getIvarForClassName(Class targetClass, NSString *ivarClassName) {
     NSDictionary *task = g_keChuanWorkQueue.firstObject; [g_keChuanWorkQueue removeObjectAtIndex:0];
     NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
     
-    UIView *labelToClick = task[@"label"];
+    // 我们不再需要 labelToClick，因为 contextView 才是关键
     UIView *contextView = task[@"contextView"];
     
     LogMessage(@"正在处理: %@", title);
     
-    // 1. 按类型动态查找内部变量
-    Ivar contextIvar = getIvarForClassName([self class], NSStringFromClass([contextView class]));
-    
-    if (contextIvar) {
-        object_setIvar(self, contextIvar, contextView);
-        LogMessage(@"成功设置内部状态: ivar '%s' -> %@", ivar_getName(contextIvar), contextView);
-    } else {
-        LogMessage(@"警告: 找不到类型为 '%@' 的内部变量。提取结果可能不正确。", NSStringFromClass([contextView class]));
-    }
-
-    // 2. 调用弹窗方法
+    // 【【【 最终核心修正 】】】
+    // 调用弹窗方法，并传递正确的上下文视图 (contextView) 作为 sender
     SEL actionToPerform = nil;
     if ([title containsString:@"地支"]) {
         actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
@@ -289,9 +257,10 @@ static Ivar getIvarForClassName(Class targetClass, NSString *ivarClassName) {
     }
     
     if ([self respondsToSelector:actionToPerform]) {
+        LogMessage(@"调用方法 %@, 并传递正确的上下文视图: %@", NSStringFromSelector(actionToPerform), contextView);
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:actionToPerform withObject:labelToClick];
+        [self performSelector:actionToPerform withObject:contextView];
         #pragma clang diagnostic pop
     } else {
         LogMessage(@"错误: 方法 %@ 不存在。", NSStringFromSelector(actionToPerform));
