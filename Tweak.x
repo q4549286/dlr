@@ -3,14 +3,14 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数 (与V6/V7相同)
+// 1. 全局变量与辅助函数 (与V8相同)
 // =========================================================================
 static UITextView *g_screenLogger = nil;
 
 #define EchoLog(format, ...) \
     do { \
         NSString *logMessage = [NSString stringWithFormat:format, ##__VA_ARGS__]; \
-        NSLog(@"[KeChuan-Test-Truth-V8-Responder] %@", logMessage); \
+        NSLog(@"[KeChuan-Test-Truth-V9-Delegate] %@", logMessage); \
         if (g_screenLogger) { \
             dispatch_async(dispatch_get_main_queue(), ^{ \
                 NSString *newText = [NSString stringWithFormat:@"%@\n- %@", g_screenLogger.text, logMessage]; \
@@ -54,9 +54,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"测试课传(V8决战)" forState:UIControlStateNormal];
+            [testButton setTitle:@"测试课传(V9最终版)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor systemRedColor];
+            testButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0]; // 蓝色
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Truth) forControlEvents:UIControlEventTouchUpInside];
@@ -65,10 +65,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UITextView *logger = [[UITextView alloc] initWithFrame:CGRectMake(10, 45, keyWindow.bounds.size.width - 170, 150)];
             logger.tag = LoggerViewTag;
             logger.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7];
-            logger.textColor = [UIColor redColor];
+            logger.textColor = [UIColor cyanColor];
             logger.font = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular];
             logger.editable = NO;
-            logger.layer.borderColor = [UIColor redColor].CGColor;
+            logger.layer.borderColor = [UIColor cyanColor].CGColor;
             logger.layer.borderWidth = 1.0;
             logger.layer.cornerRadius = 5;
             g_screenLogger = logger;
@@ -79,6 +79,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtractingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
+        // 【V9修改】现在弹窗可能不再是那两种，我们需要更通用的捕获方式。
+        // 但根据之前的经验，弹窗类型应该是固定的。我们先保持这个检查。
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
             NSString *expectedTitle = @"未知项目";
             if (g_capturedKeChuanDetailArray.count < g_keChuanTitleQueue.count) {
@@ -109,54 +111,69 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-// performKeChuanDetailExtractionTest_Truth 保持稳定，只构建队列
 - (void)performKeChuanDetailExtractionTest_Truth {
     g_screenLogger.text = @"";
-    EchoLog(@"开始V8决战测试...");
+    EchoLog(@"开始V9最终决战测试...");
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
     
-    // 省略四课逻辑，专注三传
-    Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
-    NSMutableArray *sanChuanContainers = [NSMutableArray array];
-    if (sanChuanContainerClass) { FindSubviewsOfClassRecursive(sanChuanContainerClass, self.view, sanChuanContainers); }
-    if (sanChuanContainers.count > 0) {
-        UIView *sanChuanContainer = sanChuanContainers.firstObject;
-        Class chuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
-        NSMutableArray *allChuanViews = [NSMutableArray array];
-        if (chuanViewClass) { for (UIView *subview in sanChuanContainer.subviews) { if ([subview isKindOfClass:chuanViewClass]) { [allChuanViews addObject:subview]; } } }
-        [allChuanViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-            CGPoint p1 = [v1.superview convertPoint:v1.frame.origin toView:self.view];
-            CGPoint p2 = [v2.superview convertPoint:v2.frame.origin toView:self.view];
-            return [@(p1.y) compare:@(p2.y)];
-        }];
-        NSArray *rowTitles = @[@"初传", @"中传", @"末传"];
-        for (NSUInteger i = 0; i < allChuanViews.count; i++) {
-            if (i >= rowTitles.count) break;
-            UIView *chuanView = allChuanViews[i];
-            NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], chuanView, labels);
-            [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
-            if (labels.count >= 2) {
-                UILabel *dizhiLabel = labels[labels.count - 2];
-                UILabel *tianjiangLabel = labels[labels.count - 1];
-                NSString *dizhiTitle = [NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text];
-                [g_keChuanWorkQueue addObject:@{@"item": dizhiLabel, @"title": dizhiTitle}];
-                [g_keChuanTitleQueue addObject:dizhiTitle];
-                NSString *tianjiangTitle = [NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text];
-                [g_keChuanWorkQueue addObject:@{@"item": tianjiangLabel, @"title": tianjiangTitle}];
-                [g_keChuanTitleQueue addObject:tianjiangTitle];
+    // 1. 找到作为容器的 UICollectionView
+    UICollectionView *targetCollectionView = nil;
+    NSMutableArray *allCVs = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UICollectionView class], self.view, allCVs);
+    
+    // 我们需要一种方法来唯一识别出包含三传的那个CV
+    // 假设它内部的Cell是 `六壬大占.傳視圖`
+    Class chuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
+    if (chuanViewClass) {
+        for (UICollectionView *cv in allCVs) {
+            // 刷新并获取可见cell
+            [cv layoutIfNeeded];
+            NSArray<__kindof UICollectionViewCell *> *cells = [cv visibleCells];
+            if (cells.count > 0 && [cells.firstObject isKindOfClass:chuanViewClass]) {
+                targetCollectionView = cv;
+                break;
             }
         }
     }
+    
+    if (!targetCollectionView) {
+        EchoLog(@"致命错误: 未能找到包含'傳視圖'的UICollectionView!");
+        g_isExtractingKeChuanDetail = NO;
+        return;
+    }
+    EchoLog(@"成功定位目标CV: <%@: %p>", [targetCollectionView class], targetCollectionView);
+
+    // 2. 构建任务队列。现在任务不再是点击UILabel，而是调用代理方法
+    // 假设三传在第0个section，item分别是0, 1, 2
+    // 假设地支摘要和天将摘要是同一个cell点击后弹出的不同内容，或者需要某种方式区分。
+    // 我们先做一个大胆的假设：App内部根据一个状态来决定显示地支还是天将摘要。
+    // 我们将为每个传连续调用两次 `didSelectItem`，期望它能交替显示地支和天将。
+    
+    NSArray *chuanTitles = @[@"初传", @"中传", @"末传"];
+    for (NSInteger i = 0; i < chuanTitles.count; i++) {
+        NSIndexPath *indexPath = [NSIndexPath indexPathForItem:i inSection:0]; // 假设都在section 0
+        
+        // 第一次点击，期望是地支
+        NSString *dizhiTitle = [NSString stringWithFormat:@"%@ - 地支", chuanTitles[i]];
+        [g_keChuanWorkQueue addObject:@{@"cv": targetCollectionView, @"indexPath": indexPath, @"title": dizhiTitle}];
+        [g_keChuanTitleQueue addObject:dizhiTitle];
+        
+        // 第二次点击，期望是天将
+        NSString *tianjiangTitle = [NSString stringWithFormat:@"%@ - 天将", chuanTitles[i]];
+        [g_keChuanWorkQueue addObject:@{@"cv": targetCollectionView, @"indexPath": indexPath, @"title": tianjiangTitle}];
+        [g_keChuanTitleQueue addObject:tianjiangTitle];
+    }
+    
     if (g_keChuanWorkQueue.count == 0) { EchoLog(@"测试失败: 未构建队列."); g_isExtractingKeChuanDetail = NO; return; }
     EchoLog(@"队列构建完成,共%lu项。开始处理...", (unsigned long)g_keChuanWorkQueue.count);
     [self processKeChuanQueue_Truth];
 }
 
 %new
-// ================== 【【【V8核心修改：响应者追溯】】】 ==================
+// ================== 【【【V9核心修改：模拟调用代理方法】】】 ==================
 - (void)processKeChuanQueue_Truth {
     if (g_keChuanWorkQueue.count == 0) {
         EchoLog(@"所有任务完成! 生成结果.");
@@ -173,42 +190,20 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
     
     NSDictionary *task = g_keChuanWorkQueue.firstObject; [g_keChuanWorkQueue removeObjectAtIndex:0];
-    UIView *itemToClick = task[@"item"];
+    UICollectionView *cv = task[@"cv"];
+    NSIndexPath *indexPath = task[@"indexPath"];
     NSString *title = task[@"title"];
     
-    EchoLog(@"处理任务: %@", title);
+    id<UICollectionViewDelegate> delegate = cv.delegate;
 
-    SEL actionToPerform = nil;
-    if ([title containsString:@"地支"]) { actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:"); }
-    else if ([title containsString:@"天将"]) { actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:"); }
+    EchoLog(@"处理任务: %@\n将为CV<%p>调用代理方法\ndidSelectItemAtIndexPath: [%ld-%ld]", title, cv, (long)indexPath.section, (long)indexPath.item);
 
-    if (!actionToPerform) {
-        EchoLog(@"错误: 无法确定要执行的action. 跳过.");
-        [self processKeChuanQueue_Truth];
-        return;
-    }
-
-    // --- 响应者追溯逻辑 ---
-    id responder = nil;
-    UIResponder *next = itemToClick;
-    while (next) {
-        if ([next respondsToSelector:actionToPerform]) {
-            responder = next;
-            break;
-        }
-        next = [next nextResponder];
-    }
-    // --- 追溯结束 ---
-
-    if (responder) {
-        EchoLog(@"找到响应者: <%@: %p>\n将在此对象上执行点击", [responder class], responder);
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [responder performSelector:actionToPerform withObject:itemToClick];
-        #pragma clang diagnostic pop
+    if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
+        [delegate collectionView:cv didSelectItemAtIndexPath:indexPath];
     } else {
-        EchoLog(@"警告: 未找到任何能响应 %@ 的对象! 脚本可能失败.", NSStringFromSelector(actionToPerform));
-        [self processKeChuanQueue_Truth]; // 即使找不到也继续，避免卡住
+        EchoLog(@"错误: CV的delegate不存在或不响应代理方法!");
+        // 即使出错也要继续，避免卡死
+        [self processKeChuanQueue_Truth];
     }
 }
 %end
