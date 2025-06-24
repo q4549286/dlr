@@ -10,7 +10,7 @@ static UITextView *g_screenLogger = nil;
 #define EchoLog(format, ...) \
     do { \
         NSString *logMessage = [NSString stringWithFormat:format, ##__VA_ARGS__]; \
-        NSLog(@"[KeChuan-Test-Recon-V15] %@", logMessage); \
+        NSLog(@"[KeChuan-Test-Recon-V15.1] %@", logMessage); \
         if (g_screenLogger) { \
             dispatch_async(dispatch_get_main_queue(), ^{ \
                 NSString *newText = [NSString stringWithFormat:@"%@\n- %@", g_screenLogger.text, logMessage]; \
@@ -58,7 +58,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             [keyWindow addSubview:testButton];
             
             if ([keyWindow viewWithTag:LoggerViewTag]) { [[keyWindow viewWithTag:LoggerViewTag] removeFromSuperview]; }
-            UITextView *logger = [[UITextView alloc] initWithFrame:CGRectMake(10, 45, keyWindow.bounds.size.width - 170, 150)];
+            UITextView *logger = [[UITextView alloc] initWithFrame:CGRectMake(10, 45, keyWindow.bounds.size.width - 170, 200)]; // 增加高度
             logger.tag = LoggerViewTag;
             logger.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.8];
             logger.textColor = [UIColor systemGreenColor];
@@ -77,7 +77,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 // --- 核心深度侦查方法 ---
 - (void)performDeepIvarReconnaissance {
     g_screenLogger.text = @""; // 清空日志
-    EchoLog(@"开始V15 深度Ivar侦查...");
+    EchoLog(@"开始V15.1 深度Ivar侦查...");
     
     // 1. 找到'三傳視圖'实例
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
@@ -89,6 +89,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     EchoLog(@"找到三传容器: %p", sanChuanContainer);
 
     // 2. 获取三个'傳視圖'实例
+    // 我们直接用繁体，因为V14已经证明了这是正确的
     const char *sanChuanIvarNames[] = {"初传", "中传", "末传", NULL};
     NSMutableArray *chuanViews = [NSMutableArray array];
     for (int i = 0; sanChuanIvarNames[i] != NULL; ++i) {
@@ -123,8 +124,17 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 Ivar ivar = ivars[j];
                 const char *ivarName = ivar_getName(ivar);
                 const char *ivarType = ivar_getTypeEncoding(ivar);
-                id ivarValue = object_getIvar(chuanView, ivar);
-                EchoLog(@"   - 名称: %s, 类型: %s, 值: <%@: %p>", ivarName, ivarType, (ivarValue ? [ivarValue class] : @"(null)"), ivarValue);
+                
+                // 判断ivar是否是对象类型
+                if (ivarType[0] == '@') {
+                    id ivarValue = object_getIvar(chuanView, ivar);
+                    // ================== 【【【编译错误修正点】】】 ==================
+                    EchoLog(@"   - 名称: %s, 类型: %s, 值: <%@: %p>", ivarName, ivarType, (ivarValue ? NSStringFromClass([ivarValue class]) : @"(null class)"), ivarValue);
+                    // ==============================================================
+                } else {
+                    // 对于非对象类型，我们无法安全地读取其值，只打印类型
+                    EchoLog(@"   - 名称: %s, 类型: %s (非对象类型)", ivarName, ivarType);
+                }
             }
             free(ivars);
         } else {
