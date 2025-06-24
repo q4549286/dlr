@@ -7,7 +7,7 @@
 static BOOL g_isExtracting = NO;
 static NSMutableArray *g_workQueue = nil;
 static NSMutableArray *g_titleQueue = nil;
-static NSMutableString *g_finalResultString = nil; // 用于逐步构建最终结果
+static NSMutableString *g_finalResultString = nil;
 
 // =========================================================================
 // 2. 主功能实现
@@ -52,7 +52,7 @@ static NSMutableString *g_finalResultString = nil; // 用于逐步构建最终�
                 if (completion) { completion(); }
                 
                 NSString *currentTitle = (g_titleQueue.count > 0) ? g_titleQueue.firstObject : @"[未知标题]";
-                [g_titleQueue removeObjectAtIndex:0];
+                if (g_titleQueue.count > 0) { [g_titleQueue removeObjectAtIndex:0]; }
 
                 NSMutableString *allText = [NSMutableString string];
                 for(UIView* v in viewControllerToPresent.view.subviews) {
@@ -63,7 +63,6 @@ static NSMutableString *g_finalResultString = nil; // 用于逐步构建最终�
                 }
                 NSString* capturedDetail = allText.length > 0 ? [allText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] : @"[无文本信息]";
                 
-                // 【【【逻辑修正】】】直接构建最终结果字符串
                 [g_finalResultString appendFormat:@"--- %@ ---\n%@\n\n", currentTitle, capturedDetail];
 
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
@@ -107,7 +106,10 @@ static NSMutableString *g_finalResultString = nil; // 用于逐步构建最终�
 
     NSMutableArray<UILabel *> *allLabels = [NSMutableArray array];
     
-    // 【【【编译错误修正】】】使用 __block 来处理递归 block
+    // 【【【编译错误修正】】】
+    // 使用 pragma 指令来压制循环引用的警告，因为我们知道这个循环是临时的，将在方法结束时被打破。
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Warc-retain-cycles"
     __block void (^findLabels)(UIView*);
     findLabels = ^(UIView *v) {
         if([v isKindOfClass:[UILabel class]]) {
@@ -117,6 +119,8 @@ static NSMutableString *g_finalResultString = nil; // 用于逐步构建最终�
             findLabels(sv);
         }
     };
+    #pragma clang diagnostic pop
+
     findLabels(self.view);
 
     NSMutableArray<NSMutableArray *> *groupedLabels = [NSMutableArray array];
@@ -185,7 +189,6 @@ static NSMutableString *g_finalResultString = nil; // 用于逐步构建最终�
             }
         }
     }
-    // 如果失败，直接跳到下一个
     [self processNextFinalBypassQueueItem];
 }
 
