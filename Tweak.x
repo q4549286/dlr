@@ -142,7 +142,7 @@ static UIImage * createWatermarkImage(NSString *text, UIFont *font, UIColor *tex
                     }
                 }
                 NSString *content = [textParts componentsJoinedByString:@"\n"];
-                if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content; else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content; else g_extractedD`ata[@"毕法"] = content;
+                if ([title containsString:@"方法"]) g_extractedData[@"方法"] = content; else if ([title containsString:@"格局"]) g_extractedData[@"格局"] = content; else g_extractedData[@"毕法"] = content;
             } else if ([vcClassName containsString:@"七政"]) {
                 NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, allLabels); [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
                 for (UILabel *label in allLabels) { if (label.text.length > 0) [textParts addObject:label.text]; }
@@ -309,12 +309,13 @@ static UIImage * createWatermarkImage(NSString *text, UIFont *font, UIColor *tex
                 for (int i=0; i < sikeColumns.count; i++) {
                     NSMutableArray *column = sikeColumns[i];
                     [column sortUsingComparator:^NSComparisonResult(UILabel* o1, UILabel* o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-                    [sikeSummary appendFormat:@"第%@课: %@ %@ %@\n", @[@"一",@"二",@"三",@"四"][i], ((UILabel*)column[0]).text, ((UILabel*)column[1]).text, ((UILabel*)column[2]).text];
-                    
-                    for (int j=0; j < column.count; j++) {
-                        UILabel *label = column[j];
-                        NSString *uniqueKey = [NSString stringWithFormat:@"sike_%d_%d_%@", i, j, label.text];
-                        [g_kePanDetailWorkQueue addObject:@{@"view": label, @"key": uniqueKey}];
+                    if (column.count == 3) {
+                        [sikeSummary appendFormat:@"第%@课: %@ %@ %@\n", @[@"一",@"二",@"三",@"四"][i], ((UILabel*)column[0]).text, ((UILabel*)column[1]).text, ((UILabel*)column[2]).text];
+                        for (int j=0; j < column.count; j++) {
+                            UILabel *label = column[j];
+                            NSString *uniqueKey = [NSString stringWithFormat:@"sike_%d_%d_%@", i, j, label.text];
+                            [g_kePanDetailWorkQueue addObject:@{@"view": label, @"key": uniqueKey}];
+                        }
                     }
                 }
                 g_extractedData[@"四课概要"] = [sikeSummary stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -350,13 +351,14 @@ static UIImage * createWatermarkImage(NSString *text, UIFont *font, UIColor *tex
                  for (int i=0; i < scColumns.count; i++) {
                      NSMutableArray *column = scColumns[i];
                      [column sortUsingComparator:^NSComparisonResult(UILabel* o1, UILabel* o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-                     [scSummary appendFormat:@"%@ %@ %@ %@\n", titles[i], ((UILabel*)column[0]).text, ((UILabel*)column[1]).text, ((UILabel*)column[2]).text];
-
-                     // 只添加前两个（彩色的）
-                     for (int j=0; j < 2; j++) {
-                         UILabel *label = column[j];
-                         NSString *uniqueKey = [NSString stringWithFormat:@"sc_%d_%d_%@", i, j, label.text];
-                         [g_kePanDetailWorkQueue addObject:@{@"view": label, @"key": uniqueKey}];
+                     if (column.count == 3) {
+                         [scSummary appendFormat:@"%@ %@ %@ %@\n", titles[i], ((UILabel*)column[0]).text, ((UILabel*)column[1]).text, ((UILabel*)column[2]).text];
+                         // 只添加前两个（彩色的）
+                         for (int j=0; j < 2; j++) {
+                             UILabel *label = column[j];
+                             NSString *uniqueKey = [NSString stringWithFormat:@"sc_%d_%d_%@", i, j, label.text];
+                             [g_kePanDetailWorkQueue addObject:@{@"view": label, @"key": uniqueKey}];
+                         }
                      }
                  }
                  g_extractedData[@"三传概要"] = [scSummary stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
