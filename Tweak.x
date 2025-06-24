@@ -2,10 +2,7 @@
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 
-// =========================================================================
-// 1. 全局变量与辅助函数
-// =========================================================================
-#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Truth-V-Final-Simple] " format, ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Truth-V-Final-Apology] " format, ##__VA_ARGS__)
 
 static NSInteger const TestButtonTag = 556690;
 static BOOL g_isExtractingKeChuanDetail = NO;
@@ -18,9 +15,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
-// =========================================================================
-// 2. 主功能区 (基于最简单的逻辑)
-// =========================================================================
 @interface UIViewController (EchoAITestAddons_Truth)
 - (void)performKeChuanDetailExtractionTest_Truth;
 - (void)processKeChuanQueue_Truth;
@@ -28,9 +22,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %hook UIViewController
 
+// ... viewDidLoad 和 presentViewController 保持不变 ...
 - (void)viewDidLoad {
     %orig;
-    // 只有目标 ViewController 才添加按钮
     if ([NSStringFromClass([self class]) isEqualToString:@"六壬大占.ViewController"]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
@@ -39,7 +33,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"测试课传(回归版)" forState:UIControlStateNormal];
+            [testButton setTitle:@"测试课传(最终版)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
             testButton.backgroundColor = [UIColor systemGreenColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -54,11 +48,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     if (g_isExtractingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            viewControllerToPresent.view.alpha = 0.0f;
-            flag = NO;
+            viewControllerToPresent.view.alpha = 0.0f; flag = NO;
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
-                // 提取文本
                 UIView *contentView = viewControllerToPresent.view;
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
@@ -68,14 +60,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
                 }];
                 NSMutableArray<NSString *> *textParts = [NSMutableArray array];
-                for (UILabel *label in allLabels) {
-                    if (label.text && label.text.length > 0) { [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]; }
-                }
+                for (UILabel *label in allLabels) { if (label.text && label.text.length > 0) { [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]; } }
                 NSString *fullDetail = [textParts componentsJoinedByString:@"\n"];
                 [g_capturedKeChuanDetailArray addObject:fullDetail];
-                // 关键：在弹窗完全关闭后，再处理下一个任务
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                    // 增加一个微小的延迟，给UI线程足够的喘息时间
                      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         [self processKeChuanQueue_Truth];
                     });
@@ -90,70 +78,47 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %new
 - (void)performKeChuanDetailExtractionTest_Truth {
-    EchoLog(@"开始执行 [课传详情] 回归版测试");
+    EchoLog(@"开始执行[最终版]测试：基于Y坐标识别 + 模拟点击");
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
 
-    // 我们不再关心 `傳視圖` 或 `三傳視圖` 这些中间层。
-    // 我们直接在 `self.view` (也就是 `六壬大占.ViewController` 的主视图) 上寻找所有 `UILabel`。
-    // 然后通过它们的坐标来识别它们属于哪一传。这是最直接、最不容易出错的方法。
-    
-    NSMutableArray<UILabel *> *allLabels = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UILabel class], self.view, allLabels);
-    
-    // 按视觉顺序（Y优先，X其次）给所有Label排序
-    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-        if (roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-        if (roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
-        return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+    Class chuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
+    if (!chuanViewClass) { EchoLog(@"错误: 找不到'六壬大占.傳視圖'类"); g_isExtractingKeChuanDetail = NO; return; }
+
+    NSMutableArray *allChuanViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(chuanViewClass, self.view, allChuanViews);
+
+    [allChuanViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+        return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
     }];
     
-    // 通过文本内容来识别三传的行
-    NSMutableArray<NSArray<UILabel *> *> *chuanRows = [NSMutableArray array];
-    for (UILabel *label in allLabels) {
-        if ([label.text isEqualToString:@"初"] || [label.text isEqualToString:@"中"] || [label.text isEqualToString:@"末"]) {
-            // 这是一个传的开始，找到和它在同一行（Y坐标相近）的所有Label
-            NSMutableArray<UILabel *> *row = [NSMutableArray array];
-            CGRect searchRect = CGRectMake(0, label.frame.origin.y - 5, self.view.bounds.size.width, 10);
-            for (UILabel *otherLabel in allLabels) {
-                if (CGRectIntersectsRect(searchRect, otherLabel.frame)) {
-                    [row addObject:otherLabel];
-                }
-            }
-            // 在行内按X排序
-            [row sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                 return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-            }];
-            if (row.count > 0 && ![chuanRows containsObject:row]) {
-                [chuanRows addObject:row];
-            }
-        }
-    }
+    NSArray *rowTitles = @[@"初传", @"中传", @"末传"];
+    for (NSUInteger i = 0; i < allChuanViews.count; i++) {
+        if (i >= rowTitles.count) break;
+        
+        UIView *chuanView = allChuanViews[i];
+        
+        NSMutableArray *labelsInView = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UILabel class], chuanView, labelsInView);
+        [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+            return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+        }];
+        
+        if (labelsInView.count >= 2) {
+            UILabel *dizhiLabel = labelsInView[labelsInView.count - 2];
+            UILabel *tianjiangLabel = labelsInView[labelsInView.count - 1];
 
-    if (chuanRows.count == 3) {
-        NSArray *rowTitles = @[@"初传", @"中传", @"末传"];
-        for(NSUInteger i = 0; i < chuanRows.count; i++) {
-            NSArray<UILabel *> *row = chuanRows[i];
-            if (row.count >= 3) { // 至少要有 "初/中/末", 地支, 天将
-                UILabel *dizhiLabel = row[row.count - 2];
-                UILabel *tianjiangLabel = row[row.count - 1];
-
-                [g_keChuanWorkQueue addObject:@{@"item": dizhiLabel, @"type": @"dizhi"}];
-                [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
-
-                [g_keChuanWorkQueue addObject:@{@"item": tianjiangLabel, @"type": @"tianjiang"}];
-                [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
-            }
+            [g_keChuanWorkQueue addObject:@{@"item": dizhiLabel, @"type": @"dizhi"}];
+            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
+            
+            [g_keChuanWorkQueue addObject:@{@"item": tianjiangLabel, @"type": @"tianjiang"}];
+            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
         }
     }
     
-    if (g_keChuanWorkQueue.count == 0) {
-        EchoLog(@"测试失败: 未找到三传的Labels。");
-        g_isExtractingKeChuanDetail = NO;
-        return;
-    }
+    if (g_keChuanWorkQueue.count == 0) { EchoLog(@"测试失败: 未找到任何可点击的课传项目。"); g_isExtractingKeChuanDetail = NO; return; }
     
     [self processKeChuanQueue_Truth];
 }
@@ -161,14 +126,27 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 %new
 - (void)processKeChuanQueue_Truth {
     if (g_keChuanWorkQueue.count == 0) {
-        // ... (结束逻辑)
+        // ... 结束逻辑
+        EchoLog(@"所有任务处理完毕");
+        NSMutableString *resultStr = [NSMutableString string];
+        for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
+            NSString *title = g_keChuanTitleQueue[i];
+            NSString *detail = (i < g_capturedKeChuanDetailArray.count) ? g_capturedKeChuanDetailArray[i] : @"[信息提取失败]";
+            [resultStr appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
+        }
+        [UIPasteboard generalPasteboard].string = resultStr;
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"最终版测试完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+        [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:successAlert animated:YES completion:nil];
+        g_isExtractingKeChuanDetail = NO;
+        g_keChuanWorkQueue = nil; g_capturedKeChuanDetailArray = nil; g_keChuanTitleQueue = nil;
         return;
     }
 
     NSDictionary *task = g_keChuanWorkQueue.firstObject;
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     
-    UIView *itemToClick = task[@"item"];
+    UILabel *itemToClick = task[@"item"];
     NSString *itemType = task[@"type"];
 
     SEL actionToPerform = nil;
@@ -180,6 +158,12 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
     if (actionToPerform && [self respondsToSelector:actionToPerform]) {
         EchoLog(@"正在点击: %@", g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count]);
+        
+        // 【强制更新上下文】
+        // 在调用方法前，我们先用 hitTest 告诉系统，我们的“意图”是在这个 Label 上。
+        // 这可能会更新 App 内部我们看不见的那个“当前行”状态。
+        [itemToClick.superview hitTest:itemToClick.center withEvent:nil];
+
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         [self performSelector:actionToPerform withObject:itemToClick];
@@ -189,4 +173,5 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         [self processKeChuanQueue_Truth];
     }
 }
+
 %end
