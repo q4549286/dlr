@@ -4,7 +4,7 @@
 // =========================================================================
 // 宏定义与辅助函数 (精简版)
 // =========================================================================
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-Sike] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-Sike-V3] " format), ##__VA_ARGS__)
 
 static NSInteger const TestButtonTag = 998877;
 static BOOL g_isExtracting = NO;
@@ -45,44 +45,48 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// --- 核心：截获弹窗 ---
+// --- 核心：截获弹窗 (温和处理版) ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtracting && g_currentItemKey) {
         if (![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
-            EchoLog(@"捕获到一个可能是详情的弹窗: %@", NSStringFromClass([viewControllerToPresent class]));
-            viewControllerToPresent.view.alpha = 0.0f;
-            flag = NO;
+            EchoLog(@"捕获到弹窗: %@, 采用温和处理模式。", NSStringFromClass([viewControllerToPresent class]));
             
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                UIView *contentView = viewControllerToPresent.view;
-                NSMutableArray *allLabels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
-                    if (fabs(l1.frame.origin.y - l2.frame.origin.y) > 5) {
-                        return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)];
-                    }
-                    return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
-                }];
-
-                NSMutableArray *textParts = [NSMutableArray array];
-                for (UILabel *label in allLabels) {
-                    if (label.text && label.text.length > 0) {
-                        NSString *cleanedText = [[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                        if (cleanedText.length > 0) {
-                            [textParts addObject:cleanedText];
-                        }
-                    }
+            // 包装原始的completion block
+            void (^newCompletion)(void) = ^{
+                // 先执行原始的completion，确保弹窗完全显示
+                if (completion) {
+                    completion();
                 }
                 
-                NSString *fullText = [textParts componentsJoinedByString:@" -> "];
-                g_capturedDetails[g_currentItemKey] = fullText;
-                
-                EchoLog(@"[捕获成功] Key: %@, 内容: %@", g_currentItemKey, fullText);
-                
-                [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
-            });
-            %orig(viewControllerToPresent, flag, completion);
-            [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+                // 在弹窗显示后，我们再安全地操作
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    UIView *contentView = viewControllerToPresent.view;
+                    NSMutableArray *allLabels = [NSMutableArray array];
+                    FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+                    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
+                        if (fabs(l1.frame.origin.y - l2.frame.origin.y) > 5) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }
+                        return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
+                    }];
+
+                    NSMutableArray *textParts = [NSMutableArray array];
+                    for (UILabel *label in allLabels) {
+                        if (label.text && label.text.length > 0) {
+                            NSString *cleanedText = [[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                            if (cleanedText.length > 0) { [textParts addObject:cleanedText]; }
+                        }
+                    }
+                    
+                    NSString *fullText = [textParts componentsJoinedByString:@" -> "];
+                    g_capturedDetails[g_currentItemKey] = fullText;
+                    EchoLog(@"[捕获成功] Key: %@, 内容: %@", g_currentItemKey, fullText);
+                    
+                    // 提取完毕后，再关闭弹窗
+                    [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+                });
+            };
+            
+            // 使用我们包装后的 newCompletion 来执行原始的 presentViewController
+            %orig(viewControllerToPresent, animated, newCompletion);
             return;
         }
     }
@@ -107,7 +111,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %new
 - (void)extractSiKeSanChuanDetailsWithCompletion:(void (^)(NSString *detailsText))completion {
-    EchoLog(@"--- 开始 [独立测试] 提取流程 ---");
+    EchoLog(@"--- 开始 [独立测试 V3] 提取流程 ---");
     g_isExtracting = YES;
     g_capturedDetails = [NSMutableDictionary dictionary];
 
@@ -184,16 +188,14 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 EchoLog(@"触发点击 -> Target: %@, Action: %@", NSStringFromClass([target class]), actionString);
                 #pragma clang diagnostic push
                 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                // ============ FIX v2: 传递手势识别器本身作为参数 ============
                 [target performSelector:action withObject:tap];
-                // =======================================================
                 #pragma clang diagnostic pop
             } else {
                 EchoLog(@"[错误] 无法触发点击。Target: %@, Action: %@", target, actionString);
             }
         }
         
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             processQueue();
         });
     };
