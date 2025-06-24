@@ -23,31 +23,31 @@ static void FindGesturesOfTypeRecursive(Class gestureClass, UIView *view, NSMuta
 // =========================================================================
 // 2. 主功能实现
 // =========================================================================
-@interface UIViewController (DirectDispatch)
-- (void)startDirectDispatchExtraction;
-- (void)processNextDirectDispatchQueueItem;
+@interface UIViewController (StuntDoubleDispatch)
+- (void)startStuntDoubleExtraction;
+- (void)processNextStuntDoubleQueueItem;
 @end
 
 %hook UIViewController
 
-// --- 注入终极武器按钮 ---
+// --- 注入最终按钮 ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *window = self.view.window; if (!window) return;
-            NSInteger buttonTag = 987654321;
+            NSInteger buttonTag = 1337; // The final tag
             [[window viewWithTag:buttonTag] removeFromSuperview];
             UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
             button.frame = CGRectMake(self.view.center.x - 100, 50, 200, 40);
             button.tag = buttonTag;
-            [button setTitle:@"提取课传(直接派发)" forState:UIControlStateNormal];
+            [button setTitle:@"提取课传(最终答案)" forState:UIControlStateNormal];
             button.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            button.backgroundColor = [UIColor purpleColor];
+            button.backgroundColor = [UIColor colorWithRed:0.0 green:0.5 blue:1.0 alpha:1.0];
             [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             button.layer.cornerRadius = 20;
-            [button addTarget:self action:@selector(startDirectDispatchExtraction) forControlEvents:UIControlEventTouchUpInside];
+            [button addTarget:self action:@selector(startStuntDoubleExtraction) forControlEvents:UIControlEventTouchUpInside];
             [window addSubview:button];
         });
     }
@@ -61,7 +61,6 @@ static void FindGesturesOfTypeRecursive(Class gestureClass, UIView *view, NSMuta
             viewControllerToPresent.view.alpha = 0.0f; flag = NO;
             void (^extractionCompletion)(void) = ^{
                 if (completion) { completion(); }
-                // 简化版提取，直接获取所有UILabel的文本
                 NSMutableString *allText = [NSMutableString string];
                 for(UIView* v in viewControllerToPresent.view.subviews) {
                     if([v isKindOfClass:[UILabel class]]) {
@@ -69,10 +68,10 @@ static void FindGesturesOfTypeRecursive(Class gestureClass, UIView *view, NSMuta
                         if (text) [allText appendFormat:@"%@ ", [text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
                     }
                 }
-                [g_capturedDetails addObject:allText.length > 0 ? allText : @"[无文本信息]"];
+                [g_capturedDetails addObject:allText.length > 0 ? [allText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] : @"[无文本信息]"];
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        [self processNextDirectDispatchQueueItem];
+                        [self processNextStuntDoubleQueueItem];
                     });
                 }];
             };
@@ -84,8 +83,8 @@ static void FindGesturesOfTypeRecursive(Class gestureClass, UIView *view, NSMuta
 }
 
 %new
-// --- 流程起点：空间关联 ---
-- (void)startDirectDispatchExtraction {
+// --- 流程起点：空间关联 (已证明正确) ---
+- (void)startStuntDoubleExtraction {
     if (g_isExtracting) { return; }
     g_isExtracting = YES; g_workQueue = [NSMutableArray array]; g_titleQueue = [NSMutableArray array]; g_capturedDetails = [NSMutableArray array];
 
@@ -140,16 +139,16 @@ static void FindGesturesOfTypeRecursive(Class gestureClass, UIView *view, NSMuta
     }
     
     if (g_workQueue.count == 0) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"失败" message:@"空间关联失败。" preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"失败" message:@"未能通过空间关联找到任何手势。" preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好吧" style:UIAlertActionStyleDefault handler:nil]];
         g_isExtracting = NO; return;
     }
-    [self processNextDirectDispatchQueueItem];
+    [self processNextStuntDoubleQueueItem];
 }
 
 %new
-// --- 队列处理器：直接派发！ ---
-- (void)processNextDirectDispatchQueueItem {
+// --- 队列处理器：伪造派发！ ---
+- (void)processNextStuntDoubleQueueItem {
     if (g_workQueue.count == 0) {
         NSMutableString *result = [NSMutableString string];
         for (NSUInteger i = 0; i < g_titleQueue.count; i++) {
@@ -157,33 +156,38 @@ static void FindGesturesOfTypeRecursive(Class gestureClass, UIView *view, NSMuta
         }
         [UIPasteboard generalPasteboard].string = result;
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成！" message:@"所有详情已复制到剪贴板！" preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"搞定！" style:UIAlertActionStyleDefault handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"成功！" style:UIAlertActionStyleDefault handler:nil]];
         g_isExtracting = NO; return;
     }
-    UIGestureRecognizer *gestureToTrigger = g_workQueue.firstObject; [g_workQueue removeObjectAtIndex:0];
+    UIGestureRecognizer *realGesture = g_workQueue.firstObject; [g_workQueue removeObjectAtIndex:0];
     
-    // ** 终极武器：侵入手势内部，获取真正的target和action **
     Ivar targetsIvar = class_getInstanceVariable([UIGestureRecognizer class], "_targets");
-    if (!targetsIvar) { [self processNextDirectDispatchQueueItem]; return; }
+    if (!targetsIvar) { [self processNextStuntDoubleQueueItem]; return; }
+    NSArray *targets = object_getIvar(realGesture, targetsIvar);
+    if (targets.count == 0) { [self processNextStuntDoubleQueueItem]; return; }
     
-    NSArray *targets = object_getIvar(gestureToTrigger, targetsIvar);
-    if (targets.count == 0) { [self processNextDirectDispatchQueueItem]; return; }
-    
-    // 通常只有一个target-action对
     id targetActionPair = targets[0];
-    
-    // 从这个私有对象中获取真正的target和action
     id realTarget = [targetActionPair valueForKey:@"target"];
     SEL realAction = NSSelectorFromString([targetActionPair valueForKey:@"action"]);
 
     if (realTarget && realAction && [realTarget respondsToSelector:realAction]) {
+        // ** 终极答案：创建特技替身 **
+        // 1. 创建一个和真实手势同类型的伪造手势
+        UIGestureRecognizer *stuntGesture = [[[realGesture class] alloc] init];
+
+        // 2. 将伪造手势的view指向真实手势的view，确保上下文正确
+        [stuntGesture setValue:realGesture.view forKey:@"view"];
+
+        // 3. 将伪造手势的状态设置为“Ended”，以通过App的状态检查
+        stuntGesture.state = UIGestureRecognizerStateEnded;
+
+        // 4. 用伪造手势作为参数，执行真正的Target-Action
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [realTarget performSelector:realAction withObject:gestureToTrigger];
+        [realTarget performSelector:realAction withObject:stuntGesture];
         #pragma clang diagnostic pop
     } else {
-        // 如果失败，继续处理下一个
-        [self processNextDirectDispatchQueueItem];
+        [self processNextStuntDoubleQueueItem];
     }
 }
 %end
