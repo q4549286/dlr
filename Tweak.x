@@ -10,7 +10,7 @@ static UITextView *g_screenLogger = nil;
 #define EchoLog(format, ...) \
     do { \
         NSString *logMessage = [NSString stringWithFormat:format, ##__VA_ARGS__]; \
-        NSLog(@"[KeChuan-Test-Recon-V14] %@", logMessage); \
+        NSLog(@"[KeChuan-Test-Recon-V14.1] %@", logMessage); \
         if (g_screenLogger) { \
             dispatch_async(dispatch_get_main_queue(), ^{ \
                 NSString *newText = [NSString stringWithFormat:@"%@\n- %@", g_screenLogger.text, logMessage]; \
@@ -73,13 +73,11 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// --- 这个脚本不需要hook presentViewController ---
-
 %new
 // --- 核心侦查方法 ---
 - (void)performIvarReconnaissance {
     g_screenLogger.text = @""; // 清空日志
-    EchoLog(@"开始V14 Ivar侦查...");
+    EchoLog(@"开始V14.1 Ivar侦查...");
     
     // 1. 找到'三傳視圖'类
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
@@ -102,14 +100,13 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     EchoLog(@"成功找到三传容器实例: <%@: %p>", [sanChuanContainer class], sanChuanContainer);
     
     // 3. 定义我们要查找的ivar名字列表
-    // 【重要】我们必须尝试简体和繁体，因为不知道开发者的习惯
     const char *ivarNames[] = {
-        "初传", "中传", "末传",       // 繁体
-        "初傳", "中傳", "末傳",       // 另一个可能的繁体
-        "初传", "中传", "末传",       // 简体 (以防万一)
-        "_初传", "_中传", "_末传",     // 带下划线的繁体
-        "_初傳", "_中傳", "_末傳",     // 带下划线的繁体
-        NULL // 列表结束标记
+        "初传", "中传", "末传",
+        "初傳", "中傳", "末傳",
+        "初传", "中传", "末传",
+        "_初传", "_中传", "_末传",
+        "_初傳", "_中傳", "_末傳",
+        NULL
     };
     
     BOOL foundAny = NO;
@@ -120,13 +117,14 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         
         if (ivar) {
             foundAny = YES;
-            // 直接读取ivar的值 (它是一个对象)
             id ivarValue = object_getIvar(sanChuanContainer, ivar);
             
             EchoLog(@"找到Ivar '%s'!", ivarName);
-            EchoLog(@"  -> 值: <%@: %p>", (ivarValue ? [ivarValue class] : @"(null)"), ivarValue);
+
+            // ================== 【【【编译错误修正点】】】 ==================
+            EchoLog(@"  -> 值: <%@: %p>", (ivarValue ? NSStringFromClass([ivarValue class]) : @"(null class)"), ivarValue);
+            // ==============================================================
             
-            // 如果能读到值，我们可以尝试打印它的description来获取更多信息
             if (ivarValue && [ivarValue respondsToSelector:@selector(description)]) {
                 EchoLog(@"  -> Description: %@", [ivarValue description]);
             }
