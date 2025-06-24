@@ -3,36 +3,13 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数
+// 1. 全局变量与辅助函数 (保持不变)
 // =========================================================================
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
-static NSMutableArray<UIView *> *g_keChuanWorkQueue = nil; // 明确类型为UIView
-static NSMutableArray<NSString *> *g_keChuanTitleQueue = nil;
+static NSMutableArray *g_keChuanWorkQueue = nil;
+static NSMutableArray *g_keChuanTitleQueue = nil;
 
-// 新增：日志视图和控制面板
-static UITextView *g_logTextView = nil;
-static UIView *g_controlPanelView = nil;
-
-// 日志记录函数
-static void LogMessage(NSString *format, ...) {
-    if (!g_logTextView) return;
-    va_list args;
-    va_start(args, format);
-    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args);
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-        [formatter setDateFormat:@"HH:mm:ss.SSS"];
-        NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
-        NSString *fullMessage = [logPrefix stringByAppendingString:message];
-        g_logTextView.text = [NSString stringWithFormat:@"%@\n%@", fullMessage, g_logTextView.text];
-        NSLog(@"[KeChuanExtractor] %@", message);
-    });
-}
-
-// 递归查找视图
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
@@ -41,64 +18,121 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 // =========================================================================
 // 2. 主功能区
 // =========================================================================
-@interface UIViewController (EchoAITestAddons_Truth)
-- (void)startExtraction_Truth;
-- (void)processKeChuanQueue_Truth;
-- (void)createOrShowControlPanel_Truth;
-- (void)copyAndClose_Truth;
+@interface UIViewController (EchoAITestAddons_Atonement)
+- (void)performKeChuanDetailExtractionTest_Atonement;
+- (void)processKeChuanQueue_Atonement;
 @end
 
 %hook UIViewController
 
-// --- viewDidLoad: 创建控制面板触发按钮 ---
+// --- viewDidLoad: 创建按钮 (调用新方法) ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
-            NSInteger controlButtonTag = 556691;
-            if ([keyWindow viewWithTag:controlButtonTag]) { return; } // 如果已存在则不创建
-            
-            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
-            controlButton.tag = controlButtonTag;
-            [controlButton setTitle:@"提取工具(日志版)" forState:UIControlStateNormal];
-            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            controlButton.backgroundColor = [UIColor systemBlueColor];
-            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            controlButton.layer.cornerRadius = 8;
-            [controlButton addTarget:self action:@selector(createOrShowControlPanel_Truth) forControlEvents:UIControlEventTouchUpInside];
-            [keyWindow addSubview:controlButton];
+            NSInteger TestButtonTag = 556692; // 新的Tag
+            if ([keyWindow viewWithTag:TestButtonTag]) { [[keyWindow viewWithTag:TestButtonTag] removeFromSuperview]; }
+            UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
+            testButton.tag = TestButtonTag;
+            [testButton setTitle:@"课传提取(谢罪舞)" forState:UIControlStateNormal];
+            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            testButton.backgroundColor = [UIColor colorWithRed:0.9 green:0.1 blue:0.1 alpha:1.0];
+            [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            testButton.layer.cornerRadius = 8;
+            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Atonement) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:testButton];
         });
     }
 }
 
-// --- presentViewController: 捕获弹窗并驱动队列 ---
+// --- presentViewController: 捕获弹窗并驱动队列 (逻辑微调，调用新队列处理器) ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtractingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            LogMessage(@"捕获到弹窗: %@", vcClassName);
-            
-            viewControllerToPresent.view.alpha = 0.0f; // 隐藏弹窗，加快速度
+            viewControllerToPresent.view.alpha = 0.0f;
             flag = NO;
-            
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
-                
                 UIView *contentView = viewControllerToPresent.view;
-                NSMutableArray *allLabels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-                
-                // 按Y坐标、再按X坐标排序，确保文本顺序正确
-                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                    if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-                    if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
-                    return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-                }];
-                
+                NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending; if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending; return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
                 NSMutableArray<NSString *> *textParts = [NSMutableArray array];
-                for (UILabel *label in allLabels) {
-                    if (label.text && label.text.length > 0) {
-                        [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@"
+                for (UILabel *label in allLabels) { if (label.text && label.text.length > 0) { [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]; } }
+                NSString *fullDetail = [textParts componentsJoinedByString:@"\n"];
+                [g_capturedKeChuanDetailArray addObject:fullDetail];
+                [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
+                    // 【关键】在弹窗消失后，延迟一小段时间再处理下一个，给UI足够的时间响应
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        [self processKeChuanQueue_Atonement];
+                    });
+                }];
+            };
+            %orig(viewControllerToPresent, flag, newCompletion);
+            return;
+        }
+    }
+    %orig(viewControllerToPresent, flag, completion);
+}
+
+%new
+// --- performKeChuanDetailExtractionTest_Atonement: 构建新的、更智能的任务队列 ---
+- (void)performKeChuanDetailExtractionTest_Atonement {
+    g_isExtractingKeChuanDetail = YES;
+    g_capturedKeChuanDetailArray = [NSMutableArray array];
+    g_keChuanWorkQueue = [NSMutableArray array];
+    g_keChuanTitleQueue = [NSMutableArray array];
+
+    Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
+    if (sanChuanContainerClass) {
+        NSMutableArray *containers = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, self.view, containers);
+        if (containers.count > 0) {
+            UIView *sanChuanContainer = containers.firstObject;
+            const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL};
+            NSString *rowTitles[] = {@"初传", @"中传", @"末传"};
+            for (int i = 0; i < 3; ++i) { // 明确循环3次
+                Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarNames[i]);
+                if (ivar) {
+                    UIView *chuanView = object_getIvar(sanChuanContainer, ivar);
+                    if (chuanView) {
+                        NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], chuanView, labels);
+                        [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
+                        if (labels.count >= 2) {
+                            UILabel *dizhiLabel = labels[labels.count-2];
+                            UILabel *tianjiangLabel = labels[labels.count-1];
+                            
+                            // 【【【谢罪之舞的核心】】】
+                            // 队列中存储一个包含所有需要信息的字典
+                            // 包含了我们手动构造的indexPath的row
+                            [g_keChuanWorkQueue addObject:@{ @"label": dizhiLabel, @"indexPathRow": @(i), @"type": @"地支" }];
+                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
+
+                            [g_keChuanWorkQueue addObject:@{ @"label": tianjiangLabel, @"indexPathRow": @(i), @"type": @"天将" }];
+                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (g_keChuanWorkQueue.count == 0) { g_isExtractingKeChuanDetail = NO; return; }
+    [self processKeChuanQueue_Atonement];
+}
+
+%new
+// --- processKeChuanQueue_Atonement: 执行“谢罪之舞” ---
+- (void)processKeChuanQueue_Atonement {
+    if (g_keChuanWorkQueue.count == 0) {
+        // ... 结束逻辑 (保持不变) ...
+        NSMutableString *resultStr = [NSMutableString string];
+        for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
+            NSString *title = g_keChuanTitleQueue[i];
+            NSString *detail = (i < g_capturedKeChuanDetailArray.count) ? g_capturedKeChuanDetailArray[i] : @"[信息提取失败]";
+            [resultStr appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
+        }
+        [UIPasteboard generalPasteboard].string = resultStr;
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+        [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
