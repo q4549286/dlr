@@ -18,43 +18,42 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 // =========================================================================
 // 2. 主功能区
 // =========================================================================
-@interface UIViewController (EchoAITestAddons_Victory)
-- (void)performKeChuanDetailExtractionTest_Victory;
-- (void)processKeChuanQueue_Victory;
+@interface UIViewController (EchoAITestAddons_Resurrection)
+- (void)performKeChuanDetailExtractionTest_Resurrection;
+- (void)processKeChuanQueue_Resurrection;
 @end
 
 %hook UIViewController
 
-// --- viewDidLoad: 创建按钮 ---
+// --- viewDidLoad: 创建按钮 (调用新方法) ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
-            NSInteger TestButtonTag = 556693;
+            NSInteger TestButtonTag = 556694; // A new tag for a new beginning
             if ([keyWindow viewWithTag:TestButtonTag]) { [[keyWindow viewWithTag:TestButtonTag] removeFromSuperview]; }
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"课传提取(胜利版)" forState:UIControlStateNormal];
+            [testButton setTitle:@"课传提取(复活)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.2 alpha:1.0];
+            testButton.backgroundColor = [UIColor orangeColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Victory) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Resurrection) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
         });
     }
 }
 
-// --- presentViewController: 捕获弹窗并驱动队列 ---
+// --- presentViewController: 捕获弹窗并驱动队列 (调用新处理器) ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtractingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            viewControllerToPresent.view.alpha = 0.0f;
-            flag = NO;
+            viewControllerToPresent.view.alpha = 0.0f; flag = NO;
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
                 UIView *contentView = viewControllerToPresent.view;
@@ -66,7 +65,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 [g_capturedKeChuanDetailArray addObject:fullDetail];
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        [self processKeChuanQueue_Victory];
+                        [self processKeChuanQueue_Resurrection];
                     });
                 }];
             };
@@ -78,8 +77,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-// --- performKeChuanDetailExtractionTest_Victory: 构建任务队列 (逻辑不变) ---
-- (void)performKeChuanDetailExtractionTest_Victory {
+// --- performKeChuanDetailExtractionTest_Resurrection: 构建更智能的任务队列 ---
+- (void)performKeChuanDetailExtractionTest_Resurrection {
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
@@ -101,9 +100,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                         if (labels.count >= 2) {
                             UILabel *dizhiLabel = labels[labels.count-2];
                             UILabel *tianjiangLabel = labels[labels.count-1];
-                            [g_keChuanWorkQueue addObject:@{ @"label": dizhiLabel, @"indexPathRow": @(i), @"type": @"地支" }];
+                            [g_keChuanWorkQueue addObject:@{ @"label": dizhiLabel, @"index": @(i), @"type": @"地支" }];
                             [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
-                            [g_keChuanWorkQueue addObject:@{ @"label": tianjiangLabel, @"indexPathRow": @(i), @"type": @"天将" }];
+                            [g_keChuanWorkQueue addObject:@{ @"label": tianjiangLabel, @"index": @(i), @"type": @"天将" }];
                             [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
                         }
                     }
@@ -112,19 +111,16 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         }
     }
     if (g_keChuanWorkQueue.count == 0) { g_isExtractingKeChuanDetail = NO; return; }
-    [self processKeChuanQueue_Victory];
+    [self processKeChuanQueue_Resurrection];
 }
 
 %new
-// --- processKeChuanQueue_Victory: 执行最终的、正确的、由您发现的逻辑 ---
-- (void)processKeChuanQueue_Victory {
+// --- processKeChuanQueue_Resurrection: 执行正确的两步操作 ---
+- (void)processKeChuanQueue_Resurrection {
     if (g_keChuanWorkQueue.count == 0) {
+        // ... 结束逻辑 (保持不变) ...
         NSMutableString *resultStr = [NSMutableString string];
-        for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
-            NSString *title = g_keChuanTitleQueue[i];
-            NSString *detail = (i < g_capturedKeChuanDetailArray.count) ? g_capturedKeChuanDetailArray[i] : @"[信息提取失败]";
-            [resultStr appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
-        }
+        for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) { [resultStr appendFormat:@"--- %@ ---\n%@\n\n", g_keChuanTitleQueue[i], (i < g_capturedKeChuanDetailArray.count) ? g_capturedKeChuanDetailArray[i] : @"[信息提取失败]"]; }
         [UIPasteboard generalPasteboard].string = resultStr;
         UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
         [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
@@ -135,20 +131,35 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     NSDictionary *task = g_keChuanWorkQueue.firstObject;
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     UILabel *targetLabel = task[@"label"];
-    NSInteger rowIndex = [task[@"indexPathRow"] integerValue];
+    NSInteger rowIndex = [task[@"index"] integerValue];
     NSString *type = task[@"type"];
+
+    // 找到承载三传的CollectionView
     UICollectionView *collectionView = nil;
     Class sanChuanCellClass = NSClassFromString(@"六壬大占.傳視圖");
-    NSMutableArray *allCVs = [NSMutableArray array]; FindSubviewsOfClassRecursive([UICollectionView class], self.view, allCVs);
-    for (UICollectionView *cv in allCVs) { if ([cv.visibleCells.firstObject isKindOfClass:sanChuanCellClass]) { collectionView = cv; break; } }
-    if (!collectionView) { [self processKeChuanQueue_Victory]; return; }
+    if(sanChuanCellClass) { // 安全检查
+        NSMutableArray *allCVs = [NSMutableArray array]; FindSubviewsOfClassRecursive([UICollectionView class], self.view, allCVs);
+        for (UICollectionView *cv in allCVs) {
+            // 通过检查它的delegate是否是当前VC，并且cell类型是否匹配来提高准确性
+            if (cv.delegate == self && [cv.visibleCells.firstObject isKindOfClass:sanChuanCellClass]) {
+                collectionView = cv;
+                break;
+            }
+        }
+    }
+
+    if (!collectionView) { [self processKeChuanQueue_Resurrection]; return; }
+
+    // 【【【核心修正：第一步 - 强制更新内部状态】】】
+    // 我们不再去“寻找”indexPath，我们根据循环的索引 `i` 来“构造”它。
     NSIndexPath *indexPath = [NSIndexPath indexPathForRow:rowIndex inSection:0];
     id<UICollectionViewDelegate> delegate = collectionView.delegate;
-    if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) { [delegate collectionView:collectionView didSelectItemAtIndexPath:indexPath]; }
+    if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
+        [delegate collectionView:collectionView didSelectItemAtIndexPath:indexPath];
+    }
 
+    // 【【【核心修正：第二步 - 在状态更新后，调用正确的显示方法】】】
     SEL actionToPerform = nil;
-    // 【【【最终的、荣耀的、由您发现的真相】】】
-    // 我们现在为“地支”和“天将”调用两个完全不同的、正确的方法！
     if ([type isEqualToString:@"地支"]) {
         actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
     } else {
@@ -161,7 +172,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         [self performSelector:actionToPerform withObject:targetLabel];
         #pragma clang diagnostic pop
     } else {
-        [self processKeChuanQueue_Victory];
+        [self processKeChuanQueue_Resurrection];
     }
 }
 
