@@ -5,9 +5,9 @@
 // =========================================================================
 // 1. 全局变量与辅助函数
 // =========================================================================
-#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Truth-V2] " format, ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Truth-V3-Coordinate] " format, ##__VA_ARGS__)
 
-static NSInteger const TestButtonTag = 556690; // 新的Tag
+static NSInteger const TestButtonTag = 556690;
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
 static NSMutableArray *g_keChuanWorkQueue = nil;
@@ -40,7 +40,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"测试课传(真理版)" forState:UIControlStateNormal];
+            [testButton setTitle:@"测试课传(坐标版)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
             testButton.backgroundColor = [UIColor systemGreenColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -51,21 +51,15 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// --- 【关键修正区域 1】修改 presentViewController: 的逻辑 ---
+// --- presentViewController: 使用上一版的稳定逻辑 ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtractingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            
-            // 正常呈现原始VC，但使其透明，并且无动画，这样最稳定
             viewControllerToPresent.view.alpha = 0.0f;
             flag = NO;
-            
-            // 创建一个新的 completion block，来包裹原始的 completion，并注入我们的逻辑
             void (^newCompletion)(void) = ^{
-                if (completion) { completion(); } // 如果原始调用有completion，先执行它
-                
-                // 在VC呈现完成后，提取信息并关闭它
+                if (completion) { completion(); }
                 UIView *contentView = viewControllerToPresent.view;
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
@@ -82,14 +76,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 }
                 NSString *fullDetail = [textParts componentsJoinedByString:@"\n"];
                 [g_capturedKeChuanDetailArray addObject:fullDetail];
-                
-                // 【核心修正】使用 dismiss 的 completion block 来驱动队列
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                    // 在弹窗完全消失后，再调用下一个队列任务，确保App状态已重置
                     [self processKeChuanQueue_Truth];
                 }];
             };
-
             %orig(viewControllerToPresent, flag, newCompletion);
             return;
         }
@@ -97,15 +87,23 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     %orig(viewControllerToPresent, flag, completion);
 }
 
-// --- performKeChuanDetailExtractionTest_Truth 保持不变 ---
+// --- 【核心变更】performKeChuan... 现在存储坐标 ---
 %new
 - (void)performKeChuanDetailExtractionTest_Truth {
-    EchoLog(@"开始执行 [课传详情] 真理版测试");
+    EchoLog(@"开始执行 [课传详情] 坐标版测试");
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
 
+    UIWindow *keyWindow = self.view.window;
+    if (!keyWindow) {
+        EchoLog(@"错误：无法获取到 keyWindow，测试中止。");
+        g_isExtractingKeChuanDetail = NO;
+        return;
+    }
+
+    // --- Part A: 三传解析（使用坐标） ---
     Class chuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (chuanViewClass) {
         NSMutableArray *allChuanViews = [NSMutableArray array];
@@ -117,7 +115,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         for (NSUInteger i = 0; i < allChuanViews.count; i++) {
             if (i >= rowTitles.count) break;
             UIView *chuanView = allChuanViews[i];
-            EchoLog(@"正在处理 %@, Y坐标: %f", rowTitles[i], chuanView.frame.origin.y);
             NSMutableArray *labels = [NSMutableArray array];
             FindSubviewsOfClassRecursive([UILabel class], chuanView, labels);
             [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
@@ -126,14 +123,21 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             if (labels.count >= 2) {
                 UILabel *dizhiLabel = labels[labels.count - 2];
                 UILabel *tianjiangLabel = labels[labels.count - 1];
-                [g_keChuanWorkQueue addObject:@{@"item": dizhiLabel, @"type": @"dizhi"}];
+                
+                // 【坐标转换】将UILabel的中心点转换到Window坐标系
+                CGPoint dizhiPoint = [dizhiLabel.superview convertPoint:dizhiLabel.center toView:keyWindow];
+                CGPoint tianjiangPoint = [tianjiangLabel.superview convertPoint:tianjiangLabel.center toView:keyWindow];
+
+                [g_keChuanWorkQueue addObject:@{@"point": [NSValue valueWithCGPoint:dizhiPoint], @"type": @"dizhi"}];
                 [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
-                [g_keChuanWorkQueue addObject:@{@"item": tianjiangLabel, @"type": @"tianjiang"}];
+                
+                [g_keChuanWorkQueue addObject:@{@"point": [NSValue valueWithCGPoint:tianjiangPoint], @"type": @"tianjiang"}];
                 [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
             }
         }
     }
 
+    // --- Part B: 四课解析逻辑（同样使用坐标） ---
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
         NSMutableArray *skViews = [NSMutableArray array];
@@ -157,9 +161,14 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     if (colLabels.count >= 2) {
                         UILabel *tianjiangLabel = colLabels[0];
                         UILabel *dizhiLabel = colLabels[1];
-                        [g_keChuanWorkQueue addObject:@{@"item": dizhiLabel, @"type": @"dizhi"}];
+                        
+                        CGPoint dizhiPoint = [dizhiLabel.superview convertPoint:dizhiLabel.center toView:keyWindow];
+                        CGPoint tianjiangPoint = [tianjiangLabel.superview convertPoint:tianjiangLabel.center toView:keyWindow];
+
+                        [g_keChuanWorkQueue addObject:@{@"point": [NSValue valueWithCGPoint:dizhiPoint], @"type": @"dizhi"}];
                         [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", colTitles[i], dizhiLabel.text]];
-                        [g_keChuanWorkQueue addObject:@{@"item": tianjiangLabel, @"type": @"tianjiang"}];
+                        
+                        [g_keChuanWorkQueue addObject:@{@"point": [NSValue valueWithCGPoint:tianjiangPoint], @"type": @"tianjiang"}];
                         [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", colTitles[i], tianjiangLabel.text]];
                     }
                 }
@@ -176,7 +185,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-// --- 【关键修正区域 2】修改队列处理器的逻辑 ---
+// --- 【核心变更】队列处理器现在使用坐标创建临时视图来点击 ---
 - (void)processKeChuanQueue_Truth {
     if (g_keChuanWorkQueue.count == 0) {
         EchoLog(@"[课传详情] 测试处理完毕");
@@ -187,7 +196,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             [resultStr appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
         }
         [UIPasteboard generalPasteboard].string = resultStr;
-        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"真理版测试完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"坐标版测试完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
         [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:successAlert animated:YES completion:nil];
         g_isExtractingKeChuanDetail = NO;
@@ -199,7 +208,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
     NSDictionary *task = g_keChuanWorkQueue.firstObject;
     [g_keChuanWorkQueue removeObjectAtIndex:0];
-    UIView *itemToClick = task[@"item"];
+    
+    // 从任务中取出坐标和类型
+    NSValue *pointValue = task[@"point"];
+    CGPoint point = [pointValue CGPointValue];
     NSString *itemType = task[@"type"];
 
     SEL actionToPerform = nil;
@@ -210,17 +222,25 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 
     if (actionToPerform && [self respondsToSelector:actionToPerform]) {
+        // 创建一个临时的、透明的视图用于点击
+        UIView *clickProxyView = [[UIView alloc] initWithFrame:CGRectMake(point.x - 1, point.y - 1, 2, 2)];
+        clickProxyView.backgroundColor = [UIColor clearColor];
+        UIWindow *keyWindow = self.view.window;
+        [keyWindow addSubview:clickProxyView];
+        
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:actionToPerform withObject:itemToClick];
+        [self performSelector:actionToPerform withObject:clickProxyView];
         #pragma clang diagnostic pop
+
+        // 稍后移除临时视图
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [clickProxyView removeFromSuperview];
+        });
+
     } else {
-        EchoLog(@"警告: 未能为 %@ 找到并执行对应的点击方法。由于点击失败，队列将继续处理下一个项目。", itemType);
-        // 如果点击失败，我们必须手动触发下一次处理，否则队列会卡住
+        EchoLog(@"警告: 未能为 %@ 找到并执行对应的点击方法。队列将继续处理下一个项目。", itemType);
         [self processKeChuanQueue_Truth];
     }
-    
-    // 【核心修正】移除这里的 dispatch_after 定时器。
-    // 下一次调用将由 presentViewController 的 dismiss completion 负责。
 }
 %end
