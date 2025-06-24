@@ -10,56 +10,42 @@ keyWindow = [[UIApplication sharedApplication] keyWindow]; #pragma clang diagnos
 } UIViewController *topController = keyWindow.rootViewController; while (topController.presentedViewController) { topController = topController.presentedViewController; } return topController; }
 
 // =========================================================================
-// 2. 核心捕获逻辑：修复闪退并扩大适用范围
+// 2. 核心捕获逻辑：回归王道，直击Action
 // =========================================================================
-@interface UIView (WeiHunterHook)
-- (void)my_hooked_touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event;
+// 我们为UIViewController创建一个分类来存放我们的新方法
+@interface UIViewController (WeiHunterHook)
+- (void)my_hooked_showSummary:(id)sender;
 @end
 
-@implementation UIView (WeiHunterHook)
-- (void)my_hooked_touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    // 首先，让原始方法执行。
-    [self my_hooked_touchesEnded:touches withEvent:event];
+@implementation UIViewController (WeiHunterHook)
+// 这就是我们新的、用于交换的方法
+- (void)my_hooked_showSummary:(id)sender {
+    // 首先，让App的原始功能正常执行。因为方法已交换，所以调用自己就是调用原始实现。
+    [self my_hooked_showSummary:sender];
 
-    // 只有在捕获模式下才继续
-    if (!g_isListeningForWei) {
-        return;
-    }
-    
-    // 我们检查self是否是我们关心的那几个类之一。
-    // 这样做比在%ctor里分别hook更灵活。
-    NSArray *targetClassNames = @[@"六壬大占.傳視圖", @"六壬大占.三傳視圖", @"六壬大占.課傳視圖"];
-    BOOL isTarget = NO;
-    for (NSString *className in targetClassNames) {
-        Class targetClass = NSClassFromString(className);
-        if (targetClass && [self isKindOfClass:targetClass]) {
-            isTarget = YES;
-            break;
-        }
-    }
-
-    if (isTarget) {
+    // 然后，在捕获模式下，从sender中提取'位'属性。
+    // sender就是那个被点击的视图，例如“三傳視圖”。
+    if (g_isListeningForWei) {
         @try {
-            // 【【【最终的、修复闪退的修正】】】
-            // 我们先尝试获取'位'属性。
-            id weiValue = [self valueForKey:@"位"];
-            
-            // 只有当'位'属性真实存在(不为nil)时，我们才记录它。
-            // 这可以防止因点击空白区域而导致的闪退或记录无效数据。
-            if (weiValue) {
-                NSString *capturedDescription = [NSString stringWithFormat:@"%@", weiValue];
-                [g_capturedWeiValues addObject:capturedDescription];
+            // sender不为nil，且能响应valueForKey:时才操作
+            if (sender && [sender respondsToSelector:@selector(valueForKey:)]) {
+                id weiValue = [sender valueForKey:@"位"];
                 
-                UILabel *feedbackLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 120, 40)];
-                feedbackLabel.center = getTopmostViewController().view.center;
-                feedbackLabel.text = @"'位' 已捕获!";
-                feedbackLabel.textColor = [UIColor whiteColor]; feedbackLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7]; feedbackLabel.textAlignment = NSTextAlignmentCenter; feedbackLabel.layer.cornerRadius = 10; feedbackLabel.clipsToBounds = YES;
-                [getTopmostViewController().view.window addSubview:feedbackLabel];
-                [UIView animateWithDuration:1.5 animations:^{ feedbackLabel.alpha = 0; } completion:^(BOOL f) { [feedbackLabel removeFromSuperview]; }];
+                // 只有当'位'属性真实存在(不为nil)时，我们才记录它。
+                if (weiValue) {
+                    NSString *capturedDescription = [NSString stringWithFormat:@"%@", weiValue];
+                    [g_capturedWeiValues addObject:capturedDescription];
+                    
+                    UILabel *feedbackLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 120, 40)];
+                    feedbackLabel.center = getTopmostViewController().view.center;
+                    feedbackLabel.text = @"'位' 已捕获!";
+                    feedbackLabel.textColor = [UIColor whiteColor]; feedbackLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7]; feedbackLabel.textAlignment = NSTextAlignmentCenter; feedbackLabel.layer.cornerRadius = 10; feedbackLabel.clipsToBounds = YES;
+                    [getTopmostViewController().view.window addSubview:feedbackLabel];
+                    [UIView animateWithDuration:1.5 animations:^{ feedbackLabel.alpha = 0; } completion:^(BOOL f) { [feedbackLabel removeFromSuperview]; }];
+                }
             }
         } @catch (NSException *exception) {
-            // 保留catch以防万一，但上面的if(weiValue)应该能处理绝大多数情况。
-            // 这里可以什么都不做，静默失败，防止弹窗干扰。
+            // 静默失败
         }
     }
 }
@@ -78,27 +64,22 @@ keyWindow = [[UIApplication sharedApplication] keyWindow]; #pragma clang diagnos
 %end
 
 // =========================================================================
-// 4. 手动方法交换：扩大围剿范围
+// 4. 手动方法交换：使用终极武器攻击正确目标
 // =========================================================================
 %ctor {
     %init;
 
-    // 【【【最终的、扩大围剿范围的修正】】】
-    // 我们将对所有可疑的视图类，应用同一个Hook。
-    NSArray *targetClassNames = @[@"六壬大占.傳視圖", @"六壬大占.三傳視圖", @"六壬大占.課傳視圖"];
+    // 我们将对通用的UIViewController，交换那个带汉字的方法
+    Class targetClass = [UIViewController class];
     
-    SEL originalSelector = @selector(touchesEnded:withEvent:);
-    SEL newSelector = @selector(my_hooked_touchesEnded:withEvent:);
-    Method newMethod = class_getInstanceMethod([UIView class], newSelector);
-
-    for (NSString *className in targetClassNames) {
-        Class targetClass = NSClassFromString(className);
-        if (targetClass) {
-            Method originalMethod = class_getInstanceMethod(targetClass, originalSelector);
-            if (originalMethod && newMethod) {
-                // 我们使用method_exchangeImplementations是安全的，因为我们只对这几个特定类操作。
-                method_exchangeImplementations(originalMethod, newMethod);
-            }
-        }
+    SEL originalSelector = NSSelectorFromString(@"顯示課傳摘要WithSender:");
+    SEL newSelector = @selector(my_hooked_showSummary:);
+    
+    Method originalMethod = class_getInstanceMethod(targetClass, originalSelector);
+    // 我们的新方法是在我们自己的分类里，所以从同一个类获取
+    Method newMethod = class_getInstanceMethod(targetClass, newSelector);
+    
+    if (originalMethod && newMethod) {
+        method_exchangeImplementations(originalMethod, newMethod);
     }
 }
