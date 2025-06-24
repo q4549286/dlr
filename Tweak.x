@@ -7,8 +7,7 @@
 // =========================================================================
 #define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Gesture] " format, ##__VA_ARGS__)
 
-static NSInteger const TestButtonTag = 556693; // 新的Tag
-// ... 其他全局变量不变 ...
+static NSInteger const TestButtonTag = 556693; // 保持Tag不变
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
 static NSMutableArray *g_keChuanWorkQueue = nil;
@@ -92,7 +91,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
 
-    // --- Part A: 找到三传的视图并提取其手势识别器 ---
     Class chuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (chuanViewClass) {
         NSMutableArray *allChuanViews = [NSMutableArray array];
@@ -104,21 +102,16 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         NSArray *rowTitles = @[@"初传", @"中传", @"末传"];
         for (NSUInteger i = 0; i < allChuanViews.count; i++) {
             if (i >= rowTitles.count) break;
-            
             UIView *chuanView = allChuanViews[i];
-            // 我们现在不关心UILabel了，我们只关心这个视图本身和它的手势
             for (UIGestureRecognizer *recognizer in chuanView.gestureRecognizers) {
-                // 假设是单击手势
                 if ([recognizer isKindOfClass:NSClassFromString(@"UITapGestureRecognizer")]) {
-                    [g_keChuanWorkQueue addObject:@{@"recognizer": recognizer, @"view": chuanView}];
+                    [g_keChuanWorkQueue addObject:@{@"recognizer": recognizer}];
                     [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ 的 Tap 手势", rowTitles[i]]];
                 }
             }
         }
     }
     
-    // --- Part B: 找到四课的视图并提取其手势识别器 ---
-    // 假设四课视图也有一个总的手势识别器
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
         NSMutableArray *skViews = [NSMutableArray array];
@@ -127,7 +120,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIView *siKeContainer = skViews.firstObject;
             for (UIGestureRecognizer *recognizer in siKeContainer.gestureRecognizers) {
                 if ([recognizer isKindOfClass:NSClassFromString(@"UITapGestureRecognizer")]) {
-                    [g_keChuanWorkQueue addObject:@{@"recognizer": recognizer, @"view": siKeContainer}];
+                    [g_keChuanWorkQueue addObject:@{@"recognizer": recognizer}];
                     [g_keChuanTitleQueue addObject:@"四课视图的 Tap 手势"];
                 }
             }
@@ -146,7 +139,21 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 - (void)processKeChuanQueue_Gesture {
     if (g_keChuanWorkQueue.count == 0) {
         // ... 结束逻辑不变 ...
-        // (为简洁省略)
+        EchoLog(@"[课传详情] 手势版测试处理完毕");
+        NSMutableString *resultStr = [NSMutableString string];
+        for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
+            NSString *title = g_keChuanTitleQueue[i];
+            NSString *detail = (i < g_capturedKeChuanDetailArray.count) ? g_capturedKeChuanDetailArray[i] : @"[信息提取失败]";
+            [resultStr appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
+        }
+        [UIPasteboard generalPasteboard].string = resultStr;
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"手势版测试完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+        [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:successAlert animated:YES completion:nil];
+        g_isExtractingKeChuanDetail = NO;
+        g_keChuanWorkQueue = nil;
+        g_capturedKeChuanDetailArray = nil;
+        g_keChuanTitleQueue = nil;
         return;
     }
     
@@ -154,21 +161,18 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     
     UIGestureRecognizer *recognizer = task[@"recognizer"];
-    UIView *targetView = task[@"view"];
+    // 【修正】删除了未使用的 targetView 变量
     
-    // 【核心操作】我们不再调用VC的方法，而是直接触发手势识别器的action
-    // 这需要用运行时来获取私有的 target 和 action
     id targets = [recognizer valueForKey:@"targets"];
     if ([targets count] > 0) {
         id targetContainer = targets[0];
         id target = [targetContainer valueForKey:@"target"];
-        SEL action = (SEL)[targetContainer valueForKey:@"action"];
+        
+        // 【修正】使用 NSSelectorFromString 来安全地处理 SEL
+        NSString *actionString = NSStringFromSelector((SEL)[[targetContainer valueForKey:@"action"] pointerValue]);
+        SEL action = NSSelectorFromString(actionString);
 
         if (target && action && [target respondsToSelector:action]) {
-            // 在触发前，我们需要设置手势的状态和位置，让APP以为是一次真实的点击
-            // 这很复杂，但我们可以先试试最简单的直接调用
-            // 如果不行，说明APP在action方法里检查了recognizer的状态或位置
-            
             EchoLog(@"尝试触发手势: %@ on %@", NSStringFromSelector(action), target);
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
