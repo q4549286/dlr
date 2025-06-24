@@ -30,9 +30,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            // 避免重复添加
             if ([self.view.window viewWithTag:TestButtonTag]) return;
-            
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(self.view.window.bounds.size.width - 150, 85, 140, 36);
             testButton.tag = TestButtonTag;
@@ -50,16 +48,11 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 // --- 核心：截获弹窗 ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtracting && g_currentItemKey) {
-        // 从你的截图分析，弹出的窗口很可能是一个自定义的ViewController，而不是UIAlertController
-        // 所以我们用这个逻辑来捕获
         if (![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
             EchoLog(@"捕获到一个可能是详情的弹窗: %@", NSStringFromClass([viewControllerToPresent class]));
-            
-            // 立即处理，不显示动画
             viewControllerToPresent.view.alpha = 0.0f;
             flag = NO;
             
-            // 延迟一点确保视图加载完毕
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 UIView *contentView = viewControllerToPresent.view;
                 NSMutableArray *allLabels = [NSMutableArray array];
@@ -81,7 +74,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     }
                 }
                 
-                // 【V2 改进】把提取的内容用 -> 连接，更紧凑
                 NSString *fullText = [textParts componentsJoinedByString:@" -> "];
                 g_capturedDetails[g_currentItemKey] = fullText;
                 
@@ -89,9 +81,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             });
-            // 截获完成，不执行原始的present
             %orig(viewControllerToPresent, flag, completion);
-            [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil]; // 确保关闭
+            [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             return;
         }
     }
@@ -125,7 +116,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     
-    // 查找所有UILabel并筛选
     void (^findItemsInContainer)(Class, UIView*, NSString*) = ^(Class containerClass, UIView *parentView, NSString *prefix) {
         if (!containerClass) return;
         NSMutableArray *containers = [NSMutableArray array];
@@ -136,7 +126,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             FindSubviewsOfClassRecursive([UILabel class], container, labels);
             
             for (UILabel *label in labels) {
-                // 关键筛选条件：只找那些有手势识别器的UILabel
                 if (label.gestureRecognizers && label.gestureRecognizers.count > 0) {
                     NSString *uniqueKey = [NSString stringWithFormat:@"%@-%@-%p", prefix, label.text, (void*)label];
                     [clickableItems addObject:@{@"view": label, @"key": uniqueKey, @"text": label.text ?: @""}];
@@ -156,7 +145,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
     EchoLog(@"找到了 %lu 个可点击的课传项。", (unsigned long)clickableItems.count);
 
-    // --- 创建并执行工作队列 ---
     NSMutableArray *workQueue = [clickableItems mutableCopy];
     __weak typeof(self) weakSelf = self;
     __block void (^processQueue)(void);
@@ -165,7 +153,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         if (!strongSelf || workQueue.count == 0) {
             EchoLog(@"--- 提取流程全部完成 ---");
             NSMutableString *resultStr = [NSMutableString string];
-            // 按原始顺序格式化输出
             for (NSDictionary *item in clickableItems) {
                 NSString *key = item[@"key"];
                 NSString *details = g_capturedDetails[key];
@@ -175,7 +162,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 }
             }
             g_isExtracting = NO;
-            if (completion) { completion([resultStr stringByTrimmingCharactersInSet:[NSCharacterSet.whitespaceAndNewlineCharacterSet]]); }
+            // ============ FIX: 这里是修正的地方 ============
+            if (completion) { completion([resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
+            // ============================================
             processQueue = nil;
             return;
         }
@@ -187,29 +176,23 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         
         EchoLog(@"正在处理: %@", g_currentItemKey);
 
-        //  ====== 触发点击的核心代码 ======
         UITapGestureRecognizer *tap = itemView.gestureRecognizers.firstObject;
         if (tap && [tap isKindOfClass:[UITapGestureRecognizer class]]) {
-            // 通过KVC获取私有属性 target
             id target = [tap valueForKey:@"target"];
-            
-            // 这是我们从Flex找到的action名字！
             NSString *actionString = @"顯示課傳摘要WithSender:"; 
             SEL action = NSSelectorFromString(actionString);
             
             if (target && action && [target respondsToSelector:action]) {
                 EchoLog(@"触发点击 -> Target: %@, Action: %@", NSStringFromClass([target class]), actionString);
-                // 使用宏来避免编译器警告
                 #pragma clang diagnostic push
                 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                [target performSelector:action withObject:itemView]; // 注意：参数应该是被点击的视图，即itemView(UILabel)
+                [target performSelector:action withObject:itemView];
                 #pragma clang diagnostic pop
             } else {
                 EchoLog(@"[错误] 无法触发点击。Target: %@, Action: %@", target, actionString);
             }
         }
         
-        // 等待下一个任务
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             processQueue();
         });
