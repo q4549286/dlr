@@ -93,7 +93,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %new
 - (void)setupDebugModule {
-    // (与上一版相同，保持不变)
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         UIWindow *window = self.view.window; if (!window) return;
         [[window viewWithTag:998801] removeFromSuperview]; [[window viewWithTag:998802] removeFromSuperview];
@@ -111,11 +110,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %new
 - (void)startExtractionProcess {
-    // (与上一版相同，保持不变，但补全了四课)
     if (g_isExtracting) { DebugLog(@"[警告] 任务已在进行中!"); return; }
     g_isExtracting = YES; g_workQueue = [NSMutableArray array]; g_titleQueue = [NSMutableArray array]; g_capturedDetails = [NSMutableArray array]; g_stepCounter = 0; g_debugLogView.text = @"";
     DebugLog(@"--- 开始新一轮提取任务 (真实点击模式) ---");
-    // 三传
     Class sc = NSClassFromString(@"六壬大占.三傳視圖");
     if (sc) {
         NSMutableArray *v = [NSMutableArray array]; FindSubviewsOfClassRecursive(sc, self.view, v);
@@ -135,7 +132,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             }
         }
     }
-    // 四课
     Class sk = NSClassFromString(@"六壬大占.四課視圖");
     if (sk) {
         NSMutableArray *v = [NSMutableArray array]; FindSubviewsOfClassRecursive(sk, self.view, v);
@@ -161,7 +157,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-// --- 核心解决方案：模拟真实触摸事件 ---
+// --- 【已修复编译错误】模拟真实触摸事件 ---
 - (void)simulateTapOnView:(UIView *)view {
     if (!view || !view.window) {
         DebugLog(@"[错误] 目标视图无效或不在窗口中，无法模拟点击。");
@@ -172,11 +168,26 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     // 1. 获取视图在窗口中的中心点
     CGPoint centerPoint = [view.superview convertPoint:view.center toView:nil];
 
-    // 2. 创建触摸事件
+    // 2. 【【【核心修正】】】
+    // 使用运行时动态调用私有的 `initWithPoint:inWindow:` 方法来创建 UITouch 实例
+    UITouch *touch = (UITouch *)[NSClassFromString(@"UITouch") alloc];
+    SEL initSel = NSSelectorFromString([NSString stringWithFormat:@"%@%@%@:", @"init", @"WithPoint:", @"inWindow"]);
+    if ([touch respondsToSelector:initSel]) {
+        NSMethodSignature *signature = [touch methodSignatureForSelector:initSel];
+        NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
+        [invocation setSelector:initSel];
+        [invocation setTarget:touch];
+        [invocation setArgument:&centerPoint atIndex:2]; // 参数从2开始
+        [invocation setArgument:&(view.window) atIndex:3];
+        [invocation invoke];
+        [invocation getReturnValue:&touch];
+    } else {
+        DebugLog(@"[错误] 无法找到UITouch的私有初始化方法。");
+        return;
+    }
+
+    // 3. 关联触摸和事件
     UIEvent *event = [[UIEvent alloc] init];
-    UITouch *touch = [[UITouch alloc] initWithPoint:centerPoint inWindow:view.window];
-    
-    // 3. 关联触摸和事件 (这是私有API，需要动态调用来避免编译警告)
     [touch setValue:@(UITouchPhaseBegan) forKey:@"phase"];
     [touch setValue:view.window forKey:@"window"];
     SEL setEventSEL = NSSelectorFromString([NSString stringWithFormat:@"%@%@%@", @"_set", @"IOHID", @"Event:"]);
@@ -198,8 +209,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     });
 }
 
+
 %new
-// --- 队列处理器 (已更新为使用真实点击) ---
 - (void)processNextInQueue {
     if (g_workQueue.count == 0) {
         DebugLog(@"--- 所有任务完成 ---");
@@ -217,12 +228,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     
     UIView *itemToClick = g_workQueue.firstObject;
     [g_workQueue removeObjectAtIndex:0];
-    
     NSString *title = g_titleQueue[g_capturedDetails.count];
     DebugLog(@"[处理队列] 准备点击: '%@'", title);
 
-    // 【【【最终修正】】】
-    // 不再使用 performSelector，而是调用我们新的模拟真实点击方法
     [self simulateTapOnView:itemToClick];
 }
 
