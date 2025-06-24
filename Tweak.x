@@ -12,8 +12,6 @@ static NSInteger g_finishButtonTag = 202402;
 // =========================================================================
 // 2. 辅助函数
 // =========================================================================
-// 【【【核心修正】】】
-// 寻找当前最顶层的视图控制器，以避免闪退
 static UIViewController* getTopmostViewController() {
     UIWindow *keyWindow = nil;
     if (@available(iOS 13.0, *)) {
@@ -28,7 +26,12 @@ static UIViewController* getTopmostViewController() {
             }
         }
     } else {
+        // 【【【编译错误修正】】】
+        // 使用 pragma 指令来压制“过时”警告，因为这个分支只在老系统上运行。
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
         keyWindow = [[UIApplication sharedApplication] keyWindow];
+        #pragma clang diagnostic pop
     }
     
     UIViewController *topController = keyWindow.rootViewController;
@@ -37,7 +40,6 @@ static UIViewController* getTopmostViewController() {
     }
     return topController;
 }
-
 
 // =========================================================================
 // 3. 主功能实现
@@ -129,7 +131,6 @@ static UIViewController* getTopmostViewController() {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"记录模式已开始" message:@"请像平时一样，用手指点击您想提取的课盘内容。所有弹窗详情将被自动记录。" preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"明白了" style:UIAlertActionStyleDefault handler:nil]];
     
-    // 【【【核心修正】】】
     UIViewController *presenter = getTopmostViewController();
     [presenter presentViewController:alert animated:YES completion:nil];
 }
@@ -137,17 +138,20 @@ static UIViewController* getTopmostViewController() {
 %new
 - (void)finishScribeMode {
     if (!g_isListening || g_accumulatedResult == nil) {
-        // ... (处理未开始记录的情况)
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示" message:@"您尚未开始记录模式，或没有记录任何内容。" preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        UIViewController *presenter = getTopmostViewController();
+        [presenter presentViewController:alert animated:YES completion:nil];
         return;
     }
     
     g_isListening = NO;
     [UIPasteboard generalPasteboard].string = g_accumulatedResult;
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"记录完成" message:@"所有记录内容已合并并复制到剪贴板！" preferredStyle:UIAlertControllerStyleAlert];
+    NSString *message = [NSString stringWithFormat:@"记录完成！共 %lu 项内容已合并并复制到剪贴板！", (unsigned long)([[g_accumulatedResult componentsSeparatedByString:@"---"] count] - 1)];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"记录完成" message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"太棒了！" style:UIAlertActionStyleDefault handler:nil]];
     
-    // 【【【核心修正】】】
     UIViewController *presenter = getTopmostViewController();
     [presenter presentViewController:alert animated:YES completion:nil];
 }
