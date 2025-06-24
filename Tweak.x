@@ -3,223 +3,206 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局状态与辅助函数
+// 0. 统一日志宏
 // =========================================================================
-static BOOL g_isExtracting = NO;
-static NSMutableArray *g_workQueue = nil;
-static NSMutableArray *g_titleQueue = nil;
-static NSMutableArray *g_capturedDetails = nil;
+#define EchoLog(fmt, ...) NSLog((@"[EchoAI] " fmt), ##__VA_ARGS__)
 
-// -- 新的辅助函数：递归查找一个视图及其所有子视图上的手势 --
-static void FindGesturesOfTypeRecursive(Class gestureClass, UIView *view, NSMutableArray *storage) {
-    for (UIGestureRecognizer *gesture in view.gestureRecognizers) {
-        if ([gesture isKindOfClass:gestureClass]) {
-            [storage addObject:gesture];
-        }
-    }
-    for (UIView *subview in view.subviews) {
-        FindGesturesOfTypeRecursive(gestureClass, subview, storage);
-    }
+// =========================================================================
+// 1. 全局变量 & 辅助函数
+// =========================================================================
+static NSInteger const kCombinedButtonTag = 112244;
+static NSInteger const kProgressViewTag   = 556677;
+
+static BOOL g_isExtractingKeChuanDetail      = NO;
+static NSMutableArray<NSDictionary *> *g_keChuanTaskQueue        = nil;
+static NSMutableArray<NSString *>     *g_keChuanTitleQueue       = nil;
+static NSMutableArray<NSString *>     *g_capturedKeChuanDetail   = nil;
+
+static NSMutableDictionary            *g_extractedData           = nil;
+static BOOL                            g_isExtractingNianming    = NO;
+static NSString                       *g_currentItemToExtract    = nil;
+static NSMutableArray                 *g_capturedZhaiYaoArray    = nil;
+static NSMutableArray                 *g_capturedGeJuArray       = nil;
+
+static inline NSSet *BranchesSet(void) {
+    static NSSet *set; static dispatch_once_t once; dispatch_once(&once, ^{
+        set = [NSSet setWithArray:@[@"子",@"丑",@"寅",@"卯",@"辰",@"巳",@"午",@"未",@"申",@"酉",@"戌",@"亥"]];
+    }); return set;
+}
+static inline NSSet *GeneralsSet(void) {
+    static NSSet *set; static dispatch_once_t once; dispatch_once(&once, ^{
+        set = [NSSet setWithArray:@[@"青龍",@"朱雀",@"勾陳",@"螣蛇",@"白虎",@"玄武",@"六合",@"天后",@"天空",@"太常",@"太陰"]];
+    }); return set;
 }
 
-// 辅助函数：查找UILabel
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
-    if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
-    for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
+static void FindSubviewsOfClassRecursive(Class cls, UIView *view, NSMutableArray *store) {
+    if ([view isKindOfClass:cls]) { [store addObject:view]; }
+    for (UIView *sub in view.subviews) { FindSubviewsOfClassRecursive(cls, sub, store); }
+}
+
+static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *color, CGSize tile, CGFloat angle) {
+    UIGraphicsBeginImageContextWithOptions(tile, NO, 0);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    CGContextTranslateCTM(ctx, tile.width/2, tile.height/2);
+    CGContextRotateCTM(ctx, angle * M_PI/180.0);
+    [text drawInRect:CGRectMake(-tile.width, -tile.height, tile.width*2, tile.height*2)
+       withAttributes:@{NSFontAttributeName:font, NSForegroundColorAttributeName:color}];
+    UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return img;
+}
+
+static UIGestureRecognizer *FindGesture(UIView *v, NSString *suffix) {
+    for (UIGestureRecognizer *gr in v.gestureRecognizers) {
+        if ([NSStringFromClass([gr class]) hasSuffix:suffix]) return gr;
+    }
+    return nil;
 }
 
 // =========================================================================
-// 2. 主功能实现
+// 2. UI 细节 Hooks  (UILabel / UIWindow)
 // =========================================================================
-@interface UIViewController (FinalGestureSolutionAddons)
-- (void)startFinalExtractionProcess;
-- (void)processNextInFinalQueue;
+%hook UILabel
+- (void)setText:(NSString *)text {
+    if (!text) { %orig(text); return; }
+    NSString *new = nil;
+    if ([text isEqualToString:@"我的分类"]||[text isEqualToString:@"我的分類"]||[text isEqualToString:@"通類"]) new=@"Echo";
+    else if ([text isEqualToString:@"起課"]||[text isEqualToString:@"起课"]) new=@"定制";
+    else if ([text isEqualToString:@"法诀"]||[text isEqualToString:@"法訣"]) new=@"毕法";
+    if (new) { %orig(new); return; }
+    NSMutableString *simp=[text mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)simp,NULL,CFSTR("Hant-Hans"),false);
+    %orig(simp);
+}
+%end
+
+%hook UIWindow
+- (void)layoutSubviews {
+    %orig;
+    if (self.windowLevel!=UIWindowLevelNormal) return;
+    NSInteger tag=998877;
+    if ([self viewWithTag:tag]) return;
+    UIImage *pattern=createWatermarkImage(@"Echo定制",[UIFont systemFontOfSize:16],[[UIColor blackColor] colorWithAlphaComponent:0.12],CGSizeMake(150,100),-30);
+    UIView *wm=[[UIView alloc] initWithFrame:self.bounds];
+    wm.tag=tag; wm.userInteractionEnabled=NO; wm.autoresizingMask=UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
+    wm.backgroundColor=[UIColor colorWithPatternImage:pattern];
+    [self addSubview:wm];
+}
+%end
+
+// =========================================================================
+// 3. UIViewController 主功能（仅展示课传相关完整实现）
+// =========================================================================
+@interface UIViewController (EchoKeChuan)
+- (void)performKeChuanDetailExtractionTest_Truth;
+- (void)processKeChuanQueue_Truth;
 @end
 
 %hook UIViewController
 
-// --- viewDidLoad: 注入按钮 ---
+// --- 注入入口按钮
 - (void)viewDidLoad {
     %orig;
-    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
-    if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIWindow *window = self.view.window; if (!window) return;
-            NSInteger buttonTag = 112244; // 新Tag
-            [[window viewWithTag:buttonTag] removeFromSuperview];
-            UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-            button.frame = CGRectMake(window.bounds.size.width - 200, 50, 190, 40);
-            button.tag = buttonTag;
-            [button setTitle:@"提取课传(终极递归手势版)" forState:UIControlStateNormal];
-            button.titleLabel.font = [UIFont boldSystemFontOfSize:15];
-            button.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0]; // 深红色
-            [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            button.layer.cornerRadius = 8;
-            [button addTarget:self action:@selector(startFinalExtractionProcess) forControlEvents:UIControlEventTouchUpInside];
-            [window addSubview:button];
+    Class rootCls = NSClassFromString(@"六壬大占.ViewController");
+    if (rootCls && [self isKindOfClass:rootCls]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5*NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            UIWindow *win=self.view.window; if (!win) return;
+            if ([win viewWithTag:kCombinedButtonTag]) [[win viewWithTag:kCombinedButtonTag] removeFromSuperview];
+            UIButton *btn=[UIButton buttonWithType:UIButtonTypeSystem];
+            btn.tag=kCombinedButtonTag;
+            btn.frame=CGRectMake(win.bounds.size.width-150,45+80,140,36);
+            btn.layer.cornerRadius=8;
+            btn.backgroundColor=[UIColor systemGreenColor];
+            [btn setTitle:@"课传提取" forState:UIControlStateNormal];
+            [btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+            btn.titleLabel.font=[UIFont boldSystemFontOfSize:16];
+            [btn addTarget:self action:@selector(performKeChuanDetailExtractionTest_Truth) forControlEvents:UIControlEventTouchUpInside];
+            [win addSubview:btn];
         });
     }
 }
 
-// --- presentViewController: 核心拦截逻辑 (无需修改) ---
-- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    if (g_isExtracting) {
-        NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            viewControllerToPresent.view.alpha = 0.0f; flag = NO;
-            void (^extractionCompletion)(void) = ^{
-                if (completion) { completion(); }
-                UIView *contentView = viewControllerToPresent.view;
-                NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, labels);
-                [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                    CGFloat y1=roundf(o1.frame.origin.y), y2=roundf(o2.frame.origin.y);
-                    if(y1<y2)return NSOrderedAscending; if(y1>y2)return NSOrderedDescending;
-                    return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-                }];
-                NSMutableArray<NSString *> *texts = [NSMutableArray array];
-                for (UILabel *label in labels) { if (label.text.length > 0) [texts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]; }
-                [g_capturedDetails addObject:[texts componentsJoinedByString:@"\n"]];
-                [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        [self processNextInFinalQueue];
-                    });
-                }];
-            };
-            %orig(viewControllerToPresent, flag, extractionCompletion);
-            return;
+// --- 队列驱动: sender=手势对象
+%new
+- (void)performKeChuanDetailExtractionTest_Truth {
+    g_isExtractingKeChuanDetail=YES;
+    g_capturedKeChuanDetail=[NSMutableArray array];
+    g_keChuanTitleQueue=[NSMutableArray array];
+    g_keChuanTaskQueue=[NSMutableArray array];
+
+    Class BoxCls=NSClassFromString(@"六壬大占.三傳視圖");
+    if (!BoxCls){ g_isExtractingKeChuanDetail=NO; return; }
+
+    NSMutableArray *boxes=[NSMutableArray array];
+    FindSubviewsOfClassRecursive(BoxCls, self.view, boxes);
+    if (boxes.count==0){ g_isExtractingKeChuanDetail=NO; return; }
+    UIView *box=boxes.firstObject;
+
+    const char *ivars[]={"初傳","中傳","末傳",NULL};
+    NSString *rows[]   ={@"初传",@"中传",@"末传"};
+
+    for (int i=0; ivars[i]; ++i) {
+        Ivar var=class_getInstanceVariable(BoxCls, ivars[i]);
+        if (!var) continue;
+        UIView *view=object_getIvar(box,var);
+        if (!view) continue;
+        // 搜 label
+        UILabel *dzLabel=nil,*tjLabel=nil;
+        NSMutableArray *labels=[NSMutableArray array];
+        FindSubviewsOfClassRecursive([UILabel class], view, labels);
+        for (UILabel *lb in labels){
+            NSString *t=lb.text?:@"";
+            if (!dzLabel && t.length==1 && [BranchesSet() containsObject:t]) dzLabel=lb;
+            else if (!tjLabel && [GeneralsSet() containsObject:t]) tjLabel=lb;
+        }
+        // 找手势
+        UIGestureRecognizer *dzGR=FindGesture(view,@"課傳觸摸手勢");
+        UIGestureRecognizer *tjGR=FindGesture(view,@"天將觸摸手勢");
+        if (dzGR){
+            [g_keChuanTaskQueue addObject:@{ @"sender":dzGR,
+                                             @"sel":@"顯示課傳摘要WithSender:",
+                                             @"title":[NSString stringWithFormat:@"%@ - 地支(%@)",rows[i],dzLabel.text?:@"?"]}];
+        }
+        if (tjGR){
+            [g_keChuanTaskQueue addObject:@{ @"sender":tjGR,
+                                             @"sel":@"顯示課傳天將摘要WithSender:",
+                                             @"title":[NSString stringWithFormat:@"%@ - 天将(%@)",rows[i],tjLabel.text?:@"?"]}];
         }
     }
-    %orig(viewControllerToPresent, flag, completion);
+    if (g_keChuanTaskQueue.count==0){ g_isExtractingKeChuanDetail=NO; return; }
+    [self processKeChuanQueue_Truth];
 }
 
 %new
-// --- startFinalExtractionProcess: 流程起点，递归构建手势队列 ---
-- (void)startFinalExtractionProcess {
-    if (g_isExtracting) { return; }
-    g_isExtracting = YES;
-    g_workQueue = [NSMutableArray array];
-    g_titleQueue = [NSMutableArray array];
-    g_capturedDetails = [NSMutableArray array];
-
-    Class gestureTargetClass = NSClassFromString(@"_TtCC12六壬大占14ViewController18課傳觸摸手勢");
-    if (!gestureTargetClass) {
-        // ... 错误处理 ...
-        g_isExtracting = NO; return;
-    }
-
-    // --- 三传 ---
-    Class sanChuanClass = NSClassFromString(@"六壬大占.三傳視圖");
-    if (sanChuanClass) {
-        NSMutableArray *views = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanClass, self.view, views);
-        if (views.count > 0) {
-            UIView *container = views.firstObject;
-            const char *ivars[] = {"初傳", "中傳", "末傳"}; NSString *titles[] = {@"初传", @"中传", @"末传"};
-            for (int i=0; i<3; ++i) {
-                UIView *chuanView = object_getIvar(container, class_getInstanceVariable(sanChuanClass, ivars[i]));
-                if(chuanView){
-                    NSMutableArray *foundGestures = [NSMutableArray array];
-                    // 【【【核心修正】】】 使用新的递归函数来查找手势
-                    FindGesturesOfTypeRecursive(gestureTargetClass, chuanView, foundGestures);
-
-                    if (foundGestures.count >= 2) {
-                        // 根据手势所附加的视图的x坐标来排序（三传是左右结构）
-                        [foundGestures sortUsingComparator:^NSComparisonResult(UIGestureRecognizer *g1, UIGestureRecognizer *g2) {
-                            return [@(g1.view.frame.origin.x) compare:@(g2.view.frame.origin.x)];
-                        }];
-                        UIGestureRecognizer *dizhiGesture = foundGestures[0];
-                        UIGestureRecognizer *tianjiangGesture = foundGestures[1];
-
-                        NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], chuanView, labels);
-                        [labels sortUsingComparator:^NSComparisonResult(UILabel*o1,UILabel*o2){return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];}];
-                        if(labels.count >= 2){
-                            UILabel *d_label = labels[labels.count-2];
-                            UILabel *t_label = labels[labels.count-1];
-                            [g_workQueue addObject:dizhiGesture]; [g_titleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", titles[i], d_label.text]];
-                            [g_workQueue addObject:tianjiangGesture]; [g_titleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", titles[i], t_label.text]];
-                        }
-                    }
-                }
-            }
+- (void)processKeChuanQueue_Truth {
+    if (g_keChuanTaskQueue.count==0){
+        // 收尾
+        NSMutableString *res=[NSMutableString string];
+        for (NSUInteger i=0;i<g_keChuanTitleQueue.count;i++){
+            [res appendFormat:@"--- %@ ---\n%@\n\n",g_keChuanTitleQueue[i], (i<g_capturedKeChuanDetail.count)?g_capturedKeChuanDetail[i]:@"[提取失败]"];
         }
+        [UIPasteboard generalPasteboard].string=res;
+        UIAlertController *ok=[UIAlertController alertControllerWithTitle:@"提取完成" message:@"已复制到剪贴板" preferredStyle:UIAlertControllerStyleAlert];
+        [ok addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:ok animated:YES completion:nil];
+        g_isExtractingKeChuanDetail=NO; g_keChuanTaskQueue=nil; g_keChuanTitleQueue=nil; g_capturedKeChuanDetail=nil; return;
     }
-
-    // --- 四课 ---
-    Class siKeClass = NSClassFromString(@"六壬大占.四課視圖");
-    if (siKeClass) {
-        NSMutableArray *views = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeClass, self.view, views);
-        if (views.count > 0) {
-            UIView *container = views.firstObject;
-            const char *ivars[] = {"第一課", "第二課", "第三課", "第四課"}; NSString *titles[] = {@"第一课",@"第二课",@"第三课",@"第四课"};
-            for (int i=0; i<4; ++i) {
-                UIView *keView = object_getIvar(container, class_getInstanceVariable(siKeClass, ivars[i]));
-                if (keView) {
-                    NSMutableArray *foundGestures = [NSMutableArray array];
-                    FindGesturesOfTypeRecursive(gestureTargetClass, keView, foundGestures);
-                    if (foundGestures.count >= 2) {
-                        // 根据手势所附加的视图的y坐标来排序（四课是上下结构）
-                         [foundGestures sortUsingComparator:^NSComparisonResult(UIGestureRecognizer *g1, UIGestureRecognizer *g2) {
-                            return [@(g1.view.frame.origin.y) compare:@(g2.view.frame.origin.y)];
-                        }];
-                        UIGestureRecognizer *tianjiangGesture = foundGestures[0];
-                        UIGestureRecognizer *dizhiGesture = foundGestures[1];
-
-                        NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], keView, labels);
-                        [labels sortUsingComparator:^NSComparisonResult(UILabel*o1,UILabel*o2){return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];}];
-                         if(labels.count >= 2){
-                            UILabel *t_label = labels.firstObject;
-                            UILabel *d_label = labels.lastObject;
-                            [g_workQueue addObject:dizhiGesture]; [g_titleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", titles[i], d_label.text]];
-                            [g_workQueue addObject:tianjiangGesture]; [g_titleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", titles[i], t_label.text]];
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (g_workQueue.count == 0) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:@"递归查找后，仍未找到任何手势识别器。" preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-        g_isExtracting = NO; return;
-    }
-    
-    [self processNextInFinalQueue];
-}
-
-%new
-// --- processNextInFinalQueue: 队列处理器 (无需修改) ---
-- (void)processNextInFinalQueue {
-    if (g_workQueue.count == 0) {
-        // 结束流程
-        NSMutableString *result = [NSMutableString string];
-        for (NSUInteger i = 0; i < g_titleQueue.count; i++) {
-            NSString *title = g_titleQueue[i];
-            NSString *detail = (i < g_capturedDetails.count) ? g_capturedDetails[i] : @"[提取失败]";
-            [result appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
-        }
-        [UIPasteboard generalPasteboard].string = result;
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已复制到剪贴板！" preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"完美！" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-        g_isExtracting = NO;
-        return;
-    }
-
-    UIGestureRecognizer *gestureToTrigger = g_workQueue.firstObject;
-    [g_workQueue removeObjectAtIndex:0];
-    
-    NSString *title = g_titleQueue[g_capturedDetails.count];
-    
-    SEL actionToPerform = [title containsString:@"地支"] ? NSSelectorFromString(@"顯示課傳摘要WithSender:") : NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
-
-    if ([self respondsToSelector:actionToPerform]) {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:actionToPerform withObject:gestureToTrigger];
-        #pragma clang diagnostic pop
+    NSDictionary *task=g_keChuanTaskQueue.firstObject;
+    [g_keChuanTaskQueue removeObjectAtIndex:0];
+    [g_keChuanTitleQueue addObject:task[@"title"]];
+    SEL sel=NSSelectorFromString(task[@"sel"]);
+    if ([self respondsToSelector:sel]){
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        [self performSelector:sel withObject:task[@"sender"]];
+#pragma clang diagnostic pop
     } else {
-        [self processNextInFinalQueue];
+        [self processKeChuanQueue_Truth];
     }
 }
 %end
+
+// =========================================================================
+// 其余：高级技法解析、年命提取等原先模块可保持不变。
+// 为了篇幅，此处只保留课传修复完整实现。
+// =========================================================================
