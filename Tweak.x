@@ -3,7 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数 (无变化)
+// 1. 全局变量与辅助函数
 // =========================================================================
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
@@ -48,7 +48,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %hook UIViewController
 
-// --- viewDidLoad: 创建控制面板触发按钮 (无变化) ---
+// --- viewDidLoad: 创建控制面板触发按钮 ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
@@ -61,9 +61,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
             controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
             controlButton.tag = controlButtonTag;
-            [controlButton setTitle:@"提取(最终胜利版)" forState:UIControlStateNormal];
+            [controlButton setTitle:@"提取(完整校准)" forState:UIControlStateNormal];
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            controlButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.6 blue:0.0 alpha:1.0]; // 金色
+            controlButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.8 alpha:1.0]; // 天蓝色
             [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             controlButton.layer.cornerRadius = 8;
             [controlButton addTarget:self action:@selector(createOrShowControlPanel_Truth) forControlEvents:UIControlEventTouchUpInside];
@@ -72,7 +72,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// --- presentViewController: 捕获弹窗并驱动队列 (无变化) ---
+// --- presentViewController: 捕获弹窗并驱动队列 ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtractingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
@@ -117,7 +117,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)createOrShowControlPanel_Truth { /* UI创建代码无变化 */
+- (void)createOrShowControlPanel_Truth {
     UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
     NSInteger panelTag = 556692;
     if (g_controlPanelView && g_controlPanelView.superview) {
@@ -144,7 +144,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)copyAndClose_Truth { /* 复制关闭代码无变化 */
+- (void)copyAndClose_Truth {
     if (g_capturedKeChuanDetailArray && g_capturedKeChuanDetailArray.count > 0 && g_keChuanTitleQueue && g_keChuanTitleQueue.count > 0) {
         NSMutableString *resultStr = [NSMutableString string];
         for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
@@ -162,7 +162,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-// 【【【 任务构建函数 - 决定性的逻辑修正 】】】
 - (void)startExtraction_Truth {
     if (g_isExtractingKeChuanDetail) { LogMessage(@"错误：提取任务已在进行中。"); return; }
     
@@ -183,7 +182,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
     LogMessage(@"成功获取总容器 '課傳': %@", keChuanContainer);
 
-    // 步骤 2: 在总容器内寻找三传视图
+    // =================================================================
+    // Part A: 三传 (逻辑已验证，保持不变)
+    // =================================================================
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
     NSMutableArray *sanChuanResults = [NSMutableArray array];
     FindSubviewsOfClassRecursive(sanChuanContainerClass, keChuanContainer, sanChuanResults);
@@ -211,7 +212,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         }
     } else { LogMessage(@"警告: 在总容器内未找到三传视图。"); }
   
-    // 步骤 3: 在总容器内寻找四课视图
+    // =================================================================
+    // Part B: 四课 (采用Flex截图揭示的直接ivar提取逻辑)
+    // =================================================================
     Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
     NSMutableArray *siKeResults = [NSMutableArray array];
     FindSubviewsOfClassRecursive(siKeContainerClass, keChuanContainer, siKeResults);
@@ -219,21 +222,25 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     if (siKeResults.count > 0) {
         UIView *siKeContainer = siKeResults.firstObject;
         LogMessage(@"在总容器内找到四课视图: %@", siKeContainer);
-        const char *ivarNames[] = {"第四課", "第三課", "第二課", "第一課", NULL}; NSString *rowTitles[] = {@"第四课", @"第三课", @"第二课", @"第一课"};
-        for (int i = 0; ivarNames[i] != NULL; ++i) {
-            Ivar ivar = class_getInstanceVariable(siKeContainerClass, ivarNames[i]); if (!ivar) continue;
-            UIView *keView = object_getIvar(siKeContainer, ivar); if (!keView) continue;
-            NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], keView, labels);
-            [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-            if (labels.count >= 2) {
-                UILabel *tianjiangLabel = labels[0]; UILabel *dizhiLabel = labels[1];
-                if (dizhiLabel.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"contextView": keView}];
-                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
-                }
-                if (tianjiangLabel.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"contextView": keView}];
-                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
+        
+        // 定义12个要查找的ivar名称和对应的标题
+        const char* ivarNames[] = {
+            "日", "辰", "日上", "辰上", "日上地盤", "辰上地盤",
+            "日陰", "辰陰", "日上天將", "辰上天將", "日陰天將", "辰陰天將"
+        };
+        NSString* titleNames[] = {
+            @"四课 - 日", @"四课 - 辰", @"四课 - 日上", @"四课 - 辰上", @"四课 - 日上地盘", @"四课 - 辰上地盘",
+            @"四课 - 日阴", @"四课 - 辰阴", @"四课 - 日上天将", @"四课 - 辰上天将", @"四课 - 日阴天将", @"四课 - 辰阴天将"
+        };
+        
+        for (int i = 0; i < 12; ++i) {
+            Ivar ivar = class_getInstanceVariable(siKeContainerClass, ivarNames[i]);
+            if (ivar) {
+                UILabel *label = (UILabel *)object_getIvar(siKeContainer, ivar);
+                if (label && [label isKindOfClass:[UILabel class]] && label.gestureRecognizers.count > 0) {
+                    // 第零步所需的上下文是包含所有课的siKeContainer，而不是单个label
+                    [g_keChuanWorkQueue addObject:@{@"gesture": label.gestureRecognizers.firstObject, @"contextView": siKeContainer}];
+                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ (%@)", titleNames[i], label.text]];
                 }
             }
         }
@@ -247,7 +254,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-// 任务处理函数，无需任何修改，它已经是完美的
 - (void)processKeChuanQueue_Truth {
     if (!g_isExtractingKeChuanDetail || g_keChuanWorkQueue.count == 0) {
         if (g_isExtractingKeChuanDetail) {
@@ -264,28 +270,26 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
     
     UIGestureRecognizer *gestureToTrigger = task[@"gesture"];
-    UIView *contextView = task[@"contextView"];
+    UIView *contextView = task[@"contextView"]; // 这是 chuanView 或 siKeContainer
     
     LogMessage(@"正在处理: %@", title);
     
     // 第零步：设置内部状态变量
     Ivar keChuanIvar = class_getInstanceVariable([self class], "課傳");
     if (keChuanIvar) {
-        // 【注意】这里我们依然是设置当前要处理的那个“行视图”（chuanView/keView）
-        // 而不是总容器。App的弹窗逻辑依赖于这个具体的行视图。
+        // 将触发事件的上下文视图(chuanView 或 siKeContainer)设置进去
         object_setIvar(self, keChuanIvar, contextView);
         LogMessage(@"第0步: 成功设置 '課傳' ivar -> %@", contextView);
     } else {
-        // 这个警告理论上不会再触发
         LogMessage(@"第0步: 警告！找不到内部变量 '課傳'。");
     }
 
     // 第一步：调用弹窗方法
     SEL actionToPerform = nil;
-    if ([title containsString:@"地支"]) {
-        actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
-    } else {
+    if ([title containsString:@"天将"]) {
         actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
+    } else {
+        actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
     }
     
     if ([self respondsToSelector:actionToPerform]) {
