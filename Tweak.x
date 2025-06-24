@@ -23,11 +23,9 @@ static NSString* CreateIvarListString(id object, NSString *objectName) {
             id value = nil;
             NSString *valueDescription = @"[无法获取值]";
             @try {
-                value = object_getIvar(object, ivar);
-                // 对于非对象类型，object_getIvar返回的是指针或值的拷贝，直接打印可能无意义或崩溃
-                // 我们只尝试打印看起来像对象的东西
                 const char *type = ivar_getTypeEncoding(ivar);
                 if (type[0] == '@') { // 是一个OC对象
+                    value = object_getIvar(object, ivar);
                     valueDescription = [NSString stringWithFormat:@"%@", value];
                 } else {
                     valueDescription = [NSString stringWithFormat:@"[非对象类型: %s]", type];
@@ -51,43 +49,48 @@ static NSString* CreateIvarListString(id object, NSString *objectName) {
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     NSString *presentedVCClassName = NSStringFromClass([viewControllerToPresent class]);
 
-    // 我们只关心与课传摘要相关的弹窗
     if ([presentedVCClassName containsString:@"摘要"] || [presentedVCClassName containsString:@"Popover"]) {
         
-        // 1. 获取主VC (self) 的状态字符串
         NSString *mainVCState = CreateIvarListString(self, @"主VC (self)");
-        
-        // 2. 获取弹窗VC的状态字符串
         NSString *popupVCState = CreateIvarListString(viewControllerToPresent, @"弹窗VC");
-
-        // 3. 组合成一个巨大的消息体
         NSString *fullMessage = [NSString stringWithFormat:@"侦测到弹窗: %@\n\n%@%@", presentedVCClassName, mainVCState, popupVCState];
 
-        // 4. 创建并显示一个可滚动的Alert
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"内部状态侦查"
                                                                          message:fullMessage
-                                                                  preferredStyle:UIAlertControllerStyleAlert];
+                                                                  preferredStyle:UIAlertControllerStyleActionSheet]; // 使用ActionSheet以防万一
 
-        // 添加一个“复制并关闭”按钮
         [alert addAction:[UIAlertAction actionWithTitle:@"复制并关闭" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             [UIPasteboard generalPasteboard].string = fullMessage;
+            // 我们手动dismiss我们自己的alert
+             [alert dismissViewControllerAnimated:YES completion:nil];
+             // 同时也尝试dismiss原来的弹窗
+             [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
         }]];
 
-        // 添加一个“关闭”按钮
-        [alert addAction:[UIAlertAction actionWithTitle:@"直接关闭" style:UIAlertActionStyleCancel handler:nil]];
-
-        // 找到最顶层的VC来呈现这个Alert，防止它被弹窗覆盖
+        [alert addAction:[UIAlertAction actionWithTitle:@"直接关闭" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action){
+            // 同样，关闭所有
+            [alert dismissViewControllerAnimated:YES completion:nil];
+            [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+        }]];
+        
+        // 【关键修正】我们不在这里调用%orig，因为我们想完全控制流程
+        // 我们在下面呈现我们自己的Alert
+        
+        // 找到最顶层的VC来呈现这个Alert
         UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
         while (topController.presentedViewController) {
             topController = topController.presentedViewController;
         }
-        [topController presentViewController:alert animated:YES completion:nil];
+        // 先dismiss掉原来的弹窗，再显示我们的
+        [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
+             [topController presentViewController:alert animated:YES completion:nil];
+        }];
 
-        // 注意：我们依然要调用原始的present方法，让原来的弹窗出现
-        // 但我们的Alert会覆盖在它上面
+        // 因为我们完全接管了流程，所以不调用 %orig
+        return;
     }
 
-    // 调用原始方法
+    // 如果不是我们关心的弹窗，就正常执行
     %orig(viewControllerToPresent, flag, completion);
 }
 
