@@ -5,9 +5,9 @@
 // =========================================================================
 // 1. 全局变量与辅助函数
 // =========================================================================
-#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Direct] " format, ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Absolute] " format, ##__VA_ARGS__)
 
-static NSInteger const TestButtonTag = 556686; // 新的Tag
+static NSInteger const TestButtonTag = 556687; // 新的Tag
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
 static NSMutableArray *g_keChuanWorkQueue = nil;
@@ -21,14 +21,14 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 // =========================================================================
 // 2. 主功能区
 // =========================================================================
-@interface UIViewController (EchoAITestAddons_Direct)
-- (void)performKeChuanDetailExtractionTest_Direct;
-- (void)processKeChuanQueue_Direct;
+@interface UIViewController (EchoAITestAddons_Absolute)
+- (void)performKeChuanDetailExtractionTest_Absolute;
+- (void)processKeChuanQueue_Absolute;
 @end
 
 %hook UIViewController
 
-// --- viewDidLoad 和 presentViewController 保持不变，它们已经稳定 ---
+// --- viewDidLoad 和 presentViewController 保持不变 ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
@@ -40,12 +40,12 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"测试课传(直接解析)" forState:UIControlStateNormal];
+            [testButton setTitle:@"测试课传(绝对坐标)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.2 alpha:1.0];
+            testButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.5 blue:0.8 alpha:1.0];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Direct) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Absolute) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
         });
     }
@@ -58,6 +58,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             viewControllerToPresent.view.alpha = 0.0f;
             flag = NO;
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                // ... 内部提取逻辑不变 ...
                 UIView *contentView = viewControllerToPresent.view;
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
@@ -84,14 +85,14 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)performKeChuanDetailExtractionTest_Direct {
-    EchoLog(@"开始执行 [课传详情] 直接解析版测试");
+- (void)performKeChuanDetailExtractionTest_Absolute {
+    EchoLog(@"开始执行 [课传详情] 绝对坐标版测试");
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
 
-    // --- Part A: 直接解析三传 ---
+    // --- Part A: 使用绝对坐标解析三传 ---
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
     if (sanChuanContainerClass) {
         NSMutableArray *containerViews = [NSMutableArray array];
@@ -99,28 +100,27 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         if (containerViews.count > 0) {
             UIView *container = containerViews.firstObject;
             
-            // 【核心修正】我们不找子视图了，直接在这个容器里找所有的UILabel
             NSMutableArray *allLabels = [NSMutableArray array];
             FindSubviewsOfClassRecursive([UILabel class], container, allLabels);
             
-            // 按Y坐标将标签分组成行 (初传、中传、末传)
             NSMutableDictionary<NSString *, NSMutableArray *> *rows = [NSMutableDictionary dictionary];
             for (UILabel *label in allLabels) {
-                NSString *yKey = [NSString stringWithFormat:@"%.0f", roundf(label.frame.origin.y)];
+                // 【核心修正】将相对坐标转换为窗口坐标
+                CGPoint absolutePoint = [label.superview convertPoint:label.frame.origin toView:nil];
+                NSString *yKey = [NSString stringWithFormat:@"%.0f", absolutePoint.y];
+                
                 if (!rows[yKey]) { rows[yKey] = [NSMutableArray array]; }
                 [rows[yKey] addObject:label];
             }
             
-            // 将行按Y坐标排序
             NSArray *sortedYKeys = [rows.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *o1, NSString *o2) { return [@([o1 floatValue]) compare:@([o2 floatValue])]; }];
             
             NSArray *rowTitles = @[@"初传", @"中传", @"末传"];
             for (NSUInteger i = 0; i < sortedYKeys.count; i++) {
-                if (i >= rowTitles.count) break; // 防止数组越界
+                if (i >= rowTitles.count) break;
                 
                 NSString *yKey = sortedYKeys[i];
                 NSMutableArray *rowLabels = rows[yKey];
-                // 对行内的标签按X坐标排序
                 [rowLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
                 
                 if (rowLabels.count >= 2) {
@@ -137,7 +137,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         }
     }
 
-    // --- Part B: 直接解析四课 (逻辑不变，因为它本来就是直接解析) ---
+    // --- Part B: 解析四课 (这个逻辑本身就是正确的，因为四课在一个视图内，相对坐标有效) ---
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
         NSMutableArray *skViews = [NSMutableArray array];
@@ -149,6 +149,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             
             NSMutableDictionary *cols = [NSMutableDictionary dictionary];
             for (UILabel *label in allLabels) {
+                // 对于四课，因为所有label都在同一个父视图下，相对坐标就等于绝对坐标关系，所以可以不转换
                 NSString *key = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))];
                 if (!cols[key]) { cols[key] = [NSMutableArray array]; }
                 [cols[key] addObject:label];
@@ -182,11 +183,12 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         g_isExtractingKeChuanDetail = NO;
         return;
     }
-    [self processKeChuanQueue_Direct];
+    [self processKeChuanQueue_Absolute];
 }
 
 %new
-- (void)processKeChuanQueue_Direct {
+// --- processKeChuanQueue_Absolute 保持不变 ---
+- (void)processKeChuanQueue_Absolute {
     if (g_keChuanWorkQueue.count == 0) {
         EchoLog(@"[课传详情] 测试处理完毕");
         NSMutableString *resultStr = [NSMutableString string];
@@ -197,7 +199,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         }
         
         [UIPasteboard generalPasteboard].string = resultStr;
-        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"直接解析版测试完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"绝对坐标版测试完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
         [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:successAlert animated:YES completion:nil];
         
@@ -231,7 +233,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self processKeChuanQueue_Direct];
+        [self processKeChuanQueue_Absolute];
     });
 }
 %end
