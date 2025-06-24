@@ -1,27 +1,21 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog(@"[EchoAI-Test-KCD-V6.1-DirectCall] " format, ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog(@"[EchoAI-Test-KCD-V7-Simple] " format, ##__VA_ARGS__)
 
 // --- 全局变量 ---
-static BOOL g_isTestingKeChuanDetail = NO;
-static NSMutableArray *g_capturedKeChuanDetailArray = nil;
-static NSMutableArray *g_keChuanTaskQueue = nil;
-static void (^g_processQueueBlock)(void) = nil;
-
+// 全部移除，不再需要
 
 // --- 辅助函数 ---
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
-// [修正] 已删除未使用的 GetIvarView 函数
-
 
 // --- 声明 ---
 @interface UIViewController (EchoAITestAddons)
 - (void)performKeChuanDetailTest;
-- (NSString *)extractTextFromViewHierachy:(UIView *)view;
+- (NSString *)extractTextFromTopMostPresentedViewController;
 // App自带的方法
 - (void)顯示課傳摘要WithSender:(id)sender;
 - (void)顯示課傳天將摘要WithSender:(id)sender;
@@ -44,9 +38,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 90, 140, 36);
             testButton.tag = testButtonTag;
-            [testButton setTitle:@"测试课传V6(直调)" forState:UIControlStateNormal];
+            [testButton setTitle:@"测试课传V7(极简)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.8 alpha:1.0]; // 蓝色
+            testButton.backgroundColor = [UIColor colorWithRed:0.9 green:0.4 blue:0.1 alpha:1.0]; // 亮橙色
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             [testButton addTarget:self action:@selector(performKeChuanDetailTest) forControlEvents:UIControlEventTouchUpInside];
@@ -55,42 +49,18 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// 2. 拦截详情窗口 (逻辑不变)
-- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    if (g_isTestingKeChuanDetail) {
-        NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        if ([vcClassName isEqualToString:@"六壬大占.課傳摘要視圖"]) {
-            EchoLog(@"捕获到 '課傳摘要視圖'...");
-            void (^newCompletion)(void) = ^{
-                if (completion) { completion(); }
-                EchoLog(@"'課傳摘要視圖' 已显示，开始提取...");
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    NSString *detailText = [self extractTextFromViewHierachy:viewControllerToPresent.view];
-                    [g_capturedKeChuanDetailArray addObject:detailText];
-                    EchoLog(@"内容提取完成，关闭详情页。");
-                    [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                         if (g_processQueueBlock) { g_processQueueBlock(); }
-                    }];
-                });
-            };
-            %orig(viewControllerToPresent, flag, newCompletion);
-            return;
-        }
-    }
-    %orig(viewControllerToPresent, flag, completion);
-}
+// [核心修改] 不再 hook presentViewController
 
 // =========================================================================
 // 新增的功能实现
 // =========================================================================
 %new
-// 3. 核心测试逻辑 (最终版)
+// 3. 核心测试逻辑 (极简版)
 - (void)performKeChuanDetailTest {
-    EchoLog(@"--- 开始测试 V6.1 (直接调用) ---");
-    g_isTestingKeChuanDetail = YES;
-    g_capturedKeChuanDetailArray = [NSMutableArray array];
-    g_keChuanTaskQueue = [NSMutableArray array];
-
+    EchoLog(@"--- 开始测试 V7 (极简模式) ---");
+    
+    // 1. 准备任务队列
+    NSMutableArray *taskQueue = [NSMutableArray array];
     NSMutableArray *siKeTasksMutable = [NSMutableArray array];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
@@ -99,72 +69,101 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         if (siKeViews.count > 0) {
             UIView *siKeContainer = siKeViews.firstObject;
             [siKeTasksMutable addObjectsFromArray:siKeContainer.subviews];
-             [siKeTasksMutable sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-                return [@(v2.frame.origin.x) compare:@(v1.frame.origin.x)];
-            }];
+            [siKeTasksMutable sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v2.frame.origin.x) compare:@(v1.frame.origin.x)]; }];
         }
     }
-    [g_keChuanTaskQueue addObjectsFromArray:siKeTasksMutable];
+    [taskQueue addObjectsFromArray:siKeTasksMutable];
 
     NSMutableArray *sanChuanTasksMutable = [NSMutableArray array];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if(sanChuanViewClass){
         FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, sanChuanTasksMutable);
         [sanChuanTasksMutable sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-        [g_keChuanTaskQueue addObjectsFromArray:sanChuanTasksMutable];
+        [taskQueue addObjectsFromArray:sanChuanTasksMutable];
     }
     
-    if (g_keChuanTaskQueue.count == 0) {
-        EchoLog(@"错误：未能获取任何可点击的课、传视图。"); g_isTestingKeChuanDetail = NO; return;
+    if (taskQueue.count == 0) {
+        EchoLog(@"错误：未能获取任何课、传视图。"); return;
     }
-    EchoLog(@"任务队列准备就绪，总共 %lu 个任务。", (unsigned long)g_keChuanTaskQueue.count);
+    
+    EchoLog(@"任务队列准备就绪，总共 %lu 个任务。", (unsigned long)taskQueue.count);
+    
+    // 2. 使用 dispatch_async 串行执行任务
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSMutableArray *results = [NSMutableArray array];
+        
+        for (NSUInteger i = 0; i < taskQueue.count; i++) {
+            UIView *targetView = taskQueue[i];
+            
+            // 使用信号量来等待异步操作完成
+            dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                EchoLog(@"处理任务 %lu/%lu... 目标视图: %@", (unsigned long)i + 1, (unsigned long)taskQueue.count, targetView);
+                
+                // a. 调用显示方法
+                SEL selectorToShow = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
+                if (![self respondsToSelector:selectorToShow]) {
+                    selectorToShow = NSSelectorFromString(@"顯示課傳摘要WithSender:");
+                }
+                
+                if ([self respondsToSelector:selectorToShow]) {
+                    #pragma clang diagnostic push
+                    #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+                    [self performSelector:selectorToShow withObject:targetView];
+                    #pragma clang diagnostic pop
+                } else {
+                     EchoLog(@"错误! ViewController 不响应摘要显示方法。");
+                     dispatch_semaphore_signal(semaphore); // 释放信号，继续下一个
+                     return;
+                }
 
-    __weak typeof(self) weakSelf = self;
-    g_processQueueBlock = [^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || g_keChuanTaskQueue.count == 0) {
+                // b. 等待弹窗出现
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    // c. 提取文本
+                    NSString *detailText = [self extractTextFromTopMostPresentedViewController];
+                    [results addObject:detailText];
+                    EchoLog(@"提取到文本，准备关闭。");
+                    
+                    // d. 关闭当前弹窗
+                    [self.presentedViewController dismissViewControllerAnimated:NO completion:^{
+                        // e. 弹窗关闭后，释放信号，让循环继续
+                        EchoLog(@"弹窗已关闭。");
+                        dispatch_semaphore_signal(semaphore);
+                    }];
+                });
+            });
+            
+            // 等待信号，超时时间设为5秒，防止无限卡死
+            dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
+        }
+        
+        // 3. 所有任务完成，回到主线程打印结果
+        dispatch_async(dispatch_get_main_queue(), ^{
             EchoLog(@"--- 所有任务处理完毕 ---");
             NSMutableString *finalResult = [NSMutableString string];
             NSArray *titles = @[@"第1课", @"第2课", @"第3课", @"第4课", @"初传", @"中传", @"末传"];
-            for (NSUInteger i = 0; i < g_capturedKeChuanDetailArray.count; i++) {
+            for (NSUInteger i = 0; i < results.count; i++) {
                 NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"项目 %lu", (unsigned long)i+1];
-                [finalResult appendFormat:@"\n[%@ 详情]\n%@\n--------------------\n", title, g_capturedKeChuanDetailArray[i]];
+                [finalResult appendFormat:@"\n[%@ 详情]\n%@\n--------------------\n", title, results[i]];
             }
             NSLog(@"%@", finalResult);
             EchoLog(@"--- 测试结束 ---");
-            g_isTestingKeChuanDetail = NO; g_processQueueBlock = nil; g_keChuanTaskQueue = nil;
-            return;
-        }
-
-        UIView *targetView = g_keChuanTaskQueue.firstObject;
-        [g_keChuanTaskQueue removeObjectAtIndex:0];
-        EchoLog(@"处理任务... 目标视图: %@", targetView);
-
-        SEL selectorToShow = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
-        if (![strongSelf respondsToSelector:selectorToShow]) {
-            selectorToShow = NSSelectorFromString(@"顯示課傳摘要WithSender:");
-        }
-        
-        if ([strongSelf respondsToSelector:selectorToShow]) {
-            EchoLog(@"调用方法: %@ withSender: %@", NSStringFromSelector(selectorToShow), targetView);
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [strongSelf performSelector:selectorToShow withObject:targetView];
-            #pragma clang diagnostic pop
-        } else {
-            EchoLog(@"错误! ViewController 不响应任何一个摘要显示方法。跳过此任务。");
-            if (g_processQueueBlock) { g_processQueueBlock(); }
-        }
-    } copy];
-
-    g_processQueueBlock();
+        });
+    });
 }
 
 %new
-// 提取文本函数
-- (NSString *)extractTextFromViewHierachy:(UIView *)view {
+// 4. 新的提取文本函数，从最顶层VC提取
+- (NSString *)extractTextFromTopMostPresentedViewController {
+    UIViewController *topVC = self.presentedViewController;
+    if (!topVC) {
+        EchoLog(@"提取文本失败：找不到 presentedViewController。");
+        return @"[提取失败]";
+    }
+
     NSMutableArray *allLabels = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UILabel class], view, allLabels);
+    FindSubviewsOfClassRecursive([UILabel class], topVC.view, allLabels);
     
     [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
         CGPoint p1 = [l1.superview convertPoint:l1.frame.origin toView:nil];
