@@ -6,10 +6,11 @@
 // 1. 全局变量与辅助函数
 // =========================================================================
 static BOOL g_isExtractingByCoordinate = NO;
-static NSMutableArray<NSString *> *g_capturedDetails = nil; // 存储捕获的详情文本
-static NSMutableArray<NSString *> *g_pointTitles = nil;     // 存储每个点的标题
-static int g_currentPointIndex = 0;                         // 当前处理到第几个点
-static UIAlertController *g_progressAlert = nil;            // 进度提示框
+static NSMutableArray<NSString *> *g_capturedDetails = nil;
+static NSMutableArray<NSString *> *g_pointTitles = nil;
+static int g_currentPointIndex = 0;
+static UIAlertController *g_progressAlert = nil;
+static id g_notificationObserver = nil; // 用于持有通知观察者
 
 // 辅助函数：提取UILabel文本
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
@@ -19,24 +20,45 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 // 辅助函数：模拟点击指定坐标
 static void SimulateTapAtPoint(CGPoint point) {
-    UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
+    UIWindow *keyWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                keyWindow = scene.windows.firstObject;
+                break;
+            }
+        }
+    } else {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        keyWindow = [[UIApplication sharedApplication] keyWindow];
+        #pragma clang diagnostic pop
+    }
     if (!keyWindow) return;
 
     UIView *touchView = [[UIView alloc] initWithFrame:CGRectMake(point.x - 5, point.y - 5, 10, 10)];
     touchView.backgroundColor = [UIColor clearColor];
     [keyWindow addSubview:touchView];
 
-    UITouch *touch = [[UITouch alloc] initInView:touchView];
-    UIEvent *event = [[NSClassFromString(@"UITouchesEvent") alloc] initWithTouch:touch];
+    // 在 Logos/Theos 中，直接创建 UITouch 和 UIEvent 可能不稳定或被系统忽略。
+    // 一个更可靠的方法是找到最顶层的视图并发送 touch 事件。
+    UITouch *touch = [[UITouch alloc] init];
+    [touch setValue:touchView forKey:@"view"];
+    [touch setValue:@(UITouchPhaseBegan) forKey:@"phase"];
+    [touch setValue:[NSValue valueWithCGPoint:point] forKey:@"locationInWindow"];
+    [touch setValue:[NSValue valueWithCGPoint:point] forKey:@"_preciseLocationInWindow"];
 
-    [touch.view touchesBegan:[NSSet setWithObject:touch] withEvent:event];
-    
+    UIEvent *event = [[NSClassFromString(@"UITouchesEvent") alloc] init];
+    [event _setTouches:[NSSet setWithObject:touch] forWindow:keyWindow];
+
+    [[UIApplication sharedApplication] sendEvent:event];
+
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [touch.view touchesEnded:[NSSet setWithObject:touch] withEvent:event];
+        [touch setValue:@(UITouchPhaseEnded) forKey:@"phase"];
+        [[UIApplication sharedApplication] sendEvent:event];
         [touchView removeFromSuperview];
     });
 }
-
 
 // =========================================================================
 // 2. 主功能区
@@ -48,7 +70,6 @@ static void SimulateTapAtPoint(CGPoint point) {
 - (void)updateProgress_Truth;
 - (void)dismissProgressAlertAndFinalize_Truth;
 @end
-
 
 %hook UIViewController
 
@@ -81,6 +102,10 @@ static void SimulateTapAtPoint(CGPoint point) {
     if (g_isExtractingByCoordinate) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
+            
+            // 发送通知，表示已成功捕获弹窗
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"DidPresentDetailNotification" object:nil];
+            
             viewControllerToPresent.view.alpha = 0.0f; flag = NO;
             
             void (^newCompletion)(void) = ^{
@@ -121,13 +146,12 @@ static void SimulateTapAtPoint(CGPoint point) {
 %new
 // --- 开始提取流程 ---
 - (void)startCoordinateExtraction_Truth {
-    if (g_isExtractingByCoordinate) return; // 防止重复点击
+    if (g_isExtractingByCoordinate) return;
     g_isExtractingByCoordinate = YES;
     
     g_capturedDetails = [NSMutableArray array];
     g_currentPointIndex = 0;
     
-    // 定义18个点的标题，用于最终输出
     g_pointTitles = [@[
         @"初传 - 地支", @"初传 - 天将",
         @"中传 - 地支", @"中传 - 天将",
@@ -145,92 +169,71 @@ static void SimulateTapAtPoint(CGPoint point) {
 %new
 // --- 处理下一个坐标点击 ---
 - (void)processNextCoordinateClick_Truth {
-    // 【核心】你的坐标数据在这里
     NSArray<NSValue *> *coordinates = @[
-        [NSValue valueWithCGPoint:CGPointMake(267.67, 153.00)],
-        [NSValue valueWithCGPoint:CGPointMake(307.00, 141.33)],
-        [NSValue valueWithCGPoint:CGPointMake(270.33, 216.00)],
-        [NSValue valueWithCGPoint:CGPointMake(307.33, 219.00)],
-        [NSValue valueWithCGPoint:CGPointMake(268.00, 298.33)],
-        [NSValue valueWithCGPoint:CGPointMake(312.00, 293.00)],
-        [NSValue valueWithCGPoint:CGPointMake(302.33, 341.33)],
-        [NSValue valueWithCGPoint:CGPointMake(299.00, 381.67)],
-        [NSValue valueWithCGPoint:CGPointMake(305.00, 415.33)],
-        [NSValue valueWithCGPoint:CGPointMake(245.33, 343.00)],
-        [NSValue valueWithCGPoint:CGPointMake(250.33, 373.67)],
-        [NSValue valueWithCGPoint:CGPointMake(248.33, 412.00)],
-        [NSValue valueWithCGPoint:CGPointMake(192.00, 346.33)],
-        [NSValue valueWithCGPoint:CGPointMake(185.33, 373.67)],
-        [NSValue valueWithCGPoint:CGPointMake(188.33, 410.67)],
-        [NSValue valueWithCGPoint:CGPointMake(135.67, 346.00)],
-        [NSValue valueWithCGPoint:CGPointMake(140.00, 375.33)],
-        [NSValue valueWithCGPoint:CGPointMake(138.00, 407.00)],
+        [NSValue valueWithCGPoint:CGPointMake(267.67, 153.00)], [NSValue valueWithCGPoint:CGPointMake(307.00, 141.33)],
+        [NSValue valueWithCGPoint:CGPointMake(270.33, 216.00)], [NSValue valueWithCGPoint:CGPointMake(307.33, 219.00)],
+        [NSValue valueWithCGPoint:CGPointMake(268.00, 298.33)], [NSValue valueWithCGPoint:CGPointMake(312.00, 293.00)],
+        [NSValue valueWithCGPoint:CGPointMake(302.33, 341.33)], [NSValue valueWithCGPoint:CGPointMake(299.00, 381.67)],
+        [NSValue valueWithCGPoint:CGPointMake(305.00, 415.33)], [NSValue valueWithCGPoint:CGPointMake(245.33, 343.00)],
+        [NSValue valueWithCGPoint:CGPointMake(250.33, 373.67)], [NSValue valueWithCGPoint:CGPointMake(248.33, 412.00)],
+        [NSValue valueWithCGPoint:CGPointMake(192.00, 346.33)], [NSValue valueWithCGPoint:CGPointMake(185.33, 373.67)],
+        [NSValue valueWithCGPoint:CGPointMake(188.33, 410.67)], [NSValue valueWithCGPoint:CGPointMake(135.67, 346.00)],
+        [NSValue valueWithCGPoint:CGPointMake(140.00, 375.33)], [NSValue valueWithCGPoint:CGPointMake(138.00, 407.00)],
     ];
 
     if (g_currentPointIndex >= coordinates.count) {
-        // 所有点都处理完了
         [self dismissProgressAlertAndFinalize_Truth];
         return;
     }
     
-    // 设置一个短暂的延迟，防止点击过快
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        CGPoint pointToTap = [coordinates[g_currentPointIndex] CGPointValue];
+        if (g_notificationObserver) {
+            [[NSNotificationCenter defaultCenter] removeObserver:g_notificationObserver];
+            g_notificationObserver = nil;
+        }
         
-        // 增加一个重试机制：如果点击后长时间没反应，可以认为该点无效，自动跳到下一个
         __block BOOL didPresent = NO;
-        id observer = [[NSNotificationCenter defaultCenter] addObserverForName:@"DidPresentDetail" object:nil queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+        g_notificationObserver = [[NSNotificationCenter defaultCenter] addObserverForName:@"DidPresentDetailNotification" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
             didPresent = YES;
+            if (g_notificationObserver) {
+                [[NSNotificationCenter defaultCenter] removeObserver:g_notificationObserver];
+                g_notificationObserver = nil;
+            }
         }];
         
+        CGPoint pointToTap = [coordinates[g_currentPointIndex] CGPointValue];
         SimulateTapAtPoint(pointToTap);
         g_currentPointIndex++;
 
-        // 检查在1秒后是否成功弹窗，如果没有，则认为此点无效
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [[NSNotificationCenter defaultCenter] removeObserver:observer];
+            if (g_notificationObserver) { // 如果观察者还在，说明回调没被触发
+                [[NSNotificationCenter defaultCenter] removeObserver:g_notificationObserver];
+                g_notificationObserver = nil;
+            }
             if (!didPresent) {
-                NSLog(@"[坐标提取] 点 #%d 未触发弹窗，自动跳过。", g_currentPointIndex-1);
-                [g_capturedDetails addObject:@"[此项无详情或点击无效]"]; // 添加占位符
+                NSLog(@"[坐标提取] 点 #%d 未触发弹窗，自动跳过。", g_currentPointIndex - 1);
+                [g_capturedDetails addObject:@"[此项无详情或点击无效]"];
                 [self updateProgress_Truth];
-                [self processNextCoordinateClick_Truth]; // 继续下一个
-            } else {
-                 // 如果成功，present的hook会调用processNextCoordinateClick_Truth，这里什么都不做
+                [self processNextCoordinateClick_Truth];
             }
         });
     });
 }
 
-// 修改 presentViewController hook 以发送通知
-%hook UIViewController
-- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    // ... 原来的逻辑 ...
-    if (g_isExtractingByCoordinate) {
-        NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            [[NSNotificationCenter defaultCenter] postNotificationName:@"DidPresentDetail" object:nil];
-            // ... 后续逻辑不变 ...
-            // ...
-        }
-    }
-    %orig;
-}
-%end
-
-
 %new
-// --- 进度条和收尾工作 ---
 - (void)showProgressAlert_Truth {
     g_progressAlert = [UIAlertController alertControllerWithTitle:@"正在提取..." message:@"进度: 0 / 18" preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:g_progressAlert animated:YES completion:nil];
 }
 
+%new
 - (void)updateProgress_Truth {
     if (g_progressAlert) {
         g_progressAlert.message = [NSString stringWithFormat:@"进度: %lu / 18", (unsigned long)g_capturedDetails.count];
     }
 }
 
+%new
 - (void)dismissProgressAlertAndFinalize_Truth {
     if (g_progressAlert) {
         [g_progressAlert dismissViewControllerAnimated:YES completion:nil];
@@ -255,6 +258,10 @@ static void SimulateTapAtPoint(CGPoint point) {
     g_isExtractingByCoordinate = NO;
     g_capturedDetails = nil;
     g_pointTitles = nil;
+    if (g_notificationObserver) {
+        [[NSNotificationCenter defaultCenter] removeObserver:g_notificationObserver];
+        g_notificationObserver = nil;
+    }
 }
 
 %end
