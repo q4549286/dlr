@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog(@"[EchoAI-Test-KCD-V6-DirectCall] " format, ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog(@"[EchoAI-Test-KCD-V6.1-DirectCall] " format, ##__VA_ARGS__)
 
 // --- 全局变量 ---
 static BOOL g_isTestingKeChuanDetail = NO;
@@ -15,17 +15,14 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
-static id GetIvarView(id object, const char *ivarName) {
-    Ivar ivar = class_getInstanceVariable([object class], ivarName);
-    if (ivar) { return object_getIvar(object, ivar); }
-    return nil;
-}
+// [修正] 已删除未使用的 GetIvarView 函数
+
 
 // --- 声明 ---
 @interface UIViewController (EchoAITestAddons)
 - (void)performKeChuanDetailTest;
 - (NSString *)extractTextFromViewHierachy:(UIView *)view;
-// 这两个是App自带的方法，我们只是声明一下以便调用
+// App自带的方法
 - (void)顯示課傳摘要WithSender:(id)sender;
 - (void)顯示課傳天將摘要WithSender:(id)sender;
 @end
@@ -66,8 +63,7 @@ static id GetIvarView(id object, const char *ivarName) {
             EchoLog(@"捕获到 '課傳摘要視圖'...");
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
-                EchoLog(@"'課傳摘要視圖' 已显示，开始提取(不再需要模拟展开)...");
-                // 因为是直接调用显示方法，理论上内容已经完全了，无需再模拟点击展开
+                EchoLog(@"'課傳摘要視圖' 已显示，开始提取...");
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     NSString *detailText = [self extractTextFromViewHierachy:viewControllerToPresent.view];
                     [g_capturedKeChuanDetailArray addObject:detailText];
@@ -88,31 +84,28 @@ static id GetIvarView(id object, const char *ivarName) {
 // 新增的功能实现
 // =========================================================================
 %new
-// 3. 核心测试逻辑 (终极版 - 直接调用)
+// 3. 核心测试逻辑 (最终版)
 - (void)performKeChuanDetailTest {
-    EchoLog(@"--- 开始测试 V6 (直接调用) ---");
+    EchoLog(@"--- 开始测试 V6.1 (直接调用) ---");
     g_isTestingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanTaskQueue = [NSMutableArray array];
 
-    // --- 精确获取四课视图 ---
+    NSMutableArray *siKeTasksMutable = [NSMutableArray array];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
         NSMutableArray *siKeViews = [NSMutableArray array]; 
         FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
         if (siKeViews.count > 0) {
-            id siKeViewInstance = siKeViews.firstObject;
-            // 这里的日辰需要动态获取，我们暂时用一个占位符方法
-            // 先用一个通用但不精确的方法获取四课的点击视图
-            [g_keChuanTaskQueue addObjectsFromArray:((UIView *)siKeViewInstance).subviews];
-            // 排序确保顺序
-             [(NSMutableArray *)g_keChuanTaskQueue sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+            UIView *siKeContainer = siKeViews.firstObject;
+            [siKeTasksMutable addObjectsFromArray:siKeContainer.subviews];
+             [siKeTasksMutable sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
                 return [@(v2.frame.origin.x) compare:@(v1.frame.origin.x)];
             }];
         }
     }
-    
-    // --- 精确获取三传视图 ---
+    [g_keChuanTaskQueue addObjectsFromArray:siKeTasksMutable];
+
     NSMutableArray *sanChuanTasksMutable = [NSMutableArray array];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if(sanChuanViewClass){
@@ -130,7 +123,6 @@ static id GetIvarView(id object, const char *ivarName) {
     g_processQueueBlock = [^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || g_keChuanTaskQueue.count == 0) {
-            // ... 结束逻辑 ...
             EchoLog(@"--- 所有任务处理完毕 ---");
             NSMutableString *finalResult = [NSMutableString string];
             NSArray *titles = @[@"第1课", @"第2课", @"第3课", @"第4课", @"初传", @"中传", @"末传"];
@@ -148,7 +140,6 @@ static id GetIvarView(id object, const char *ivarName) {
         [g_keChuanTaskQueue removeObjectAtIndex:0];
         EchoLog(@"处理任务... 目标视图: %@", targetView);
 
-        // [核心修改] 直接调用ViewController的方法，不再模拟手势
         SEL selectorToShow = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
         if (![strongSelf respondsToSelector:selectorToShow]) {
             selectorToShow = NSSelectorFromString(@"顯示課傳摘要WithSender:");
@@ -170,7 +161,7 @@ static id GetIvarView(id object, const char *ivarName) {
 }
 
 %new
-// 5. 提取文本 (保持不变)
+// 提取文本函数
 - (NSString *)extractTextFromViewHierachy:(UIView *)view {
     NSMutableArray *allLabels = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UILabel class], view, allLabels);
@@ -189,7 +180,6 @@ static id GetIvarView(id object, const char *ivarName) {
     for (UILabel *label in allLabels) {
          if (label.text && label.text.length > 0) {
             NSString *trimmedText = [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-             // 防止详情页里的标题和外部重复
             if (![textParts containsObject:trimmedText]) {
                  [textParts addObject:trimmedText];
             }
