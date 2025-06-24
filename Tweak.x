@@ -1,41 +1,69 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
-#import <os/log.h> // 引入日志头文件
 
 // =========================================================================
-// 核心诊断逻辑：我们只记录哪个方法被调用了
+// 1. 辅助函数：获取顶层视图控制器以显示弹窗
 // =========================================================================
-@interface NSObject (TheUltimateDiagnostic)
+static UIViewController* getTopmostViewController() {
+    UIWindow *keyWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [[UIApplication sharedApplication] connectedScenes]) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *window in scene.windows) {
+                    if (window.isKeyWindow) { keyWindow = window; break; }
+                }
+            }
+        }
+    } else {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        keyWindow = [[UIApplication sharedApplication] keyWindow];
+        #pragma clang diagnostic pop
+    }
+    UIViewController *topController = keyWindow.rootViewController;
+    while (topController.presentedViewController) {
+        topController = topController.presentedViewController;
+    }
+    return topController;
+}
+
+
+// =========================================================================
+// 2. 核心诊断逻辑：我们用弹窗来报告哪个方法被调用了
+// =========================================================================
+@interface NSObject (TheOnDeviceDiagnostician)
 - (void)my_hooked_didSelectItemAtIndexPath:(id)collectionView didSelectItemAtIndexPath:(id)indexPath;
 - (void)my_hooked_showKeChuanSummary:(id)sender;
 @end
 
-@implementation NSObject (TheUltimateDiagnostic)
+@implementation NSObject (TheOnDeviceDiagnostician)
 
 // Hook collectionView:didSelectItemAtIndexPath:
 - (void)my_hooked_didSelectItemAtIndexPath:(id)collectionView didSelectItemAtIndexPath:(id)indexPath {
-    // 【【【核心诊断点 1】】】
-    // 在系统日志中打印一条明确的消息
-    os_log(OS_LOG_TYPE_DEFAULT, "[MY_DIAGNOSTIC_TOOL] >>> Method 'collectionView:didSelectItemAtIndexPath:' was CALLED! <<<");
+    // 【【【核心诊断点 1：弹窗警报器】】】
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"诊断工具" message:@"方法被调用：\n\ncollectionView:\ndidSelectItemAtIndexPath:" preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+    [getTopmostViewController() presentViewController:alert animated:YES completion:nil];
     
-    // 调用原始方法，确保App正常运行
+    // 调用原始方法，确保App在弹窗消失后能继续运行
     [self my_hooked_didSelectItemAtIndexPath:collectionView didSelectItemAtIndexPath:indexPath];
 }
 
 // Hook 顯示課傳摘要WithSender:
 - (void)my_hooked_showKeChuanSummary:(id)sender {
-    // 【【【核心诊断点 2】】】
-    // 在系统日志中打印一条明确的消息
-    os_log(OS_LOG_TYPE_DEFAULT, "[MY_DIAGNOSTIC_TOOL] >>> Method '顯示課傳摘要WithSender:' was CALLED! <<<");
+    // 【【【核心诊断点 2：弹窗警报器】】】
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"诊断工具" message:@"方法被调用：\n\n顯示課傳摘要WithSender:" preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+    [getTopmostViewController() presentViewController:alert animated:YES completion:nil];
     
-    // 调用原始方法，确保App正常运行
+    // 调用原始方法
     [self my_hooked_showKeChuanSummary:sender];
 }
 
 @end
 
 // =========================================================================
-// 方法交换：我们不再需要UI，只需要在后台默默监听
+// 3. 方法交换：我们不再需要任何UI，只在后台安装警报器
 // =========================================================================
 %ctor {
     %init;
