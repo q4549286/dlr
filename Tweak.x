@@ -3,14 +3,15 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数 (带屏幕日志功能)
+// 1. 全局变量与辅助函数
 // =========================================================================
 static UITextView *g_screenLogger = nil;
-
+#define EchoLog(format, ...) do { /* ... 与V15.1相同 ... */ } while(0)
+// ... 其他全局变量和辅助函数 ...
 #define EchoLog(format, ...) \
     do { \
         NSString *logMessage = [NSString stringWithFormat:format, ##__VA_ARGS__]; \
-        NSLog(@"[KeChuan-Test-Recon-V15.1] %@", logMessage); \
+        NSLog(@"[KeChuan-Test-Recon-V15.2] %@", logMessage); \
         if (g_screenLogger) { \
             dispatch_async(dispatch_get_main_queue(), ^{ \
                 NSString *newText = [NSString stringWithFormat:@"%@\n- %@", g_screenLogger.text, logMessage]; \
@@ -29,9 +30,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
-// =========================================================================
-// 2. 主功能区
-// =========================================================================
 @interface UIViewController (EchoAITestAddons_Truth)
 - (void)performDeepIvarReconnaissance;
 @end
@@ -49,7 +47,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"深度侦查傳視圖" forState:UIControlStateNormal];
+            [testButton setTitle:@"深度侦查(修正版)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
             testButton.backgroundColor = [UIColor systemTealColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -58,7 +56,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             [keyWindow addSubview:testButton];
             
             if ([keyWindow viewWithTag:LoggerViewTag]) { [[keyWindow viewWithTag:LoggerViewTag] removeFromSuperview]; }
-            UITextView *logger = [[UITextView alloc] initWithFrame:CGRectMake(10, 45, keyWindow.bounds.size.width - 170, 200)]; // 增加高度
+            UITextView *logger = [[UITextView alloc] initWithFrame:CGRectMake(10, 45, keyWindow.bounds.size.width - 170, 200)];
             logger.tag = LoggerViewTag;
             logger.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.8];
             logger.textColor = [UIColor systemGreenColor];
@@ -77,7 +75,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 // --- 核心深度侦查方法 ---
 - (void)performDeepIvarReconnaissance {
     g_screenLogger.text = @""; // 清空日志
-    EchoLog(@"开始V15.1 深度Ivar侦查...");
+    EchoLog(@"开始V15.2 深度Ivar侦查(修正)...");
     
     // 1. 找到'三傳視圖'实例
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
@@ -88,9 +86,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     UIView *sanChuanContainer = containers.firstObject;
     EchoLog(@"找到三传容器: %p", sanChuanContainer);
 
-    // 2. 获取三个'傳視圖'实例
-    // 我们直接用繁体，因为V14已经证明了这是正确的
-    const char *sanChuanIvarNames[] = {"初传", "中传", "末传", NULL};
+    // 2. 【【【核心修正】】】使用正确的繁体中文ivar名
+    const char *sanChuanIvarNames[] = {"初傳", "中傳", "末傳", NULL};
     NSMutableArray *chuanViews = [NSMutableArray array];
     for (int i = 0; sanChuanIvarNames[i] != NULL; ++i) {
         Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, sanChuanIvarNames[i]);
@@ -98,14 +95,19 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             id chuanView = object_getIvar(sanChuanContainer, ivar);
             if (chuanView) {
                 [chuanViews addObject:chuanView];
+            } else {
+                 EchoLog(@"成功找到Ivar '%s', 但其值为nil.", sanChuanIvarNames[i]);
             }
+        } else {
+             EchoLog(@"在三传容器中未找到Ivar '%s'!", sanChuanIvarNames[i]);
         }
     }
     
     if (chuanViews.count == 0) {
-        EchoLog(@"错误: 未能从三传容器中读取到任何傳視圖实例!");
+        EchoLog(@"错误: 未能从三传容器中读取到任何傳視圖实例! 侦查中止.");
         return;
     }
+    EchoLog(@"成功读取到 %lu 个傳視圖实例.", (unsigned long)chuanViews.count);
 
     // 3. 遍历每个'傳視圖'实例，打印它的所有ivar
     Class chuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
@@ -118,27 +120,24 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         unsigned int ivarCount;
         Ivar *ivars = class_copyIvarList(chuanViewClass, &ivarCount);
         
-        if (ivars) {
+        if (ivars && ivarCount > 0) {
             EchoLog(@" -> 找到 %d 个实例变量:", ivarCount);
             for (unsigned int j = 0; j < ivarCount; j++) {
                 Ivar ivar = ivars[j];
                 const char *ivarName = ivar_getName(ivar);
                 const char *ivarType = ivar_getTypeEncoding(ivar);
                 
-                // 判断ivar是否是对象类型
                 if (ivarType[0] == '@') {
                     id ivarValue = object_getIvar(chuanView, ivar);
-                    // ================== 【【【编译错误修正点】】】 ==================
                     EchoLog(@"   - 名称: %s, 类型: %s, 值: <%@: %p>", ivarName, ivarType, (ivarValue ? NSStringFromClass([ivarValue class]) : @"(null class)"), ivarValue);
-                    // ==============================================================
                 } else {
-                    // 对于非对象类型，我们无法安全地读取其值，只打印类型
                     EchoLog(@"   - 名称: %s, 类型: %s (非对象类型)", ivarName, ivarType);
                 }
             }
             free(ivars);
         } else {
-            EchoLog(@" -> 未找到任何实例变量.");
+            EchoLog(@" -> 未找到或没有实例变量.");
+            if(ivars) free(ivars);
         }
     }
     
