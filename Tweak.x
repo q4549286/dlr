@@ -4,7 +4,7 @@
 // =========================================================================
 // 宏定义与辅助函数
 // =========================================================================
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-Final] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-Final-V2] " format), ##__VA_ARGS__)
 
 static NSInteger const TestButtonTag = 998877;
 static BOOL g_isExtracting = NO;
@@ -22,59 +22,11 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 - (void)extractSiKeSanChuanDetailsWithCompletion:(void (^)(NSString *detailsText))completion;
 @end
 
-
-// =========================================================================
-// 全新的Hook目标：UIPopoverPresentationControllerDelegate
-// Popover在呈现前，会向它的delegate查询一些信息。我们在这里拦截，这是最安全、最不会崩溃的时机。
-// =========================================================================
-%hook 六壬大占_ViewController 
-
-// 我们猜测主ViewController就是popover的delegate
-// 这个方法是当popover准备呈现时，系统会调用的方法
-- (void)prepareForPopoverPresentation:(UIPopoverPresentationController *)popoverPresentationController {
-    // 先调用原始实现，让App把所有东西都准备好
-    %orig; 
-
-    if (g_isExtracting && g_currentItemKey) {
-        EchoLog(@"成功拦截到 prepareForPopoverPresentation！提取数据...");
-
-        // popoverPresentationController.presentedViewController 就是我们要的弹窗VC
-        UIViewController *contentVC = popoverPresentationController.presentedViewController;
-        if (contentVC) {
-            // 从这里开始，提取逻辑和之前一样
-            UIView *contentView = contentVC.view;
-            NSMutableArray *allLabels = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
-                if (fabs(l1.frame.origin.y - l2.frame.origin.y) > 5) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }
-                return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
-            }];
-            NSMutableArray *textParts = [NSMutableArray array];
-            for (UILabel *label in allLabels) {
-                if (label.text && label.text.length > 0) {
-                    NSString *cleanedText = [[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    if (cleanedText.length > 0) { [textParts addObject:cleanedText]; }
-                }
-            }
-            NSString *fullText = [textParts componentsJoinedByString:@" -> "];
-            g_capturedDetails[g_currentItemKey] = fullText;
-            EchoLog(@"[捕获成功] Key: %@, 内容: %@", g_currentItemKey, fullText);
-        }
-
-        // 关键一步：我们已经拿到了数据，现在要阻止这个popover真正显示出来，避免闪烁和后续问题
-        // 我们通过让它的delegate“假装”它不应该以popover形式呈现，来取消这次弹出
-        // (这是一个hacky的方法，但可能有效)
-        // 这一步如果导致问题，我们就注释掉它，让它弹出来再消失
-    }
-}
-
-%end
-
-
 %hook UIViewController
 
 // --- 界面入口：添加测试按钮 ---
-- (void)viewDidLoad { %orig;
+- (void)viewDidLoad {
+    %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -93,7 +45,37 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// 我们不再需要拦截 presentViewController 了，因为新的Hook点更精确
+// --- 全新的Hook目标：拦截Popover的准备阶段 ---
+- (void)prepareForPopoverPresentation:(UIPopoverPresentationController *)popoverPresentationController {
+    // 先调用原始实现，让App把所有东西都准备好
+    %orig; 
+
+    // 只在我们自己的提取任务中进行拦截
+    if (g_isExtracting && g_currentItemKey) {
+        EchoLog(@"成功拦截到 prepareForPopoverPresentation！提取数据...");
+        
+        UIViewController *contentVC = popoverPresentationController.presentedViewController;
+        if (contentVC) {
+            UIView *contentView = contentVC.view;
+            NSMutableArray *allLabels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
+                if (fabs(l1.frame.origin.y - l2.frame.origin.y) > 5) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }
+                return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
+            }];
+            NSMutableArray *textParts = [NSMutableArray array];
+            for (UILabel *label in allLabels) {
+                if (label.text && label.text.length > 0) {
+                    NSString *cleanedText = [[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    if (cleanedText.length > 0) { [textParts addObject:cleanedText]; }
+                }
+            }
+            NSString *fullText = [textParts componentsJoinedByString:@" -> "];
+            g_capturedDetails[g_currentItemKey] = fullText;
+            EchoLog(@"[捕获成功] Key: %@, 内容: %@", g_currentItemKey, fullText);
+        }
+    }
+}
 
 %new
 - (void)performSiKeTestExtraction {
@@ -113,11 +95,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %new
 - (void)extractSiKeSanChuanDetailsWithCompletion:(void (^)(NSString *detailsText))completion {
-    EchoLog(@"--- 开始 [独立测试 Final] 提取流程 ---");
+    EchoLog(@"--- 开始 [独立测试 Final V2] 提取流程 ---");
     g_isExtracting = YES;
     g_capturedDetails = [NSMutableDictionary dictionary];
 
-    // ... 查找可点击项的逻辑不变 ...
     NSMutableArray *clickableItems = [NSMutableArray array];
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
@@ -144,7 +125,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         g_isExtracting = NO; if (completion) completion(@""); return;
     }
 
-    // ... 工作队列逻辑不变，触发点击的逻辑也不变 ...
     NSMutableArray *workQueue = [clickableItems mutableCopy];
     __weak typeof(self) weakSelf = self;
     __block void (^processQueue)(void);
@@ -152,7 +132,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || workQueue.count == 0) {
             EchoLog(@"--- 提取流程全部完成 ---");
-            // 延迟一下，确保最后一个popover的处理已经完成
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 NSMutableString *resultStr = [NSMutableString string];
                 for (NSDictionary *item in clickableItems) {
