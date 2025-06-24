@@ -1,60 +1,143 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <QuartzCore/QuartzCore.h>
 
-// ... 全局变量和辅助函数，带屏幕日志 ...
-#define EchoLog(format, ...) do { /* ... */ } while(0)
-// ...
+// =========================================================================
+// 1. 全局变量与辅助函数 (带屏幕日志功能)
+// =========================================================================
+static UITextView *g_screenLogger = nil;
+
+#define EchoLog(format, ...) \
+    do { \
+        NSString *logMessage = [NSString stringWithFormat:format, ##__VA_ARGS__]; \
+        NSLog(@"[KeChuan-Test-Recon-V14] %@", logMessage); \
+        if (g_screenLogger) { \
+            dispatch_async(dispatch_get_main_queue(), ^{ \
+                NSString *newText = [NSString stringWithFormat:@"%@\n- %@", g_screenLogger.text, logMessage]; \
+                if (newText.length > 4000) { newText = [newText substringFromIndex:newText.length - 4000]; } \
+                g_screenLogger.text = newText; \
+                [g_screenLogger scrollRangeToVisible:NSMakeRange(g_screenLogger.text.length - 1, 1)]; \
+            }); \
+        } \
+    } while (0)
+
+static NSInteger const TestButtonTag = 556690;
+static NSInteger const LoggerViewTag = 778899;
+
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
+    if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
+    for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
+}
+
+// =========================================================================
+// 2. 主功能区
+// =========================================================================
+@interface UIViewController (EchoAITestAddons_Truth)
+- (void)performIvarReconnaissance;
+@end
 
 %hook UIViewController
 
-// ... viewDidLoad 创建按钮和日志 ...
+// --- viewDidLoad: 创建按钮和日志窗口 ---
+- (void)viewDidLoad {
+    %orig;
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
+            if ([keyWindow viewWithTag:TestButtonTag]) { [[keyWindow viewWithTag:TestButtonTag] removeFromSuperview]; }
+            UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
+            testButton.tag = TestButtonTag;
+            [testButton setTitle:@"侦查三传Ivar" forState:UIControlStateNormal];
+            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            testButton.backgroundColor = [UIColor systemIndigoColor];
+            [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            testButton.layer.cornerRadius = 8;
+            [testButton addTarget:self action:@selector(performIvarReconnaissance) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:testButton];
+            
+            if ([keyWindow viewWithTag:LoggerViewTag]) { [[keyWindow viewWithTag:LoggerViewTag] removeFromSuperview]; }
+            UITextView *logger = [[UITextView alloc] initWithFrame:CGRectMake(10, 45, keyWindow.bounds.size.width - 170, 150)];
+            logger.tag = LoggerViewTag;
+            logger.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.8];
+            logger.textColor = [UIColor systemYellowColor];
+            logger.font = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular];
+            logger.editable = NO;
+            logger.layer.borderColor = [UIColor systemYellowColor].CGColor;
+            logger.layer.borderWidth = 1.0;
+            logger.layer.cornerRadius = 5;
+            g_screenLogger = logger;
+            [keyWindow addSubview:g_screenLogger];
+        });
+    }
+}
+
+// --- 这个脚本不需要hook presentViewController ---
 
 %new
-- (void)performKeChuanDetailExtractionTest_Truth {
-    g_screenLogger.text = @"";
-    EchoLog(@"开始V14 Ivar读取测试...");
+// --- 核心侦查方法 ---
+- (void)performIvarReconnaissance {
+    g_screenLogger.text = @""; // 清空日志
+    EchoLog(@"开始V14 Ivar侦查...");
     
+    // 1. 找到'三傳視圖'类
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
     if (!sanChuanContainerClass) {
-        EchoLog(@"错误: 找不到'三傳視圖'类!");
+        EchoLog(@"错误: 找不到'六壬大占.三傳視圖'类!");
         return;
     }
-    
+    EchoLog(@"成功找到'三傳視圖'类定义.");
+
+    // 2. 找到'三傳視圖'的实例
     NSMutableArray *containers = [NSMutableArray array];
     FindSubviewsOfClassRecursive(sanChuanContainerClass, self.view, containers);
     
     if (containers.count == 0) {
-        EchoLog(@"错误: 未找到'三傳視圖'的实例!");
+        EchoLog(@"错误: 在当前视图层级中未找到'三傳視圖'的实例!");
         return;
     }
     
     UIView *sanChuanContainer = containers.firstObject;
-    EchoLog(@"找到三传容器: <%@: %p>", [sanChuanContainer class], sanChuanContainer);
+    EchoLog(@"成功找到三传容器实例: <%@: %p>", [sanChuanContainer class], sanChuanContainer);
     
-    const char *ivarNames[] = {"初传", "中传", "末传", NULL};
+    // 3. 定义我们要查找的ivar名字列表
+    // 【重要】我们必须尝试简体和繁体，因为不知道开发者的习惯
+    const char *ivarNames[] = {
+        "初传", "中传", "末传",       // 繁体
+        "初傳", "中傳", "末傳",       // 另一个可能的繁体
+        "初传", "中传", "末传",       // 简体 (以防万一)
+        "_初传", "_中传", "_末传",     // 带下划线的繁体
+        "_初傳", "_中傳", "_末傳",     // 带下划线的繁体
+        NULL // 列表结束标记
+    };
     
+    BOOL foundAny = NO;
+    // 4. 遍历并尝试读取每个ivar
     for (int i = 0; ivarNames[i] != NULL; ++i) {
         const char *ivarName = ivarNames[i];
         Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarName);
         
         if (ivar) {
-            // 直接读取ivar的值
+            foundAny = YES;
+            // 直接读取ivar的值 (它是一个对象)
             id ivarValue = object_getIvar(sanChuanContainer, ivar);
-            EchoLog(@"找到Ivar '%s'. 值: <%@: %p>", ivarName, [ivarValue class], ivarValue);
             
-            // 如果能读到值，我们可以尝试用FLEX去分析这个ivarValue对象
-            if (ivarValue) {
-                // 在这里，我们可以尝试分析ivarValue是什么
-                // 比如，看它是否响应某些我们已知的方法
-                if ([ivarValue respondsToSelector:@selector(description)]) {
-                    EchoLog(@"  - Description: %@", [ivarValue description]);
-                }
+            EchoLog(@"找到Ivar '%s'!", ivarName);
+            EchoLog(@"  -> 值: <%@: %p>", (ivarValue ? [ivarValue class] : @"(null)"), ivarValue);
+            
+            // 如果能读到值，我们可以尝试打印它的description来获取更多信息
+            if (ivarValue && [ivarValue respondsToSelector:@selector(description)]) {
+                EchoLog(@"  -> Description: %@", [ivarValue description]);
             }
-        } else {
-            EchoLog(@"警告: 未找到Ivar '%s'!", ivarName);
         }
     }
+    
+    if (!foundAny) {
+        EchoLog(@"警告: 在尝试的列表中, 未找到任何一个Ivar!");
+    }
+    
+    EchoLog(@"侦查完毕.");
 }
 
-// ... 其他方法暂时不需要 ...
 %end
