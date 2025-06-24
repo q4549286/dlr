@@ -1,22 +1,13 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
-#import <QuartzCore/QuartzCore.h>
 
-// =========================================================================
-// 1. 全局变量、宏定义与辅助函数
-// =========================================================================
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-V3] " format), ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Test-KCD] " format), ##VA_ARGS)
 
-static const NSInteger MainButtonTag = 112244;
-// static const NSInteger ProgressViewTag = 556677; // 修复：删除未使用的变量
+// --- 全局状态变量 ---
+static BOOL g_isTestingKeChuanDetail = NO;
+static NSMutableArray *g_capturedKeChuanDetailArray = nil;
 
-// --- 异步提取状态变量 ---
-static BOOL g_isExtractingDetails = NO;
-static NSMutableDictionary *g_capturedDetails = nil; // 存储抓取到的详细信息
-static NSMutableArray *g_workQueue = nil; // 任务队列
-static void (^g_completionBlock)(void) = nil; // 任务完成后的回调
-
-// --- 辅助函数：必须在使用前定义 ---
+// --- 辅助函数 ---
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) {
         [storage addObject:view];
@@ -26,301 +17,256 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-
-// =========================================================================
-// 2. 核心功能 - 视图控制器扩展
-// =========================================================================
-
-// --- 接口声明：告诉编译器我们将要实现这些新方法 ---
-@interface UIViewController (EchoAIExtraction)
-- (void)performDetailedExtractionTest;
-- (void)processNextQueueItem;
+// --- 声明 ---
+@interface UIViewController (EchoAITestAddons)
+- (void)performKeChuanDetailTest;
+- (NSString *)extractTextFromKeChuanDetailView:(UIView *)detailView;
+- (void)triggerTapOnView:(UIView *)view;
 @end
 
+
+// =========================================================================
+// 主 Hook
+// =========================================================================
 %hook UIViewController
 
-// --- 界面入口：添加按钮 ---
+// 1. 添加一个测试按钮
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIWindow *keyWindow = self.view.window; if (!keyWindow) return;
-            if ([keyWindow viewWithTag:MainButtonTag]) { [[keyWindow viewWithTag:MainButtonTag] removeFromSuperview]; }
+            UIWindow *keyWindow = self.view.window;
+            if (!keyWindow) return;
+            
+            // 使用一个独特的tag，避免与主脚本冲突
+            NSInteger testButtonTag = 999111;
+            if ([keyWindow viewWithTag:testButtonTag]) {
+                [[keyWindow viewWithTag:testButtonTag] removeFromSuperview];
+            }
             
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
-            testButton.tag = MainButtonTag;
-            [testButton setTitle:@"高级技法解析" forState:UIControlStateNormal];
+            testButton.tag = testButtonTag;
+            [testButton setTitle:@"测试课传详情" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0];
+            testButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.5 blue:0.8 alpha:1.0]; // 蓝色以区分
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(performDetailedExtractionTest) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performKeChuanDetailTest) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
         });
     }
 }
 
-// --- 核心钩子：拦截弹窗 ---
+// 2. 拦截弹出的详情窗口
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    if (g_isExtractingDetails && [viewControllerToPresent isKindOfClass:NSClassFromString(@"六壬大占.註解視圖控制器")]) {
-        flag = NO; // 无动画快速呈现
-        void (^newCompletion)(void) = ^{
-            if (completion) completion();
+    if (g_isTestingKeChuanDetail) {
+        NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
+        // 目标视图控制器名称是 "六壬大占.課傳摘要視圖"
+        if ([vcClassName isEqualToString:@"六壬大占.課傳摘要視圖"]) {
+            EchoLog(@"[课传详情] 捕获到详情视图，开始提取...");
+            flag = NO; // 阻止动画
+            viewControllerToPresent.view.alpha = 0.0f;
             
-            // 弹窗出现后，立即提取内容
-            UIView *contentView = viewControllerToPresent.view;
-            NSMutableArray<UILabel *> *labels = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UILabel class], contentView, labels);
-            [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
-                return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)];
-            }];
-            
-            NSString *title = @"";
-            NSMutableString *description = [NSMutableString string];
-            
-            if (labels.count > 0) {
-                title = labels.firstObject.text ?: @"";
-                for (NSUInteger i = 1; i < labels.count; i++) {
-                    [description appendFormat:@"%@\n", labels[i].text ?: @""];
-                }
-            }
-            
-            NSString *fullText = [NSString stringWithFormat:@"%@\n%@", title, description];
-            
-            // 将提取到的内容存入字典
-            if(g_workQueue && g_workQueue.count > 0) {
-                NSString *key = (NSString *)g_workQueue.firstObject[@"key"];
-                if (key) {
-                    g_capturedDetails[key] = [fullText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    EchoLog(@"成功捕获 [%@] 的信息", key);
-                }
-            }
-            
-            // 关闭弹窗
-            [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                 // 弹窗关闭后，处理下一个任务
-                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    if (g_workQueue && g_workQueue.count > 0) {
-                        [g_workQueue removeObjectAtIndex:0];
-                        if (g_workQueue.count > 0) {
-                            [(UIViewController *)self.view.window.rootViewController performSelector:@selector(processNextQueueItem)];
-                        } else {
-                            if (g_completionBlock) {
-                                g_completionBlock();
-                            }
-                        }
-                    } else {
-                         if (g_completionBlock) {
-                            g_completionBlock();
-                        }
-                    }
-                });
-            }];
-        };
-        %orig(viewControllerToPresent, flag, newCompletion);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                NSString *detailText = [self extractTextFromKeChuanDetailView:viewControllerToPresent.view];
+                [g_capturedKeChuanDetailArray addObject:detailText];
+                [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
+            });
+        }
+        %orig(viewControllerToPresent, flag, completion);
         return;
     }
-    
     %orig(viewControllerToPresent, flag, completion);
 }
 
+// =========================================================================
+// 新增的功能实现
+// =========================================================================
 %new
-- (void)processNextQueueItem {
-    if (!g_workQueue || g_workQueue.count == 0) return;
+// 3. 核心测试逻辑
+- (void)performKeChuanDetailTest {
+    EchoLog(@"--- 开始测试四课三传详情提取 ---");
+    g_isTestingKeChuanDetail = YES;
+    g_capturedKeChuanDetailArray = [NSMutableArray array];
 
-    NSDictionary *task = g_workQueue.firstObject;
-    UIView *targetLabel = task[@"label"];
-    
-    // 找到包含这个Label的父Cell
-    UIView *parentCell = targetLabel;
-    while (parentCell && ![parentCell isKindOfClass:[UICollectionViewCell class]]) {
-        parentCell = parentCell.superview;
+    NSMutableArray *taskQueue = [NSMutableArray array];
+
+    // 找到四课视图并获取其可点击区域
+    Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
+    if (siKeViewClass) {
+        NSMutableArray *siKeViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
+        if (siKeViews.count > 0) {
+            UIView *siKeContainer = siKeViews.firstObject;
+            // 假设四课视图的直接子视图就是4个可点击的课容器
+            NSArray *keViews = siKeContainer.subviews;
+            [taskQueue addObjectsFromArray:keViews];
+             EchoLog(@"找到了四课视图，包含 %lu 个可点击区域。", (unsigned long)keViews.count);
+        }
     }
     
-    if (!parentCell) {
-        EchoLog(@"错误：无法为Label [%@] 找到父Cell", ((UILabel *)targetLabel).text);
-        // 跳过这个任务
-        [g_workQueue removeObjectAtIndex:0];
-        if (g_workQueue.count > 0) {
-            [self processNextQueueItem];
-        } else {
-            if (g_completionBlock) g_completionBlock();
-        }
+    // 找到三传视图并获取其可点击区域
+    Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
+    if(sanChuanViewClass){
+        NSMutableArray *scViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, scViews);
+        // 按Y坐标排序，确保是初传、中传、末传的顺序
+        [scViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) {
+            return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
+        }];
+        [taskQueue addObjectsFromArray:scViews];
+        EchoLog(@"找到了三传视图，包含 %lu 个可点击区域。", (unsigned long)scViews.count);
+    }
+
+    if (taskQueue.count == 0) {
+        EchoLog(@"错误：未能找到任何四课或三传的可点击视图。测试中止。");
+        g_isTestingKeChuanDetail = NO;
         return;
     }
-
-    // 找到Cell所在的CollectionView
-    UIView *collectionView = parentCell.superview;
-    while (collectionView && ![collectionView isKindOfClass:[UICollectionView class]]) {
-        collectionView = collectionView.superview;
-    }
     
-    if (collectionView && [collectionView isKindOfClass:[UICollectionView class]]) {
-        UICollectionView *cv = (UICollectionView *)collectionView;
-        NSIndexPath *indexPath = [cv indexPathForCell:(UICollectionViewCell *)parentCell];
-        if (indexPath && [cv.delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
-            EchoLog(@"模拟点击: [%@]", ((UILabel *)targetLabel).text);
-            [cv.delegate collectionView:cv didSelectItemAtIndexPath:indexPath];
-        } else {
-             EchoLog(@"错误：无法为 [%@] 执行点击", ((UILabel *)targetLabel).text);
-             // 如果点击失败，也要继续下一个任务
-             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [g_workQueue removeObjectAtIndex:0];
-                if (g_workQueue.count > 0) {
-                    [self processNextQueueItem];
-                } else {
-                    if (g_completionBlock) g_completionBlock();
+    // 按X坐标排序，确保四课是从右到左（第一课到第四课）
+    // 假设三传视图已经按Y坐标排好序了
+    NSRange siKeRange = NSMakeRange(0, taskQueue.count - 3); // 假设最后三个是三传
+    NSArray *siKeTasks = [taskQueue subarrayWithRange:siKeRange];
+    NSArray *sanChuanTasks = [taskQueue subarrayWithRange:NSMakeRange(siKeRange.length, 3)];
+
+    siKeTasks = [siKeTasks sortedArrayUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+        // X坐标越大越靠右，是第一课
+        return [@(v2.frame.origin.x) compare:@(v1.frame.origin.x)];
+    }];
+
+    taskQueue = [[siKeTasks arrayByAddingObjectsFromArray:sanChuanTasks] mutableCopy];
+
+    __block NSInteger totalTasks = taskQueue.count;
+    EchoLog(@"总任务数: %ld", (long)totalTasks);
+
+    __block void (^processQueue)(void);
+    __weak typeof(self) weakSelf = self;
+
+    processQueue = [^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || taskQueue.count == 0) {
+            // 所有任务完成
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                EchoLog(@"--- 所有课传详情提取完毕 ---");
+                EchoLog(@"--- 结果 ---");
+                
+                NSArray *titles = @[@"第1课", @"第2课", @"第3课", @"第4课", @"初传", @"中传", @"末传"];
+                NSMutableString *finalResult = [NSMutableString string];
+                for (NSUInteger i = 0; i < g_capturedKeChuanDetailArray.count; i++) {
+                    NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"项目 %lu", (unsigned long)i+1];
+                    NSString *detail = g_capturedKeChuanDetailArray[i];
+                    [finalResult appendFormat:@"\n[%@ 详情]\n%@\n\n--------------------\n", title, detail];
                 }
-             });
+                NSLog(@"%@", finalResult);
+                
+                EchoLog(@"--- 测试结束 ---");
+                g_isTestingKeChuanDetail = NO;
+                processQueue = nil;
+            });
+            return;
         }
-    } else {
-         EchoLog(@"错误：无法为 [%@] 找到父CollectionView", ((UILabel *)targetLabel).text);
+
+        UIView *targetView = taskQueue.firstObject;
+        [taskQueue removeObjectAtIndex:0];
+        NSInteger currentTaskNum = totalTasks - taskQueue.count;
+        EchoLog(@"正在处理任务 %ld/%ld...", (long)currentTaskNum, (long)totalTasks);
+
+        [strongSelf triggerTapOnView:targetView];
+        
+        // 设置一个延迟以等待弹窗出现和处理
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            processQueue();
+        });
+    } copy];
+
+    processQueue();
+}
+
+%new
+// 4. 模拟点击手势
+- (void)triggerTapOnView:(UIView *)view {
+    if (!view) return;
+    
+    // 遍历视图上的所有手势识别器
+    for (UIGestureRecognizer *recognizer in view.gestureRecognizers) {
+        if ([recognizer isKindOfClass:[UITapGestureRecognizer class]]) {
+            // 找到目标和动作
+            unsigned int count;
+            Ivar ivar = class_getInstanceVariable([UIGestureRecognizer class], "_targets");
+            id targets = object_getIvar(recognizer, ivar);
+            
+            if (targets && [targets count] > 0) {
+                // 通常只有一个target
+                id targetContainer = [targets firstObject];
+                // UIGestureRecognizerTarget is a private class.
+                id target = [targetContainer valueForKey:@"_target"];
+                SEL action = NSSelectorFromString([targetContainer valueForKey:@"_action"]);
+                
+                if (target && action && [target respondsToSelector:action]) {
+                    // 模拟执行
+                    #pragma clang diagnostic push
+                    #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+                    [target performSelector:action withObject:recognizer];
+                    #pragma clang diagnostic pop
+                    return; // 找到并触发后就返回
+                }
+            }
+        }
     }
+     // 如果没有找到手势，可能是在父视图上，或者需要其他点击方式
+     // 这里可以添加备用方案，但目前先假设手势在视图本身上
 }
 
 
 %new
-- (void)performDetailedExtractionTest {
-    if (g_isExtractingDetails) {
-        EchoLog(@"提取正在进行中，请勿重复点击。");
-        return;
-    }
-    EchoLog(@"--- 开始执行详细信息提取测试 ---");
-    
-    g_isExtractingDetails = YES;
-    g_capturedDetails = [NSMutableDictionary dictionary];
-    g_workQueue = [NSMutableArray array];
+// 5. 从详情视图中提取文本
+- (NSString *)extractTextFromKeChuanDetailView:(UIView *)detailView {
+    NSMutableArray *allTextParts = [NSMutableArray array];
 
-    // --- 1. 查找所有可点击的Label ---
-    NSMutableArray<UILabel *> *allClickableLabels = [NSMutableArray array];
-    
-    NSArray *viewClassNames = @[@"六壬大占.四課視圖", @"六壬大占.傳視圖"];
-    for (NSString *className in viewClassNames) {
-        Class viewClass = NSClassFromString(className);
-        if (viewClass) {
-            NSMutableArray *containerViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive(viewClass, self.view, containerViews);
-            for (UIView *container in containerViews) {
-                NSMutableArray<UILabel *> *labelsInContainer = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], container, labelsInContainer);
+    // 找到最外层的UIStackView
+    NSMutableArray *stackViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UIStackView class], detailView, stackViews);
+
+    if (stackViews.count > 0) {
+        UIStackView *mainStackView = stackViews.firstObject; // 假设第一个是主堆栈视图
+        
+        // 遍历堆栈视图中的所有子视图
+        for (UIView *arrangedSubview in mainStackView.arrangedSubviews) {
+            if ([arrangedSubview isKindOfClass:[UILabel class]]) {
+                // 如果是UILabel，直接获取文本
+                UILabel *label = (UILabel *)arrangedSubview;
+                if (label.text && label.text.length > 0) {
+                    [allTextParts addObject:[label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                }
+            } else {
+                // 如果不是UILabel（可能是包含其他内容的UIView，比如UITableView）
+                // 我们就递归地查找它内部所有的UILabel
+                NSMutableArray *subLabels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], arrangedSubview, subLabels);
                 
-                for (UILabel *label in labelsInContainer) {
-                    if (!label.text || label.text.length == 0) continue;
-                    CGFloat red, green, blue, alpha;
-                    [label.textColor getRed:&red green:&green blue:&blue alpha:&alpha];
-                    if (fabs(red - green) > 0.05 || fabs(red - blue) > 0.05 || fabs(green - blue) > 0.05) {
-                        [allClickableLabels addObject:label];
+                // 按y, x坐标排序，确保文本顺序正确
+                [subLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
+                    if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
+                    if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
+                    return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
+                }];
+                
+                for (UILabel *subLabel in subLabels) {
+                     if (subLabel.text && subLabel.text.length > 0) {
+                        [allTextParts addObject:[subLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
                     }
                 }
             }
         }
     }
-    
-    if (allClickableLabels.count == 0) {
-        EchoLog(@"错误：未能找到任何可点击的彩色标签。");
-        g_isExtractingDetails = NO;
-        UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"提取失败" message:@"未能找到任何可点击的彩色标签。请检查App界面。" preferredStyle:UIAlertControllerStyleAlert];
-        [errorAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:errorAlert animated:YES completion:nil];
-        return;
-    }
 
-    // --- 2. 建立任务队列 ---
-    // 按列分组
-    NSMutableDictionary *columns = [NSMutableDictionary dictionary];
-    for (UILabel *label in allClickableLabels) {
-        NSString *key = [NSString stringWithFormat:@"%.0f", roundf(label.center.x)];
-        if (!columns[key]) columns[key] = [NSMutableArray array];
-        [columns[key] addObject:label];
-    }
-    
-    // 找出三传区域的Y坐标边界
-    CGFloat sanChuanTopY = CGFLOAT_MAX;
-    Class sanChuanClass = NSClassFromString(@"六壬大占.傳視圖");
-    if (sanChuanClass) {
-        NSMutableArray *sanChuanViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(sanChuanClass, self.view, sanChuanViews);
-        if (sanChuanViews.count > 0) sanChuanTopY = ((UIView *)sanChuanViews.firstObject).frame.origin.y;
-    }
-
-    NSMutableArray *finalWorkQueueLabels = [NSMutableArray array];
-    for (NSString *key in columns) {
-        NSMutableArray *columnLabels = columns[key];
-        [columnLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
-            return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)];
-        }];
-        
-        if (columnLabels.count > 0 && ((UILabel *)columnLabels.firstObject).frame.origin.y >= sanChuanTopY) {
-            if (columnLabels.count > 1) { // 只取前两个
-                [finalWorkQueueLabels addObject:columnLabels[0]];
-                [finalWorkQueueLabels addObject:columnLabels[1]];
-            } else {
-                 [finalWorkQueueLabels addObjectsFromArray:columnLabels];
-            }
-        } else {
-            [finalWorkQueueLabels addObjectsFromArray:columnLabels];
-        }
-    }
-    
-    [finalWorkQueueLabels sortUsingComparator:^NSComparisonResult(UILabel *v1, UILabel *v2) {
-        if (roundf(v1.frame.origin.y) < roundf(v2.frame.origin.y)) return NSOrderedAscending;
-        if (roundf(v1.frame.origin.y) > roundf(v2.frame.origin.y)) return NSOrderedDescending;
-        return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)];
-    }];
-
-    for (UILabel *label in finalWorkQueueLabels) {
-        NSString *uniqueKey = [NSString stringWithFormat:@"%@ (%.0f,%.0f)", label.text, label.frame.origin.x, label.frame.origin.y];
-        [g_workQueue addObject:@{@"label": label, @"key": uniqueKey, @"original_text": label.text}];
-    }
-    
-    EchoLog(@"建立任务队列，共 %ld 个项目。", g_workQueue.count);
-
-    // --- 3. 设置完成后的回调 ---
-    __weak typeof(self) weakSelf = self;
-    g_completionBlock = ^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-
-        EchoLog(@"--- 所有任务完成，正在整理结果 ---");
-        
-        NSMutableString *finalReport = [NSMutableString stringWithString:@"【四课三传详细信息提取报告】\n\n"];
-        
-        // 创建一个临时队列副本用于生成报告，以保持原始顺序
-        NSMutableArray *reportQueue = [NSMutableArray array];
-        for (UILabel *label in finalWorkQueueLabels) {
-             NSString *uniqueKey = [NSString stringWithFormat:@"%@ (%.0f,%.0f)", label.text, label.frame.origin.x, label.frame.origin.y];
-             [reportQueue addObject:@{@"original_text": label.text, @"key": uniqueKey}];
-        }
-        
-        for (NSDictionary *task in reportQueue) {
-            NSString *originalText = task[@"original_text"];
-            NSString *key = task[@"key"];
-            NSString *details = g_capturedDetails[key] ?: @"[信息提取失败]";
-            
-            [finalReport appendFormat:@"---- %@ ----\n%@\n\n", originalText, details];
-        }
-
-        [UIPasteboard generalPasteboard].string = finalReport;
-        
-        // 清理全局变量
-        g_isExtractingDetails = NO;
-        g_capturedDetails = nil;
-        g_workQueue = nil;
-        g_completionBlock = nil;
-        
-        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"测试完成" message:[NSString stringWithFormat:@"成功提取 %ld 条详细信息，已全部复制到剪贴板。", (unsigned long)g_capturedDetails.count] preferredStyle:UIAlertControllerStyleAlert];
-        [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-        [strongSelf presentViewController:successAlert animated:YES completion:nil];
-    };
-
-    // --- 4. 启动任务队列 ---
-    if (g_workQueue.count > 0) {
-        [self processNextQueueItem];
-    } else {
-         if (g_completionBlock) g_completionBlock();
-    }
+    // 将所有文本片段合并成一个字符串，用换行符分隔
+    // 并进行一些清理，移除连续的空行
+    NSString *rawText = [allTextParts componentsJoinedByString:@"\n"];
+    return [rawText stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"];
 }
 
 %end
