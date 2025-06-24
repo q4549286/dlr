@@ -32,9 +32,12 @@ static UIViewController* getTopmostViewController() {
 // =========================================================================
 // 3. 主功能实现
 // =========================================================================
+// 【【【编译错误修正】】】
+// 在这里声明所有我们将要添加的新方法，以告知编译器它们的存在。
 @interface UIViewController (TheWeiHunter)
 - (void)startWeiHunting;
 - (void)finishWeiHunting;
+- (void)my_hooked_showSummary:(id)sender; // <--- 添加这个声明
 @end
 
 // 我们将手动交换的Hook代码放在一个单独的 %group 中
@@ -59,6 +62,7 @@ static UIViewController* getTopmostViewController() {
             [g_capturedWeiValues addObject:[NSString stringWithFormat:@"[捕获异常: %@]", exception.reason]];
         }
     }
+    // 现在编译器知道这个方法存在了，所以可以安全调用
     [self my_hooked_showSummary:sender];
 }
 
@@ -117,10 +121,8 @@ static UIViewController* getTopmostViewController() {
 
 // --- 手动方法交换 ---
 %ctor {
-    // 【【【编译错误修正】】】
-    // 初始化所有我们使用到的hook组
-    %init(TheosBypassHook); // 初始化我们用于手动交换的命名组
-    %init;                 // 初始化默认的、未命名的组 (用于UI注入)
+    %init(TheosBypassHook);
+    %init;
 
     Class vcClass = NSClassFromString(@"六壬大占.ViewController");
     
