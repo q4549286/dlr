@@ -1,302 +1,204 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog(@"[EchoAI-Final-V1] " format, ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog(@"[EchoAI-Test-KCD-V6-DirectCall] " format, ##__VA_ARGS__)
 
-// =========================================================================
-// 1. 全局变量与辅助函数
-// =========================================================================
+// --- 全局变量 ---
+static BOOL g_isTestingKeChuanDetail = NO;
+static NSMutableArray *g_capturedKeChuanDetailArray = nil;
+static NSMutableArray *g_keChuanTaskQueue = nil;
+static void (^g_processQueueBlock)(void) = nil;
 
-// --- 任务状态控制 ---
-static dispatch_queue_t g_echo_task_queue;
-static BOOL g_isExtractingDetails = NO;
-
-// --- 数据存储 ---
-static NSMutableDictionary *g_capturedData = nil;
 
 // --- 辅助函数 ---
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
-
 static id GetIvarView(id object, const char *ivarName) {
     Ivar ivar = class_getInstanceVariable([object class], ivarName);
     if (ivar) { return object_getIvar(object, ivar); }
     return nil;
 }
 
-static NSString * const CustomFooterText = @"\n\n"
-"--- 自定义注意事项 ---\n"
-"1. 本解析结果仅供参考。\n"
-"2. 请结合实际情况进行判断。\n"
-"3. [在此处添加您的Prompt或更多说明]";
-
-// =========================================================================
-// 2. 核心功能接口声明
-// =========================================================================
-@interface UIViewController (EchoAIFinal)
-- (void)performFullAnalysis;
-- (void)echo_step1_extractBaseInfo:(void (^)(BOOL success))completion;
-- (void)echo_step2_extractKeChuanDetails:(void (^)(BOOL success))completion;
-- (void)echo_step3_extractNianMingDetails:(void (^)(BOOL success))completion;
-- (void)echo_step4_assembleAndCopy;
-- (NSString *)echo_extractTextFromViewHierachy:(UIView *)view;
+// --- 声明 ---
+@interface UIViewController (EchoAITestAddons)
+- (void)performKeChuanDetailTest;
+- (NSString *)extractTextFromViewHierachy:(UIView *)view;
+// 这两个是App自带的方法，我们只是声明一下以便调用
+- (void)顯示課傳摘要WithSender:(id)sender;
+- (void)顯示課傳天將摘要WithSender:(id)sender;
 @end
 
 
 // =========================================================================
-// 3. UIViewController Hooks
+// 主 Hook
 // =========================================================================
 %hook UIViewController
 
-// --- 添加功能按钮 ---
+// 1. 添加测试按钮
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window; if (!keyWindow) return;
-            UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-            button.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
-            [button setTitle:@"高级技法解析" forState:UIControlStateNormal];
-            button.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            button.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0];
-            [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            button.layer.cornerRadius = 8;
-            [button addTarget:self action:@selector(performFullAnalysis) forControlEvents:UIControlEventTouchUpInside];
-            [keyWindow addSubview:button];
+            NSInteger testButtonTag = 999111; if ([keyWindow viewWithTag:testButtonTag]) { [[keyWindow viewWithTag:testButtonTag] removeFromSuperview]; }
+            UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 90, 140, 36);
+            testButton.tag = testButtonTag;
+            [testButton setTitle:@"测试课传V6(直调)" forState:UIControlStateNormal];
+            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            testButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.8 alpha:1.0]; // 蓝色
+            [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            testButton.layer.cornerRadius = 8;
+            [testButton addTarget:self action:@selector(performKeChuanDetailTest) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:testButton];
         });
     }
 }
 
-// --- 核心拦截器 ---
+// 2. 拦截详情窗口 (逻辑不变)
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    if (g_isExtractingDetails) {
+    if (g_isTestingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        
-        // --- 拦截课传详情页 ---
         if ([vcClassName isEqualToString:@"六壬大占.課傳摘要視圖"]) {
+            EchoLog(@"捕获到 '課傳摘要視圖'...");
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
+                EchoLog(@"'課傳摘要視圖' 已显示，开始提取(不再需要模拟展开)...");
+                // 因为是直接调用显示方法，理论上内容已经完全了，无需再模拟点击展开
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    UIView *contentView = viewControllerToPresent.view;
-                    // 模拟展开
-                    Class tvClass = NSClassFromString(@"六壬大占.天將摘要視圖") ?: [UITableView class];
-                    NSMutableArray *tableViews = [NSMutableArray array];
-                    FindSubviewsOfClassRecursive(tvClass, contentView, tableViews);
-                    for (UITableView *tv in tableViews) {
-                        if ([tv.delegate respondsToSelector:@selector(tableView:didSelectRowAtIndexPath:)] && tv.dataSource) {
-                            for (int s=0; s<tv.numberOfSections; s++) for (int r=0; r<[tv numberOfRowsInSection:s]; r++) {
-                                [tv.delegate tableView:tv didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:r inSection:s]];
-                            }
-                        }
-                    }
-                    // 提取文本
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        NSString *text = [self echo_extractTextFromViewHierachy:contentView];
-                        [g_capturedData[@"keChuanDetails"] addObject:text];
-                        [viewControllerToPresent dismissViewControllerAnimated:NO completion:g_capturedData[@"completionBlock"]];
-                    });
+                    NSString *detailText = [self extractTextFromViewHierachy:viewControllerToPresent.view];
+                    [g_capturedKeChuanDetailArray addObject:detailText];
+                    EchoLog(@"内容提取完成，关闭详情页。");
+                    [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
+                         if (g_processQueueBlock) { g_processQueueBlock(); }
+                    }];
                 });
             };
             %orig(viewControllerToPresent, flag, newCompletion);
             return;
         }
-
-        // --- 拦截年命摘要和格局页 (可以根据需要添加这部分逻辑) ---
-        // 此处暂时留空，可以后续整合之前的年命提取逻辑
-
     }
     %orig(viewControllerToPresent, flag, completion);
 }
 
 // =========================================================================
-// 4. 功能实现
+// 新增的功能实现
 // =========================================================================
-
 %new
-// --- 总控制器 ---
-- (void)performFullAnalysis {
-    if (g_isExtractingDetails) {
-        EchoLog(@"正在执行解析，请稍候...");
-        return;
-    }
-    EchoLog(@"--- 开始执行完整解析 ---");
-    g_isExtractingDetails = YES;
-    g_capturedData = [NSMutableDictionary dictionary];
-    if (!g_echo_task_queue) {
-        g_echo_task_queue = dispatch_queue_create("com.echoai.taskqueue", DISPATCH_QUEUE_SERIAL);
-    }
-    
-    __weak typeof(self) weakSelf = self;
-    dispatch_async(g_echo_task_queue, ^{
-        // Step 1
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            [weakSelf echo_step1_extractBaseInfo:^(BOOL success) {
-                // Step 2
-                [weakSelf echo_step2_extractKeChuanDetails:^(BOOL success) {
-                    // Step 3 (年命部分暂时跳过，可后续添加)
-                    // [weakSelf echo_step3_extractNianMingDetails:^(BOOL success) {
-                        // Step 4
-                        [weakSelf echo_step4_assembleAndCopy];
-                    // }];
-                }];
-            }];
-        });
-    });
-}
+// 3. 核心测试逻辑 (终极版 - 直接调用)
+- (void)performKeChuanDetailTest {
+    EchoLog(@"--- 开始测试 V6 (直接调用) ---");
+    g_isTestingKeChuanDetail = YES;
+    g_capturedKeChuanDetailArray = [NSMutableArray array];
+    g_keChuanTaskQueue = [NSMutableArray array];
 
-%new
-// --- 步骤1：提取基本信息和列表 ---
-- (void)echo_step1_extractBaseInfo:(void (^)(BOOL success))completion {
-    EchoLog(@"[步骤1] 提取基本信息...");
-    // 这部分代码从您之前的脚本中提取，用于抓取所有不需要点击的浅层信息
-    // 为简化，此处只列出框架，实际需要填充您的提取代码
-    g_capturedData[@"baseInfo"] = @"[此处应为提取到的时间、月将、空亡、四课三传表面文字等信息]\n";
-    g_capturedData[@"bifaInfo"] = @"[此处应为提取到的毕法诀信息]\n";
-    g_capturedData[@"gejuInfo"] = @"[此处应为提取到的格局信息]\n";
-    
-    EchoLog(@"[步骤1] 完成。");
-    if (completion) completion(YES);
-}
-
-
-%new
-// --- 步骤2：提取课传详情 ---
-- (void)echo_step2_extractKeChuanDetails:(void (^)(BOOL success))completion {
-    EchoLog(@"[步骤2] 提取课传详情...");
-    g_capturedData[@"keChuanDetails"] = [NSMutableArray array];
-    
-    NSMutableArray *taskTargets = [NSMutableArray array];
-    
-    // 精确获取四课视图
+    // --- 精确获取四课视图 ---
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
-        NSMutableArray *siKeViews = [NSMutableArray array];
+        NSMutableArray *siKeViews = [NSMutableArray array]; 
         FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
         if (siKeViews.count > 0) {
             id siKeViewInstance = siKeViews.firstObject;
-            // 假设这些ivar名称是固定的，如果不是，需要动态获取
-            NSArray *ivarNames = @[@"_日上", @"_日阴", @"_辰上", @"_辰阴"]; 
-            for (NSString *ivarNameStr in ivarNames) {
-                UIView *keView = GetIvarView(siKeViewInstance, [ivarNameStr UTF8String]);
-                if (keView) [taskTargets addObject:keView];
-            }
+            // 这里的日辰需要动态获取，我们暂时用一个占位符方法
+            // 先用一个通用但不精确的方法获取四课的点击视图
+            [g_keChuanTaskQueue addObjectsFromArray:((UIView *)siKeViewInstance).subviews];
+            // 排序确保顺序
+             [(NSMutableArray *)g_keChuanTaskQueue sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+                return [@(v2.frame.origin.x) compare:@(v1.frame.origin.x)];
+            }];
         }
     }
     
-    // 精确获取三传视图
+    // --- 精确获取三传视图 ---
+    NSMutableArray *sanChuanTasksMutable = [NSMutableArray array];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
-    if (sanChuanViewClass) {
-        NSMutableArray *sanChuanViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, sanChuanViews);
-        [sanChuanViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-        [taskTargets addObjectsFromArray:sanChuanViews];
-    }
-
-    if (taskTargets.count == 0) {
-        EchoLog(@"[步骤2] 未找到任何课传视图，跳过。");
-        if (completion) completion(YES);
-        return;
+    if(sanChuanViewClass){
+        FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, sanChuanTasksMutable);
+        [sanChuanTasksMutable sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+        [g_keChuanTaskQueue addObjectsFromArray:sanChuanTasksMutable];
     }
     
-    __block void (^processNextTask)(void);
+    if (g_keChuanTaskQueue.count == 0) {
+        EchoLog(@"错误：未能获取任何可点击的课、传视图。"); g_isTestingKeChuanDetail = NO; return;
+    }
+    EchoLog(@"任务队列准备就绪，总共 %lu 个任务。", (unsigned long)g_keChuanTaskQueue.count);
+
     __weak typeof(self) weakSelf = self;
-    
-    void (^taskCompletionBlock)(void) = ^{
-        dispatch_async(g_echo_task_queue, ^{
-            processNextTask();
-        });
-    };
-
-    g_capturedData[@"completionBlock"] = taskCompletionBlock;
-    
-    processNextTask = ^{
-        if (taskTargets.count == 0) {
-            EchoLog(@"[步骤2] 所有课传详情提取完成。");
-            g_capturedData[@"completionBlock"] = nil; // 清理
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(YES);
-            });
+    g_processQueueBlock = [^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || g_keChuanTaskQueue.count == 0) {
+            // ... 结束逻辑 ...
+            EchoLog(@"--- 所有任务处理完毕 ---");
+            NSMutableString *finalResult = [NSMutableString string];
+            NSArray *titles = @[@"第1课", @"第2课", @"第3课", @"第4课", @"初传", @"中传", @"末传"];
+            for (NSUInteger i = 0; i < g_capturedKeChuanDetailArray.count; i++) {
+                NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"项目 %lu", (unsigned long)i+1];
+                [finalResult appendFormat:@"\n[%@ 详情]\n%@\n--------------------\n", title, g_capturedKeChuanDetailArray[i]];
+            }
+            NSLog(@"%@", finalResult);
+            EchoLog(@"--- 测试结束 ---");
+            g_isTestingKeChuanDetail = NO; g_processQueueBlock = nil; g_keChuanTaskQueue = nil;
             return;
         }
+
+        UIView *targetView = g_keChuanTaskQueue.firstObject;
+        [g_keChuanTaskQueue removeObjectAtIndex:0];
+        EchoLog(@"处理任务... 目标视图: %@", targetView);
+
+        // [核心修改] 直接调用ViewController的方法，不再模拟手势
+        SEL selectorToShow = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
+        if (![strongSelf respondsToSelector:selectorToShow]) {
+            selectorToShow = NSSelectorFromString(@"顯示課傳摘要WithSender:");
+        }
         
-        id sender = taskTargets.firstObject;
-        [taskTargets removeObjectAtIndex:0];
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            EchoLog(@"调用 '顯示課傳摘要WithSender:' for %@", sender);
+        if ([strongSelf respondsToSelector:selectorToShow]) {
+            EchoLog(@"调用方法: %@ withSender: %@", NSStringFromSelector(selectorToShow), targetView);
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [weakSelf performSelector:@selector(顯示課傳摘要WithSender:) withObject:sender];
+            [strongSelf performSelector:selectorToShow withObject:targetView];
             #pragma clang diagnostic pop
-        });
-    };
-    
-    // 启动第一个任务
-    processNextTask();
-}
-
-%new
-// --- 步骤3：提取年命详情 (留作扩展) ---
-- (void)echo_step3_extractNianMingDetails:(void (^)(BOOL success))completion {
-    EchoLog(@"[步骤3] 提取年命详情 (已跳过)...");
-    if (completion) completion(YES);
-}
-
-%new
-// --- 步骤4：整合并输出 ---
-- (void)echo_step4_assembleAndCopy {
-    EchoLog(@"[步骤4] 整合所有信息...");
-    
-    NSMutableString *finalString = [NSMutableString string];
-    [finalString appendString:g_capturedData[@"baseInfo"] ?: @""];
-    [finalString appendString:g_capturedData[@"bifaInfo"] ?: @""];
-    [finalString appendString:g_capturedData[@"gejuInfo"] ?: @""];
-
-    NSArray *details = g_capturedData[@"keChuanDetails"];
-    if (details.count > 0) {
-        [finalString appendString:@"\n\n--- 课传详情 ---\n"];
-        NSArray *titles = @[@"第1课", @"第2课", @"第3课", @"第4课", @"初传", @"中传", @"末传"];
-        for (NSUInteger i=0; i < details.count; i++) {
-            NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"项目%lu", (unsigned long)i+1];
-            [finalString appendFormat:@"\n[%@]\n%@\n", title, details[i]];
+        } else {
+            EchoLog(@"错误! ViewController 不响应任何一个摘要显示方法。跳过此任务。");
+            if (g_processQueueBlock) { g_processQueueBlock(); }
         }
-    }
-    
-    [finalString appendString:CustomFooterText];
-    
-    [UIPasteboard generalPasteboard].string = finalString;
-    EchoLog(@"--- 完整解析完成，结果已复制到剪贴板 ---");
-    
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"解析完成" message:@"所有高级技法信息已合并，并成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
-    
-    g_isExtractingDetails = NO;
-    g_capturedData = nil;
+    } copy];
+
+    g_processQueueBlock();
 }
 
 %new
-// --- 文本提取辅助函数 ---
-- (NSString *)echo_extractTextFromViewHierachy:(UIView *)view {
+// 5. 提取文本 (保持不变)
+- (NSString *)extractTextFromViewHierachy:(UIView *)view {
     NSMutableArray *allLabels = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UILabel class], view, allLabels);
+    
     [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
         CGPoint p1 = [l1.superview convertPoint:l1.frame.origin toView:nil];
         CGPoint p2 = [l2.superview convertPoint:l2.frame.origin toView:nil];
-        if (fabs(p1.y - p2.y) > 2) return p1.y < p2.y ? NSOrderedAscending : NSOrderedDescending;
-        return p1.x < p2.x ? NSOrderedAscending : NSOrderedDescending;
+        if (p1.y < p2.y - 2) return NSOrderedAscending;
+        if (p1.y > p2.y + 2) return NSOrderedDescending;
+        if (p1.x < p2.x) return NSOrderedAscending;
+        if (p1.x > p2.x) return NSOrderedDescending;
+        return NSOrderedSame;
     }];
+        
     NSMutableArray *textParts = [NSMutableArray array];
     for (UILabel *label in allLabels) {
-        if (label.text.length > 0) {
-            [textParts addObject:[label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+         if (label.text && label.text.length > 0) {
+            NSString *trimmedText = [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+             // 防止详情页里的标题和外部重复
+            if (![textParts containsObject:trimmedText]) {
+                 [textParts addObject:trimmedText];
+            }
         }
     }
-    NSString *raw = [textParts componentsJoinedByString:@"\n"];
-    return [raw stringByReplacingOccurrencesOfString:@"\n{2,}" withString:@"\n" options:NSRegularExpressionSearch range:NSMakeRange(0, raw.length)];
+
+    NSString *rawText = [textParts componentsJoinedByString:@"\n"];
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"\n{2,}" options:0 error:nil];
+    return [regex stringByReplacingMatchesInString:rawText options:0 range:NSMakeRange(0, rawText.length) withTemplate:@"\n"];
 }
 
 %end
