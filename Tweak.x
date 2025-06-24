@@ -3,16 +3,19 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数
+// 1. 全局状态管理
 // =========================================================================
 
-// 用于控制自动化流程的状态和数据存储
+// 自动化流程的控制标志，YES表示正在提取
 static BOOL g_isExtractingKeChuanDetail = NO;
+// 存储提取到的弹窗详细文本
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
+// 待点击的UILabel对象队列 (工作队列)
 static NSMutableArray *g_keChuanWorkQueue = nil;
+// 与工作队列一一对应的标题队列
 static NSMutableArray *g_keChuanTitleQueue = nil;
 
-// 递归查找指定类的所有子视图
+// 辅助函数：递归查找视图层级中所有指定类的子视图
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) {
         [storage addObject:view];
@@ -24,175 +27,179 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 
 // =========================================================================
-// 2. 主功能区
+// 2. 主功能实现
 // =========================================================================
-@interface UIViewController (EchoAITestAddons_Truth)
-- (void)performKeChuanDetailExtractionTest_Truth;
-- (void)processKeChuanQueue_Truth;
+@interface UIViewController (FinalTruthAddons)
+- (void)startKeChuanExtractionProcess;
+- (void)processNextInKeChuanQueue;
 @end
 
 %hook UIViewController
 
-// --- viewDidLoad: 在主界面加载时创建功能按钮 ---
+// --- viewDidLoad: 注入功能按钮 ---
 - (void)viewDidLoad {
     %orig;
+    // 仅在目标App的主视图控制器中添加按钮
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        // 延迟执行，确保视图层级已稳定
+        // 延迟执行，确保视图层级已完全加载并稳定
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window;
             if (!keyWindow) { return; }
 
-            NSInteger testButtonTag = 556690;
-            // 移除旧按钮，防止重复添加
-            if ([keyWindow viewWithTag:testButtonTag]) {
-                [[keyWindow viewWithTag:testButtonTag] removeFromSuperview];
-            }
+            NSInteger buttonTag = 556699; // 使用一个新的唯一Tag
+            // 如果按钮已存在，先移除，防止重复添加
+            [[keyWindow viewWithTag:buttonTag] removeFromSuperview];
 
-            UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
-            testButton.tag = testButtonTag;
-            [testButton setTitle:@"课传提取(修正版)" forState:UIControlStateNormal];
-            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor systemGreenColor];
-            [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Truth) forControlEvents:UIControlEventTouchUpInside];
-            [keyWindow addSubview:testButton];
+            UIButton *extractionButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            extractionButton.frame = CGRectMake(keyWindow.bounds.size.width - 160, 45 + 88, 150, 40);
+            extractionButton.tag = buttonTag;
+            [extractionButton setTitle:@"一键提取课传(稳定版)" forState:UIControlStateNormal];
+            extractionButton.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+            extractionButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0]; // 换个醒目的蓝色
+            [extractionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            extractionButton.layer.cornerRadius = 10;
+            extractionButton.layer.shadowColor = [UIColor blackColor].CGColor;
+            extractionButton.layer.shadowOffset = CGSizeMake(0, 2);
+            extractionButton.layer.shadowOpacity = 0.3;
+            [extractionButton addTarget:self action:@selector(startKeChuanExtractionProcess) forControlEvents:UIControlEventTouchUpInside];
+            
+            [keyWindow addSubview:extractionButton];
         });
     }
 }
 
-// --- presentViewController: 捕获弹窗内容，并驱动自动化队列 ---
+// --- presentViewController: 核心拦截逻辑 ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
+    // 仅当我们的自动化流程启动时才进行拦截
     if (g_isExtractingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        // 检查是否是我们关心的弹窗类型
+        
+        // 判断弹出的视图是否是我们需要提取的目标
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            // 隐藏弹窗动画，加速提取
+            // 优化：隐藏弹窗过程，让提取在后台“瞬间”完成
             viewControllerToPresent.view.alpha = 0.0f;
             flag = NO;
 
-            // 创建一个新的completion block，在原始completion之后执行我们的逻辑
-            void (^newCompletion)(void) = ^{
-                if (completion) { completion(); }
+            // 创建一个新的completion闭包，在原始弹窗逻辑完成后执行我们的提取代码
+            void (^extractionCompletion)(void) = ^{
+                if (completion) { completion(); } // 如果原始调用有completion，先执行它
 
-                // 提取弹窗内的所有UILabel文本
+                // 1. 提取文本
                 UIView *contentView = viewControllerToPresent.view;
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
                 
-                // 按从上到下、从左到右的顺序排序Label
+                // 按从上到下、从左到右的视觉顺序排序Label
                 [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                    if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-                    if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+                    CGFloat y1 = roundf(o1.frame.origin.y);
+                    CGFloat y2 = roundf(o2.frame.origin.y);
+                    if (y1 < y2) return NSOrderedAscending;
+                    if (y1 > y2) return NSOrderedDescending;
                     return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
                 }];
 
                 NSMutableArray<NSString *> *textParts = [NSMutableArray array];
                 for (UILabel *label in allLabels) {
-                    if (label.text && label.text.length > 0) {
-                        // 将多行文本合并为一行，便于处理
+                    if (label.text.length > 0) {
                         [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
                     }
                 }
                 NSString *fullDetail = [textParts componentsJoinedByString:@"\n"];
                 [g_capturedKeChuanDetailArray addObject:fullDetail];
 
-                // 关闭当前弹窗，并在完成后触发下一个任务
+                // 2. 关闭弹窗，并在关闭后驱动队列进入下一步
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                    // 在关闭弹窗和处理下一个任务之间插入一个微小延迟。
-                    // 这给目标App的主线程足够的时间来重置其内部状态，防止因处理速度过快而导致的数据错误。
+                    // 【【【最关键的稳定性修复】】】
+                    // 必须延迟执行下一步！因为UI操作是异步的，立即调用会导致App内部状态未更新，
+                    // 从而在下一次点击时仍然使用旧数据。0.1秒的延迟给予主线程足够的时间来“喘息”和重置状态。
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        [self processKeChuanQueue_Truth];
+                        [self processNextInKeChuanQueue];
                     });
                 }];
             };
             
-            // 使用我们修改后的completion block来调用原始的present方法
-            %orig(viewControllerToPresent, flag, newCompletion);
+            %orig(viewControllerToPresent, flag, extractionCompletion);
             return;
         }
     }
-    // 如果不是在提取模式下，或者弹窗类型不匹配，则正常执行
+    
+    // 如果不是在提取模式，或弹窗不是目标类型，则正常执行原始逻辑
     %orig(viewControllerToPresent, flag, completion);
 }
 
 %new
-// --- performKeChuanDetailExtractionTest_Truth: 按钮点击事件，初始化并构建任务队列 ---
-- (void)performKeChuanDetailExtractionTest_Truth {
-    // 初始化全局状态
+// --- startKeChuanExtractionProcess: 按钮点击后，准备并启动整个流程 ---
+- (void)startKeChuanExtractionProcess {
+    // 防止重复点击导致流程混乱
+    if (g_isExtractingKeChuanDetail) {
+        NSLog(@"[Tweak] 提取任务正在进行中，请勿重复点击。");
+        return;
+    }
+    
+    // 1. 初始化所有全局状态
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
-    
-    // Part A: 提取三传信息
-    Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
-    if (sanChuanContainerClass) {
-        NSMutableArray *containers = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(sanChuanContainerClass, self.view, containers);
-        if (containers.count > 0) {
-            UIView *sanChuanContainer = containers.firstObject;
-            
-            // 使用正确的繁体中文ivar名来获取对应的视图
-            const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL};
-            NSString *rowTitles[] = {@"初传", @"中传", @"末传"};
-            
-            for (int i = 0; ivarNames[i] != NULL; ++i) {
-                Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarNames[i]);
+
+    NSLog(@"[Tweak] 开始构建课传提取队列...");
+
+    // 2. 构建任务队列 - Part A: 三传
+    Class sanChuanClass = NSClassFromString(@"六壬大占.三傳視圖");
+    if (sanChuanClass) {
+        NSMutableArray *views = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(sanChuanClass, self.view, views);
+        if (views.count > 0) {
+            UIView *container = views.firstObject;
+            const char *ivars[] = {"初傳", "中傳", "末傳"};
+            NSString *titles[] = {@"初传", @"中传", @"末传"};
+            for (int i = 0; i < 3; ++i) {
+                Ivar ivar = class_getInstanceVariable(sanChuanClass, ivars[i]);
                 if (ivar) {
-                    UIView *chuanView = object_getIvar(sanChuanContainer, ivar);
+                    UIView *chuanView = object_getIvar(container, ivar);
                     if (chuanView) {
                         NSMutableArray *labels = [NSMutableArray array];
                         FindSubviewsOfClassRecursive([UILabel class], chuanView, labels);
                         [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
-                        
-                        if(labels.count >= 2) {
-                            UILabel *dizhiLabel = labels[labels.count-2];
-                            UILabel *tianjiangLabel = labels[labels.count-1];
-                            
-                            [g_keChuanWorkQueue addObject:dizhiLabel];
-                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
-                            
-                            [g_keChuanWorkQueue addObject:tianjiangLabel];
-                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
+                        if (labels.count >= 2) {
+                            UILabel *dizhi = labels[labels.count-2];
+                            UILabel *tianjiang = labels[labels.count-1];
+                            [g_keChuanWorkQueue addObject:dizhi];
+                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", titles[i], dizhi.text]];
+                            [g_keChuanWorkQueue addObject:tianjiang];
+                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", titles[i], tianjiang.text]];
                         }
                     }
                 }
             }
         }
     }
-    
-    // Part B: 提取四课信息
-    Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
-    if (siKeContainerClass) {
-        NSMutableArray *containers = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(siKeContainerClass, self.view, containers);
-        if (containers.count > 0) {
-            UIView *siKeContainer = containers.firstObject;
 
-            const char *ivarNames[] = {"第一課", "第二課", "第三課", "第四課", NULL};
-            NSString *rowTitles[] = {@"第一课", @"第二课", @"第三课", @"第四课"};
-
-            for (int i = 0; ivarNames[i] != NULL; ++i) {
-                Ivar ivar = class_getInstanceVariable(siKeContainerClass, ivarNames[i]);
+    // 3. 构建任务队列 - Part B: 四课
+    Class siKeClass = NSClassFromString(@"六壬大占.四課視圖");
+    if (siKeClass) {
+        NSMutableArray *views = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(siKeClass, self.view, views);
+        if (views.count > 0) {
+            UIView *container = views.firstObject;
+            const char *ivars[] = {"第一課", "第二課", "第三課", "第四課"};
+            NSString *titles[] = {@"第一课", @"第二课", @"第三课", @"第四课"};
+            for (int i = 0; i < 4; ++i) {
+                Ivar ivar = class_getInstanceVariable(siKeClass, ivars[i]);
                 if (ivar) {
-                    UIView *keView = object_getIvar(siKeContainer, ivar);
+                    UIView *keView = object_getIvar(container, ivar);
                     if (keView) {
                         NSMutableArray *labels = [NSMutableArray array];
                         FindSubviewsOfClassRecursive([UILabel class], keView, labels);
                         [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-                        
                         if (labels.count >= 2) {
-                            UILabel *tianjiangLabel = labels.firstObject;
-                            UILabel *dizhiLabel = labels.lastObject;
-
-                            [g_keChuanWorkQueue addObject:dizhiLabel];
-                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
-
-                            [g_keChuanWorkQueue addObject:tianjiangLabel];
-                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
+                            UILabel *tianjiang = labels.firstObject;
+                            UILabel *dizhi = labels.lastObject;
+                            [g_keChuanWorkQueue addObject:dizhi];
+                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", titles[i], dizhi.text]];
+                            [g_keChuanWorkQueue addObject:tianjiang];
+                            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", titles[i], tianjiang.text]];
                         }
                     }
                 }
@@ -200,34 +207,41 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         }
     }
 
+    // 4. 检查队列并启动
     if (g_keChuanWorkQueue.count == 0) {
-        g_isExtractingKeChuanDetail = NO;
+        NSLog(@"[Tweak] 未找到可提取的课传信息。");
+        g_isExtractingKeChuanDetail = NO; // 重置状态
         return;
     }
     
-    [self processKeChuanQueue_Truth];
+    NSLog(@"[Tweak] 队列构建完成，共 %lu 个任务。开始执行...", (unsigned long)g_keChuanWorkQueue.count);
+    [self processNextInKeChuanQueue];
 }
 
 %new
-// --- processKeChuanQueue_Truth: 自动化队列处理器 ---
-- (void)processKeChuanQueue_Truth {
+// --- processNextInKeChuanQueue: 自动化队列的驱动引擎 ---
+- (void)processNextInKeChuanQueue {
+    // 检查队列是否已空，如果为空，则表示所有任务已完成
     if (g_keChuanWorkQueue.count == 0) {
-        // ---- 结束逻辑 ----
-        NSMutableString *resultStr = [NSMutableString string];
+        NSLog(@"[Tweak] 所有任务已完成。");
+        // ---- 结束流程 ----
+        NSMutableString *resultStr = [NSMutableString stringWithString:@"【六壬大占 - 课传详情提取结果】\n\n"];
         for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
             NSString *title = g_keChuanTitleQueue[i];
             NSString *detail = (i < g_capturedKeChuanDetailArray.count) ? g_capturedKeChuanDetailArray[i] : @"[信息提取失败]";
             [resultStr appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
         }
         
+        // 复制到剪贴板并弹窗提示
         [UIPasteboard generalPasteboard].string = resultStr;
-        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成" message:[NSString stringWithFormat:@"已成功提取 %lu 条详情，并全部复制到剪贴板。", (unsigned long)g_capturedKeChuanDetailArray.count] preferredStyle:UIAlertControllerStyleAlert];
         
-        // 【【【此处已修正】】】
-        [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        // 【编译错误修复】使用正确的 UIAlertActionStyle
+        [alert addAction:[UIAlertAction actionWithTitle:@"太棒了！" style:UIAlertActionStyleDefault handler:nil]];
         
-        [self presentViewController:successAlert animated:YES completion:nil];
+        [self presentViewController:alert animated:YES completion:nil];
         
+        // 清理所有全局变量，为下一次运行做准备
         g_isExtractingKeChuanDetail = NO;
         g_keChuanWorkQueue = nil;
         g_capturedKeChuanDetailArray = nil;
@@ -235,18 +249,16 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         return;
     }
     
-    // ---- 队列处理逻辑 ----
+    // ---- 处理当前任务 ----
     UILabel *itemToClick = g_keChuanWorkQueue.firstObject;
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     
-    NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
+    // 使用已完成任务的数量来定位当前任务的标题
+    NSString *currentTitle = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
+    NSLog(@"[Tweak] 正在处理: %@", currentTitle);
 
-    SEL actionToPerform = nil;
-    if ([title containsString:@"地支"]) {
-        actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
-    } else {
-        actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
-    }
+    // 根据标题内容判断应该调用哪个方法来模拟点击
+    SEL actionToPerform = [currentTitle containsString:@"地支"] ? NSSelectorFromString(@"顯示課傳摘要WithSender:") : NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
     
     if ([self respondsToSelector:actionToPerform]) {
         #pragma clang diagnostic push
@@ -254,8 +266,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         [self performSelector:actionToPerform withObject:itemToClick];
         #pragma clang diagnostic pop
     } else {
-        NSLog(@"[EchoAI_Tweak] Warning: Selector %@ not found. Skipping.", NSStringFromSelector(actionToPerform));
-        [self processKeChuanQueue_Truth];
+        NSLog(@"[Tweak] 错误: 方法 %@ 未找到，跳过此任务。", NSStringFromSelector(actionToPerform));
+        // 即使一个任务失败，也要继续处理下一个
+        [self processNextInKeChuanQueue];
     }
 }
+
 %end
