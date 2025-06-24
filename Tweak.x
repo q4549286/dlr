@@ -8,13 +8,14 @@ static BOOL g_isExtracting = NO;
 static NSMutableArray *g_workQueue = nil;
 static NSMutableArray *g_titleQueue = nil;
 static NSMutableString *g_finalResultString = nil;
+static NSInteger g_clickIndex = 0; // 全局计数器，用于设置'位'属性
 
 // =========================================================================
 // 2. 主功能实现
 // =========================================================================
-@interface UIViewController (TheActualFinalBypass)
-- (void)startFinalBypassExtraction;
-- (void)processNextFinalBypassQueueItem;
+@interface UIViewController (TheRosettaStone)
+- (void)startFinalExtraction;
+- (void)processNextQueueItem;
 @end
 
 %hook UIViewController
@@ -26,17 +27,17 @@ static NSMutableString *g_finalResultString = nil;
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *window = self.view.window; if (!window) return;
-            NSInteger buttonTag = 1;
+            NSInteger buttonTag = 1337;
             [[window viewWithTag:buttonTag] removeFromSuperview];
             UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
             button.frame = CGRectMake(self.view.center.x - 110, 50, 220, 44);
             button.tag = buttonTag;
-            [button setTitle:@"提取课传(最终版)" forState:UIControlStateNormal];
+            [button setTitle:@"提取课传(最终答案)" forState:UIControlStateNormal];
             button.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-            button.backgroundColor = [UIColor redColor];
+            button.backgroundColor = [UIColor colorWithRed:0.1 green:0.7 blue:0.3 alpha:1.0]; // 胜利的绿色
             [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             button.layer.cornerRadius = 22;
-            [button addTarget:self action:@selector(startFinalBypassExtraction) forControlEvents:UIControlEventTouchUpInside];
+            [button addTarget:self action:@selector(startFinalExtraction) forControlEvents:UIControlEventTouchUpInside];
             [window addSubview:button];
         });
     }
@@ -67,7 +68,7 @@ static NSMutableString *g_finalResultString = nil;
 
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        [self processNextFinalBypassQueueItem];
+                        [self processNextQueueItem];
                     });
                 }];
             };
@@ -80,9 +81,9 @@ static NSMutableString *g_finalResultString = nil;
 
 %new
 // --- 流程起点：空间关联 ---
-- (void)startFinalBypassExtraction {
+- (void)startFinalExtraction {
     if (g_isExtracting) { return; }
-    g_isExtracting = YES; g_workQueue = [NSMutableArray array]; g_titleQueue = [NSMutableArray array]; g_finalResultString = [NSMutableString string];
+    g_isExtracting = YES; g_workQueue = [NSMutableArray array]; g_titleQueue = [NSMutableArray array]; g_finalResultString = [NSMutableString string]; g_clickIndex = 0;
 
     NSMutableArray<NSValue *> *landmarkRegions = [NSMutableArray array];
     NSMutableArray<NSString *> *landmarkTitles = [NSMutableArray array];
@@ -106,21 +107,14 @@ static NSMutableString *g_finalResultString = nil;
 
     NSMutableArray<UILabel *> *allLabels = [NSMutableArray array];
     
-    // 【【【编译错误修正】】】
-    // 使用 pragma 指令来压制循环引用的警告，因为我们知道这个循环是临时的，将在方法结束时被打破。
     #pragma clang diagnostic push
     #pragma clang diagnostic ignored "-Warc-retain-cycles"
     __block void (^findLabels)(UIView*);
     findLabels = ^(UIView *v) {
-        if([v isKindOfClass:[UILabel class]]) {
-            [allLabels addObject:(UILabel*)v];
-        }
-        for(UIView *sv in v.subviews) {
-            findLabels(sv);
-        }
+        if([v isKindOfClass:[UILabel class]]) { [allLabels addObject:(UILabel*)v]; }
+        for(UIView *sv in v.subviews) { findLabels(sv); }
     };
     #pragma clang diagnostic pop
-
     findLabels(self.view);
 
     NSMutableArray<NSMutableArray *> *groupedLabels = [NSMutableArray array];
@@ -148,16 +142,16 @@ static NSMutableString *g_finalResultString = nil;
     }
 
     if (g_workQueue.count == 0) { g_isExtracting = NO; return; }
-    [self processNextFinalBypassQueueItem];
+    [self processNextQueueItem];
 }
 
 %new
-// --- 队列处理器：强制修改状态并派发 ---
-- (void)processNextFinalBypassQueueItem {
+// --- 队列处理器：最终的答案 ---
+- (void)processNextQueueItem {
     if (g_workQueue.count == 0) {
         [UIPasteboard generalPasteboard].string = g_finalResultString;
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已复制到剪贴板！" preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"完成！" style:UIAlertActionStyleDefault handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"胜利！" style:UIAlertActionStyleDefault handler:nil]];
         g_isExtracting = NO; return;
     }
 
@@ -178,18 +172,30 @@ static NSMutableString *g_finalResultString = nil;
                 id realTarget = [targetActionPair valueForKey:@"target"];
                 SEL realAction = NSSelectorFromString([targetActionPair valueForKey:@"action"]);
                 if(realTarget && realAction && [realTarget respondsToSelector:realAction]){
+                    
+                    // 【【【最终的、关键的修正】】】
+                    // 1. 设置'位'属性，我们猜测它是整数索引
+                    [realGesture setValue:@(g_clickIndex) forKey:@"位"];
+                    g_clickIndex++; // 增加计数器
+                    
+                    // 2. 设置'state'属性
                     [realGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
+                    
+                    // 3. 派发！
                     #pragma clang diagnostic push
                     #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
                     [realTarget performSelector:realAction withObject:realGesture];
                     #pragma clang diagnostic pop
+                    
+                    // 4. 恢复手势状态，以防万一
                     [realGesture setValue:@(UIGestureRecognizerStatePossible) forKey:@"state"];
                     return;
                 }
             }
         }
     }
-    [self processNextFinalBypassQueueItem];
+    // 如果失败，直接跳到下一个
+    [self processNextQueueItem];
 }
 
 %end
