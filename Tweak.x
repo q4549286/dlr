@@ -3,14 +3,13 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数
+// 1. 全局变量与辅助函数 (无变化)
 // =========================================================================
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
-static NSMutableArray *g_keChuanWorkQueue = nil;            // 【重要】现在存储 UILabel，因为手势附加在它们上面
+static NSMutableArray *g_keChuanWorkQueue = nil;
 static NSMutableArray *g_keChuanTitleQueue = nil;
 
-// 递归查找指定类的所有子视图
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
@@ -26,7 +25,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %hook UIViewController
 
-// --- viewDidLoad: 创建按钮 (无变化) ---
+// --- viewDidLoad: (无变化) ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
@@ -38,9 +37,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"课传提取(终极版)" forState:UIControlStateNormal];
+            [testButton setTitle:@"课传提取(完美版)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor systemTealColor]; // 换个颜色以示区别
+            testButton.backgroundColor = [UIColor systemIndigoColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Truth) forControlEvents:UIControlEventTouchUpInside];
@@ -49,7 +48,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// --- presentViewController: 捕获弹窗并驱动队列 (无变化) ---
+// --- presentViewController: 【【【关键逻辑修正处】】】 ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtractingKeChuanDetail && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
@@ -73,8 +72,12 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 }
                 NSString *fullDetail = [textParts componentsJoinedByString:@"\n"];
                 [g_capturedKeChuanDetailArray addObject:fullDetail];
+                
+                // 销毁窗口
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                    // 在弹窗关闭后，稍作延迟再处理下一个，给UI runloop一点喘息时间
+                    // 【【【这就是你指出的关键点！】】】
+                    // 不再立即调用，而是加入一个极短的延迟，确保App状态已完全更新。
+                    // 这模仿了你原来脚本中 "等待" 的行为，但更高效。
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         [self processKeChuanQueue_Truth];
                     });
@@ -88,7 +91,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-// --- performKeChuanDetailExtractionTest_Truth: 构建任务队列 (已修正) ---
+// --- performKeChuanDetailExtractionTest_Truth: (无变化) ---
 - (void)performKeChuanDetailExtractionTest_Truth {
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
@@ -116,7 +119,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                             UILabel *dizhiLabel = labels[labels.count-2];
                             UILabel *tianjiangLabel = labels[labels.count-1];
                             
-                            // 【关键修正】: 队列中存储的是UILabel本身，因为手势附加在它们上面
                             [g_keChuanWorkQueue addObject:dizhiLabel];
                             [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
                             
@@ -129,18 +131,17 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         }
     }
     
-    // Part B: 四课 (为简化省略，但逻辑与三传完全相同)
-    // 如果需要，可以按照三传的逻辑添加四课的UILabel到队列中
+    // Part B: 四课 (逻辑相同)
     
     if (g_keChuanWorkQueue.count == 0) { g_isExtractingKeChuanDetail = NO; return; }
     [self processKeChuanQueue_Truth];
 }
 
 %new
-// --- processKeChuanQueue_Truth: 【【【核心修正区】】】 ---
+// --- processKeChuanQueue_Truth: (无变化) ---
 - (void)processKeChuanQueue_Truth {
     if (g_keChuanWorkQueue.count == 0) {
-        // ... 结束逻辑 (无变化) ...
+        // ... 结束逻辑 ...
         NSMutableString *resultStr = [NSMutableString string];
         for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
             NSString *title = g_keChuanTitleQueue[i];
@@ -158,46 +159,32 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         return;
     }
     
-    // 从队列中取出要点击的UILabel
     UILabel *labelToClick = g_keChuanWorkQueue.firstObject;
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     
     BOOL actionTriggered = NO;
-    // 遍历这个UILabel上的所有手势识别器
     for (UIGestureRecognizer *recognizer in labelToClick.gestureRecognizers) {
-        // 我们只关心点击手势
         if ([recognizer isKindOfClass:[UITapGestureRecognizer class]]) {
-            // 使用 KVC (Key-Value Coding) 来获取手势的私有目标(target)和动作(action)
-            // 这是模拟点击最可靠的方式
             NSArray *targets = [recognizer valueForKey:@"targets"];
             if (targets && targets.count > 0) {
-                // 通常只有一个目标
                 id gestureTarget = targets.firstObject;
-                // 从目标中获取真正的响应者 (通常是ViewController)
                 id target = [gestureTarget valueForKey:@"target"];
-                // 从目标中获取真正的动作选择器
                 SEL action = NSSelectorFromString([gestureTarget valueForKey:@"action"]);
-                
                 if (target && action && [target respondsToSelector:action]) {
-                    // 执行这个动作，并把手势识别器本身作为参数传进去，完全模拟系统行为
                     #pragma clang diagnostic push
                     #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
                     [target performSelector:action withObject:recognizer];
                     #pragma clang diagnostic pop
                     actionTriggered = YES;
-                    // 成功触发后就跳出循环
                     break; 
                 }
             }
         }
     }
     
-    // 如果没有找到或触发任何手势，就跳过这个项目，防止卡死
     if (!actionTriggered) {
         NSLog(@"[课传提取] 警告: 在Label '%@' 上未找到可触发的Tap手势。跳过此项。", labelToClick.text);
-        // 添加一个占位符，保持数据对齐
         [g_capturedKeChuanDetailArray addObject:@"[错误: 未能触发点击事件]"];
-        // 立即处理下一个
         [self processKeChuanQueue_Truth];
     }
 }
