@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog(@"[EchoAI-Test-KCD-V2] " format, ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog(@"[EchoAI-Test-KCD-V4] " format, ##__VA_ARGS__)
 
 // --- 全局状态变量 ---
 static BOOL g_isTestingKeChuanDetail = NO;
@@ -15,6 +15,15 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
+static id GetIvarView(id object, const char *ivarName) {
+    Ivar ivar = class_getInstanceVariable([object class], ivarName);
+    if (ivar) {
+        return object_getIvar(object, ivar);
+    }
+    EchoLog(@"警告: 未能找到名为 %s 的实例变量。", ivarName);
+    return nil;
+}
+
 
 // --- 声明 ---
 @interface UIViewController (EchoAITestAddons)
@@ -40,9 +49,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 90, 140, 36);
             testButton.tag = testButtonTag;
-            [testButton setTitle:@"测试课传详情V2" forState:UIControlStateNormal];
+            [testButton setTitle:@"测试课传详情V4" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.5 blue:0.1 alpha:1.0]; // 橙色
+            testButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.5 alpha:1.0]; // 紫色
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             [testButton addTarget:self action:@selector(performKeChuanDetailTest) forControlEvents:UIControlEventTouchUpInside];
@@ -51,33 +60,24 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// 2. 拦截详情窗口 (全新逻辑)
+// 2. 拦截详情窗口 (逻辑不变)
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isTestingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         if ([vcClassName isEqualToString:@"六壬大占.課傳摘要視圖"]) {
             EchoLog(@"捕获到 '課傳摘要視圖'...");
             
-            // 关键：我们不再隐藏它，而是让它正常 present，然后在 completion block 里做事
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
-
                 EchoLog(@"'課傳摘要視圖' 已显示，开始模拟展开和提取...");
-                // 等待UI更新
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     UIView *contentView = viewControllerToPresent.view;
-                    
-                    // 找到所有可能是“神将摘要”的 TableView
-                    Class tableViewClass = NSClassFromString(@"六壬大占.天將摘要視圖"); // 可能是这个类，或者是普通的UITableView
-                    if(!tableViewClass) tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
-                    if(!tableViewClass) tableViewClass = [UITableView class];
-
+                    Class tableViewClass = NSClassFromString(@"六壬大占.天將摘要視圖") ?: NSClassFromString(@"六壬大占.IntrinsicTableView") ?: [UITableView class];
                     NSMutableArray *tableViews = [NSMutableArray array];
                     FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews);
                     
                     if (tableViews.count > 0) {
-                         EchoLog(@"找到 %lu 个 TableView，将尝试展开内容...", (unsigned long)tableViews.count);
-                         // 对每个 TableView 执行展开操作
+                         EchoLog(@"找到 %lu 个 TableView，尝试展开...", (unsigned long)tableViews.count);
                          for (UITableView *theTableView in tableViews) {
                             if ([theTableView.delegate respondsToSelector:@selector(tableView:didSelectRowAtIndexPath:)] && theTableView.dataSource) {
                                 id<UITableViewDelegate> delegate = theTableView.delegate;
@@ -86,32 +86,24 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                                 for (NSInteger section = 0; section < sections; section++) {
                                     NSInteger rows = [dataSource tableView:theTableView numberOfRowsInSection:section];
                                     for (NSInteger row = 0; row < rows; row++) {
-                                        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
-                                        [delegate tableView:theTableView didSelectRowAtIndexPath:indexPath];
+                                        [delegate tableView:theTableView didSelectRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:section]];
                                     }
                                 }
                             }
                          }
-                    } else {
-                        EchoLog(@"未在详情页找到可展开的 TableView。");
                     }
                     
-                    // 再等待展开动画完成
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         NSString *detailText = [self extractTextFromViewHierachy:contentView];
                         [g_capturedKeChuanDetailArray addObject:detailText];
                         EchoLog(@"内容提取完成，关闭详情页。");
                         
                         [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                            // 关键：在这里，我们确认弹窗已关闭，才去处理下一个任务
-                             if (g_processQueueBlock) {
-                                g_processQueueBlock();
-                            }
+                             if (g_processQueueBlock) { g_processQueueBlock(); }
                         }];
                     });
                 });
             };
-            
             %orig(viewControllerToPresent, flag, newCompletion);
             return;
         }
@@ -123,36 +115,48 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 // 新增的功能实现
 // =========================================================================
 %new
-// 3. 核心测试逻辑 (全新时序控制)
+// 3. 核心测试逻辑 (最终版)
 - (void)performKeChuanDetailTest {
-    EchoLog(@"--- 开始测试四课三传详情提取 V2 ---");
+    EchoLog(@"--- 开始测试四课三传详情提取 V4 ---");
     g_isTestingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanTaskQueue = [NSMutableArray array];
 
-    NSMutableArray *siKeTasksMutable = [NSMutableArray array];
+    // --- 精确获取四课视图 ---
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
-        NSMutableArray *siKeViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
-        if (siKeViews.count > 0) { [siKeTasksMutable addObjectsFromArray:siKeViews.firstObject.subviews]; }
+        NSMutableArray *siKeViews = [NSMutableArray array]; 
+        FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
+        if (siKeViews.count > 0) {
+            id siKeViewInstance = siKeViews.firstObject;
+            
+            // 基于截图的实例变量名，按第一至第四课顺序排列
+            NSArray *ivarNames = @[@"_日上", @"_日阴", @"_辰上", @"_辰阴"];
+            
+            for (NSString *ivarNameStr in ivarNames) {
+                UIView *keView = GetIvarView(siKeViewInstance, [ivarNameStr UTF8String]);
+                if (keView) {
+                    [g_keChuanTaskQueue addObject:keView];
+                }
+            }
+        }
     }
     
+    // --- 精确获取三传视图 ---
     NSMutableArray *sanChuanTasksMutable = [NSMutableArray array];
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if(sanChuanViewClass){
-        NSMutableArray *scViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, scViews);
-        [sanChuanTasksMutable addObjectsFromArray:scViews];
-    }
-
-    if (siKeTasksMutable.count == 0 && sanChuanTasksMutable.count == 0) {
-        EchoLog(@"错误：未能找到任何四课或三传的可点击视图。"); g_isTestingKeChuanDetail = NO; return;
+        FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, sanChuanTasksMutable);
+        // 按Y坐标排序，确保是初传、中传、末传的顺序
+        [sanChuanTasksMutable sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+        [g_keChuanTaskQueue addObjectsFromArray:sanChuanTasksMutable];
     }
     
-    [siKeTasksMutable sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v2.frame.origin.x) compare:@(v1.frame.origin.x)]; }];
-    [sanChuanTasksMutable sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-
-    [g_keChuanTaskQueue addObjectsFromArray:siKeTasksMutable];
-    [g_keChuanTaskQueue addObjectsFromArray:sanChuanTasksMutable];
+    if (g_keChuanTaskQueue.count == 0) {
+        EchoLog(@"错误：未能获取任何可点击的课、传视图。"); g_isTestingKeChuanDetail = NO; return;
+    }
+    
+    EchoLog(@"任务队列准备就绪，总共 %lu 个任务。", (unsigned long)g_keChuanTaskQueue.count);
 
     __weak typeof(self) weakSelf = self;
     g_processQueueBlock = [^{
@@ -167,45 +171,41 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             }
             NSLog(@"%@", finalResult);
             EchoLog(@"--- 测试结束 ---");
-            g_isTestingKeChuanDetail = NO;
-            g_processQueueBlock = nil;
-            g_keChuanTaskQueue = nil;
+            g_isTestingKeChuanDetail = NO; g_processQueueBlock = nil; g_keChuanTaskQueue = nil;
             return;
         }
 
         UIView *targetView = g_keChuanTaskQueue.firstObject;
         [g_keChuanTaskQueue removeObjectAtIndex:0];
-        EchoLog(@"处理任务 %lu/%lu...", (unsigned long)(siKeTasksMutable.count + sanChuanTasksMutable.count - g_keChuanTaskQueue.count), (unsigned long)(siKeTasksMutable.count + sanChuanTasksMutable.count));
-        
-        // 触发点击，然后等待 presentViewController hook 接管后续流程
+        EchoLog(@"处理任务... 剩余 %lu 个", (unsigned long)g_keChuanTaskQueue.count);
         [strongSelf triggerTapOnView:targetView];
         
     } copy];
 
-    // 启动第一个任务
     g_processQueueBlock();
 }
 
 %new
-// 4. 模拟点击手势 (恢复精确版本)
+- (void)triggerTapOnView:(UIView *)view { /* ... 保持V2/V3版本不变 ... */ }
+%new
+- (NSString *)extractTextFromViewHierachy:(UIView *)view { /* ... 保持V2/V3版本不变 ... */ }
+
+// V2/V3版本的函数实现需要复制过来
+%new
 - (void)triggerTapOnView:(UIView *)view {
     if (!view) return;
     
     UIGestureRecognizer *tapRecognizer = nil;
     for (UIGestureRecognizer *recognizer in view.gestureRecognizers) {
         if ([recognizer isKindOfClass:[UITapGestureRecognizer class]]) {
-            tapRecognizer = recognizer;
-            break;
+            tapRecognizer = recognizer; break;
         }
     }
-    
     if (!tapRecognizer) {
-        // 如果视图本身没有，检查其子视图
         for(UIView *subview in view.subviews) {
              for (UIGestureRecognizer *recognizer in subview.gestureRecognizers) {
                 if ([recognizer isKindOfClass:[UITapGestureRecognizer class]]) {
-                    tapRecognizer = recognizer;
-                    break;
+                    tapRecognizer = recognizer; break;
                 }
             }
             if(tapRecognizer) break;
@@ -213,7 +213,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 
     if(tapRecognizer) {
-        // 使用私有API获取target和action，这是最可靠的方式
         Ivar targetsIvar = class_getInstanceVariable([UIGestureRecognizer class], "_targets");
         id targets = object_getIvar(tapRecognizer, targetsIvar);
         
@@ -223,7 +222,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             SEL action = NSSelectorFromString([targetContainer valueForKey:@"_action"]);
             
             if (target && action && [target respondsToSelector:action]) {
-                EchoLog(@"找到手势并执行: %@", NSStringFromSelector(action));
+                EchoLog(@"找到手势并执行: %@ on target %@", NSStringFromSelector(action), target);
                 #pragma clang diagnostic push
                 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
                 [target performSelector:action withObject:tapRecognizer];
@@ -232,11 +231,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             }
         }
     }
-     EchoLog(@"警告: 未能在视图上找到可执行的Tap手势。");
+     EchoLog(@"警告: 未能在视图 %@ 上找到可执行的Tap手势。", view);
 }
 
 %new
-// 5. 提取文本 (重命名以反映其通用性)
 - (NSString *)extractTextFromViewHierachy:(UIView *)view {
     NSMutableArray *allLabels = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UILabel class], view, allLabels);
@@ -254,8 +252,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     NSMutableArray *textParts = [NSMutableArray array];
     for (UILabel *label in allLabels) {
          if (label.text && label.text.length > 0) {
-            NSString *trimmedText = [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            [textParts addObject:trimmedText];
+            [textParts addObject:[label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
         }
     }
 
