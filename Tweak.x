@@ -23,7 +23,9 @@ static void LogMessage(NSString *format, ...) {
     va_end(args);
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [NSDate date]];
+        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+        [formatter setDateFormat:@"HH:mm:ss.SSS"];
+        NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         NSString *fullMessage = [logPrefix stringByAppendingString:message];
         g_logTextView.text = [NSString stringWithFormat:@"%@\n%@", fullMessage, g_logTextView.text];
         NSLog(@"[KeChuanExtractor] %@", message);
@@ -178,7 +180,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 %new
 // --- 复制结果并关闭面板 ---
 - (void)copyAndClose_Truth {
-    if (g_capturedKeChuanDetailArray && g_capturedKeChuanDetailArray.count > 0) {
+    if (g_capturedKeChuanDetailArray && g_capturedKeChuanDetailArray.count > 0 && g_keChuanTitleQueue && g_keChuanTitleQueue.count > 0) {
         NSMutableString *resultStr = [NSMutableString string];
         for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
             NSString *title = g_keChuanTitleQueue[i];
@@ -264,8 +266,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIView *siKeContainer = containers.firstObject;
             LogMessage(@"找到四课容器: %@", siKeContainer);
             
-            const char *ivarNames[] = {"第一課", "第二課", "第三課", "第四課", NULL};
-            NSString *rowTitles[] = {@"第一课", @"第二课", @"第三课", @"第四课"};
+            // 注意：四课的ivar名可能是繁体中文，并且顺序可能需要调整
+            const char *ivarNames[] = {"第四課", "第三課", "第二課", "第一課", NULL}; // 通常从右到左，所以是4,3,2,1
+            NSString *rowTitles[] = {@"第四课", @"第三课", @"第二课", @"第一课"};
 
             for (int i = 0; ivarNames[i] != NULL; ++i) {
                 Ivar ivar = class_getInstanceVariable(siKeContainerClass, ivarNames[i]);
@@ -274,10 +277,11 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     if (keView) {
                         NSMutableArray *labels = [NSMutableArray array];
                         FindSubviewsOfClassRecursive([UILabel class], keView, labels);
+                        // 四课的UILabel是上下排列的
                         [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
                         if (labels.count >= 2) {
-                            UILabel *dizhiLabel = labels[1]; // 通常是第二个
-                            UILabel *tianjiangLabel = labels[0]; // 通常是第一个
+                            UILabel *tianjiangLabel = labels[0]; // 天将在上面
+                            UILabel *dizhiLabel = labels[1]; // 地支在下面
 
                             [g_keChuanWorkQueue addObject:dizhiLabel];
                             NSString *dizhiTitle = [NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text];
@@ -289,8 +293,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                             [g_keChuanTitleQueue addObject:tianjiangTitle];
                             LogMessage(@"已入队: %@", tianjiangTitle);
                         }
-                    }
-                }
+                    } else { LogMessage(@"获取 ivar '%s' 的视图失败", ivarNames[i]); }
+                } else { LogMessage(@"找不到 ivar '%s'", ivarNames[i]); }
             }
         } else { LogMessage(@"未找到四课容器。"); }
     } else { LogMessage(@"找不到类: 六壬大占.四課視圖"); }
@@ -303,4 +307,55 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
     
     LogMessage(@"任务队列构建完成，总计 %lu 项。开始处理...", (unsigned long)g_keChuanWorkQueue.count);
-    [self processKe
+    [self processKeChuanQueue_Truth];
+}
+
+%new
+// --- processKeChuanQueue_Truth: 处理队列中的下一个任务 ---
+- (void)processKeChuanQueue_Truth {
+    // 检查是否应该停止
+    if (!g_isExtractingKeChuanDetail || g_keChuanWorkQueue.count == 0) {
+        if (g_isExtractingKeChuanDetail) { // 只有在正常完成时才弹窗
+            LogMessage(@"全部任务处理完毕！");
+            
+            UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已复制到剪贴板。请点击“复制并关闭”按钮来获取结果并关闭工具。" preferredStyle:UIAlertControllerStyleAlert];
+            [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                // 自动复制
+                [self copyAndClose_Truth];
+            }]];
+            [self presentViewController:successAlert animated:YES completion:nil];
+        }
+        
+        // 重置状态
+        g_isExtractingKeChuanDetail = NO;
+        return;
+    }
+  
+    UIView *itemToClick = g_keChuanWorkQueue.firstObject;
+    [g_keChuanWorkQueue removeObjectAtIndex:0];
+  
+    NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
+    LogMessage(@"正在处理: %@ (队列剩余 %lu)", title, (unsigned long)g_keChuanWorkQueue.count);
+
+    SEL actionToPerform = nil;
+    if ([title containsString:@"地支"]) {
+        actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
+    } else {
+        actionToPromote = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
+    }
+  
+    if ([self respondsToSelector:actionToPerform]) {
+        LogMessage(@"触发点击事件: %@, sender: %@", NSStringFromSelector(actionToPerform), itemToClick);
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        [self performSelector:actionToPerform withObject:itemToClick];
+        #pragma clang diagnostic pop
+    } else {
+        LogMessage(@"错误: VC 不响应 %@。跳过此项。", NSStringFromSelector(actionToPerform));
+        [g_capturedKeChuanDetailArray addObject:@"[错误: 无法调用点击方法]"]; // 添加一个占位符
+        // 如果不响应，也要手动驱动队列继续，否则会卡住
+        [self processKeChuanQueue_Truth];
+    }
+}
+
+%end // <-- 【【【【【【【【【【【【【【 已添加此行 】】】】】】】】】】】】】】
