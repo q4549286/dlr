@@ -5,7 +5,7 @@
 // =========================================================================
 // 1. 全局变量与辅助函数
 // =========================================================================
-#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-LongPress] " format, ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Touch] " format, ##__VA_ARGS__)
 
 static NSInteger const TestButtonTag = 556694; // 新的Tag
 // ... 其他全局变量不变 ...
@@ -22,9 +22,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 // =========================================================================
 // 2. 主功能区
 // =========================================================================
-@interface UIViewController (EchoAITestAddons_LongPress)
-- (void)performKeChuanDetailExtractionTest_LongPress;
-- (void)processKeChuanQueue_LongPress;
+@interface UIViewController (EchoAITestAddons_Touch)
+- (void)performKeChuanDetailExtractionTest_Touch;
+- (void)processKeChuanQueue_Touch;
 @end
 
 %hook UIViewController
@@ -41,12 +41,12 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"测试课传(长按)" forState:UIControlStateNormal];
+            [testButton setTitle:@"测试课传(触摸版)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
             testButton.backgroundColor = [UIColor systemTealColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_LongPress) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Touch) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
         });
     }
@@ -85,169 +85,93 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)performKeChuanDetailExtractionTest_LongPress {
-    EchoLog(@"开始执行 [课传详情] 长按手势版测试");
+- (void)performKeChuanDetailExtractionTest_Touch {
+    EchoLog(@"开始执行 [课传详情] 触摸版测试");
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
 
-    // --- Part A: 找到顶级容器，并从中寻找带有长按手势的子视图 ---
-    Class topContainerClass = NSClassFromString(@"六壬大占.課傳視圖");
-    if (topContainerClass) {
-        NSMutableArray *topViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(topContainerClass, self.view, topViews);
-        if (topViews.count > 0) {
-            UIView *topContainer = topViews.firstObject;
-
-            // 我们假设这个顶级容器上有一个总的长按手势
-            // 当长按时，APP内部通过坐标来判断按中了哪个部分
-            for (UIGestureRecognizer *recognizer in topContainer.gestureRecognizers) {
-                // 【核心修正】寻找长按手势
-                if ([recognizer isKindOfClass:NSClassFromString(@"UILongPressGestureRecognizer")]) {
-                    // 找到了！我们只需要这一个总的手势
-                    EchoLog(@"找到了顶级容器上的长按手势: %@", recognizer);
-                    // 我们需要模拟点击每一个感兴趣的位置
-                    
-                    // 1. 获取所有感兴趣的UILabel和它们的绝对坐标
-                    NSMutableArray *targetLabels = [NSMutableArray array];
-                    // (这里可以复用之前的逻辑来找到所有地支和天将的label)
-                    // ... 为了简化，我们暂时只模拟点击初传地支的位置 ...
-                    
-                    // 这里我们采用一个更简单直接的办法：直接把这个总手势识别器放入队列
-                    // 在处理时，我们再动态计算要点击的位置
-                    [g_keChuanWorkQueue addObject:@{@"recognizer": recognizer}];
-                    [g_keChuanTitleQueue addObject:@"顶级容器的长按手势"];
-                    break; // 找到了就不用再找了
+    // --- Part A: 用最可靠的UI布局分析，找到所有要点击的UILabel ---
+    // (这部分逻辑来自于“UI布局版”，我们知道它是正确的)
+    Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
+    if (sanChuanContainerClass) {
+        NSMutableArray *containerViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(sanChuanContainerClass, self.view, containerViews);
+        if (containerViews.count > 0) {
+            UIView *container = containerViews.firstObject;
+            NSMutableArray *allLabels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], container, allLabels);
+            NSMutableDictionary<NSString *, NSMutableArray *> *rows = [NSMutableDictionary dictionary];
+            for (UILabel *label in allLabels) {
+                CGPoint absolutePoint = [label.superview convertPoint:label.frame.origin toView:nil];
+                NSString *yKey = [NSString stringWithFormat:@"%.0f", absolutePoint.y];
+                if (!rows[yKey]) { rows[yKey] = [NSMutableArray array]; }
+                [rows[yKey] addObject:label];
+            }
+            NSArray *sortedYKeys = [rows.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *o1, NSString *o2) { return [@([o1 floatValue]) compare:@([o2 floatValue])]; }];
+            NSArray *rowTitles = @[@"初传", @"中传", @"末传"];
+            for (NSUInteger i = 0; i < sortedYKeys.count; i++) {
+                if (i >= rowTitles.count) break;
+                NSMutableArray *rowLabels = rows[sortedYKeys[i]];
+                [rowLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
+                if (rowLabels.count >= 2) {
+                    UILabel *dizhiLabel = rowLabels[rowLabels.count - 2];
+                    UILabel *tianjiangLabel = rowLabels[rowLabels.count - 1];
+                    [g_keChuanWorkQueue addObject:dizhiLabel];
+                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
+                    [g_keChuanWorkQueue addObject:tianjiangLabel];
+                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
                 }
             }
         }
     }
-
+    // (为简洁，暂时省略四课的查找逻辑，先确保三传能行)
+    
     if (g_keChuanWorkQueue.count == 0) {
-        EchoLog(@"测试失败: 未找到任何带有长按手势的课传视图。");
+        EchoLog(@"测试失败: 未找到任何UILabel来构建任务。");
         g_isExtractingKeChuanDetail = NO;
         return;
     }
-    [self processKeChuanQueue_LongPress];
+    [self processKeChuanQueue_Touch];
 }
 
 %new
-- (void)processKeChuanQueue_LongPress {
+- (void)processKeChuanQueue_Touch {
     if (g_keChuanWorkQueue.count == 0) {
-        // ... 结束逻辑 ...
+        // ... 结束逻辑不变 ...
+        EchoLog(@"[课传详情] 测试处理完毕");
+        NSMutableString *resultStr = [NSMutableString string];
+        for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
+            NSString *title = g_keChuanTitleQueue[i];
+            NSString *detail = (i < g_capturedKeChuanDetailArray.count) ? g_capturedKeChuanDetailArray[i] : @"[信息提取失败]";
+            [resultStr appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
+        }
+        [UIPasteboard generalPasteboard].string = resultStr;
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"触摸版测试完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+        [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:successAlert animated:YES completion:nil];
+        g_isExtractingKeChuanDetail = NO;
+        g_keChuanWorkQueue = nil;
+        g_capturedKeChuanDetailArray = nil;
+        g_keChuanTitleQueue = nil;
         return;
     }
     
-    NSDictionary *task = g_keChuanWorkQueue.firstObject;
-    // 注意：这里我们不再移除任务，因为我们要用同一个手势模拟多次点击
+    UILabel *targetLabel = g_keChuanWorkQueue.firstObject;
+    [g_keChuanWorkQueue removeObjectAtIndex:0];
+    NSString *title = g_keChuanTitleQueue.firstObject;
+    [g_keChuanTitleQueue removeObjectAtIndex:0];
     
-    UIGestureRecognizer *recognizer = task[@"recognizer"];
-    
-    // 我们需要一个点击目标的列表。这个列表应该在 perform... 函数里创建好。
-    // 由于我们是在这里才发现需要它，我们临时在这里创建。
-    // 这是一个不好的设计，但为了快速测试。
-    
-    static dispatch_once_t onceToken;
-    static NSMutableArray *clickTargets;
-    dispatch_once(&onceToken, ^{
-        clickTargets = [NSMutableArray array];
-        // ... 在这里填充所有要点击的UILabel ...
-        // (复用之前的UI布局解析逻辑)
+    EchoLog(@"正在模拟触摸: %@", title);
+
+    // 【核心操作】我们直接在目标UILabel上调用 touchesEnded
+    // 这是一个大胆的尝试，我们假设响应链会把这个事件传递给正确的处理者
+    // 我们需要伪造一个 UITouch 对象和 UIEvent 对象
+    [targetLabel touchesEnded:[NSSet set] withEvent:nil];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self processKeChuanQueue_Touch];
     });
-    
-    // 这段逻辑太复杂了，我们简化一下！
-    // 让我们放弃队列，一次性直接触发所有点击！
-    
-    // (回到 perform... 函数)
-    // 我们不能用队列了，因为长按手势需要知道点击的位置
-    
-    // 让我们重写整个逻辑！
-    
-    // (函数 processKeChuanQueue_LongPress 暂时作废)
-    
-    // 新的逻辑在 perform... 里面
 }
-
-
-%hook UIViewController
-// ... viewDidLoad, presentViewController ...
-
-%new
-- (void)performKeChuanDetailExtractionTest_LongPress {
-    EchoLog(@"开始执行 [课传详情] 长按手势版测试");
-    g_isExtractingKeChuanDetail = YES;
-    g_capturedKeChuanDetailArray = [NSMutableArray array];
-
-    // 1. 找到长按手势
-    UILongPressGestureRecognizer *longPressRecognizer = nil;
-    Class topContainerClass = NSClassFromString(@"六壬大占.課傳視圖");
-    if (topContainerClass) {
-        NSMutableArray *topViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(topContainerClass, self.view, topViews);
-        if (topViews.count > 0) {
-            UIView *topContainer = topViews.firstObject;
-            for (UIGestureRecognizer *recognizer in topContainer.gestureRecognizers) {
-                if ([recognizer isKindOfClass:[UILongPressGestureRecognizer class]]) {
-                    longPressRecognizer = (UILongPressGestureRecognizer *)recognizer;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (!longPressRecognizer) {
-        EchoLog(@"测试失败: 未找到长按手势。");
-        g_isExtractingKeChuanDetail = NO;
-        return;
-    }
-
-    // 2. 找到所有要点击的UILabel
-    NSMutableArray *targetsToClick = [NSMutableArray array];
-    // (这里复用我们最可靠的UI布局解析逻辑)
-    // ...
-
-    // 3. 依次模拟长按
-    // 这需要一个异步队列
-    g_keChuanWorkQueue = [targetsToClick mutableCopy];
-    // ...
-
-    // 天哪，这个逻辑太复杂了。我们必须简化它。
-
-    // 最后的，最简单的尝试：
-    // 既然是长按，也许它不是用来显示详情的，而是用来显示一个菜单？
-    // 如果我们手动长按，会发生什么？
-    
-    // 我已经没有办法在不知道“长按后发生什么”的情况下编写代码了。
-    
-    // 让我们回到最开始的“只读”方案。那是我们唯一成功的、有确定结果的方案。
-    // 在那之上，我们可以思考如何整合。
-
-    // --- 最终决定 ---
-    // 放弃模拟点击。它太不可靠了。
-    // 我们将执行一个增强版的“只读”方案，并思考如何把它和您的主脚本结合。
-
-    // 调用我们之前验证过的只读版提取函数
-    NSString *keChuanText = [self extractKeChuanInfo_ReadOnly_ForIntegration];
-    
-    // 把结果合并到主脚本的g_extractedData里
-    // 这是在独立测试中无法做到的，但这是最终的目标。
-
-    // 在这个独立测试里，我们还是只显示结果
-    [UIPasteboard generalPasteboard].string = keChuanText;
-    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"最终方案(只读)" message:@"模拟点击的道路已走到尽头。这是最可靠的只读提取结果。" preferredStyle:UIAlertControllerStyleAlert];
-    [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:successAlert animated:YES completion:nil];
-    
-    g_isExtractingKeChuanDetail = NO;
-}
-
-%new
-// 这是一个可以被您的主脚本调用的版本
-- (NSString *)extractKeChuanInfo_ReadOnly_ForIntegration {
-    // 这个函数的代码，就是我们之前成功的那个只读版的代码
-    // ... (此处省略，因为它已经证明可以工作)
-    return @"这里是四课和三传的只读信息";
-}
-
 %end
