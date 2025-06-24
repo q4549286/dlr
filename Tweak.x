@@ -5,7 +5,7 @@
 // =========================================================================
 // 1. 全局变量与辅助函数
 // =========================================================================
-#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Truth-V4-Precise] " format, ##__VA_ARGS__)
+#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Truth-V5-Simple] " format, ##__VA_ARGS__)
 
 static NSInteger const TestButtonTag = 556690;
 static BOOL g_isExtractingKeChuanDetail = NO;
@@ -28,7 +28,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %hook UIViewController
 
-// --- viewDidLoad 和 presentViewController 保持原样，它们已经稳定 ---
+// --- viewDidLoad 和 presentViewController 保持稳定，无需修改 ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
@@ -87,13 +87,13 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %new
 - (void)performKeChuanDetailExtractionTest_Truth {
-    EchoLog(@"开始执行 [课传详情] 真理版测试 V4");
+    EchoLog(@"开始执行 [课传详情] 真理版测试 V5");
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
 
-    // ======================= 【【【核心修正点 V4】】】 =======================
+    // --- Part A: 三传解析 (最终版) ---
     // 1. 先精准找到唯一的父容器 `三傳視圖`
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
     NSMutableArray *sanChuanContainers = [NSMutableArray array];
@@ -108,7 +108,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         Class chuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
         NSMutableArray *allChuanViews = [NSMutableArray array];
         if (chuanViewClass) {
-            // 只在父容器的直接子视图中查找，更精准
             for (UIView *subview in sanChuanContainer.subviews) {
                 if ([subview isKindOfClass:chuanViewClass]) {
                     [allChuanViews addObject:subview];
@@ -116,14 +115,16 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             }
         }
         
-        // 3. 对找到的子传视图列表，进行绝对坐标排序（最可靠的方式）
+        // ======================= 【【【核心修正点 V5】】】 =======================
+        // 3. 直接根据它们在父视图中的相对Y坐标排序，这是最简单且最可靠的方法
         [allChuanViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-            CGPoint p1 = [v1.superview convertPoint:v1.frame.origin toView:self.view];
-            CGPoint p2 = [v2.superview convertPoint:v2.frame.origin toView:self.view];
-            if (p1.y < p2.y) return NSOrderedAscending;
-            if (p1.y > p2.y) return NSOrderedDescending;
+            CGFloat y1 = v1.frame.origin.y;
+            CGFloat y2 = v2.frame.origin.y;
+            if (y1 < y2) return NSOrderedAscending;
+            if (y1 > y2) return NSOrderedDescending;
             return NSOrderedSame;
         }];
+        // ======================= 【【【核心修正点 V5 结束】】】 =======================
         
         // 4. 按排好的顺序处理
         NSArray *rowTitles = @[@"初传", @"中传", @"末传"];
@@ -131,8 +132,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             if (i >= rowTitles.count) break;
             
             UIView *chuanView = allChuanViews[i];
-            CGPoint absPos = [chuanView.superview convertPoint:chuanView.frame.origin toView:self.view];
-            EchoLog(@"正在处理 %@, 绝对Y坐标: %f", rowTitles[i], absPos.y);
+            EchoLog(@"正在处理 %@, 相对Y坐标: %f", rowTitles[i], chuanView.frame.origin.y);
 
             NSMutableArray *labels = [NSMutableArray array];
             FindSubviewsOfClassRecursive([UILabel class], chuanView, labels);
@@ -143,10 +143,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             if (labels.count >= 2) {
                 UILabel *dizhiLabel = labels[labels.count - 2];
                 UILabel *tianjiangLabel = labels[labels.count - 1];
-                
                 [g_keChuanWorkQueue addObject:@{@"item": dizhiLabel, @"type": @"dizhi"}];
                 [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
-                
                 [g_keChuanWorkQueue addObject:@{@"item": tianjiangLabel, @"type": @"tianjiang"}];
                 [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
             }
@@ -154,13 +152,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     } else {
         EchoLog(@"错误：未能找到'六壬大占.三傳視圖'容器，无法解析三传。");
     }
-    // ======================= 【【【核心修正点 V4 结束】】】 =======================
-
 
     // --- Part B: 四课解析逻辑 (保持不变) ---
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
-        // (四课逻辑无需修改，保持原样)
         NSMutableArray *skViews = [NSMutableArray array];
         FindSubviewsOfClassRecursive(siKeViewClass, self.view, skViews);
         if (skViews.count > 0) {
