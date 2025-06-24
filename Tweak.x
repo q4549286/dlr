@@ -158,4 +158,51 @@ static UIGestureRecognizer *FindGesture(UIView *v, NSString *suffix) {
         }
         // gesture
         UIGestureRecognizer *dzGR=FindGesture(view,@"課傳觸摸手勢");
-        UIGestureRecognizer *tjGR
+        UIGestureRecognizer *dzGR=FindGesture(view,@"課傳觸摸手勢");
+        UIGestureRecognizer *tjGR=FindGesture(view,@"天將觸摸手勢");
+
+        if (dzGR){
+            [g_keChuanTaskQueue addObject:@{ @"sender":dzGR,
+                                             @"sel":@"顯示課傳摘要WithSender:",
+                                             @"title":[NSString stringWithFormat:@"%@ - 地支(%@)",rows[i],dzLabel.text?:@"?"]}];
+        }
+        if (tjGR){
+            [g_keChuanTaskQueue addObject:@{ @"sender":tjGR,
+                                             @"sel":@"顯示課傳天將摘要WithSender:",
+                                             @"title":[NSString stringWithFormat:@"%@ - 天将(%@)",rows[i],tjLabel.text?:@"?"]}];
+        }
+    }
+
+    if (g_keChuanTaskQueue.count==0){ g_isExtractingKeChuanDetail=NO; return; }
+    [self processKeChuanQueue_Truth];
+}
+
+%new
+- (void)processKeChuanQueue_Truth {
+    if (g_keChuanTaskQueue.count==0){
+        NSMutableString *res=[NSMutableString string];
+        for (NSUInteger i=0;i<g_keChuanTitleQueue.count;i++){
+            [res appendFormat:@"--- %@ ---
+%@
+
+",g_keChuanTitleQueue[i],
+             (i<g_capturedKeChuanDetail.count)?g_capturedKeChuanDetail[i]:@"[提取失败]"]; }
+        [UIPasteboard generalPasteboard].string=res;
+        UIAlertController *ok=[UIAlertController alertControllerWithTitle:@"提取完成" message:@"已复制到剪贴板" preferredStyle:UIAlertControllerStyleAlert];
+        [ok addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:ok animated:YES completion:nil];
+        g_isExtractingKeChuanDetail=NO; g_keChuanTaskQueue=nil; g_keChuanTitleQueue=nil; g_capturedKeChuanDetail=nil;
+        return;
+    }
+
+    NSDictionary *task=g_keChuanTaskQueue.firstObject;
+    [g_keChuanTaskQueue removeObjectAtIndex:0];
+    [g_keChuanTitleQueue addObject:task[@"title"]];
+    SEL sel=NSSelectorFromString(task[@"sel"]);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    if ([self respondsToSelector:sel]) [self performSelector:sel withObject:task[@"sender"]];
+#pragma clang diagnostic pop
+    else [self processKeChuanQueue_Truth];
+}
+%end
