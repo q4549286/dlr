@@ -7,7 +7,7 @@
 // =========================================================================
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
-static NSMutableArray<UIGestureRecognizer *> *g_keChuanWorkQueue = nil; // 队列回归到只存手势
+static NSMutableArray<NSDictionary *> *g_keChuanWorkQueue = nil;
 static NSMutableArray<NSString *> *g_keChuanTitleQueue = nil;
 
 static UITextView *g_logTextView = nil;
@@ -116,7 +116,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)createOrShowControlPanel_Truth { /* UI创建代码与之前版本相同 */ 
+- (void)createOrShowControlPanel_Truth {
     UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
     NSInteger panelTag = 556692;
     if (g_controlPanelView && g_controlPanelView.superview) {
@@ -143,7 +143,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)copyAndClose_Truth { /* 复制关闭代码与之前版本相同 */ 
+- (void)copyAndClose_Truth {
     if (g_capturedKeChuanDetailArray && g_capturedKeChuanDetailArray.count > 0 && g_keChuanTitleQueue && g_keChuanTitleQueue.count > 0) {
         NSMutableString *resultStr = [NSMutableString string];
         for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
@@ -168,7 +168,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array]; g_keChuanWorkQueue = [NSMutableArray array]; g_keChuanTitleQueue = [NSMutableArray array];
   
-    // 队列构建逻辑与之前版本相同
+    // Part A: 三传
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
     if (sanChuanContainerClass) {
         NSMutableArray *containers = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, self.view, containers);
@@ -183,17 +183,21 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     UILabel *dizhiLabel = labels[labels.count-2]; UILabel *tianjiangLabel = labels[labels.count-1];
                     
                     if (dizhiLabel.gestureRecognizers.count > 0) {
-                        [g_keChuanWorkQueue addObject:dizhiLabel.gestureRecognizers.firstObject];
+                        NSDictionary *task = @{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"contextView": chuanView};
+                        [g_keChuanWorkQueue addObject:task];
                         [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
                     }
                     if (tianjiangLabel.gestureRecognizers.count > 0) {
-                        [g_keChuanWorkQueue addObject:tianjiangLabel.gestureRecognizers.firstObject];
+                        NSDictionary *task = @{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"contextView": chuanView};
+                        [g_keChuanWorkQueue addObject:task];
                         [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
                     }
                 }
             }
         }
     }
+  
+    // Part B: 四课
     Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeContainerClass) {
         NSMutableArray *containers = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, self.view, containers);
@@ -208,11 +212,13 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     UILabel *tianjiangLabel = labels[0]; UILabel *dizhiLabel = labels[1];
                     
                     if (dizhiLabel.gestureRecognizers.count > 0) {
-                        [g_keChuanWorkQueue addObject:dizhiLabel.gestureRecognizers.firstObject];
+                        NSDictionary *task = @{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"contextView": keView};
+                        [g_keChuanWorkQueue addObject:task];
                         [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
                     }
                     if (tianjiangLabel.gestureRecognizers.count > 0) {
-                        [g_keChuanWorkQueue addObject:tianjiangLabel.gestureRecognizers.firstObject];
+                        NSDictionary *task = @{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"contextView": keView};
+                        [g_keChuanWorkQueue addObject:task];
                         [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
                     }
                 }
@@ -238,29 +244,43 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         g_isExtractingKeChuanDetail = NO; return;
     }
   
-    UIGestureRecognizer *gestureToTrigger = g_keChuanWorkQueue.firstObject;
+    NSDictionary *task = g_keChuanWorkQueue.firstObject;
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
     
+    UIGestureRecognizer *gestureToTrigger = task[@"gesture"];
+    UIView *contextView = task[@"contextView"];
+    
     LogMessage(@"正在处理: %@", title);
     
-    // 【【【 终极核心修正：调用正确的主方法，让App自己处理一切！ 】】】
+    // 【【【 最终核心修正：使用您发现的正确变量名 "課傳" 】】】
+    
+    // 第零步：设置内部状态变量
+    Ivar keChuanIvar = class_getInstanceVariable([self class], "課傳");
+    if (keChuanIvar) {
+        object_setIvar(self, keChuanIvar, contextView);
+        LogMessage(@"第0步: 成功设置 '課傳' -> %@", contextView);
+    } else {
+        LogMessage(@"第0步: 警告！找不到内部变量 '課傳'。");
+    }
+
+    // 第一步：调用弹窗方法
     SEL actionToPerform = nil;
     if ([title containsString:@"地支"]) {
-        actionToPerform = NSSelectorFromString(@"課傳觸摸處理WithGestureRecognizer:");
+        actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
     } else {
-        actionToPerform = NSSelectorFromString(@"天將觸摸處理WithGestureRecognizer:");
+        actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
     }
     
     if ([self respondsToSelector:actionToPerform]) {
-        LogMessage(@"调用主方法 %@, 传递手势: %@", NSStringFromSelector(actionToPerform), gestureToTrigger);
+        LogMessage(@"第1步: 调用方法 %@, 传递手势: %@", NSStringFromSelector(actionToPerform), gestureToTrigger);
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         [self performSelector:actionToPerform withObject:gestureToTrigger];
         #pragma clang diagnostic pop
     } else {
-        LogMessage(@"致命错误: 主方法 %@ 不存在！", NSStringFromSelector(actionToPerform));
-        [g_capturedKeChuanDetailArray addObject:@"[提取失败: 主方法不存在]"];
+        LogMessage(@"第1步: 错误！方法 %@ 不存在。", NSStringFromSelector(actionToPerform));
+        [g_capturedKeChuanDetailArray addObject:@"[提取失败: 方法不存在]"];
         [self processKeChuanQueue_Truth];
     }
 }
