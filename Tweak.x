@@ -1,138 +1,152 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局状态
+// 1. 全局变量
 // =========================================================================
-static BOOL g_isListeningForWei = NO;
-static NSMutableArray *g_capturedWeiValues = nil;
+static NSMutableArray<NSString *> *g_recordedCoordinates = nil;
 
 // =========================================================================
-// 2. 辅助函数
+// 2. 主功能区
 // =========================================================================
-static UIViewController* getTopmostViewController() {
-    UIWindow *keyWindow = nil;
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [[UIApplication sharedApplication] connectedScenes]) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                for (UIWindow *window in scene.windows) { if (window.isKeyWindow) { keyWindow = window; break; } }
-            }
-        }
-    } else {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        keyWindow = [[UIApplication sharedApplication] keyWindow];
-        #pragma clang diagnostic pop
-    }
-    UIViewController *topController = keyWindow.rootViewController;
-    while (topController.presentedViewController) { topController = topController.presentedViewController; }
-    return topController;
-}
-
-// =========================================================================
-// 3. 主功能实现
-// =========================================================================
-// 【【【编译错误修正】】】
-// 在这里声明所有我们将要添加的新方法，以告知编译器它们的存在。
-@interface UIViewController (TheWeiHunter)
-- (void)startWeiHunting;
-- (void)finishWeiHunting;
-- (void)my_hooked_showSummary:(id)sender; // <--- 添加这个声明
+@interface UIViewController (CoordinateRecorder)
+- (void)toggleCoordinateRecordingMode;
 @end
 
-// 我们将手动交换的Hook代码放在一个单独的 %group 中
-%group TheosBypassHook
-%hook UIViewController
+// 自定义一个 Window 类来拦截触摸事件
+%hook UIWindow
 
-// 新的、用于交换的方法
-- (void)my_hooked_showSummary:(id)sender {
-    if (g_isListeningForWei && sender) {
-        @try {
-            id weiValue = [sender valueForKey:@"位"];
-            NSString *capturedDescription = weiValue ? [NSString stringWithFormat:@"%@", weiValue] : @"[捕获失败: '位' 为 nil]";
-            [g_capturedWeiValues addObject:capturedDescription];
+- (void)sendEvent:(UIEvent *)event {
+    if (g_recordedCoordinates != nil && event.type == UIEventTypeTouches) {
+        NSSet<UITouch *> *touches = [event allTouches];
+        UITouch *touch = [touches anyObject];
+
+        if (touch.phase == UITouchPhaseBegan) {
+            CGPoint location = [touch locationInView:self];
             
-            UILabel *feedbackLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 120, 40)];
-            feedbackLabel.center = self.view.center;
-            feedbackLabel.text = @"'位' 已捕获!";
-            feedbackLabel.textColor = [UIColor whiteColor]; feedbackLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7]; feedbackLabel.textAlignment = NSTextAlignmentCenter; feedbackLabel.layer.cornerRadius = 10; feedbackLabel.clipsToBounds = YES;
-            [self.view.window addSubview:feedbackLabel];
-            [UIView animateWithDuration:1.5 animations:^{ feedbackLabel.alpha = 0; } completion:^(BOOL f) { [feedbackLabel removeFromSuperview]; }];
-        } @catch (NSException *exception) {
-            [g_capturedWeiValues addObject:[NSString stringWithFormat:@"[捕获异常: %@]", exception.reason]];
+            // 记录坐标
+            NSString *coordString = [NSString stringWithFormat:@"(%.2f, %.2f)", location.x, location.y];
+            [g_recordedCoordinates addObject:coordString];
+            
+            NSLog(@"[坐标记录器] 已记录坐标 #%lu: %@", (unsigned long)g_recordedCoordinates.count, coordString);
+            
+            // 在屏幕上显示一个视觉反馈
+            UIView *feedbackCircle = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 40, 40)];
+            feedbackCircle.center = location;
+            feedbackCircle.backgroundColor = [UIColor.redColor colorWithAlphaComponent:0.5];
+            feedbackCircle.layer.cornerRadius = 20;
+            feedbackCircle.layer.borderColor = UIColor.whiteColor.CGColor;
+            feedbackCircle.layer.borderWidth = 2;
+            [self addSubview:feedbackCircle];
+            
+            // 更新按钮标题
+            UIViewController *rootVC = self.rootViewController;
+            if ([rootVC isKindOfClass:NSClassFromString(@"UINavigationController")]) {
+                rootVC = [(UINavigationController *)rootVC viewControllers].firstObject;
+            }
+            UIButton *button = [rootVC.view.window viewWithTag:556692];
+            if (button) {
+                [button setTitle:[NSString stringWithFormat:@"已记录 %lu 点", (unsigned long)g_recordedCoordinates.count] forState:UIControlStateNormal];
+            }
+
+            [UIView animateWithDuration:0.5 animations:^{
+                feedbackCircle.transform = CGAffineTransformMakeScale(1.5, 1.5);
+                feedbackCircle.alpha = 0;
+            } completion:^(BOOL finished) {
+                [feedbackCircle removeFromSuperview];
+            }];
         }
     }
-    // 现在编译器知道这个方法存在了，所以可以安全调用
-    [self my_hooked_showSummary:sender];
+
+    %orig; // 继续传递事件，保证App正常响应
 }
 
 %end
-%end
 
-// 默认组，用于UI注入
+
 %hook UIViewController
 
+// --- viewDidLoad: 创建模式切换按钮 ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIWindow *window = self.view.window; if (!window) return;
-            [[window viewWithTag:202701] removeFromSuperview]; [[window viewWithTag:202702] removeFromSuperview];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
+            NSInteger buttonTag = 556692; // 新的Tag
+            if ([keyWindow viewWithTag:buttonTag]) { [[keyWindow viewWithTag:buttonTag] removeFromSuperview]; }
             
-            UIButton *startButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            startButton.frame = CGRectMake(self.view.frame.size.width - 230, 50, 100, 44); startButton.tag = 202701;
-            [startButton setTitle:@"捕获'位'" forState:UIControlStateNormal]; startButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; startButton.backgroundColor = [UIColor systemIndigoColor]; [startButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; startButton.layer.cornerRadius = 22;
-            [startButton addTarget:self action:@selector(startWeiHunting) forControlEvents:UIControlEventTouchUpInside];
-            [window addSubview:startButton];
-            
-            UIButton *finishButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            finishButton.frame = CGRectMake(self.view.frame.size.width - 120, 50, 110, 44); finishButton.tag = 202702;
-            [finishButton setTitle:@"完成并复制" forState:UIControlStateNormal]; finishButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; finishButton.backgroundColor = [UIColor systemOrangeColor]; [finishButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; finishButton.layer.cornerRadius = 22;
-            [finishButton addTarget:self action:@selector(finishWeiHunting) forControlEvents:UIControlEventTouchUpInside];
-            [window addSubview:finishButton];
+            UIButton *recordButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            recordButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
+            recordButton.tag = buttonTag;
+            [recordButton setTitle:@"开始记录坐标" forState:UIControlStateNormal];
+            recordButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            recordButton.backgroundColor = [UIColor systemOrangeColor];
+            [recordButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            recordButton.layer.cornerRadius = 8;
+            [recordButton addTarget:self action:@selector(toggleCoordinateRecordingMode) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:recordButton];
         });
     }
 }
 
 %new
-- (void)startWeiHunting {
-    g_isListeningForWei = YES;
-    g_capturedWeiValues = [NSMutableArray array];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"捕获模式已开始" message:@"请像平时一样，用手指点击您想记录'位'的课盘内容。" preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"明白了" style:UIAlertActionStyleDefault handler:nil]];
-    [getTopmostViewController() presentViewController:alert animated:YES completion:nil];
-}
+// --- 切换坐标记录模式 ---
+- (void)toggleCoordinateRecordingMode {
+    UIButton *button = [self.view.window viewWithTag:556692];
 
-%new
-- (void)finishWeiHunting {
-    if (!g_isListeningForWei) { return; }
-    g_isListeningForWei = NO;
-    NSString *finalResult = [g_capturedWeiValues componentsJoinedByString:@"\n---\n"];
-    [UIPasteboard generalPasteboard].string = finalResult;
-    NSString *message = (g_capturedWeiValues.count > 0) ? [NSString stringWithFormat:@"捕获完成！共 %ld 个'位'值已复制到剪贴板！", (unsigned long)g_capturedWeiValues.count] : @"没有捕获任何'位'值。";
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"捕获完成" message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"胜利！" style:UIAlertActionStyleDefault handler:nil]];
-    [getTopmostViewController() presentViewController:alert animated:YES completion:nil];
-}
+    if (g_recordedCoordinates != nil) {
+        // --- 结束记录 ---
+        
+        // 拼接所有坐标，准备复制
+        NSString *result = [g_recordedCoordinates componentsJoinedByString:@",\n"];
+        result = [NSString stringWithFormat:@"@[\n%@\n]", result];
+        [UIPasteboard generalPasteboard].string = result;
+        
+        // 提示用户
+        NSString *message = [NSString stringWithFormat:@"记录结束！\n共 %lu 个坐标点已复制到剪贴板。\n\n请将内容发送给我。", (unsigned long)g_recordedCoordinates.count];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"操作完成" message:message preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
 
-%end
+        [button setTitle:@"开始记录坐标" forState:UIControlStateNormal];
+        button.backgroundColor = [UIColor systemOrangeColor];
+        
+        g_recordedCoordinates = nil; // 重置
+        
+    } else {
+        // --- 开始记录 ---
+        g_recordedCoordinates = [NSMutableArray array];
+        
+        [button setTitle:@"结束记录" forState:UIControlStateNormal];
+        button.backgroundColor = [UIColor systemRedColor];
+        
+        NSString *instructions = @"请严格按顺序点击18个目标：\n\n"
+                                 @"--- 三传 (6点) ---\n"
+                                 @"1. 初传-地支\n2. 初传-天将\n"
+                                 @"3. 中传-地支\n4. 中传-天将\n"
+                                 @"5. 末传-地支\n6. 末传-天将\n\n"
+                                 @"--- 四课 (12点) ---\n"
+                                 @"7. 第一课-天盘(天将)\n"
+                                 @"8. 第一课-天盘下地支\n"
+                                 @"9. 第一课-地盘上地支\n"
+                                 @"10. 第二课-天盘(天将)\n"
+                                 @"11. 第二课-天盘下地支\n"
+                                 @"12. 第二课-地盘上地支\n"
+                                 @"13. 第三课-天盘(天将)\n"
+                                 @"14. 第三课-天盘下地支\n"
+                                 @"15. 第三课-地盘上地支\n"
+                                 @"16. 第四课-天盘(天将)\n"
+                                 @"17. 第四课-天盘下地支\n"
+                                 @"18. 第四课-地盘上地支\n\n"
+                                 @"如果某项不可点，请点其附近空白处。完成后再按此按钮。";
 
-
-// --- 手动方法交换 ---
-%ctor {
-    %init(TheosBypassHook);
-    %init;
-
-    Class vcClass = NSClassFromString(@"六壬大占.ViewController");
-    
-    SEL originalSelector = NSSelectorFromString(@"顯示課傳摘要WithSender:");
-    SEL newSelector = @selector(my_hooked_showSummary:);
-    
-    Method originalMethod = class_getInstanceMethod(vcClass, originalSelector);
-    Method newMethod = class_getInstanceMethod(vcClass, newSelector);
-    
-    if (originalMethod && newMethod) {
-        method_exchangeImplementations(originalMethod, newMethod);
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"坐标记录已开启"
+                                                                       message:instructions
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"我明白了" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
     }
 }
+%end
