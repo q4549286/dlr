@@ -1,70 +1,94 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-#define EchoLog(format, ...) NSLog(@"[Popup-Detective-V2] " format, ##__VA_ARGS__)
-
-// --- 辅助函数：打印一个对象的所有实例变量 ---
-static void PrintAllIvars(id object, NSString *objectName) {
+// --- 辅助函数：生成一个包含对象所有实例变量及其值的字符串 ---
+static NSString* CreateIvarListString(id object, NSString *objectName) {
     if (!object) {
-        EchoLog(@"对象 '%@' 为 nil，无法打印。", objectName);
-        return;
+        return [NSString stringWithFormat:@"对象 '%@' 为 nil。", objectName];
     }
     
-    unsigned int ivarCount;
-    // class_copyIvarList 只能获取本类的ivar，所以我们需要遍历父类
-    NSMutableString *ivarLog = [NSMutableString stringWithFormat:@"\n--- %@ (%@) 的实例变量 (Ivars) ---\n", objectName, NSStringFromClass([object class])];
+    NSMutableString *logStr = [NSMutableString stringWithFormat:@"\n\n--- %@ (%@) 的内部状态 ---\n", objectName, NSStringFromClass([object class])];
     
     Class currentClass = [object class];
     while (currentClass && currentClass != [NSObject class]) {
-        [ivarLog appendFormat:@"\n  --- 属于类: %@ ---\n", NSStringFromClass(currentClass)];
-        ivars = class_copyIvarList(currentClass, &ivarCount);
+        [logStr appendFormat:@"\n  --- 属于类: %@ ---\n", NSStringFromClass(currentClass)];
+        unsigned int ivarCount;
+        Ivar *ivars = class_copyIvarList(currentClass, &ivarCount);
         if (ivarCount == 0) {
-            [ivarLog appendString:@"  (无自定义ivar)\n"];
+            [logStr appendString:@"  (无自定义ivar)\n"];
         }
         for (unsigned int i = 0; i < ivarCount; i++) {
             Ivar ivar = ivars[i];
             const char *name = ivar_getName(ivar);
-            const char *type = ivar_getTypeEncoding(ivar);
-            [ivarLog appendFormat:@"  ? %s (%s)\n", name, type];
+            id value = nil;
+            NSString *valueDescription = @"[无法获取值]";
+            @try {
+                value = object_getIvar(object, ivar);
+                // 对于非对象类型，object_getIvar返回的是指针或值的拷贝，直接打印可能无意义或崩溃
+                // 我们只尝试打印看起来像对象的东西
+                const char *type = ivar_getTypeEncoding(ivar);
+                if (type[0] == '@') { // 是一个OC对象
+                    valueDescription = [NSString stringWithFormat:@"%@", value];
+                } else {
+                    valueDescription = [NSString stringWithFormat:@"[非对象类型: %s]", type];
+                }
+            } @catch (NSException *exception) {
+                valueDescription = [NSString stringWithFormat:@"[获取时异常: %@]", exception.reason];
+            }
+            [logStr appendFormat:@"  ? %s = %@\n", name, valueDescription];
         }
         free(ivars);
         currentClass = class_getSuperclass(currentClass);
     }
-    
-    EchoLog(@"%@", ivarLog);
+     [logStr appendString:@"\n===========================\n\n"];
+    return logStr;
 }
+
 
 // --- 核心Hook ---
-// 根据您之前的截图，弹出的详情窗口是 '六壬大占.課傳摘要視圖'，它是一个UIView。
-// 管理它的ViewController很可能就是 '六壬大占.課傳摘要視圖控制器'。
-// 我们先大胆地hook这个推测出来的名字。
-// 如果日志没有输出，我们就需要换成hook '六壬大占.課傳摘要視圖' 的 - (id)initWith... 方法。
-%hook 六壬大占.課傳摘要視圖控制器
+%hook 六壬大占.ViewController
 
-- (void)viewDidLoad {
-    // 先调用原始方法，确保所有东西都已加载
-    %orig;
+- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
+    NSString *presentedVCClassName = NSStringFromClass([viewControllerToPresent class]);
 
-    EchoLog(@"--- 成功Hook到'課傳摘要視圖控制器'的 viewDidLoad ---");
+    // 我们只关心与课传摘要相关的弹窗
+    if ([presentedVCClassName containsString:@"摘要"] || [presentedVCClassName containsString:@"Popover"]) {
+        
+        // 1. 获取主VC (self) 的状态字符串
+        NSString *mainVCState = CreateIvarListString(self, @"主VC (self)");
+        
+        // 2. 获取弹窗VC的状态字符串
+        NSString *popupVCState = CreateIvarListString(viewControllerToPresent, @"弹窗VC");
 
-    // 1. 打印弹窗VC自己的所有Ivars
-    PrintAllIvars(self, @"弹窗自己 (self)");
+        // 3. 组合成一个巨大的消息体
+        NSString *fullMessage = [NSString stringWithFormat:@"侦测到弹窗: %@\n\n%@%@", presentedVCClassName, mainVCState, popupVCState];
 
-    // 2. 打印创建它的那个VC (主VC) 的所有Ivars
-    UIViewController *presentingVC = self.presentingViewController;
-    PrintAllIvars(presentingVC, @"主VC (presentingViewController)");
-}
+        // 4. 创建并显示一个可滚动的Alert
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"内部状态侦查"
+                                                                         message:fullMessage
+                                                                  preferredStyle:UIAlertControllerStyleAlert];
 
-%end
+        // 添加一个“复制并关闭”按钮
+        [alert addAction:[UIAlertAction actionWithTitle:@"复制并关闭" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [UIPasteboard generalPasteboard].string = fullMessage;
+        }]];
 
-// 我们也hook一下天将的弹窗控制器，以防万一
-%hook 六壬大占.天將摘要視圖控制器
+        // 添加一个“关闭”按钮
+        [alert addAction:[UIAlertAction actionWithTitle:@"直接关闭" style:UIAlertActionStyleCancel handler:nil]];
 
-- (void)viewDidLoad {
-    %orig;
-    EchoLog(@"--- 成功Hook到'天將摘要視圖控制器'的 viewDidLoad ---");
-    PrintAllIvars(self, @"天将弹窗自己 (self)");
-    PrintAllIvars(self.presentingViewController, @"主VC (presentingViewController)");
+        // 找到最顶层的VC来呈现这个Alert，防止它被弹窗覆盖
+        UIViewController *topController = [UIApplication sharedApplication].keyWindow.rootViewController;
+        while (topController.presentedViewController) {
+            topController = topController.presentedViewController;
+        }
+        [topController presentViewController:alert animated:YES completion:nil];
+
+        // 注意：我们依然要调用原始的present方法，让原来的弹窗出现
+        // 但我们的Alert会覆盖在它上面
+    }
+
+    // 调用原始方法
+    %orig(viewControllerToPresent, flag, completion);
 }
 
 %end
