@@ -3,37 +3,49 @@
 
 %hook UIViewController
 
-// --- 注入一个新的侦察按钮 ---
+// --- 注入最终的侦察按钮 ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *window = self.view.window; if (!window) return;
-            NSInteger buttonTag = 888888;
+            NSInteger buttonTag = 999999;
             [[window viewWithTag:buttonTag] removeFromSuperview];
             UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
             button.frame = CGRectMake(10, 50, 180, 40);
             button.tag = buttonTag;
-            [button setTitle:@"侦察VC变量" forState:UIControlStateNormal];
+            [button setTitle:@"终极侦察(课传对象)" forState:UIControlStateNormal];
             button.titleLabel.font = [UIFont boldSystemFontOfSize:15];
-            button.backgroundColor = [UIColor colorWithRed:0.1 green:0.6 blue:0.3 alpha:1.0];
+            button.backgroundColor = [UIColor redColor];
             [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            [button addTarget:self action:@selector(inspectVCProperties) forControlEvents:UIControlEventTouchUpInside];
+            [button addTarget:self action:@selector(inspectKeChuanObject) forControlEvents:UIControlEventTouchUpInside];
             [window addSubview:button];
         });
     }
 }
 
 %new
-// --- 按钮的动作：侦察并显示ViewController的实例变量 ---
-- (void)inspectVCProperties {
-    Class vcClass = [self class];
-    
-    NSMutableString *resultString = [NSMutableString stringWithFormat:@"%@ 实例变量报告:\n\n", NSStringFromClass(vcClass)];
+// --- 按钮的动作：侦察并显示`課傳`对象的实例变量 ---
+- (void)inspectKeChuanObject {
+    // 1. 获取`課傳`对象
+    Ivar keChuanIvar = class_getInstanceVariable([self class], "課傳");
+    if (!keChuanIvar) {
+        // ... 错误处理 ...
+        return;
+    }
+    id keChuanObject = object_getIvar(self, keChuanIvar);
+    if (!keChuanObject) {
+         // ... 错误处理 ...
+        return;
+    }
+
+    // 2. 开始分析`課傳`对象
+    Class keChuanClass = [keChuanObject class];
+    NSMutableString *resultString = [NSMutableString stringWithFormat:@"'%@' 对象实例变量报告:\n\n", NSStringFromClass(keChuanClass)];
 
     unsigned int count;
-    Ivar *ivars = class_copyIvarList(vcClass, &count);
+    Ivar *ivars = class_copyIvarList(keChuanClass, &count);
 
     for (unsigned int i = 0; i < count; i++) {
         Ivar ivar = ivars[i];
@@ -45,13 +57,10 @@
 
         [resultString appendFormat:@"变量名: %@\n类型: %@\n", ivarName, ivarType];
 
-        // 如果是对象类型，尝试读取它的值
         if (ivarType.length > 0 && [ivarType characterAtIndex:0] == '@') {
             @try {
-                id value = object_getIvar(self, ivar);
+                id value = object_getIvar(keChuanObject, ivar);
                 [resultString appendFormat:@"值: %@\n", value];
-
-                // 如果这个值是一个数组，我们把它里面的东西也打印出来看看！
                 if ([value isKindOfClass:[NSArray class]]) {
                     NSArray *array = (NSArray *)value;
                     [resultString appendString:@"  (数组内容):\n"];
@@ -74,10 +83,9 @@
     textView.text = resultString;
     textView.editable = NO;
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"VC侦察报告" message:nil preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"课传对象侦察报告" message:nil preferredStyle:UIAlertControllerStyleAlert];
     [alert.view addSubview:textView];
     
-    // 因为UIAlertController在iOS9之后会约束其内容大小, 我们需要手动调整一下
     [alert.view addConstraint:[NSLayoutConstraint constraintWithItem:alert.view attribute:NSLayoutAttributeHeight relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1.0 constant:400]];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"复制并关闭" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
