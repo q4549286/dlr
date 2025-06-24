@@ -190,13 +190,13 @@ static NSString *ExtractTextFromView(UIView *container)
 - (void)kc_processNextTask
 {
     if (!g_taskQueue.count) {
-        // 完成：整理结果 -> 复制剪贴板 -> 弹框
-        NSMutableString *final = [NSMutableString string];
-        for (NSDictionary *task in g_taskResults) { /* 保留原顺序 */
-            NSString *title = task.key;
-            NSString *detail = g_taskResults[title] ?: @"[信息提取失败]";
-            [final appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
-        }
+// ---------- 完成：整理结果 ----------
+NSMutableString *final = [NSMutableString string];
+for (NSString *title in g_taskResults) {
+    NSString *detail = g_taskResults[title] ?: @"[信息提取失败]";
+    [final appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
+}
+
         [UIPasteboard generalPasteboard].string = final;
         
         UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"提取完成"
