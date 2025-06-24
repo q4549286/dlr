@@ -3,26 +3,11 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数 (带屏幕日志功能)
+// 1. 全局变量与辅助函数
 // =========================================================================
-static UITextView *g_screenLogger = nil;
-
-#define EchoLog(format, ...) \
-    do { \
-        NSString *logMessage = [NSString stringWithFormat:format, ##__VA_ARGS__]; \
-        NSLog(@"[KeChuan-Test-Truth-V12-Final] %@", logMessage); \
-        if (g_screenLogger) { \
-            dispatch_async(dispatch_get_main_queue(), ^{ \
-                NSString *newText = [NSString stringWithFormat:@"%@\n- %@", g_screenLogger.text, logMessage]; \
-                if (newText.length > 2000) { newText = [newText substringFromIndex:newText.length - 2000]; } \
-                g_screenLogger.text = newText; \
-                [g_screenLogger scrollRangeToVisible:NSMakeRange(g_screenLogger.text.length - 1, 1)]; \
-            }); \
-        } \
-    } while (0)
+#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Truth-V13-Simple] " format, ##__VA_ARGS__)
 
 static NSInteger const TestButtonTag = 556690;
-static NSInteger const LoggerViewTag = 778899;
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
 static NSMutableArray *g_keChuanWorkQueue = nil;
@@ -43,7 +28,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %hook UIViewController
 
-// --- viewDidLoad: 创建按钮和日志窗口 ---
+// --- viewDidLoad: 创建按钮 ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
@@ -54,44 +39,31 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"课传提取(最终版)" forState:UIControlStateNormal];
+            [testButton setTitle:@"课传提取(简洁版)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.6 alpha:1.0]; // 品红色
+            testButton.backgroundColor = [UIColor systemGreenColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
             [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Truth) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
-            
-            if ([keyWindow viewWithTag:LoggerViewTag]) { [[keyWindow viewWithTag:LoggerViewTag] removeFromSuperview]; }
-            UITextView *logger = [[UITextView alloc] initWithFrame:CGRectMake(10, 45, keyWindow.bounds.size.width - 170, 150)];
-            logger.tag = LoggerViewTag;
-            logger.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7];
-            logger.textColor = [UIColor colorWithRed:1.0 green:0.4 blue:0.8 alpha:1.0]; // 亮粉色
-            logger.font = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular];
-            logger.editable = NO;
-            logger.layer.borderColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.6 alpha:1.0].CGColor;
-            logger.layer.borderWidth = 1.0;
-            logger.layer.cornerRadius = 5;
-            g_screenLogger = logger;
-            [keyWindow addSubview:g_screenLogger];
         });
     }
 }
 
-// --- presentViewController: 捕获弹窗并驱动队列 ---
+// --- presentViewController: 捕获弹窗并驱动队列 (最核心的时序控制) ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtractingKeChuanDetail) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            NSString *expectedTitle = @"未知项目";
-            if (g_capturedKeChuanDetailArray.count < g_keChuanTitleQueue.count) {
-                expectedTitle = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
-            }
-            EchoLog(@"捕获弹窗 for [%@]", expectedTitle);
+            
+            // 确保弹窗能正常加载，但让它透明且无动画
             viewControllerToPresent.view.alpha = 0.0f;
             flag = NO;
+            
             void (^newCompletion)(void) = ^{
-                if (completion) { completion(); }
+                if (completion) { completion(); } // 执行原始的completion
+
+                // 提取文本
                 UIView *contentView = viewControllerToPresent.view;
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
@@ -108,11 +80,13 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 }
                 NSString *fullDetail = [textParts componentsJoinedByString:@"\n"];
                 [g_capturedKeChuanDetailArray addObject:fullDetail];
-                EchoLog(@"内容已提取, 关闭弹窗.");
+                
+                // 【关键】在关闭弹窗的completion中，触发下一个任务，保证时序
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
                     [self processKeChuanQueue_Truth];
                 }];
             };
+
             %orig(viewControllerToPresent, flag, newCompletion);
             return;
         }
@@ -123,16 +97,13 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 %new
 // --- performKeChuanDetailExtractionTest_Truth: 构建任务队列 ---
 - (void)performKeChuanDetailExtractionTest_Truth {
-    g_screenLogger.text = @"";
-    EchoLog(@"开始V12最终测试...");
+    EchoLog(@"开始V13简洁版测试...");
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
     
-    NSInteger itemIndex = 0; // 总索引
-
-    // 三传识别
+    // --- Part A: 三传解析 (使用被验证过的最可靠的识别方法) ---
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
     if (sanChuanContainerClass) {
         NSMutableArray *sanChuanContainers = [NSMutableArray array];
@@ -160,19 +131,17 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     if (labels.count >= 2) {
                         UILabel *dizhiLabel = labels[labels.count - 2];
                         UILabel *tianjiangLabel = labels[labels.count - 1];
-                        NSString *dizhiTitle = [NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text];
-                        [g_keChuanWorkQueue addObject:@{@"title": dizhiTitle, @"index": @(itemIndex++)}];
-                        [g_keChuanTitleQueue addObject:dizhiTitle];
-                        NSString *tianjiangTitle = [NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text];
-                        [g_keChuanWorkQueue addObject:@{@"title": tianjiangTitle, @"index": @(itemIndex++)}];
-                        [g_keChuanTitleQueue addObject:tianjiangTitle];
+                        [g_keChuanWorkQueue addObject:dizhiLabel];
+                        [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
+                        [g_keChuanWorkQueue addObject:tianjiangLabel];
+                        [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
                     }
                 }
             }
         }
     }
-    
-    // 四课识别
+
+    // --- Part B: 四课解析 (同样使用简单可靠的识别方法) ---
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
     if (siKeViewClass) {
         NSMutableArray *skViews = [NSMutableArray array];
@@ -194,31 +163,33 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     NSMutableArray *colLabels = cols[sortedKeys[i]];
                     [colLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
                     if (colLabels.count >= 2) {
-                        // 四课的索引是继续往上加的
-                        NSString *dizhiTitle = [NSString stringWithFormat:@"%@ - 地支(%@)", colTitles[i], ((UILabel*)colLabels[1]).text];
-                        [g_keChuanWorkQueue addObject:@{@"title": dizhiTitle, @"index": @(itemIndex++)}];
-                        [g_keChuanTitleQueue addObject:dizhiTitle];
-                        NSString *tianjiangTitle = [NSString stringWithFormat:@"%@ - 天将(%@)", colTitles[i], ((UILabel*)colLabels[0]).text];
-                        [g_keChuanWorkQueue addObject:@{@"title": tianjiangTitle, @"index": @(itemIndex++)}];
-                        [g_keChuanTitleQueue addObject:tianjiangTitle];
+                        UILabel *tianjiangLabel = colLabels[0];
+                        UILabel *dizhiLabel = colLabels[1];
+                        [g_keChuanWorkQueue addObject:dizhiLabel];
+                        [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", colTitles[i], dizhiLabel.text]];
+                        [g_keChuanWorkQueue addObject:tianjiangLabel];
+                        [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", colTitles[i], tianjiangLabel.text]];
                     }
                 }
             }
         }
     }
     
-    if (g_keChuanWorkQueue.count == 0) { EchoLog(@"测试失败: 未构建任何任务."); g_isExtractingKeChuanDetail = NO; return; }
-    EchoLog(@"队列构建完成,共%lu项。开始处理...", (unsigned long)g_keChuanWorkQueue.count);
+    if (g_keChuanWorkQueue.count == 0) {
+        EchoLog(@"错误: 未找到任何可点击的项目.");
+        g_isExtractingKeChuanDetail = NO;
+        return;
+    }
+    
+    EchoLog(@"队列构建完成, 共%lu项, 开始处理.", (unsigned long)g_keChuanWorkQueue.count);
     [self processKeChuanQueue_Truth];
 }
 
 %new
-// --- processKeChuanQueue_Truth: 注入Ivar并调用显示方法 ---
+// --- processKeChuanQueue_Truth: 简单地执行队列中的任务 ---
 - (void)processKeChuanQueue_Truth {
     if (g_keChuanWorkQueue.count == 0) {
         EchoLog(@"所有任务完成! 生成结果.");
-        g_isExtractingKeChuanDetail = NO;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ g_screenLogger.text = @"测试完成。请检查剪贴板。"; });
         NSMutableString *resultStr = [NSMutableString string];
         for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
             NSString *title = g_keChuanTitleQueue[i];
@@ -226,36 +197,23 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             [resultStr appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
         }
         [UIPasteboard generalPasteboard].string = resultStr;
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有课传详情已复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+        [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:successAlert animated:YES completion:nil];
+
+        g_isExtractingKeChuanDetail = NO;
+        g_keChuanWorkQueue = nil;
+        g_capturedKeChuanDetailArray = nil;
+        g_keChuanTitleQueue = nil;
         return;
     }
     
-    NSDictionary *task = g_keChuanWorkQueue.firstObject;
+    UILabel *itemToClick = g_keChuanWorkQueue.firstObject;
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     
-    NSString *title = task[@"title"];
-    NSInteger itemIndex = [task[@"index"] integerValue];
+    NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
 
-    EchoLog(@"处理任务: %@ (索引 %ld)", title, (long)itemIndex);
-
-    // 1. 【核心】尝试设置一个假想的ivar来更新App内部状态
-    const char *ivarNameToTry = "_selectedIndex"; // 这是一个非常通用的命名，我们以此作为最后尝试
-    Ivar ivar = class_getInstanceVariable([self class], ivarNameToTry);
-    
-    if (ivar) {
-        const char *type = ivar_getTypeEncoding(ivar);
-        // 确保ivar类型是NSInteger, long, int等整数类型
-        if (strcmp(type, @encode(NSInteger)) == 0 || strcmp(type, @encode(long)) == 0 || strcmp(type, @encode(int)) == 0) {
-            EchoLog(@"找到整数Ivar '%s'!", ivarNameToTry);
-            object_setIvar(self, ivar, (id)(uintptr_t)itemIndex); // 更安全的设置方式
-            EchoLog(@"已设置Ivar '%s' 的值为 %ld", ivarNameToTry, (long)itemIndex);
-        } else {
-            EchoLog(@"警告: Ivar '%s' 类型为 %s, 不是整数类型!", ivarNameToTry, type);
-        }
-    } else {
-        EchoLog(@"警告: 未找到Ivar '%s'. 此次调用可能失败.", ivarNameToTry);
-    }
-
-    // 2. 调用显示方法
+    // 简单的启发式规则来判断是地支还是天将
     SEL actionToPerform = nil;
     if ([title containsString:@"地支"]) {
         actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
@@ -264,14 +222,14 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 
     if (actionToPerform && [self respondsToSelector:actionToPerform]) {
-        EchoLog(@"将在 self 上调用 %@", NSStringFromSelector(actionToPerform));
+        EchoLog(@"点击: %@", title);
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:actionToPerform withObject:nil];
+        [self performSelector:actionToPerform withObject:itemToClick];
         #pragma clang diagnostic pop
     } else {
-        EchoLog(@"警告: 未找到显示方法! 跳过.");
-        [self processKeChuanQueue_Truth];
+        EchoLog(@"警告: 未找到点击方法 for %@. 跳过.", title);
+        [self processKeChuanQueue_Truth]; // 如果失败，直接处理下一个，防止卡住
     }
 }
 %end
