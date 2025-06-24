@@ -27,48 +27,36 @@ static UIViewController* getTopmostViewController() {
 }
 
 // =========================================================================
-// 2. 核心捕获逻辑：精确制导打击
+// 2. 核心捕获逻辑：我们为UIView创建一个分类来存放我们的新方法
 // =========================================================================
-// 我们不再Hook通用的UIViewController，而是直接Hook真凶！
-%hook 六壬大占.三傳視圖 
+@interface UIView (WeiHunterHook)
+- (void)my_hooked_touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event;
+@end
 
-// 我们Hook触摸结束的事件，这通常是触发操作的时刻。
-- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
-    // 首先，让App的原始功能正常执行，弹出窗口等。
-    %orig;
+@implementation UIView (WeiHunterHook)
+- (void)my_hooked_touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    // 首先，让App的原始功能正常执行。因为方法已交换，所以调用自己就是调用原始实现。
+    [self my_hooked_touchesEnded:touches withEvent:event];
 
     // 然后，执行我们的捕获逻辑。
     if (g_isListeningForWei) {
         @try {
-            // 从self (也就是这个三傳視圖对象) 中，直接读取'位'属性。
             id weiValue = [self valueForKey:@"位"];
             NSString *capturedDescription = weiValue ? [NSString stringWithFormat:@"%@", weiValue] : @"[捕获失败: '位' 为 nil]";
             [g_capturedWeiValues addObject:capturedDescription];
             
-            // 在窗口上显示一个短暂的视觉反馈
             UILabel *feedbackLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 120, 40)];
             feedbackLabel.center = getTopmostViewController().view.center;
             feedbackLabel.text = @"'位' 已捕获!";
-            feedbackLabel.textColor = [UIColor whiteColor];
-            feedbackLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7];
-            feedbackLabel.textAlignment = NSTextAlignmentCenter;
-            feedbackLabel.layer.cornerRadius = 10;
-            feedbackLabel.clipsToBounds = YES;
+            feedbackLabel.textColor = [UIColor whiteColor]; feedbackLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7]; feedbackLabel.textAlignment = NSTextAlignmentCenter; feedbackLabel.layer.cornerRadius = 10; feedbackLabel.clipsToBounds = YES;
             [getTopmostViewController().view.window addSubview:feedbackLabel];
-            [UIView animateWithDuration:1.5 animations:^{
-                feedbackLabel.alpha = 0;
-            } completion:^(BOOL finished) {
-                [feedbackLabel removeFromSuperview];
-            }];
-
+            [UIView animateWithDuration:1.5 animations:^{ feedbackLabel.alpha = 0; } completion:^(BOOL f) { [feedbackLabel removeFromSuperview]; }];
         } @catch (NSException *exception) {
             [g_capturedWeiValues addObject:[NSString stringWithFormat:@"[捕获异常: %@]", exception.reason]];
         }
     }
 }
-
-%end
-
+@end
 
 // =========================================================================
 // 3. UI注入与控制（这部分完全不变，工作得很好）
@@ -102,8 +90,7 @@ static UIViewController* getTopmostViewController() {
     }
 }
 
-%new
-- (void)startWeiHunting {
+%new - (void)startWeiHunting {
     g_isListeningForWei = YES;
     g_capturedWeiValues = [NSMutableArray array];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"捕获模式已开始" message:@"请像平时一样，点击课盘中的“初传”、“中传”、“末传”等项目。" preferredStyle:UIAlertControllerStyleAlert];
@@ -111,8 +98,7 @@ static UIViewController* getTopmostViewController() {
     [getTopmostViewController() presentViewController:alert animated:YES completion:nil];
 }
 
-%new
-- (void)finishWeiHunting {
+%new - (void)finishWeiHunting {
     if (!g_isListeningForWei) { return; }
     g_isListeningForWei = NO;
     NSString *finalResult = [g_capturedWeiValues componentsJoinedByString:@"\n---\n"];
@@ -124,3 +110,27 @@ static UIViewController* getTopmostViewController() {
 }
 
 %end
+
+
+// =========================================================================
+// 4. 手动方法交换
+// =========================================================================
+%ctor {
+    // 初始化我们的UIViewController Hook (用于添加按钮)
+    %init; 
+
+    // 手动交换 "六壬大占.三傳視圖" 的方法
+    Class targetClass = NSClassFromString(@"六壬大占.三傳視圖");
+    if (targetClass) {
+        SEL originalSelector = @selector(touchesEnded:withEvent:);
+        SEL newSelector = @selector(my_hooked_touchesEnded:withEvent:);
+        
+        Method originalMethod = class_getInstanceMethod(targetClass, originalSelector);
+        // 我们的新方法是在UIView的分类里，所以从UIView获取
+        Method newMethod = class_getInstanceMethod([UIView class], newSelector);
+        
+        if (originalMethod && newMethod) {
+            method_exchangeImplementations(originalMethod, newMethod);
+        }
+    }
+}
