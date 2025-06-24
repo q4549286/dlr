@@ -4,9 +4,8 @@
 // =========================================================================
 // 1. 全局状态
 // =========================================================================
-static BOOL g_isListening = NO;
-static NSMutableString *g_accumulatedResult = nil;
-static NSInteger g_recordCount = 0;
+static BOOL g_isListeningForWei = NO;
+static NSMutableArray *g_capturedWeiValues = nil;
 
 // =========================================================================
 // 2. 辅助函数
@@ -30,129 +29,101 @@ static UIViewController* getTopmostViewController() {
     return topController;
 }
 
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
-    if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
-    for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
-}
-
 // =========================================================================
 // 3. 主功能实现
 // =========================================================================
-@interface UIViewController (TheUltimateScribe)
-- (void)startScribeMode;
-- (void)finishScribeMode;
+@interface UIViewController (TheWeiHunter)
+- (void)startWeiHunting;
+- (void)finishWeiHunting;
+- (void)顯示課傳摘要WithSender:(id)sender; // 声明原始方法以供Hook
 @end
 
 %hook UIViewController
 
-// --- 注入最终的“书记员”工具栏 ---
+// --- 注入最终的“猎人”工具栏 ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *window = self.view.window; if (!window) return;
-            [[window viewWithTag:202501] removeFromSuperview]; [[window viewWithTag:202502] removeFromSuperview];
+            [[window viewWithTag:202701] removeFromSuperview]; [[window viewWithTag:202702] removeFromSuperview];
             
             UIButton *startButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            startButton.frame = CGRectMake(self.view.frame.size.width - 230, 50, 100, 44); startButton.tag = 202501;
-            [startButton setTitle:@"开始记录" forState:UIControlStateNormal]; startButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; startButton.backgroundColor = [UIColor systemGreenColor]; [startButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; startButton.layer.cornerRadius = 22;
-            [startButton addTarget:self action:@selector(startScribeMode) forControlEvents:UIControlEventTouchUpInside];
+            startButton.frame = CGRectMake(self.view.frame.size.width - 230, 50, 100, 44); startButton.tag = 202701;
+            [startButton setTitle:@"捕获'位'" forState:UIControlStateNormal]; startButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; startButton.backgroundColor = [UIColor systemIndigoColor]; [startButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; startButton.layer.cornerRadius = 22;
+            [startButton addTarget:self action:@selector(startWeiHunting) forControlEvents:UIControlEventTouchUpInside];
             [window addSubview:startButton];
             
             UIButton *finishButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            finishButton.frame = CGRectMake(self.view.frame.size.width - 120, 50, 110, 44); finishButton.tag = 202502;
-            [finishButton setTitle:@"完成并复制" forState:UIControlStateNormal]; finishButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; finishButton.backgroundColor = [UIColor systemRedColor]; [finishButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; finishButton.layer.cornerRadius = 22;
-            [finishButton addTarget:self action:@selector(finishScribeMode) forControlEvents:UIControlEventTouchUpInside];
+            finishButton.frame = CGRectMake(self.view.frame.size.width - 120, 50, 110, 44); finishButton.tag = 202702;
+            [finishButton setTitle:@"完成并复制" forState:UIControlStateNormal]; finishButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; finishButton.backgroundColor = [UIColor systemOrangeColor]; [finishButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; finishButton.layer.cornerRadius = 22;
+            [finishButton addTarget:self action:@selector(finishWeiHunting) forControlEvents:UIControlEventTouchUpInside];
             [window addSubview:finishButton];
         });
     }
 }
 
-// --- 核心拦截器：被动监听，并用智能重试机制解决时机问题 ---
-- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    if (g_isListening) {
-        NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            void (^originalCompletion)(void) = completion;
-            void (^scribeCompletion)(void) = ^{
-                if (originalCompletion) { originalCompletion(); }
-                
-                __block int retryCount = 0;
-                
-                // 【【【编译错误修正】】】
-                // 1. 使用 __block 声明
-                // 2. 将声明与定义分开
-                // 3. 使用 pragma 压制任何潜在的循环引用警告
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Warc-retain-cycles"
-                __block void (^tryExtract)(void);
-                tryExtract = ^{
-                    NSMutableArray *labels = [NSMutableArray array];
-                    FindSubviewsOfClassRecursive([UILabel class], viewControllerToPresent.view, labels);
-                    
-                    BOOL hasText = NO;
-                    for (UILabel *label in labels) { if (label.text.length > 0) { hasText = YES; break; } }
-                    
-                    if (hasText || retryCount >= 10) {
-                        [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                            CGFloat y1 = roundf(o1.frame.origin.y), y2 = roundf(o2.frame.origin.y);
-                            if (y1 < y2) return NSOrderedAscending; if (y1 > y2) return NSOrderedDescending;
-                            return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-                        }];
-                        
-                        NSMutableArray<NSString *> *texts = [NSMutableArray array];
-                        for (UILabel *label in labels) { if (label.text.length > 0) { [texts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]; } }
-                        
-                        NSString *capturedDetail = texts.count > 0 ? [texts componentsJoinedByString:@" | "] : @"[无文本信息]";
-                        [g_accumulatedResult appendFormat:@"--- (记录 #%ld) ---\n%@\n\n", (long)++g_recordCount, capturedDetail];
-
-                        UILabel *feedbackLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 100, 40)];
-                        feedbackLabel.center = CGPointMake(viewControllerToPresent.view.bounds.size.width / 2, viewControllerToPresent.view.bounds.size.height / 2);
-                        feedbackLabel.text = @"已记录"; feedbackLabel.textColor = [UIColor whiteColor]; feedbackLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7]; feedbackLabel.textAlignment = NSTextAlignmentCenter; feedbackLabel.layer.cornerRadius = 10; feedbackLabel.clipsToBounds = YES;
-                        [viewControllerToPresent.view addSubview:feedbackLabel];
-                        [UIView animateWithDuration:1.0 animations:^{ feedbackLabel.alpha = 0; } completion:^(BOOL f){ [feedbackLabel removeFromSuperview]; }];
-                        
-                    } else {
-                        retryCount++;
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                            tryExtract();
-                        });
-                    }
-                };
-                #pragma clang diagnostic pop
-                
-                tryExtract();
-            };
+// --- 核心捕获点：Hook真正被调用的方法 ---
+- (void)顯示課傳摘要WithSender:(id)sender {
+    // 【【【最终的、正确的逻辑】】】
+    if (g_isListeningForWei && sender) {
+        @try {
+            // 从 sender (手势对象) 中读取 '位' 属性
+            id weiValue = [sender valueForKey:@"位"];
             
-            %orig(viewControllerToPresent, flag, scribeCompletion);
-            return;
+            NSString *capturedDescription;
+            if (weiValue) {
+                capturedDescription = [NSString stringWithFormat:@"%@", weiValue];
+            } else {
+                capturedDescription = @"[捕获失败: '位' 为 nil]";
+            }
+            
+            [g_capturedWeiValues addObject:capturedDescription];
+            
+            // 视觉反馈
+            UILabel *feedbackLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 120, 40)];
+            feedbackLabel.center = self.view.center;
+            feedbackLabel.text = @"'位' 已捕获!";
+            feedbackLabel.textColor = [UIColor whiteColor]; feedbackLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7]; feedbackLabel.textAlignment = NSTextAlignmentCenter; feedbackLabel.layer.cornerRadius = 10; feedbackLabel.clipsToBounds = YES;
+            [self.view.window addSubview:feedbackLabel];
+            [UIView animateWithDuration:1.5 animations:^{
+                feedbackLabel.alpha = 0;
+            } completion:^(BOOL finished) {
+                [feedbackLabel removeFromSuperview];
+            }];
+
+        } @catch (NSException *exception) {
+            [g_capturedWeiValues addObject:[NSString stringWithFormat:@"[捕获异常: %@]", exception.reason]];
         }
     }
-    %orig(viewControllerToPresent, flag, completion);
+    
+    // 无论如何，都让原始流程继续
+    %orig(sender);
 }
 
+
 %new
-- (void)startScribeMode {
-    g_isListening = YES;
-    g_accumulatedResult = [NSMutableString string];
-    g_recordCount = 0;
+- (void)startWeiHunting {
+    g_isListeningForWei = YES;
+    g_capturedWeiValues = [NSMutableArray array];
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"记录模式已开始" message:@"请像平时一样，用手指点击您想提取的课盘内容。所有弹窗详情将被自动记录。" preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"捕获模式已开始" message:@"请像平时一样，用手指点击您想记录'位'的课盘内容。" preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"明白了" style:UIAlertActionStyleDefault handler:nil]];
     
     [getTopmostViewController() presentViewController:alert animated:YES completion:nil];
 }
 
 %new
-- (void)finishScribeMode {
-    if (!g_isListening) { return; }
+- (void)finishWeiHunting {
+    if (!g_isListeningForWei) { return; }
     
-    g_isListening = NO;
-    [UIPasteboard generalPasteboard].string = g_accumulatedResult;
+    g_isListeningForWei = NO;
+    NSString *finalResult = [g_capturedWeiValues componentsJoinedByString:@"\n"];
+    [UIPasteboard generalPasteboard].string = finalResult;
     
-    NSString *message = (g_recordCount > 0) ? [NSString stringWithFormat:@"记录完成！共 %ld 项内容已合并并复制到剪贴板！", (long)g_recordCount] : @"没有记录任何内容。";
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"记录完成" message:message preferredStyle:UIAlertControllerStyleAlert];
+    NSString *message = (g_capturedWeiValues.count > 0) ? [NSString stringWithFormat:@"捕获完成！共 %ld 个'位'值已复制到剪贴板！", (unsigned long)g_capturedWeiValues.count] : @"没有捕获任何'位'值。";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"捕获完成" message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"胜利！" style:UIAlertActionStyleDefault handler:nil]];
     
     [getTopmostViewController() presentViewController:alert animated:YES completion:nil];
