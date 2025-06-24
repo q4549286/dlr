@@ -3,15 +3,17 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数 (这个区域是安全的)
+// 1. 全局变量与辅助函数
 // =========================================================================
-#define EchoLog(format, ...) NSLog((@"[KeChuan-Test-Bible] " format), ##VA_ARGS)
 
-static NSInteger const TestButtonTag = 556681;
+// 【修正】使用一个更安全、更简单的日志宏
+#define EchoLog(format, ...) NSLog(@"[KeChuan-Test-Final] " format, ##__VA_ARGS__)
+
+static NSInteger const TestButtonTag = 556682; // 新的Tag
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
 static NSMutableArray *g_keChuanWorkQueue = nil;
-static NSMutableArray *g_keChuanTitleQueue = nil; // 新增，用于保存标题
+static NSMutableArray *g_keChuanTitleQueue = nil;
 
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
@@ -27,11 +29,11 @@ static id GetIvarFromObject(id object, const char *ivarName) {
 }
 
 // =========================================================================
-// 2. 主功能区 (这是我们反复出错的地方，现在已修正)
+// 2. 主功能区
 // =========================================================================
-@interface UIViewController (EchoAITestAddons_Bible)
-- (void)performKeChuanDetailExtractionTest_Bible;
-- (void)processKeChuanQueue_Bible;
+@interface UIViewController (EchoAITestAddons_Final)
+- (void)performKeChuanDetailExtractionTest_Final;
+- (void)processKeChuanQueue_Final;
 @end
 
 %hook UIViewController
@@ -39,7 +41,8 @@ static id GetIvarFromObject(id object, const char *ivarName) {
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
-    if ([targetClass && [self isKindOfClass:targetClass]) {
+    // 【修正】修复了这里的 if 语句语法
+    if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
             if ([keyWindow viewWithTag:TestButtonTag]) { [[keyWindow viewWithTag:TestButtonTag] removeFromSuperview]; }
@@ -47,12 +50,12 @@ static id GetIvarFromObject(id object, const char *ivarName) {
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
             testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 80, 140, 36);
             testButton.tag = TestButtonTag;
-            [testButton setTitle:@"测试课传(最终修正)" forState:UIControlStateNormal];
+            [testButton setTitle:@"测试课传(语法修正)" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.4 alpha:1.0];
+            testButton.backgroundColor = [UIColor colorWithRed:0.9 green:0.5 blue:0.1 alpha:1.0];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 8;
-            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Bible) forControlEvents:UIControlEventTouchUpInside];
+            [testButton addTarget:self action:@selector(performKeChuanDetailExtractionTest_Final) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:testButton];
         });
     }
@@ -86,25 +89,21 @@ static id GetIvarFromObject(id object, const char *ivarName) {
                 EchoLog(@"提取到内容:\n%@", fullDetail);
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:nil];
             });
-            // 只有在拦截时才调用一次 %orig，并提前返回
             %orig(viewControllerToPresent, flag, completion);
             return;
         }
     }
-    
-    // 如果不拦截，则正常调用 %orig
     %orig(viewControllerToPresent, flag, completion);
 }
 
 %new
-- (void)performKeChuanDetailExtractionTest_Bible {
-    EchoLog(@"--- 开始执行 [课传详情] 圣经版测试 ---");
+- (void)performKeChuanDetailExtractionTest_Final {
+    EchoLog(@"开始执行 [课传详情] 最终修正版测试");
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
-    g_keChuanTitleQueue = [NSMutableArray array]; // 初始化标题队列
+    g_keChuanTitleQueue = [NSMutableArray array];
 
-    // --- Part A: 建立工作队列 ---
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if (sanChuanViewClass) {
         NSMutableArray *scViews = [NSMutableArray array];
@@ -154,13 +153,13 @@ static id GetIvarFromObject(id object, const char *ivarName) {
         g_isExtractingKeChuanDetail = NO;
         return;
     }
-    [self processKeChuanQueue_Bible];
+    [self processKeChuanQueue_Final];
 }
 
 %new
-- (void)processKeChuanQueue_Bible {
+- (void)processKeChuanQueue_Final {
     if (g_keChuanWorkQueue.count == 0) {
-        EchoLog(@"--- [课传详情] 圣经版测试处理完毕 ---");
+        EchoLog(@"[课传详情] 测试处理完毕");
         NSMutableString *resultStr = [NSMutableString string];
         for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
             NSString *title = g_keChuanTitleQueue[i];
@@ -169,7 +168,7 @@ static id GetIvarFromObject(id object, const char *ivarName) {
         }
         
         [UIPasteboard generalPasteboard].string = resultStr;
-        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"圣经版测试完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"语法修正版测试完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
         [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:successAlert animated:YES completion:nil];
         
@@ -203,7 +202,7 @@ static id GetIvarFromObject(id object, const char *ivarName) {
     }
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self processKeChuanQueue_Bible];
+        [self processKeChuanQueue_Final];
     });
 }
 %end
