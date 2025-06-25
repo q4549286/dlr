@@ -1,4 +1,4 @@
-// Filename: EchoUltimateMonitor_v5.x
+// Filename: EchoUltimateMonitor_v5.1_Fixed.x
 
 #import <UIKit/UIKit.h>
 #import <substrate.h> // 引入 Substrate 核心头文件
@@ -28,7 +28,7 @@ static void PanelLog(NSString *format, ...) {
         NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text];
         if (newText.length > 5000) { newText = [newText substringToIndex:5000]; }
         g_logView.text = newText;
-        NSLog(@"[EchoMonitor-v5] %@", message);
+        NSLog(@"[EchoMonitor-v5.1] %@", message);
     });
 }
 
@@ -45,7 +45,6 @@ static void new_UIGestureRecognizer_addTarget_action(id self, SEL _cmd, id targe
     original_UIGestureRecognizer_addTarget_action(self, _cmd, target, action);
 
     // 然后，执行我们的监控逻辑
-    // self 是 UIGestureRecognizer 实例
     UIGestureRecognizer *gesture = (UIGestureRecognizer *)self;
     
     // 在主线程更新UI，避免多线程问题
@@ -59,15 +58,20 @@ static void new_UIGestureRecognizer_addTarget_action(id self, SEL _cmd, id targe
 }
 
 // =========================================================================
-// 4. UIViewController 分类 (仅用于创建UI)
+// 4. UIViewController 分类接口 (声明新方法)
 // =========================================================================
 @interface UIViewController (EchoMonitorUI)
 - (void)setupMonitorPanel;
 - (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer;
 @end
 
-// 注入一个 viewDidLoad 来创建我们的UI
+// =========================================================================
+// 5. Logos Hooks and %new Implementation
+// =========================================================================
+
 %hook UIViewController
+
+// 注入一个 viewDidLoad 来创建我们的UI
 - (void)viewDidLoad {
     %orig;
     // 确保只在主ViewController上创建一次
@@ -78,10 +82,9 @@ static void new_UIGestureRecognizer_addTarget_action(id self, SEL _cmd, id targe
         });
     }
 }
-%end
 
+// *** FIX: Moved implementation inside the %hook block and marked with %new ***
 %new
-@implementation UIViewController (EchoMonitorUI)
 - (void)setupMonitorPanel {
     UIWindow *keyWindow = self.view.window;
     if (!keyWindow || [keyWindow viewWithTag:555666]) return;
@@ -98,7 +101,7 @@ static void new_UIGestureRecognizer_addTarget_action(id self, SEL _cmd, id targe
     [g_panelView addGestureRecognizer:pan];
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, 300, 20)];
-    titleLabel.text = @"手势监控器 v5";
+    titleLabel.text = @"手势监控器 v5.1";
     titleLabel.textColor = [UIColor redColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -116,15 +119,17 @@ static void new_UIGestureRecognizer_addTarget_action(id self, SEL _cmd, id targe
     [keyWindow addSubview:g_panelView];
 }
 
+%new
 - (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer {
     CGPoint translation = [recognizer translationInView:g_panelView.superview];
     g_panelView.center = CGPointMake(g_panelView.center.x + translation.x, g_panelView.center.y + translation.y);
     [recognizer setTranslation:CGPointZero inView:g_panelView.superview];
 }
-@end
+
+%end // End of %hook UIViewController
 
 // =========================================================================
-// 5. Constructor 构造函数，确保最早执行Hook
+// 6. Constructor 构造函数，确保最早执行Hook
 // =========================================================================
 %ctor {
     // 在这里，我们使用 Cydia Substrate 的核心函数进行Hook
@@ -137,5 +142,5 @@ static void new_UIGestureRecognizer_addTarget_action(id self, SEL _cmd, id targe
     );
     
     // 可以在这里加一个NSLog来确认ctor是否被执行
-    NSLog(@"[EchoMonitor-v5] Constructor executed, UIGestureRecognizer is now hooked at the earliest stage.");
+    NSLog(@"[EchoMonitor-v5.1] Constructor executed, UIGestureRecognizer is now hooked at the earliest stage.");
 }
