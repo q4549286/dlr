@@ -13,7 +13,8 @@ static void LogMessage(NSString *format, ...);
 // --- S1 (Truth Extractor) 全局变量 ---
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
-static NSMutableArray<NSDictionary *> *g_keChuanWorkQueue = nil;
+// FIX #2: Changed to NSMutableDictionary to match the type of objects being stored.
+static NSMutableArray<NSMutableDictionary *> *g_keChuanWorkQueue = nil;
 static NSMutableArray<NSString *> *g_keChuanTitleQueue = nil;
 static NSString *g_s1_finalResult = nil; // 用于存储S1的最终结果
 
@@ -447,8 +448,10 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     progressView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.8];
     progressView.layer.cornerRadius = 10;
     progressView.tag = progressViewTag;
-
-    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+    
+    // FIX #1: Use modern API for activity indicator style.
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    spinner.color = [UIColor whiteColor];
     spinner.center = CGPointMake(110, 50);
     [spinner startAnimating];
     [progressView addSubview:spinner];
@@ -852,8 +855,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews); if (plateViews.count == 0) return @"天地盘提取失败: 找不到视图实例";
         UIView *plateView = plateViews.firstObject;
         
-        // --- BUG FIX ---
-        // Correctly declare each variable on its own line to avoid syntax errors.
         id diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
         id tianShenDict = GetIvarValueSafely(plateView, @"天神宮名列");
         id tianJiangDict = GetIvarValueSafely(plateView, @"天將宮名列");
@@ -863,8 +864,18 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         NSArray *diGongLayers=[diGongDict allValues], *tianShenLayers=[tianShenDict allValues], *tianJiangLayers=[tianJiangDict allValues];
         if (diGongLayers.count!=12||tianShenLayers.count!=12||tianJiangLayers.count!=12) return @"天地盘提取失败: 数据长度不匹配";
         
-        NSMutableArray *allLayerInfos = [NSMutableArray array]; CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:plateView.superview];
-        void (^processLayers)(NSArray *, NSString *) = ^(NSArray *layers, NSString *type) { for (id layer in layers) { if (![layer isKindOfClass:[CALayer class]]) continue; CALayer *pLayer = [layer presentationLayer] ?: layer; CGPoint pos = [pLayer.superlayer convertPoint:pLayer.position toView:plateView.superview]; CGFloat dx = pos.x - center.x, dy = pos.y - center.y; [allLayerInfos addObject:@{ @"type": type, @"text": GetStringFromLayer(layer), @"angle": @(atan2(dy, dx)), @"radius": @(sqrt(dx*dx + dy*dy)) }]; } };
+        NSMutableArray *allLayerInfos = [NSMutableArray array];
+        // FIX #3: Reverted coordinate conversion logic to the original, correct syntax.
+        CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
+        void (^processLayers)(NSArray *, NSString *) = ^(NSArray *layers, NSString *type) {
+            for (id layer in layers) {
+                if (![layer isKindOfClass:[CALayer class]]) continue;
+                CALayer *pLayer = [layer presentationLayer] ?: layer;
+                CGPoint pos = [pLayer.superlayer convertPoint:pLayer.position toLayer:nil];
+                CGFloat dx = pos.x - center.x, dy = pos.y - center.y;
+                [allLayerInfos addObject:@{ @"type": type, @"text": GetStringFromLayer(layer), @"angle": @(atan2(dy, dx)), @"radius": @(sqrt(dx*dx + dy*dy)) }];
+            }
+        };
         processLayers(diGongLayers, @"diPan"); processLayers(tianShenLayers, @"tianPan"); processLayers(tianJiangLayers, @"tianJiang");
         
         NSMutableDictionary *palaceGroups = [NSMutableDictionary dictionary];
@@ -874,11 +885,29 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         }
         
         NSMutableArray *palaceData = [NSMutableArray array];
-        for (NSNumber *groupAngle in palaceGroups) { NSMutableArray *group = palaceGroups[groupAngle]; if (group.count < 3) continue; [group sortUsingComparator:^NSComparisonResult(id o1, id o2) { return [o2[@"radius"] compare:o1[@"radius"]]; }]; [palaceData addObject:@{ @"diPan": group.lastObject[@"text"], @"tianPan": group[1][@"text"], @"tianJiang": group[0][@"text"] }]; }
+        for (NSNumber *groupAngle in palaceGroups) {
+            NSMutableArray *group = palaceGroups[groupAngle];
+            if (group.count < 3) continue;
+            [group sortUsingComparator:^NSComparisonResult(id o1, id o2) { return [o2[@"radius"] compare:o1[@"radius"]]; }];
+            // The order of text extraction depends on radius sorting; typically outer->inner is diPan->tianPan->tianJiang
+            NSString *diPanText = @"?";
+            NSString *tianPanText = @"?";
+            NSString *tianJiangText = @"?";
+            for(NSDictionary* layerInfo in group){
+                if([layerInfo[@"type"] isEqualToString:@"diPan"]) diPanText = layerInfo[@"text"];
+                else if([layerInfo[@"type"] isEqualToString:@"tianPan"]) tianPanText = layerInfo[@"text"];
+                else if([layerInfo[@"type"] isEqualToString:@"tianJiang"]) tianJiangText = layerInfo[@"text"];
+            }
+            [palaceData addObject:@{ @"diPan": diPanText, @"tianPan": tianPanText, @"tianJiang": tianJiangText }];
+        }
         if (palaceData.count != 12) return [NSString stringWithFormat:@"天地盘提取失败: 宫位数据不完整 (%ld/12)", (long)palaceData.count];
         
         NSArray *order = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
-        [palaceData sortUsingComparator:^NSComparisonResult(NSDictionary *o1, NSDictionary *o2) { return [@([order indexOfObject:o1[@"diPan"]]) compare:@([order indexOfObject:o2[@"diPan"]])]; }];
+        [palaceData sortUsingComparator:^NSComparisonResult(NSDictionary *o1, NSDictionary *o2) {
+             NSUInteger index1 = [order indexOfObject:o1[@"diPan"]];
+             NSUInteger index2 = [order indexOfObject:o2[@"diPan"]];
+             return [@(index1) compare:@(index2)];
+        }];
         
         NSMutableString *result = [NSMutableString stringWithString:@"天地盘:\n"];
         for (NSDictionary *entry in palaceData) { [result appendFormat:@"%@宫: %@(%@)\n", entry[@"diPan"], entry[@"tianPan"], entry[@"tianJiang"]]; }
