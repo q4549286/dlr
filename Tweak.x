@@ -1,56 +1,33 @@
-// Filename: UltimateDetector_v6.1_Fixed.x
+// Filename: UltimateMonitor_v7.x
 
 #import <UIKit/UIKit.h>
+#import <substrate.h>
 #import <objc/runtime.h>
 
-// =========================================================================
-// 1. 全局UI元素 & 辅助函数
-// =========================================================================
-
+// 全局UI变量
 static UITextView *g_logView = nil;
 
 // 统一日志输出
-static void PanelLog(NSString *format, ...) {
-    if (!g_logView) return;
-    va_list args;
-    va_start(args, format);
-    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args);
+static void PanelLog(NSString *format, ...) { if (!g_logView) return; va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args); dispatch_async(dispatch_get_main_queue(), ^{ NSString *timestamp = [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterNoStyle timeStyle:NSDateFormatterMediumStyle]; NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text]; if (newText.length > 5000) { newText = [newText substringToIndex:5000]; } g_logView.text = newText; NSLog(@"[UltimateMonitor-v7] %@", message); }); }
+
+// 核心Hook逻辑 (C语言 + Substrate)
+static void (*original_UIGestureRecognizer_addTarget_action)(id, SEL, id, SEL);
+
+static void new_UIGestureRecognizer_addTarget_action(id self, SEL _cmd, id target, SEL action) {
+    original_UIGestureRecognizer_addTarget_action(self, _cmd, target, action);
+    UIGestureRecognizer *gesture = (UIGestureRecognizer *)self;
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *timestamp = [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterNoStyle timeStyle:NSDateFormatterMediumStyle];
-        NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text];
-        if (newText.length > 10000) { // 加大日志容量
-            newText = [newText substringToIndex:10000];
+        // 我们只关心添加到 “課傳視圖” 上的手势
+        if ([gesture.view isKindOfClass:NSClassFromString(@"六壬大占.課傳視圖")]) {
+            PanelLog(@"--- TARGET GESTURE ADDED ---\n- Gesture: %@\n- On View: %@ (父视图)\n- Target: %@\n- Action: %@\n--------------------", [gesture class], [gesture.view class], [target class], NSStringFromSelector(action));
         }
-        g_logView.text = newText;
-        NSLog(@"[UltimateDetector-v6.1] %@", message);
     });
 }
 
-// *** FIX: Added the missing helper function implementation ***
-// 递归查找子视图的辅助函数
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
-    if (!view) return;
-    if ([view isKindOfClass:aClass]) {
-        [storage addObject:view];
-    }
-    for (UIView *subview in view.subviews) {
-        FindSubviewsOfClassRecursive(aClass, subview, storage);
-    }
-}
-
-// =========================================================================
-// 2. UIViewController 分类接口
-// =========================================================================
-@interface UIViewController (UltimateDetectorUI)
-- (void)setupDetectorPanel;
-- (void)deepScanKeTiView;
+// UIViewController 分类接口
+@interface UIViewController (UltimateMonitorUI)
+- (void)setupUltimatePanel;
 @end
-
-
-// =========================================================================
-// 3. Logos Hooks and %new Implementation
-// =========================================================================
 
 %hook UIViewController
 
@@ -58,125 +35,64 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self setupDetectorPanel];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self setupUltimatePanel];
         });
     }
 }
 
+// 在这里实现新方法，修复之前的编译错误
 %new
-- (void)setupDetectorPanel {
+- (void)setupUltimatePanel {
     UIWindow *keyWindow = self.view.window;
-    if (!keyWindow || [keyWindow viewWithTag:616161]) return;
+    if (!keyWindow || [keyWindow viewWithTag:777888]) return;
+
+    UIView *panelView = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 300, 200)];
+    panelView.tag = 777888;
+    panelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
+    panelView.layer.cornerRadius = 10;
+    panelView.layer.borderColor = [UIColor systemIndigoColor].CGColor;
+    panelView.layer.borderWidth = 1.5;
     
-    UIView *panelView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, keyWindow.bounds.size.width - 20, 400)];
-    panelView.tag = 616161;
-    panelView.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.9];
-    panelView.layer.cornerRadius = 12;
-    panelView.layer.borderColor = [UIColor cyanColor].CGColor;
-    panelView.layer.borderWidth = 1.0;
-    
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, panelView.bounds.size.width, 20)];
-    titleLabel.text = @"终极探测器 v6.1";
-    titleLabel.textColor = [UIColor cyanColor];
-    titleLabel.textAlignment = NSTextAlignmentCenter;
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, 300, 20)];
+    titleLabel.text = @"终极监控器 v7";
+    titleLabel.textColor = [UIColor systemIndigoColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
+    titleLabel.textAlignment = NSTextAlignmentCenter;
     [panelView addSubview:titleLabel];
     
-    UIButton *scanButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    scanButton.frame = CGRectMake(15, 40, panelView.bounds.size.width - 30, 40);
-    [scanButton setTitle:@"深度扫描'课体'视图" forState:UIControlStateNormal];
-    [scanButton addTarget:self action:@selector(deepScanKeTiView) forControlEvents:UIControlEventTouchUpInside];
-    scanButton.backgroundColor = [UIColor systemOrangeColor];
-    [scanButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    scanButton.layer.cornerRadius = 8;
-    [panelView addSubview:scanButton];
-    
-    g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, 90, panelView.bounds.size.width - 20, 300)];
+    g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, 40, 280, 150)];
     g_logView.backgroundColor = [UIColor blackColor];
     g_logView.textColor = [UIColor whiteColor];
-    g_logView.font = [UIFont fontWithName:@"Menlo" size:10];
+    g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = YES;
-    g_logView.text = @"点击上方按钮，开始深度扫描...";
+    g_logView.text = @"监控已自动开始。\n请点击App界面上的“课体”区域，然后在本窗口查看被触发的函数名。";
     [panelView addSubview:g_logView];
-    
+
     [keyWindow addSubview:panelView];
+    
+    // 增加拖动手势
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
+    [panelView addGestureRecognizer:pan];
 }
 
 %new
-- (void)deepScanKeTiView {
-    PanelLog(@"--- 开始深度扫描 ---");
-    
-    // 1. 找到目标视图
-    Class keTiViewClass = NSClassFromString(@"六壬大占.課體視圖");
-    if (!keTiViewClass) { PanelLog(@"错误: 找不到类 '六壬大占.課體視圖'"); return; }
-    
-    NSMutableArray *targetViews = [NSMutableArray array];
-    // 现在这个函数被定义了，可以正常调用
-    FindSubviewsOfClassRecursive(keTiViewClass, self.view, targetViews);
-    if (targetViews.count == 0) { PanelLog(@"错误: 未找到'课体'视图实例"); return; }
-    
-    UIView *keTiView = targetViews.firstObject;
-    PanelLog(@"找到目标视图: %@", keTiView);
-    
-    // 2. 检查所有手势
-    if (keTiView.gestureRecognizers.count == 0) {
-        PanelLog(@"警告: 目标视图上没有任何手势识别器 (gestureRecognizers数组为空)。");
-    } else {
-        PanelLog(@"发现 %lu 个手势识别器，正在分析...", (unsigned long)keTiView.gestureRecognizers.count);
-        for (UIGestureRecognizer *gesture in keTiView.gestureRecognizers) {
-            PanelLog(@"\n[手势分析]");
-            PanelLog(@" - 手势类: %@", [gesture class]);
-            PanelLog(@" - 手势状态: %ld", (long)gesture.state);
-            PanelLog(@" - 是否启用: %s", gesture.enabled ? "YES" : "NO");
-
-            // *** 最安全、最核心的探测 ***
-            // 这是一个非常强大的反向验证技巧
-            // 我们尝试添加一个众所周知的动作，比如 viewDidLoad
-            @try {
-                [gesture addTarget:self action:@selector(viewDidLoad)];
-                // 之后，我们尝试移除它
-                [gesture removeTarget:self action:@selector(viewDidLoad)];
-                // 如果这个过程没有崩溃，就说明 'self' (ViewController) 极有可能就是这个手势的原始目标之一。
-                PanelLog(@" - 目标(Target)兼容性测试: [通过] 当前ViewController可以作为其目标。");
-            } @catch (NSException *exception) {
-                 PanelLog(@" - 目标(Target)兼容性测试: [失败] 添加/移除临时目标时发生异常: %@", exception.reason);
-            }
-        }
-    }
-    
-    // 3. 分析视图本身
-    PanelLog(@"\n[视图层级与响应链分析]");
-    PanelLog(@" - 视图类名: %@", NSStringFromClass([keTiView class]));
-    // 检查它是否覆盖了触摸方法
-    if ([keTiView respondsToSelector:@selector(touchesBegan:withEvent:)]) {
-        PanelLog(@" - 警告: 此视图覆盖了 touchesBegan:withEvent: 方法！点击事件可能由视图自身处理，而不是通过手势识别器。");
-    }
-
-    // 打印响应者链
-    NSMutableString *responderChain = [NSMutableString stringWithString:@" - 响应链: "];
-    UIResponder *responder = keTiView;
-    while (responder) {
-        [responderChain appendFormat:@"%@ -> ", NSStringFromClass([responder class])];
-        responder = [responder nextResponder];
-    }
-    PanelLog(@"%@", responderChain);
-
-    // 4. 最终手段：列出 ViewController 的所有方法
-    PanelLog(@"\n[ViewController 方法列表]");
-    PanelLog(@"列出 '六壬大占.ViewController' 的所有方法作为参考。请从中寻找可疑函数名。");
-    
-    unsigned int methodCount = 0;
-    Method *methods = class_copyMethodList([self class], &methodCount);
-    NSMutableArray *methodNames = [NSMutableArray array];
-    for (unsigned int i = 0; i < methodCount; i++) {
-        [methodNames addObject:[NSString stringWithUTF8String:sel_getName(method_getName(methods[i]))]];
-    }
-    [methodNames sortUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
-    PanelLog(@"%@", [methodNames componentsJoinedByString:@"\n"]);
-    free(methods);
-    
-    PanelLog(@"--- 扫描结束 ---");
+- (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer {
+    UIView *panel = recognizer.view;
+    CGPoint translation = [recognizer translationInView:panel.superview];
+    panel.center = CGPointMake(panel.center.x + translation.x, panel.center.y + translation.y);
+    [recognizer setTranslation:CGPointZero inView:panel.superview];
 }
 
 %end
+
+// Constructor 构造函数，确保最早执行Hook
+%ctor {
+    MSHookMessageEx(
+        [UIGestureRecognizer class],
+        @selector(addTarget:action:),
+        (IMP)&new_UIGestureRecognizer_addTarget_action,
+        (IMP*)&original_UIGestureRecognizer_addTarget_action
+    );
+    NSLog(@"[UltimateMonitor-v7] Constructor hook is active.");
+}
