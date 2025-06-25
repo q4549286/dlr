@@ -9,6 +9,15 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 // =========================================================================
+//  接口声明 (修复编译错误的关键)
+// =========================================================================
+@interface UIViewController (KeTiDetector)
+- (void)detectKeTiFunction;
+- (void)showDetectionResultWithTitle:(NSString *)title message:(NSString *)message;
+@end
+
+
+// =========================================================================
 //  主逻辑
 // =========================================================================
 
@@ -72,17 +81,15 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 
     NSMutableString *resultString = [NSMutableString string];
+    [resultString appendString:@"侦测到以下点击事件:\n\n"];
 
     // 遍历所有手势
     for (UIGestureRecognizer *gesture in gestures) {
         NSLog(@"[Detector] 检查手势: %@", gesture.class);
-        [resultString appendFormat:@"手势类型: %@\n", NSStringFromClass(gesture.class)];
-
+        
         // 使用KVC黑魔法获取内部存储的目标-动作对
-        // 这是逆向工程中的常用技巧
         id targets = [gesture valueForKey:@"_targets"];
         if (!targets || ![targets respondsToSelector:@selector(count)] || [targets count] == 0) {
-            [resultString appendString:@"  - 未找到任何目标(target)。\n\n"];
             continue;
         }
 
@@ -97,22 +104,44 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
             NSLog(@"[Detector] -> 找到目标: %@, 方法: %@", targetClassName, actionString);
             
-            [resultString appendFormat:@"  - 目标类名: %@\n", targetClassName];
-            [resultString appendFormat:@"  - 方法名(Selector): %@\n\n", actionString];
+            [resultString appendFormat:@"▶︎ 目标类: %@\n", targetClassName];
+            [resultString appendFormat:@"▶︎ 方法名(Selector): %@\n\n", actionString];
         }
     }
     
-    [self showDetectionResultWithTitle:@"探测结果" message:resultString];
+    if (resultString.length > 20) { // 确保真的找到了东西
+        [self showDetectionResultWithTitle:@"探测成功！" message:resultString];
+    } else {
+        [self showDetectionResultWithTitle:@"探测失败" message:@"在课体视图的手势中未能找到任何有效的目标-动作对。"];
+    }
 }
 
 %new
 - (void)showDetectionResultWithTitle:(NSString *)title message:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"复制并关闭" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    
+    // 创建一个UITextView来显示，这样可以滚动和选择文本
+    UITextView *textView = [[UITextView alloc] initWithFrame:CGRectZero];
+    textView.text = message;
+    textView.editable = NO;
+    textView.backgroundColor = [UIColor clearColor];
+    textView.font = [UIFont systemFontOfSize:13];
+    
+    // 把textView放到alertController里面，这也是个小技巧
+    [alert setValue:textView forKey:@"accessoryView"];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"复制信息" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [UIPasteboard generalPasteboard].string = message;
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    
+    // 适配一下TextView的大小
+    [self presentViewController:alert animated:YES completion:^{
+        // 调整 accessoryView 的高度
+        CGRect newFrame = alert.view.bounds;
+        newFrame.size.height = 250.0; // 可以根据需要调整
+        alert.view.bounds = newFrame;
+    }];
 }
 
 %end
