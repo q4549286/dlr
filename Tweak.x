@@ -61,9 +61,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
             controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
             controlButton.tag = controlButtonTag;
-            [controlButton setTitle:@"提取(最终逻辑)" forState:UIControlStateNormal];
+            [controlButton setTitle:@"提取(最终排序)" forState:UIControlStateNormal];
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            controlButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.2 alpha:1.0]; // 核心绿色
+            controlButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0]; // 最终红色
             [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             controlButton.layer.cornerRadius = 8;
             [controlButton addTarget:self action:@selector(createOrShowControlPanel_Truth) forControlEvents:UIControlEventTouchUpInside];
@@ -213,7 +213,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     } else { LogMessage(@"警告: 在总容器内未找到三传视图。"); }
   
     // =================================================================
-    // Part B: 四课提取 (严格按照您提供的分类逻辑)
+    // Part B: 四课提取 (严格按照您的最终排序逻辑)
     // =================================================================
     Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
     NSMutableArray *siKeResults = [NSMutableArray array];
@@ -223,12 +223,13 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         UIView *siKeContainer = siKeResults.firstObject;
         LogMessage(@"在总容器内找到四课视图: %@", siKeContainer);
         
-        // 定义四课的结构，完全基于您的指示
+        // 严格按照您的最终排序定义四课结构
+        // 结构: [课标题, 下神ivar, 上神ivar, 天将ivar]
         NSDictionary *keDefinitions[] = {
-            @{@"title": @"第一课", @"shangShen": @"日上", @"tianJiang": @"日上天將", @"xiaShen": @"日"},
-            @{@"title": @"第二课", @"shangShen": @"日陰", @"tianJiang": @"日陰天將", @"xiaShen": @"日上"},
-            @{@"title": @"第三课", @"shangShen": @"辰上", @"tianJiang": @"辰上天將", @"xiaShen": @"辰"},
-            @{@"title": @"第四课", @"shangShen": @"辰陰", @"tianJiang": @"辰陰天將", @"xiaShen": @"辰上"}
+            @{@"title": @"第一课", @"xiaShen": @"日",    @"shangShen": @"日上", @"tianJiang": @"日上天將"},
+            @{@"title": @"第二课", @"xiaShen": @"日上", @"shangShen": @"日陰", @"tianJiang": @"日陰天將"},
+            @{@"title": @"第三课", @"xiaShen": @"辰",    @"shangShen": @"辰上", @"tianJiang": @"辰上天將"},
+            @{@"title": @"第四课", @"xiaShen": @"辰上", @"shangShen": @"辰陰", @"tianJiang": @"辰陰天將"}
         };
 
         // 辅助Block，用于添加任务到队列
@@ -238,23 +239,21 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             if (ivar) {
                 UILabel *label = (UILabel *)object_getIvar(siKeContainer, ivar);
                 if (label && [label isKindOfClass:[UILabel class]] && label.gestureRecognizers.count > 0) {
-                    // 对于四课的所有点击，上下文都是siKeContainer本身
                     [g_keChuanWorkQueue addObject:@{@"gesture": label.gestureRecognizers.firstObject, @"contextView": siKeContainer}];
                     NSString *finalTitle = [NSString stringWithFormat:@"%@ (%@)", fullTitle, label.text];
                     [g_keChuanTitleQueue addObject:finalTitle];
-                    LogMessage(@"已添加四课任务: %@", finalTitle);
                 }
             }
         };
 
-        // 严格按照您的分类逻辑，为每一课的 上神、天将、下神 添加任务
+        // 严格按照“课”为单位，并按“下神->上神->天将”的顺序添加任务
         for (int i = 0; i < 4; ++i) {
             NSDictionary *def = keDefinitions[i];
             NSString *keTitle = def[@"title"];
             
+            addTaskBlock([def[@"xiaShen"] UTF8String],   [NSString stringWithFormat:@"%@ - 下神", keTitle]);
             addTaskBlock([def[@"shangShen"] UTF8String], [NSString stringWithFormat:@"%@ - 上神", keTitle]);
             addTaskBlock([def[@"tianJiang"] UTF8String], [NSString stringWithFormat:@"%@ - 天将", keTitle]);
-            addTaskBlock([def[@"xiaShen"] UTF8String],   [NSString stringWithFormat:@"%@ - 下神", keTitle]);
         }
     } else { LogMessage(@"警告: 在总容器内未找到四课视图。"); }
 
@@ -290,7 +289,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     // 第零步：设置内部状态变量
     Ivar keChuanIvar = class_getInstanceVariable([self class], "課傳");
     if (keChuanIvar) {
-        // 将触发事件的上下文视图(chuanView 或 siKeContainer)设置进去
         object_setIvar(self, keChuanIvar, contextView);
         LogMessage(@"第0步: 成功设置 '課傳' ivar -> %@", contextView);
     } else {
@@ -302,7 +300,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     if ([title containsString:@"天将"]) {
         actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
     } else {
-        actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
+        actionToToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
     }
     
     if ([self respondsToSelector:actionToPerform]) {
