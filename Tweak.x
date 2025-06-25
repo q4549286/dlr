@@ -1,334 +1,160 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
-#import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数
+// 全局变量，用于在屏幕上显示日志
 // =========================================================================
-static BOOL g_isExtractingKeChuanDetail = NO;
-static NSMutableArray *g_capturedKeChuanDetailArray = nil;
-static NSMutableArray<NSDictionary *> *g_keChuanWorkQueue = nil;
-static NSMutableArray<NSString *> *g_keChuanTitleQueue = nil;
-
+static UIView *g_loggerPanel = nil;
 static UITextView *g_logTextView = nil;
-static UIView *g_controlPanelView = nil;
+static NSMutableString *g_logStorageString = nil; // 用于存储所有日志以便复制
 
-static void LogMessage(NSString *format, ...) {
-    if (!g_logTextView) return;
+// =========================================================================
+// 辅助函数 - 将日志同时输出到 NSLog 和屏幕上的 UITextView
+// =========================================================================
+static void LogToScreen(NSString *format, ...) {
     va_list args;
     va_start(args, format);
     NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
     va_end(args);
 
+    // 原始NSLog，以防万一
+    NSLog(@"[ObserverV11] %@", message);
+
+    // 在主线程更新UI
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-        [formatter setDateFormat:@"HH:mm:ss.SSS"];
-        NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
-        NSString *fullMessage = [logPrefix stringByAppendingString:message];
-        g_logTextView.text = [NSString stringWithFormat:@"%@\n%@", fullMessage, g_logTextView.text];
-        NSLog(@"[ExtractorV9] %@", message);
+        if (g_logTextView) {
+            NSString *newText = [g_logTextView.text stringByAppendingFormat:@"%@\n", message];
+            g_logTextView.text = newText;
+            // 自动滚动到底部
+            [g_logTextView scrollRangeToVisible:NSMakeRange(g_logTextView.text.length, 0)];
+        }
+        if (g_logStorageString) {
+            [g_logStorageString appendFormat:@"%@\n", message];
+        }
     });
 }
 
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
-    if (!view) return;
-    if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
-    for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
-}
-
 // =========================================================================
-// 2. 主功能区
+// 界面与观察核心
 // =========================================================================
-@interface UIViewController (EchoAITestAddons_Truth)
-- (void)startExtraction_Truth;
-- (void)processKeChuanQueue_Truth;
-- (void)createOrShowControlPanel_Truth;
-- (void)copyAndClose_Truth;
-@end
-
-@interface UICollectionView (DelegateMethods)
-- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath;
+@interface UIViewController (OnDeviceLogger)
+- (void)createOrShowLoggerPanel_V11;
+- (void)copyLogsAndClose_V11;
 @end
 
 %hook UIViewController
 
-// --- viewDidLoad ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
-            NSInteger controlButtonTag = 556691;
-            if ([keyWindow viewWithTag:controlButtonTag]) { [[keyWindow viewWithTag:controlButtonTag] removeFromSuperview]; }
+            NSInteger buttonTag = 110011;
+            if ([keyWindow viewWithTag:buttonTag]) { return; }
             
-            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
-            controlButton.tag = controlButtonTag;
-            [controlButton setTitle:@"提取面板" forState:UIControlStateNormal];
-            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            controlButton.backgroundColor = [UIColor purpleColor];
-            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            controlButton.layer.cornerRadius = 8;
-            [controlButton addTarget:self action:@selector(createOrShowControlPanel_Truth) forControlEvents:UIControlEventTouchUpInside];
-            [keyWindow addSubview:controlButton];
+            UIButton *loggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            loggerButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
+            loggerButton.tag = buttonTag;
+            [loggerButton setTitle:@"日志面板" forState:UIControlStateNormal];
+            loggerButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            loggerButton.backgroundColor = [UIColor systemBlueColor];
+            [loggerButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            loggerButton.layer.cornerRadius = 8;
+            [loggerButton addTarget:self action:@selector(createOrShowLoggerPanel_V11) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:loggerButton];
         });
     }
 }
 
-// --- presentViewController ---
-- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    if (g_isExtractingKeChuanDetail) {
-        NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"] || [vcClassName containsString:@"課體概覽視圖"]) {
-            LogMessage(@"捕获到弹窗: %@", vcClassName);
-            viewControllerToPresent.view.alpha = 0.0f; flag = NO;
-            
-            void (^newCompletion)(void) = ^{
-                if (completion) { completion(); }
-                
-                UIView *contentView = viewControllerToPresent.view;
-                NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                    if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-                    if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
-                    return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-                }];
-                
-                NSMutableArray<NSString *> *textParts = [NSMutableArray array];
-                for (UILabel *label in allLabels) {
-                    if (label.text && label.text.length > 0) {
-                        [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
-                    }
-                }
-                NSString *fullDetail = [textParts componentsJoinedByString:@"\n"];
-                [g_capturedKeChuanDetailArray addObject:fullDetail];
-                LogMessage(@"成功提取内容 (共 %lu 条)", (unsigned long)g_capturedKeChuanDetailArray.count);
-                
-                [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
-                    const double kDelayInSeconds = 0.2; 
-                    LogMessage(@"弹窗已关闭，延迟 %.1f 秒后处理下一个...", kDelayInSeconds);
-                    [self processKeChuanQueue_Truth];
-                }];
-            };
-            %orig(viewControllerToPresent, flag, newCompletion);
-            return;
-        }
-    }
-    %orig(viewControllerToPresent, flag, completion);
-}
-
 %new
-- (void)createOrShowControlPanel_Truth {
-    UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
-    NSInteger panelTag = 556692;
-    if (g_controlPanelView && g_controlPanelView.superview) {
-        [g_controlPanelView removeFromSuperview]; g_controlPanelView = nil; g_logTextView = nil; return;
+- (void)createOrShowLoggerPanel_V11 {
+    if (g_loggerPanel && g_loggerPanel.superview) {
+        [g_loggerPanel removeFromSuperview];
+        g_loggerPanel = nil; g_logTextView = nil; g_logStorageString = nil;
+        return;
     }
-    g_controlPanelView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, keyWindow.bounds.size.width - 20, keyWindow.bounds.size.height - 200)];
-    g_controlPanelView.tag = panelTag;
-    g_controlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.85];
-    g_controlPanelView.layer.cornerRadius = 12; g_controlPanelView.clipsToBounds = YES;
-    
-    UIButton *startButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    startButton.frame = CGRectMake(10, 10, 240, 40);
-    [startButton setTitle:@"提取全部(三传+四课+课体)" forState:UIControlStateNormal];
-    [startButton addTarget:self action:@selector(startExtraction_Truth) forControlEvents:UIControlEventTouchUpInside];
-    startButton.backgroundColor = [UIColor systemGreenColor]; [startButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; startButton.layer.cornerRadius = 8;
+
+    UIWindow *keyWindow = self.view.window;
+    g_loggerPanel = [[UIView alloc] initWithFrame:CGRectMake(10, 100, keyWindow.bounds.size.width - 20, keyWindow.bounds.size.height - 200)];
+    g_loggerPanel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
+    g_loggerPanel.layer.cornerRadius = 12; g_loggerPanel.clipsToBounds = YES;
+
+    UILabel *instructionLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, g_loggerPanel.bounds.size.width - 20, 40)];
+    instructionLabel.text = @"请先点击此面板外的【课体】单元格，\n下方文本框将显示日志，然后点击复制。";
+    instructionLabel.textColor = [UIColor whiteColor];
+    instructionLabel.textAlignment = NSTextAlignmentCenter;
+    instructionLabel.numberOfLines = 2;
+    [g_loggerPanel addSubview:instructionLabel];
+
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 60, g_loggerPanel.bounds.size.width - 20, g_loggerPanel.bounds.size.height - 120)];
+    g_logTextView.backgroundColor = [UIColor blackColor];
+    g_logTextView.textColor = [UIColor greenColor];
+    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12];
+    g_logTextView.editable = NO;
+    [g_loggerPanel addSubview:g_logTextView];
     
     UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    copyButton.frame = CGRectMake(260, 10, 100, 40);
-    [copyButton setTitle:@"复制关闭" forState:UIControlStateNormal];
-    [copyButton addTarget:self action:@selector(copyAndClose_Truth) forControlEvents:UIControlEventTouchUpInside];
-    copyButton.backgroundColor = [UIColor systemOrangeColor]; [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; copyButton.layer.cornerRadius = 8;
-
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 60, g_controlPanelView.bounds.size.width - 20, g_controlPanelView.bounds.size.height - 70)];
-    g_logTextView.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0]; g_logTextView.textColor = [UIColor systemGreenColor]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12]; g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8;
-    g_logTextView.text = @"V9 终极版已就绪。\n";
+    copyButton.frame = CGRectMake(10, g_loggerPanel.bounds.size.height - 50, g_loggerPanel.bounds.size.width - 20, 40);
+    [copyButton setTitle:@"复制日志并关闭" forState:UIControlStateNormal];
+    [copyButton addTarget:self action:@selector(copyLogsAndClose_V11) forControlEvents:UIControlEventTouchUpInside];
+    copyButton.backgroundColor = [UIColor systemOrangeColor];
+    [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    copyButton.layer.cornerRadius = 8;
+    [g_loggerPanel addSubview:copyButton];
     
-    [g_controlPanelView addSubview:startButton];
-    [g_controlPanelView addSubview:copyButton];
-    [g_controlPanelView addSubview:g_logTextView];
-    [keyWindow addSubview:g_controlPanelView];
+    [keyWindow addSubview:g_loggerPanel];
+    
+    // 初始化日志存储
+    g_logStorageString = [NSMutableString string];
+    LogToScreen(@"日志面板已就绪。请点击一个课体单元...");
 }
 
 %new
-- (void)copyAndClose_Truth {
-    if (g_capturedKeChuanDetailArray && g_keChuanTitleQueue && g_capturedKeChuanDetailArray.count == g_keChuanTitleQueue.count) {
-        NSMutableString *resultStr = [NSMutableString string];
-        for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
-            NSString *title = g_keChuanTitleQueue[i];
-            NSString *detail = g_capturedKeChuanDetailArray[i];
-            [resultStr appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
+- (void)copyLogsAndClose_V11 {
+    if (g_logStorageString.length > 0) {
+        [UIPasteboard generalPasteboard].string = g_logStorageString;
+        LogToScreen(@"日志已复制到剪贴板！");
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (g_loggerPanel) {
+            [g_loggerPanel removeFromSuperview];
+            g_loggerPanel = nil; g_logTextView = nil; g_logStorageString = nil;
         }
-        [UIPasteboard generalPasteboard].string = resultStr;
-        LogMessage(@"结果已复制到剪贴板！");
-    } else { 
-        LogMessage(@"没有可复制的内容或队列数量不匹配。标题: %lu, 内容: %lu", (unsigned long)g_keChuanTitleQueue.count, (unsigned long)g_capturedKeChuanDetailArray.count);
-    }
-    
-    if (g_controlPanelView) {
-        [g_controlPanelView removeFromSuperview]; g_controlPanelView = nil; g_logTextView = nil;
-    }
+    });
 }
-
 
 // =========================================================================
-// 核心提取逻辑
+// 核心观察逻辑
 // =========================================================================
 
-%new
-- (void)startExtraction_Truth {
-    if (g_isExtractingKeChuanDetail) { LogMessage(@"错误：提取任务已在进行中。"); return; }
-    
-    LogMessage(@"开始提取任务...");
-    g_isExtractingKeChuanDetail = YES;
-    g_capturedKeChuanDetailArray = [NSMutableArray array]; g_keChuanWorkQueue = [NSMutableArray array]; g_keChuanTitleQueue = [NSMutableArray array];
-  
-    // 寻找总容器，而不是通过ViewController的ivar获取
-    Class masterContainerClass = NSClassFromString(@"六壬大占.課傳視圖");
-    NSMutableArray *masterContainers = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(masterContainerClass, self.view, masterContainers);
-    if (masterContainers.count == 0) {
-         LogMessage(@"致命错误: 找不到总容器 '課傳視圖'。"); g_isExtractingKeChuanDetail = NO; return;
-    }
-    UIView *masterContainer = masterContainers.firstObject;
-    LogMessage(@"成功找到总容器 '課傳視圖': %@", masterContainer);
+- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+    Class targetVCClass = NSClassFromString(@"六壬大占.ViewController");
+    Class targetCVClass = NSClassFromString(@"六壬大占.課體視圖");
 
-    // Part A: 三传提取
-    Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
-    NSMutableArray *sanChuanResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, masterContainer, sanChuanResults);
-    if (sanChuanResults.count > 0) {
-        UIView *sanChuanContainer = sanChuanResults.firstObject;
-        const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL}; NSString *rowTitles[] = {@"初传", @"中传", @"末传"};
-        for (int i = 0; ivarNames[i] != NULL; ++i) {
-            Ivar ivar = class_getInstanceVariable([sanChuanContainer class], ivarNames[i]); if (!ivar) continue;
-            UIView *chuanView = object_getIvar(sanChuanContainer, ivar); if (!chuanView) continue;
-            NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], chuanView, labels);
-            [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
-            if(labels.count >= 2) {
-                UILabel *dizhiLabel = labels[labels.count-2]; UILabel *tianjiangLabel = labels[labels.count-1];
-                if (dizhiLabel.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"contextView": chuanView, @"taskType": @"diZhi"}];
-                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
-                }
-                if (tianjiangLabel.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"contextView": chuanView, @"taskType": @"tianJiang"}];
-                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
-                }
-            }
-        }
-    }
-  
-    // Part B: 四课提取
-    Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
-    NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, masterContainer, siKeResults);
-    if (siKeResults.count > 0) {
-        UIView *siKeContainer = siKeResults.firstObject;
-        const char *ivarNames[] = {"第一課", "第二課", "第三課", "第四課", NULL}; NSString *rowTitles[] = {@"一课", @"二课", @"三课", @"四课"};
-        for (int i = 0; ivarNames[i] != NULL; ++i) {
-            Ivar ivar = class_getInstanceVariable([siKeContainer class], ivarNames[i]); if (!ivar) continue;
-            UIView *keView = object_getIvar(siKeContainer, ivar); if (!keView) continue;
-            NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], keView, labels);
-            if(labels.count >= 2) {
-                UILabel *dizhiLabel = labels[0]; UILabel *tianjiangLabel = labels[1];
-                if (dizhiLabel.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"contextView": keView, @"taskType": @"diZhi"}];
-                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
-                }
-                if (tianjiangLabel.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"contextView": keView, @"taskType": @"tianJiang"}];
-                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
-                }
-            }
-        }
-    }
-
-    // Part C: 课体提取
-    Class keTiViewClass = NSClassFromString(@"六壬大占.課體視圖");
-    NSMutableArray *keTiViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(keTiViewClass, self.view, keTiViews);
-    if (keTiViews.count > 0) {
-        UICollectionView *keTiCollectionView = (UICollectionView *)keTiViews.firstObject;
-        NSArray<__kindof UICollectionViewCell *> *visibleCells = [keTiCollectionView.visibleCells sortedArrayUsingComparator:^NSComparisonResult(UICollectionViewCell *a, UICollectionViewCell *b){if(a.frame.origin.y<b.frame.origin.y)return NSOrderedAscending;if(a.frame.origin.y>b.frame.origin.y)return NSOrderedDescending;if(a.frame.origin.x<b.frame.origin.x)return NSOrderedAscending;if(a.frame.origin.x>b.frame.origin.x)return NSOrderedDescending;return NSOrderedSame;}];
-        for (UICollectionViewCell *cell in visibleCells) {
-            NSIndexPath *path = [keTiCollectionView indexPathForCell:cell]; if (!path) continue;
-            NSString *title = @"未知课体";
-            NSMutableArray *labelsInCell = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
-            if (labelsInCell.count > 0) { title = ((UILabel *)labelsInCell.firstObject).text; }
-            [g_keChuanWorkQueue addObject:@{@"taskType": @"keTi", @"collectionView": keTiCollectionView, @"indexPath": path, @"contextView": keTiCollectionView}];
-            [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"课体 - %@", title]];
-        }
-    }
-
-    if (g_keChuanWorkQueue.count == 0) { LogMessage(@"队列为空，未找到任何可提取项。"); g_isExtractingKeChuanDetail = NO; return; }
-    LogMessage(@"--- 任务队列构建完成，总计 %lu 项。---", (unsigned long)g_keChuanWorkQueue.count);
-    [self processKeChuanQueue_Truth];
-}
-
-%new
-- (void)processKeChuanQueue_Truth {
-    if (!g_isExtractingKeChuanDetail || g_keChuanWorkQueue.count == 0) {
-        if (g_isExtractingKeChuanDetail) {
-            LogMessage(@"--- 全部任务处理完毕！ ---");
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已提取。" preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:alert animated:YES completion:nil];
-        }
-        g_isExtractingKeChuanDetail = NO; return;
-    }
-  
-    NSDictionary *task = g_keChuanWorkQueue.firstObject; 
-    [g_keChuanWorkQueue removeObjectAtIndex:0];
-    
-    NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
-    NSString *taskType = task[@"taskType"];
-    UIView *contextView = task[@"contextView"];
-    
-    LogMessage(@"正在处理: %@ (类型: %@)", title, taskType);
-    
-    // 【【【【【【【 终 极 修 正 】】】】】】】
-    // 在处理任何任务之前，都先设置正确的上下文
-    Ivar keChuanIvar = class_getInstanceVariable([self class], "課傳");
-    if (keChuanIvar && contextView) {
-        object_setIvar(self, keChuanIvar, contextView);
-        LogMessage(@"第0步: 成功设置 '課傳' ivar -> %@", contextView);
-    } else {
-        LogMessage(@"第0步: 未找到'課傳' ivar或上下文视图为空, 跳过设置。");
-    }
-
-    if ([taskType isEqualToString:@"keTi"]) {
-        UICollectionView *collectionView = task[@"collectionView"];
-        NSIndexPath *indexPath = task[@"indexPath"];
-        id delegate = collectionView.delegate;
-        SEL selector = @selector(collectionView:didSelectItemAtIndexPath:);
+    if ([self isKindOfClass:targetVCClass] && [collectionView isKindOfClass:targetCVClass]) {
+        LogToScreen(@"\n\n==================================================");
+        LogToScreen(@"=========== 观察到【课体】点击事件！ ===========");
+        LogToScreen(@"ViewController: %@", self);
+        LogToScreen(@"被点击的路径: %@", indexPath);
         
-        LogMessage(@"第1步: 调用代理方法 %@", NSStringFromSelector(selector));
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [delegate performSelector:selector withObject:collectionView withObject:indexPath];
-        #pragma clang diagnostic pop
-
-    } else {
-        UIGestureRecognizer *gestureToTrigger = task[@"gesture"];
-        SEL actionToPerform = nil;
-        if ([taskType isEqualToString:@"tianJiang"]) {
-            actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
-        } else {
-            actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
+        LogToScreen(@"\n--- 正在检查 ViewController 的所有实例变量 ---");
+        unsigned int ivarCount = 0;
+        Ivar *ivars = class_copyIvarList([self class], &ivarCount);
+        if (ivars) {
+            for(unsigned int i = 0; i < ivarCount; i++) {
+                Ivar ivar = ivars[i];
+                const char *name = ivar_getName(ivar);
+                id value = object_getIvar(self, ivar);
+                LogToScreen(@"IVAR: %s -- 值: %@", name, value);
+            }
+            free(ivars);
         }
-        
-        if ([self respondsToSelector:actionToPerform]) {
-            LogMessage(@"第1步: 调用方法 %@, 传递手势: %@", NSStringFromSelector(actionToPerform), gestureToTrigger);
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [self performSelector:actionToPerform withObject:gestureToTrigger];
-            #pragma clang diagnostic pop
-        } else {
-            LogMessage(@"第1步: 错误！方法 %@ 不存在。", NSStringFromSelector(actionToPerform));
-            [g_capturedKeChuanDetailArray addObject:@"[提取失败: 方法不存在]"];
-            [self processKeChuanQueue_Truth];
-        }
+        LogToScreen(@"--- Ivar 列表检查完毕 ---\n");
     }
+
+    // 调用原始实现，让App正常工作
+    %orig;
 }
 
 %end
