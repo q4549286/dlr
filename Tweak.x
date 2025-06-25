@@ -1,8 +1,8 @@
-/////// Filename: EchoAI_Ultimate_v7.1_FinalCompilerFix.xm
-// 描述: EchoAI终极整合版 v7.1。此版本修复了v7.0的所有编译错误。
-//       - [FIX] 将 `processKeTiWorkQueue_S1` 转换为 UIViewController 的 `%new` 方法，解决了作用域和选择器错误。
-//       - [FIX] 修正了所有 `#pragma` 语句的语法，使其符合编译器要求。
-//       - [UI/UX] 保留了全新的Prestige UI：单页滚动式布局，带有模糊背景和分组标题。
+/////// Filename: EchoAI_Ultimate_v7.2_Final.xm
+// 描述: EchoAI终极整合版 v7.2 (最终修复版)。此版本修复了v7.1的所有编译错误。
+//       - [FIX] 彻底修正了多行宏`SUPPRESS_LEAK_WARNING`的语法。
+//       - [FIX] 将`GetIvarValueSafely`和`GetStringFromLayer`函数移回正确的%hook作用域内，解决了未声明的函数调用错误。
+//       - [UI/UX] 保留了全新的Prestige UI。
 //       - [RELIABILITY] 保留了基于类名的可靠弹窗识别机制。
 //       - [COMPLETENESS] 保留了七政四余在综合模式中的完整提取。
 
@@ -45,7 +45,7 @@ static NSMutableArray *g_s2_capturedGeJuArray = nil;
 
 static NSString * const CustomFooterText = @"\n\n"
 "--- 自定义注意事项 ---\n"
-"1. 本解析结果由 EchoAI_Ultimate_v7.1 生成，仅供参考。\n"
+"1. 本解析结果由 EchoAI_Ultimate_v7.2 生成，仅供参考。\n"
 "2. 请结合实际情况与专业知识进行最终判断。\n"
 "3. [可在此处添加您的个人Prompt或更多说明]";
 
@@ -60,7 +60,7 @@ static void LogMessage(NSString *format, ...) {
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss.SSS"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logTextView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logTextView.text];
-        NSLog(@"[EchoAI-Ultimate-v7.1] %@", message);
+        NSLog(@"[EchoAI-Ultimate-v7.2] %@", message);
     });
 }
 
@@ -75,7 +75,14 @@ static UIWindow* GetFrontmostWindow() {
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
-                frontmostWindow = scene.windows.firstObject; break;
+                // For apps with multiple windows, this is a more robust way
+                for (UIWindow *window in scene.windows) {
+                    if (window.isKeyWindow) {
+                        frontmostWindow = window;
+                        break;
+                    }
+                }
+                if (frontmostWindow) break;
             }
         }
     }
@@ -265,7 +272,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-#pragma mark - Prestige UI v7.1
+#pragma mark - Prestige UI v7.2
 %new
 - (void)createOrShowMainControlPanel {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
@@ -289,7 +296,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [g_mainControlPanelView addSubview:contentView];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, 40)];
-    titleLabel.text = @"EchoAI 终极提取器 v7.1";
+    titleLabel.text = @"EchoAI 终极提取器 v7.2";
     titleLabel.font = [UIFont boldSystemFontOfSize:22];
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -393,12 +400,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [UIPasteboard generalPasteboard].string = g_logTextView.text;
         LogMessage(@"日志内容已复制到剪贴板！");
     }
-    [self handleMasterButtonTap:nil]; // Use nil sender to just close
+    [self handleMasterButtonTap:nil];
 }
 
 %new
 - (void)handleMasterButtonTap:(UIButton *)sender {
-    if (!sender) { // A way to just close the panel
+    if (!sender) {
         if (g_mainControlPanelView) {
             [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) {
                 [g_mainControlPanelView removeFromSuperview]; g_mainControlPanelView = nil; g_logTextView = nil;
@@ -432,7 +439,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-#pragma mark - HUD & Progress
 %new
 - (void)showProgressHUD:(NSString *)text {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
@@ -660,6 +666,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }];
     }];
 }
+
+// FIX: Corrected multi-line macro syntax and moved helper functions into scope.
+#define SUPPRESS_LEAK_WARNING(code) \
+    _Pragma("clang diagnostic push") \
+    _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
+    code; \
+    _Pragma("clang diagnostic pop")
+
 %new
 - (void)extractKePanInfo_S2_WithCompletion:(void (^)(NSString *kePanText))completion {
     #define SafeString(str) (str ?: @"")
@@ -680,7 +694,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     LogMessage(@"[S2-KePan] 提取毕法、格局、七政等弹窗信息...");
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        #define SUPPRESS_LEAK_WARNING(code) _Pragma("clang diagnostic push") \n _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \n code; \n _Pragma("clang diagnostic pop")
         if ([self respondsToSelector:NSSelectorFromString(@"顯示法訣總覽")]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:NSSelectorFromString(@"顯示法訣總覽") withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:NSSelectorFromString(@"顯示格局總覽")]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:NSSelectorFromString(@"顯示格局總覽") withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:NSSelectorFromString(@"顯示方法總覽")]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:NSSelectorFromString(@"顯示方法總覽") withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
@@ -751,6 +764,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     processQueue();
 }
 
+// FIX: Moved helper functions here, inside the %hook block, to ensure they are in scope.
+%new
+- (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix {
+    if (!object || !ivarNameSuffix) return nil; unsigned int ivarCount; Ivar *ivars = class_copyIvarList([object class], &ivarCount); if (!ivars) { free(ivars); return nil; } id value = nil; for (unsigned int i = 0; i < ivarCount; i++) { Ivar ivar = ivars[i]; const char *name = ivar_getName(ivar); if (name) { NSString *ivarName = [NSString stringWithUTF8String:name]; if ([ivarName hasSuffix:ivarNameSuffix]) { value = object_getIvar(object, ivar); break; } } } free(ivars); return value;
+}
+%new
+- (NSString *)GetStringFromLayer:(id)layer {
+    if (layer && [layer respondsToSelector:@selector(string)]) { id stringValue = [layer valueForKey:@"string"]; if ([stringValue isKindOfClass:[NSString class]]) return stringValue; if ([stringValue isKindOfClass:[NSAttributedString class]]) return ((NSAttributedString *)stringValue).string; } return @"?";
+}
+
 %new
 - (NSString *)formatNianmingGejuFromView_S2:(UIView *)contentView {
     Class cellClass = NSClassFromString(@"六壬大占.格局單元"); if (!cellClass) return @"";
@@ -789,7 +812,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return @"天地盘提取失败: 找不到keyWindow";
         NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews); if (plateViews.count == 0) return @"天地盘提取失败: 找不到视图实例";
         UIView *plateView = plateViews.firstObject;
-        id diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列"), tianShenDict = GetIvarValueSafely(plateView, @"天神宮名列"), tianJiangDict = GetIvarValueSafely(plateView, @"天將宮名列");
+        id diGongDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"地宮宮名列"], tianShenDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天神宮名列"], tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
         if (!diGongDict || !tianShenDict || !tianJiangDict) return @"天地盘提取失败: 未能获取核心数据字典";
         NSArray *diGongLayers=[diGongDict allValues], *tianShenLayers=[tianShenDict allValues], *tianJiangLayers=[tianJiangDict allValues];
         if (diGongLayers.count!=12||tianShenLayers.count!=12||tianJiangLayers.count!=12) return @"天地盘提取失败: 数据长度不匹配";
@@ -801,7 +824,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 CALayer *pLayer = [layer presentationLayer] ?: layer;
                 CGPoint pos = [pLayer.superlayer convertPoint:pLayer.position toLayer:nil];
                 CGFloat dx = pos.x - center.x, dy = pos.y - center.y;
-                [allLayerInfos addObject:@{ @"type": type, @"text": GetStringFromLayer(layer), @"angle": @(atan2(dy, dx)), @"radius": @(sqrt(dx*dx + dy*dy)) }];
+                [allLayerInfos addObject:@{ @"type": type, @"text": [self GetStringFromLayer:layer], @"angle": @(atan2(dy, dx)), @"radius": @(sqrt(dx*dx + dy*dy)) }];
             }
         };
         processLayers(diGongLayers, @"diPan"); processLayers(tianShenLayers, @"tianPan"); processLayers(tianJiangLayers, @"tianJiang");
@@ -876,6 +899,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[EchoAI-Ultimate-v7.1] 终极提取器 v7.1 (Prestige UI) 已加载。");
+        NSLog(@"[EchoAI-Ultimate-v7.2] 终极提取器 v7.2 (Final) 已加载。");
     }
 }
