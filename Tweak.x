@@ -1,6 +1,5 @@
-// Filename: KeTi_JiuZongMen_Extractor_v1.8
-// 终极修复版！放弃寻找主StackView，改为收集所有UI元素并按坐标排序，确保100%提取成功。
-// v1.8: 修复了pragma和performSelector导致的编译错误。
+// Filename: KeTi_JiuZongMen_Extractor_v1.9
+// 终极修复版！采用“地毯式”递归搜索，确保找到所有UI元素，彻底解决内容为空的问题。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -10,19 +9,26 @@
 // 1. 全局变量与辅助函数
 // =================================================================
 
+// --- 状态控制 ---
 static BOOL g_isExtracting = NO;
 static NSString *g_currentTaskType = nil;
+
+// --- “课体”批量提取专用变量 ---
 static NSMutableArray *g_keTi_workQueue = nil;
 static NSMutableArray *g_keTi_resultsArray = nil;
 static UICollectionView *g_keTi_targetCV = nil;
+
+// --- UI ---
 static UITextView *g_logView = nil;
 
+// 辅助函数：递归查找子视图
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if (!view || !storage) return;
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
+// 统一日志函数
 static void LogMessage(NSString *format, ...) {
     if (!g_logView) return;
     va_list args;
@@ -34,7 +40,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[Extractor-Fixed-v1.8] %@", message);
+        NSLog(@"[Extractor-Fixed-v1.9] %@", message);
     });
 }
 
@@ -55,7 +61,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         void (^extractionCompletion)(void) = ^{
             if (completion) { completion(); }
 
-            // --- 全新的、基于无差别收集和排序的提取逻辑 ---
+            // --- 终极修复：基于“地毯式”递归搜索的提取逻辑 ---
             NSMutableArray<NSDictionary *> *sortedElements = [NSMutableArray array];
             UIView *contentView = vcToPresent.view; 
             
@@ -65,34 +71,41 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                      contentView = scrollView.subviews.firstObject;
                  }
             }
+            LogMessage(@"确定内容容器视图: %@", NSStringFromClass([contentView class]));
 
-            // 1. 收集所有可能的元素（StackViews 和 Labels）
-            LogMessage(@"开始收集所有UI元素...");
+            // 1. 使用递归，无差别地收集所有 StackViews 和 Labels
+            NSMutableArray *allStackViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
+            LogMessage(@"递归找到 %lu 个 StackView", (unsigned long)allStackViews.count);
+
+            NSMutableArray *allLabels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+            LogMessage(@"递归找到 %lu 个 Label", (unsigned long)allLabels.count);
+
+            // 2. 将它们全部放入一个待排序的数组中，并标记出在StackView中的Label
             NSMutableSet *labelsInStackViews = [NSMutableSet set];
-            for (UIView *subview in contentView.subviews) {
-                if ([subview isKindOfClass:[UIStackView class]]) {
-                    [sortedElements addObject:@{ @"view": subview, @"y": @(subview.frame.origin.y) }];
-                    NSMutableArray *labels = [NSMutableArray array];
-                    FindSubviewsOfClassRecursive([UILabel class], subview, labels);
-                    for (UILabel *label in labels) {
-                        [labelsInStackViews addObject:label];
-                    }
+            for (UIStackView *stackView in allStackViews) {
+                [sortedElements addObject:@{ @"view": stackView, @"y": @(stackView.frame.origin.y) }];
+                NSMutableArray *labels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], stackView, labels);
+                for (UILabel *label in labels) {
+                    [labelsInStackViews addObject:label];
                 }
             }
 
-            for (UIView *subview in contentView.subviews) {
-                if ([subview isKindOfClass:[UILabel class]] && ![labelsInStackViews containsObject:subview]) {
-                    [sortedElements addObject:@{ @"view": subview, @"y": @(subview.frame.origin.y) }];
+            for (UILabel *label in allLabels) {
+                if (![labelsInStackViews containsObject:label]) {
+                    [sortedElements addObject:@{ @"view": label, @"y": @(label.frame.origin.y) }];
                 }
             }
-            LogMessage(@"共收集到 %lu 个元素。", (unsigned long)sortedElements.count);
+            LogMessage(@"共收集到 %lu 个待排序元素。", (unsigned long)sortedElements.count);
 
-            // 2. 按Y坐标排序
+            // 3. 按Y坐标排序
             [sortedElements sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
                 return [obj1[@"y"] compare:obj2[@"y"]];
             }];
 
-            // 3. 遍历排序后的元素列表，智能生成结果
+            // 4. 遍历排序后的元素列表，智能生成结果
             NSMutableArray<NSString *> *textParts = [NSMutableArray array];
             NSArray *knownTitles = @[@"判断", @"变体", @"简断", @"象辞", @"判斷", @"變體", @"簡斷", @"象辭"];
 
@@ -118,7 +131,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                              if (![knownTitles containsObject:contentLabel.text]) {
                                 NSString *contentText = contentLabel.text ?: @"";
                                 [textParts addObject:[NSString stringWithFormat:@"%@ → %@", titleLabel.text, [contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]];
-                                i++; // 跳过下一个内容Label
+                                i++;
                              }
                         }
                     }
@@ -189,7 +202,6 @@ static void processKeTiWorkQueue() {
 %new
 - (void)setupCombinedExtractorPanel {
     UIWindow *keyWindow = nil;
-    // --- FIX: Expanded if/else block to prevent compiler errors ---
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
@@ -213,7 +225,7 @@ static void processKeTiWorkQueue() {
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"课体/九宗门提取器 v1.8";
+    titleLabel.text = @"课体/九宗门提取器 v1.9";
     titleLabel.textColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.4 alpha:1.0];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -244,7 +256,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"编译错误已修复，请测试。";
+    g_logView.text = @"已采用终极递归提取逻辑，请测试。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -284,7 +296,6 @@ static void processKeTiWorkQueue() {
     SEL selector = NSSelectorFromString(@"顯示九宗門概覽");
     if ([self respondsToSelector:selector]) {
         LogMessage(@"正在调用方法: 顯示九宗門概覽");
-        // --- FIX: Expanded block to prevent compiler errors and suppress leak warning correctly ---
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         [self performSelector:selector];
@@ -316,7 +327,7 @@ static void processKeTiWorkQueue() {
         Class vcClass = NSClassFromString(@"六壬大占.ViewController");
         if (vcClass) {
             MSHookMessageEx(vcClass, @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-            NSLog(@"[Extractor-Fixed-v1.8] 提取器已准备就绪。");
+            NSLog(@"[Extractor-Fixed-v1.9] 提取器已准备就绪。");
         }
     }
 }
