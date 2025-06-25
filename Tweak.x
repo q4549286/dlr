@@ -1,5 +1,5 @@
-// Filename: CombinedExtractor_v5.2_RobustFilter
-// 描述: 最终解决方案 v5.2。重写了StackView的提取逻辑，使其更加健壮，能100%过滤掉内容为空的标题。
+// Filename: CombinedExtractor_v5.3_TitleRetention
+// 描述: 最终解决方案 v5.3。修复了v5.2错误过滤空标题的问题，现在会保留所有标题，无论其是否有内容。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -36,7 +36,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[CombinedExtractor-v5.2] %@", message);
+        NSLog(@"[CombinedExtractor-v5.3] %@", message);
     });
 }
 
@@ -46,7 +46,7 @@ static void LogMessage(NSString *format, ...) {
 
 static void processKeTiWorkQueue(void);
 
-// ================== 分区提取函数 (v5.2 健壮过滤版) ==================
+// ================== 分区提取函数 (v5.3 标题保留版) ==================
 static NSString* extractDataFromSplitView(UIView *rootView, BOOL includeXiangJie) {
     if (!rootView) return @"[错误: 根视图为空]";
     
@@ -59,7 +59,6 @@ static NSString* extractDataFromSplitView(UIView *rootView, BOOL includeXiangJie
     if (stackViews.count > 0) {
         UIStackView *mainStackView = stackViews.firstObject;
         
-        // 使用更健壮的“块”处理逻辑
         NSMutableArray *blocks = [NSMutableArray array];
         NSMutableDictionary *currentBlock = nil;
 
@@ -72,39 +71,38 @@ static NSString* extractDataFromSplitView(UIView *rootView, BOOL includeXiangJie
             BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0;
 
             if (isTitle) {
-                // 如果已存在一个块，先保存它
                 if (currentBlock) {
                     [blocks addObject:currentBlock];
                 }
-                // 创建一个新块
                 currentBlock = [NSMutableDictionary dictionaryWithDictionary:@{
                     @"title": text,
                     @"content": [NSMutableString string]
                 }];
             } else {
-                // 如果这是一个内容，并且当前有一个块，就追加内容
                 if (currentBlock) {
                     NSMutableString *content = currentBlock[@"content"];
                     if (content.length > 0) {
-                        [content appendString:@" "]; // 用空格分隔多行内容
+                        [content appendString:@" "];
                     }
                     [content appendString:text];
                 }
             }
         }
-        // 不要忘记添加最后一个块
         if (currentBlock) {
             [blocks addObject:currentBlock];
         }
 
-        // 格式化并过滤所有块
+        // FIX: 重写格式化逻辑，保留内容为空的标题
         for (NSDictionary *block in blocks) {
             NSString *title = block[@"title"];
             NSString *content = [block[@"content"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-            // 只有内容不为空的块才会被添加
             if (content.length > 0) {
+                // 有内容：输出 标题 + 内容
                 [finalResult appendFormat:@"%@\n%@\n\n", title, content];
+            } else {
+                // 无内容：只输出 标题
+                [finalResult appendFormat:@"%@\n\n", title];
             }
         }
     }
@@ -128,7 +126,6 @@ static NSString* extractDataFromSplitView(UIView *rootView, BOOL includeXiangJie
                     for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) {
                         UILabel *titleLabel = xiangJieLabels[i];
                         
-                        // 过滤掉结尾多余的“详解”标签
                         if (i + 1 >= xiangJieLabels.count && [titleLabel.text isEqualToString:@"详解"]) {
                             continue; 
                         }
@@ -193,14 +190,25 @@ static void processKeTiWorkQueue() {
         NSMutableString *finalResult = [NSMutableString string];
         for (NSUInteger i = 0; i < g_keTi_resultsArray.count; i++) {
             NSString *itemText = g_keTi_resultsArray[i];
-            NSString *itemTitle = [NSString stringWithFormat:@"课体 %lu", (unsigned long)i + 1];
-            NSRange titleRange = [itemText rangeOfString:@"\n"];
-            if (titleRange.location != NSNotFound) {
-                 NSString* firstLine = [itemText substringToIndex:titleRange.location];
+            
+            // --- 改进批量提取时的标题逻辑 ---
+            NSString *itemTitle = @"未知课体";
+            // 尝试从内容中解析真实标题，现在内容可能没有换行
+            NSArray *lines = [itemText componentsSeparatedByString:@"\n"];
+            if (lines.count > 0) {
+                 NSString* firstLine = lines[0];
+                 // 检查第一行是否包含“课”字，以确定它是否是一个有效的标题
                  if ([firstLine containsString:@"课"]) {
                     itemTitle = firstLine;
+                    // 从内容中移除第一行，避免重复
+                    NSRange firstLineRange = [itemText rangeOfString:firstLine];
+                    if (firstLineRange.location != NSNotFound) {
+                        itemText = [itemText stringByReplacingCharactersInRange:firstLineRange withString:@""];
+                        itemText = [itemText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    }
                  }
             }
+            
             [finalResult appendFormat:@"--- %@ ---\n\n%@\n\n\n", itemTitle, itemText];
         }
         [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -254,12 +262,12 @@ static void processKeTiWorkQueue() {
     panel.tag = 889900;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemPurpleColor].CGColor;
+    panel.layer.borderColor = [UIColor systemGreenColor].CGColor;
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"大六壬终极提取器 v5.2";
-    titleLabel.textColor = [UIColor systemPurpleColor];
+    titleLabel.text = @"大六壬终极提取器 v5.3";
+    titleLabel.textColor = [UIColor systemGreenColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
@@ -297,7 +305,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"终极提取器 v5.2 (健壮过滤版) 已就绪。";
+    g_logView.text = @"终极提取器 v5.3 (标题保留版) 已就绪。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -402,6 +410,6 @@ static void processKeTiWorkQueue() {
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[CombinedExtractor-v5.2] 终极提取器 v5.2 (健壮过滤版) 已准备就绪。");
+        NSLog(@"[CombinedExtractor-v5.3] 终极提取器 v5.3 (标题保留版) 已准备就绪。");
     }
 }
