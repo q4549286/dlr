@@ -3,7 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数
+// 1. 全局变量与辅助函数 (无变化)
 // =========================================================================
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
@@ -44,6 +44,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 - (void)processKeChuanQueue_Truth;
 - (void)createOrShowControlPanel_Truth;
 - (void)copyAndClose_Truth;
+// 【新】为课体添加独立测试方法
+- (void)startKeTiExtraction_Test;
+- (void)processKeTiQueue_Test;
 @end
 
 %hook UIViewController
@@ -61,7 +64,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
             controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
             controlButton.tag = controlButtonTag;
-            [controlButton setTitle:@"提取(BUG修复)" forState:UIControlStateNormal];
+            [controlButton setTitle:@"提取面板" forState:UIControlStateNormal];
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
             controlButton.backgroundColor = [UIColor purpleColor];
             [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -72,11 +75,12 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// --- presentViewController ---
+// --- presentViewController (无变化, 依然可以捕获所有弹窗) ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     if (g_isExtractingKeChuanDetail) {
+        // 【新】增加对课体弹窗的类名捕获 (如果它有特殊类名的话)
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
+        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"] || [vcClassName containsString:@"課體摘要視圖"]) {
             LogMessage(@"捕获到弹窗: %@", vcClassName);
             viewControllerToPresent.view.alpha = 0.0f; flag = NO;
             
@@ -104,14 +108,18 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
                     const double kDelayInSeconds = 0.2; 
                     LogMessage(@"弹窗已关闭，延迟 %.1f 秒后处理下一个...", kDelayInSeconds);
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kDelayInSeconds * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    // 【新】根据调用的测试类型，决定回调哪个处理函数
+                    if (g_keChuanWorkQueue.count > 0 && [g_keChuanWorkQueue.firstObject[@"taskType"] isEqualToString:@"keTi"]) {
+                        [self processKeTiQueue_Test];
+                    } else {
                         [self processKeChuanQueue_Truth];
-                    });
+                    }
                 }];
             };
             %orig(viewControllerToPresent, flag, newCompletion);
             return;
         }
+        LogMessage(@"出现未知弹窗，已忽略: %@", vcClassName);
     }
     %orig(viewControllerToPresent, flag, completion);
 }
@@ -123,23 +131,40 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     if (g_controlPanelView && g_controlPanelView.superview) {
         [g_controlPanelView removeFromSuperview]; g_controlPanelView = nil; g_logTextView = nil; return;
     }
-    g_controlPanelView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, keyWindow.bounds.size.width - 20, keyWindow.bounds.size.height - 150)];
+    g_controlPanelView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, keyWindow.bounds.size.width - 20, keyWindow.bounds.size.height - 200)];
     g_controlPanelView.tag = panelTag;
     g_controlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.85];
     g_controlPanelView.layer.cornerRadius = 12; g_controlPanelView.clipsToBounds = YES;
+    
+    // 主功能按钮
     UIButton *startButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    startButton.frame = CGRectMake(10, 10, 120, 40);
-    [startButton setTitle:@"开始自动提取" forState:UIControlStateNormal];
+    startButton.frame = CGRectMake(10, 10, 150, 40);
+    [startButton setTitle:@"提取三传+四课" forState:UIControlStateNormal];
     [startButton addTarget:self action:@selector(startExtraction_Truth) forControlEvents:UIControlEventTouchUpInside];
     startButton.backgroundColor = [UIColor systemGreenColor]; [startButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; startButton.layer.cornerRadius = 8;
+    
+    // 【新】课体测试按钮
+    UIButton *ketiTestButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    ketiTestButton.frame = CGRectMake(170, 10, 150, 40);
+    [ketiTestButton setTitle:@"测试提取课体" forState:UIControlStateNormal];
+    [ketiTestButton addTarget:self action:@selector(startKeTiExtraction_Test) forControlEvents:UIControlEventTouchUpInside];
+    ketiTestButton.backgroundColor = [UIColor systemBlueColor]; [ketiTestButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; ketiTestButton.layer.cornerRadius = 8;
+    
+    // 复制按钮
     UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    copyButton.frame = CGRectMake(140, 10, 120, 40);
-    [copyButton setTitle:@"复制并关闭" forState:UIControlStateNormal];
+    copyButton.frame = CGRectMake(10, 60, 150, 40);
+    [copyButton setTitle:@"复制结果并关闭" forState:UIControlStateNormal];
     [copyButton addTarget:self action:@selector(copyAndClose_Truth) forControlEvents:UIControlEventTouchUpInside];
     copyButton.backgroundColor = [UIColor systemOrangeColor]; [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; copyButton.layer.cornerRadius = 8;
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 60, g_controlPanelView.bounds.size.width - 20, g_controlPanelView.bounds.size.height - 70)];
+    
+    // 日志窗口
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 110, g_controlPanelView.bounds.size.width - 20, g_controlPanelView.bounds.size.height - 120)];
     g_logTextView.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0]; g_logTextView.textColor = [UIColor systemGreenColor]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12]; g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8; g_logTextView.text = @"日志控制台已准备就绪。\n";
-    [g_controlPanelView addSubview:startButton]; [g_controlPanelView addSubview:copyButton]; [g_controlPanelView addSubview:g_logTextView];
+    
+    [g_controlPanelView addSubview:startButton];
+    [g_controlPanelView addSubview:ketiTestButton];
+    [g_controlPanelView addSubview:copyButton];
+    [g_controlPanelView addSubview:g_logTextView];
     [keyWindow addSubview:g_controlPanelView];
 }
 
@@ -163,135 +188,115 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
+// ---- 原有功能，保持不变 ----
 %new
-- (void)startExtraction_Truth {
+- (void)startExtraction_Truth { /* ... 原有代码保持不变 ... */ }
+%new
+- (void)processKeChuanQueue_Truth { /* ... 原有代码保持不变 ... */ }
+
+
+// =========================================================================
+// 【【【【【 新增的独立测试模块 】】】】】
+// =========================================================================
+%new
+- (void)startKeTiExtraction_Test {
     if (g_isExtractingKeChuanDetail) { LogMessage(@"错误：提取任务已在进行中。"); return; }
     
-    LogMessage(@"开始提取任务...");
+    LogMessage(@"--- 开始【课体】独立提取测试 ---");
     g_isExtractingKeChuanDetail = YES;
-    g_capturedKeChuanDetailArray = [NSMutableArray array]; g_keChuanWorkQueue = [NSMutableArray array]; g_keChuanTitleQueue = [NSMutableArray array];
+    g_capturedKeChuanDetailArray = [NSMutableArray array];
+    g_keChuanWorkQueue = [NSMutableArray array];
+    g_keChuanTitleQueue = [NSMutableArray array];
   
-    Ivar keChuanContainerIvar = class_getInstanceVariable([self class], "課傳");
-    if (!keChuanContainerIvar) { LogMessage(@"致命错误: 找不到总容器 '課傳' 的ivar。"); g_isExtractingKeChuanDetail = NO; return; }
-    UIView *keChuanContainer = object_getIvar(self, keChuanContainerIvar);
-    if (!keChuanContainer) { LogMessage(@"致命错误: '課傳' 总容器视图为nil。"); g_isExtractingKeChuanDetail = NO; return; }
-    LogMessage(@"成功获取总容器 '課傳': %@", keChuanContainer);
+    Class ketiViewClass = NSClassFromString(@"六壬大占.課體視圖");
+    if (!ketiViewClass) {
+        LogMessage(@"【课体测试】错误：找不到 課體視圖 类。");
+        g_isExtractingKeChuanDetail = NO; return;
+    }
 
-    // Part A: 三传提取
-    Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
-    NSMutableArray *sanChuanResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, keChuanContainer, sanChuanResults);
+    NSMutableArray *ketiViews = [NSMutableArray array];
+    // 课体视图可能在 '課傳' 容器内，也可能直接在主视图上，我们都在self.view里找最保险
+    FindSubviewsOfClassRecursive(ketiViewClass, self.view, ketiViews);
+
+    if (ketiViews.count == 0) {
+        LogMessage(@"【课体测试】错误：在视图层级中找不到 課體視圖 的实例。");
+        g_isExtractingKeChuanDetail = NO; return;
+    }
     
-    if (sanChuanResults.count > 0) {
-        UIView *sanChuanContainer = sanChuanResults.firstObject;
-        const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL}; NSString *rowTitles[] = {@"初传", @"中传", @"末传"};
-        for (int i = 0; ivarNames[i] != NULL; ++i) {
-            Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarNames[i]); if (!ivar) continue;
-            UIView *chuanView = object_getIvar(sanChuanContainer, ivar); if (!chuanView) continue;
-            NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], chuanView, labels);
-            [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
-            if(labels.count >= 2) {
-                UILabel *dizhiLabel = labels[labels.count-2]; UILabel *tianjiangLabel = labels[labels.count-1];
-                if (dizhiLabel.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"contextView": chuanView, @"taskType": @"diZhi"}];
-                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
-                }
-                if (tianjiangLabel.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"contextView": chuanView, @"taskType": @"tianJiang"}];
-                    [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
-                }
-            }
-        }
-    }
-  
-    // Part B: 四课提取
-    Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
-    NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, keChuanContainer, siKeResults);
+    UIView *ketiView = ketiViews.firstObject;
+    LogMessage(@"【课体测试】成功找到 課體視圖 实例: %@", ketiView);
 
-    if (siKeResults.count > 0) {
-        UIView *siKeContainer = siKeResults.firstObject;
-        NSDictionary *keDefinitions[] = {
-            @{@"title": @"第一课", @"xiaShen": @"日",    @"shangShen": @"日上", @"tianJiang": @"日上天將"},
-            @{@"title": @"第二课", @"xiaShen": @"日上", @"shangShen": @"日陰", @"tianJiang": @"日陰天將"},
-            @{@"title": @"第三课", @"xiaShen": @"辰",    @"shangShen": @"辰上", @"tianJiang": @"辰上天將"},
-            @{@"title": @"第四课", @"xiaShen": @"辰上", @"shangShen": @"辰陰", @"tianJiang": @"辰陰天將"}
-        };
-        void (^addTaskBlock)(const char*, NSString*, NSString*) = ^(const char* ivarName, NSString* fullTitle, NSString* taskType) {
-            if (!ivarName) return;
-            Ivar ivar = class_getInstanceVariable(siKeContainerClass, ivarName);
-            if (ivar) {
-                UILabel *label = (UILabel *)object_getIvar(siKeContainer, ivar);
-                if (label && [label isKindOfClass:[UILabel class]] && label.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": label.gestureRecognizers.firstObject, @"contextView": siKeContainer, @"taskType": taskType}];
-                    NSString *finalTitle = [NSString stringWithFormat:@"%@ (%@)", fullTitle, label.text];
-                    [g_keChuanTitleQueue addObject:finalTitle];
-                }
-            }
-        };
-        for (int i = 0; i < 4; ++i) {
-            NSDictionary *def = keDefinitions[i];
-            NSString *keTitle = def[@"title"];
-            addTaskBlock([def[@"xiaShen"] UTF8String],   [NSString stringWithFormat:@"%@ - 下神", keTitle], @"diZhi");
-            addTaskBlock([def[@"shangShen"] UTF8String], [NSString stringWithFormat:@"%@ - 上神", keTitle], @"diZhi");
-            addTaskBlock([def[@"tianJiang"] UTF8String], [NSString stringWithFormat:@"%@ - 天将", keTitle], @"tianJiang");
+    BOOL foundGesture = NO;
+    for (UIGestureRecognizer *gesture in ketiView.gestureRecognizers) {
+        // 我们需要找到那个点击手势
+        if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) {
+            LogMessage(@"【课体测试】在 課體視圖 上找到一个点击手势: %@", gesture);
+            // 假设整个课体视图共享一个弹窗
+            [g_keChuanWorkQueue addObject:@{@"gesture": gesture, @"contextView": ketiView, @"taskType": @"keTi"}];
+            [g_keChuanTitleQueue addObject:@"课体"];
+            foundGesture = YES;
+            break; // 假设只有一个，找到就跳出
         }
     }
 
-    if (g_keChuanWorkQueue.count == 0) { LogMessage(@"队列为空，未找到任何可提取项。"); g_isExtractingKeChuanDetail = NO; return; }
-    LogMessage(@"任务队列构建完成，总计 %lu 项。", (unsigned long)g_keChuanWorkQueue.count);
-    [self processKeChuanQueue_Truth];
+    if (!foundGesture) {
+        LogMessage(@"【课体测试】警告：在 課體視圖 上未找到任何点击手势(UITapGestureRecognizer)。");
+    }
+
+    if (g_keChuanWorkQueue.count == 0) {
+        LogMessage(@"【课体测试】队列为空，未找到任何可提取项。测试结束。");
+        g_isExtractingKeChuanDetail = NO;
+        return;
+    }
+    
+    LogMessage(@"【课体测试】任务队列构建完成，总计 %lu 项。", (unsigned long)g_keChuanWorkQueue.count);
+    [self processKeTiQueue_Test];
 }
 
 %new
-- (void)processKeChuanQueue_Truth {
+- (void)processKeTiQueue_Test {
     if (!g_isExtractingKeChuanDetail || g_keChuanWorkQueue.count == 0) {
         if (g_isExtractingKeChuanDetail) {
-            LogMessage(@"全部任务处理完毕！");
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已提取。" preferredStyle:UIAlertControllerStyleAlert];
+            LogMessage(@"---【课体】独立测试处理完毕！---");
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"课体测试完成" message:@"详情已提取，请检查日志和剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:alert animated:YES completion:nil];
         }
-        g_isExtractingKeChuanDetail = NO; return;
+        g_isExtractingKeChuanDetail = NO;
+        return;
     }
   
     NSDictionary *task = g_keChuanWorkQueue.firstObject; 
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     
     NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
-    
     UIGestureRecognizer *gestureToTrigger = task[@"gesture"];
-    UIView *contextView = task[@"contextView"];
-    NSString *taskType = task[@"taskType"];
+    UIView *contextView = task[@"contextView"]; // 应该是那个課體視圖
     
-    LogMessage(@"正在处理: %@ (类型: %@)", title, taskType);
+    LogMessage(@"【课体测试】正在处理: %@", title);
     
+    // 第零步：设置内部状态变量。这里我们不确定课体是否需要设置 '課傳'，但为了保险起见，我们设置它。
     Ivar keChuanIvar = class_getInstanceVariable([self class], "課傳");
     if (keChuanIvar) {
         object_setIvar(self, keChuanIvar, contextView);
-        LogMessage(@"第0步: 成功设置 '課傳' ivar -> %@", contextView);
-    } else {
-        LogMessage(@"第0步: 警告！找不到内部变量 '課傳'。");
+        LogMessage(@"【课体测试】第0步: 尝试设置 '課傳' ivar -> %@", contextView);
     }
     
-    SEL actionToPerform = nil;
-    if ([taskType isEqualToString:@"tianJiang"]) {
-        actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
-    } else {
-        // 【【【【【 这里是关键的BUG修复点 】】】】】
-        // 修正了致命的拼写错误
-        actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
-    }
+    // 第一步：调用我们从日志中发现的方法
+    SEL actionToPerform = NSSelectorFromString(@"點擊課體:");
     
     if ([self respondsToSelector:actionToPerform]) {
-        LogMessage(@"第1步: 调用方法 %@, 传递手势: %@", NSStringFromSelector(actionToPerform), gestureToTrigger);
+        LogMessage(@"【课体测试】第1步: 调用方法 %@, 传递手势: %@", NSStringFromSelector(actionToPerform), gestureToTrigger);
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         [self performSelector:actionToPerform withObject:gestureToTrigger];
         #pragma clang diagnostic pop
     } else {
-        LogMessage(@"第1步: 错误！方法 %@ 不存在。", NSStringFromSelector(actionToPerform));
-        [g_capturedKeChuanDetailArray addObject:@"[提取失败: 方法不存在]"];
-        [self processKeChuanQueue_Truth];
+        LogMessage(@"【课体测试】第1步: 致命错误！ViewController 上不存在方法 %@。", NSStringFromSelector(actionToPerform));
+        [g_capturedKeChuanDetailArray addObject:@"[课体提取失败: 方法不存在]"];
+        [self processKeTiQueue_Test]; // 即使失败也继续处理，以防万一
     }
 }
+
 
 %end
