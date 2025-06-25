@@ -37,7 +37,7 @@ static void PanelLog(NSString *format, ...) { if (!g_logView) return; va_list ar
 // ==================== 全面方法拦截陷阱 ==========================
 // =================================================================
 
-%hook 六壬大占_ViewController
+%hook @"六壬大占.ViewController"
 
 // --- 已有的核心陷阱 ---
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
