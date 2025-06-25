@@ -1,8 +1,5 @@
-// Filename: CombinedExtractor_v3.0_Final
-// 描述: 终极版。采用运行时直接读取数据模型，不再依赖UI抓取。
-// 1. 100% 准确提取所有内容，解决了内容丢失问题。
-// 2. 新增 “带详解/不带详解” 选项，共四个按钮，满足不同需求。
-// 3. 代码更稳定，不受UI布局变化影响。
+// Filename: CombinedExtractor_v3.1_Fixed
+// 描述: 修正了v3.0中的编译错误。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -15,7 +12,7 @@
 // --- 状态控制 ---
 static BOOL g_isExtracting = NO;
 static NSString *g_currentTaskType = nil;
-static BOOL g_shouldIncludeXiangJie = NO; // 新增：是否包含“详解”
+static BOOL g_shouldIncludeXiangJie = NO;
 
 // --- “课体”批量提取专用变量 ---
 static NSMutableArray *g_keTi_workQueue = nil;
@@ -25,7 +22,7 @@ static UICollectionView *g_keTi_targetCV = nil;
 // --- UI ---
 static UITextView *g_logView = nil;
 
-// 辅助函数：递归查找子视图 (依然需要它来找CollectionView)
+// 辅助函数：递归查找子视图
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if (!view || !storage) return;
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
@@ -44,7 +41,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[CombinedExtractor-v3] %@", message);
+        NSLog(@"[CombinedExtractor-v3.1] %@", message);
     });
 }
 
@@ -58,23 +55,23 @@ static id GetIvarValueSafely(id object, const char *ivarName) {
 }
 
 // =================================================================
-// 2. 核心的Hook与队列处理逻辑 (已完全重写)
+// 2. 核心的Hook与队列处理逻辑
 // =================================================================
 
 static void processKeTiWorkQueue(void);
 
-// ================== 全新的核心提取函数 ==================
-// 这个函数现在直接从内存读取数据，不再解析UI
+// 全新的核心提取函数
 static NSString* extractDataFromModel(id viewController, BOOL includeXiangJie) {
     if (!viewController) return @"[错误: 目标控制器为空]";
 
     // 定义数据模型的实例变量名 (根据你的截图)
+    // FIX: 修正了字典值的语法错误，加上了@
     NSDictionary<NSString *, NSString *> *dataMap = @{
-        @"课名": "課名",
-        @"判断": "判斷",
-        @"变体": "變體",
-        @"简断": "簡斷",
-        @"故象曰": "象辭" // 注意截图里是“象辞”，这里保持一致
+        @"课名": @"課名",
+        @"判断": @"判斷",
+        @"变体": @"變體",
+        @"简断": @"簡斷",
+        @"故象曰": @"象辭"
     };
 
     NSMutableString *resultString = [NSMutableString string];
@@ -90,21 +87,17 @@ static NSString* extractDataFromModel(id viewController, BOOL includeXiangJie) {
 
     // 2. 根据选项，决定是否提取“详解”
     if (includeXiangJie) {
-        // "详解"的数据结构可能是字典或数组，我们需要判断
-        id xiangJieValue = GetIvarValueSafely(viewController, "詳解表"); // 假设是这个变量
+        id xiangJieValue = GetIvarValueSafely(viewController, "詳解表");
         
         if (xiangJieValue) {
             [resultString appendString:@"--- 详解 ---\n\n"];
             
             if ([xiangJieValue isKindOfClass:[NSDictionary class]]) {
-                // 如果是字典，直接格式化 Key -> Value
                 NSDictionary *xiangJieDict = (NSDictionary *)xiangJieValue;
                 for (id key in xiangJieDict) {
                     [resultString appendFormat:@"%@→%@\n\n", key, xiangJieDict[key]];
                 }
             } else if ([xiangJieValue isKindOfClass:[NSArray class]]) {
-                 // 如果是数组，则可能是包含字典的数组，或其他结构，需要进一步分析
-                 // 这里做一个通用处理，打印它的描述
                  [resultString appendFormat:@"%@\n\n", [xiangJieValue description]];
             } else {
                  [resultString appendFormat:@"%@\n\n", [xiangJieValue description]];
@@ -115,7 +108,7 @@ static NSString* extractDataFromModel(id viewController, BOOL includeXiangJie) {
     return [resultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// Hook：拦截弹窗事件 (已更新)
+// Hook：拦截弹窗事件
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     Class targetClass = NSClassFromString(@"六壬大占.課體概覽視圖");
@@ -126,7 +119,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         void (^extractionCompletion)(void) = ^{
             if (completion) { completion(); }
 
-            // 使用全新的、基于数据模型的提取函数
             NSString *extractedText = extractDataFromModel(vcToPresent, g_shouldIncludeXiangJie);
             
             if ([g_currentTaskType isEqualToString:@"KeTi"]) {
@@ -159,7 +151,6 @@ static void processKeTiWorkQueue() {
         LogMessage(@"所有 %lu 项“课体”任务处理完毕！", (unsigned long)g_keTi_resultsArray.count);
         NSMutableString *finalResult = [NSMutableString string];
         for (NSUInteger i = 0; i < g_keTi_resultsArray.count; i++) {
-            // 从提取结果中找到“课名”作为标题
             NSString *itemText = g_keTi_resultsArray[i];
             NSString *itemTitle = @"未知课体";
             NSRange titleRange = [itemText rangeOfString:@"\n"];
@@ -168,7 +159,8 @@ static void processKeTiWorkQueue() {
             }
             [finalResult appendFormat:@"--- %@ ---\n\n%@\n\n\n", itemTitle, itemText];
         }
-        [UIPasteboard generalPasteboard].string: [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        // FIX: 修正了属性赋值语法，使用 = 而不是 :
+        [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         LogMessage(@"“课体”批量提取完成，所有内容已合并并复制！");
         
         g_isExtracting = NO;
@@ -190,7 +182,7 @@ static void processKeTiWorkQueue() {
 }
 
 // =================================================================
-// 3. UI 和控制逻辑 (已更新为4个按钮)
+// 3. UI 和控制逻辑
 // =================================================================
 
 @interface UIViewController (CombinedExtractor)
@@ -216,7 +208,7 @@ static void processKeTiWorkQueue() {
     UIWindow *keyWindow = self.view.window;
     if (!keyWindow || [keyWindow viewWithTag:889900]) return;
 
-    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 350, 500)]; // 增加高度以容纳4个按钮
+    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 350, 500)];
     panel.tag = 889900;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
@@ -224,13 +216,12 @@ static void processKeTiWorkQueue() {
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"大六壬终极提取器 v3.0";
+    titleLabel.text = @"大六壬终极提取器 v3.1";
     titleLabel.textColor = [UIColor systemIndigoColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
 
-    // --- 创建四个按钮 ---
     CGFloat buttonY = 60;
     CGFloat buttonHeight = 44;
     CGFloat buttonSpacing = 10;
@@ -258,14 +249,13 @@ static void processKeTiWorkQueue() {
         buttonY += buttonHeight + buttonSpacing;
     }
 
-    // --- 日志视图 ---
     g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, buttonY + 10, panel.bounds.size.width - 20, panel.bounds.size.height - buttonY - 20)];
     g_logView.backgroundColor = [UIColor blackColor];
     g_logView.textColor = [UIColor whiteColor];
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"终极提取器 v3.0 (数据模型版) 已就绪。";
+    g_logView.text = @"终极提取器 v3.1 (数据模型版) 已就绪。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -282,19 +272,19 @@ static void processKeTiWorkQueue() {
     BOOL includeXiangJie = NO;
 
     switch (sender.tag) {
-        case 1: // 课体 带详解
+        case 1:
             taskType = @"KeTi";
             includeXiangJie = YES;
             break;
-        case 2: // 课体 无详解
+        case 2:
             taskType = @"KeTi";
             includeXiangJie = NO;
             break;
-        case 3: // 九宗门 带详解
+        case 3:
             taskType = @"JiuZongMen";
             includeXiangJie = YES;
             break;
-        case 4: // 九宗门 无详解
+        case 4:
             taskType = @"JiuZongMen";
             includeXiangJie = NO;
             break;
@@ -314,7 +304,6 @@ static void processKeTiWorkQueue() {
     LogMessage(@"--- 开始任务: %@ (详解: %@) ---", taskType, include ? @"是" : @"否");
 
     if ([taskType isEqualToString:@"KeTi"]) {
-        // --- 批量提取课体 ---
         UIWindow *keyWindow = self.view.window;
         if (!keyWindow) { LogMessage(@"错误: 找不到主窗口。"); g_isExtracting = NO; return; }
         
@@ -350,7 +339,6 @@ static void processKeTiWorkQueue() {
         processKeTiWorkQueue();
 
     } else if ([taskType isEqualToString:@"JiuZongMen"]) {
-        // --- 提取九宗门 ---
         SEL selector = NSSelectorFromString(@"顯示九宗門概覽");
         if ([self respondsToSelector:selector]) {
             LogMessage(@"正在调用方法: 顯示九宗門概覽");
@@ -382,7 +370,6 @@ static void processKeTiWorkQueue() {
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[CombinedExtractor-v3] 终极提取器 v3.0 (数据模型版) 已准备就绪。");
+        NSLog(@"[CombinedExtractor-v3.1] 终极提取器 v3.1 (数据模型版) 已准备就绪。");
     }
 }
-
