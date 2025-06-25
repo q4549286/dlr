@@ -71,12 +71,12 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 // 2. UI微调 Hooks (来自S2, 保持不变)
 // =========================================================================
 %hook UILabel
-(void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
-(void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
+- (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
+- (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
 %end
 
 %hook UIWindow
-(void)layoutSubviews { %orig; if (self.windowLevel != UIWindowLevelNormal) { return; } NSInteger watermarkTag = 998877; if ([self viewWithTag:watermarkTag]) { return; } NSString *watermarkText = @"Echo定制"; UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; CGFloat rotationAngle = -30.0; CGSize tileSize = CGSizeMake(150, 100); UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; watermarkView.tag = watermarkTag; watermarkView.userInteractionEnabled = NO; watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; [self addSubview:watermarkView]; [self sendSubviewToBack:watermarkView]; }
+- (void)layoutSubviews { %orig; if (self.windowLevel != UIWindowLevelNormal) { return; } NSInteger watermarkTag = 998877; if ([self viewWithTag:watermarkTag]) { return; } NSString *watermarkText = @"Echo定制"; UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; CGFloat rotationAngle = -30.0; CGSize tileSize = CGSizeMake(150, 100); UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; watermarkView.tag = watermarkTag; watermarkView.userInteractionEnabled = NO; watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; [self addSubview:watermarkView]; [self sendSubviewToBack:watermarkView]; }
 %end
 
 
@@ -507,7 +507,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
   
-    // 使用 object_getInstanceVariable 来安全地获取 ivar
     Ivar keChuanContainerIvar = class_getInstanceVariable([self class], "課傳");
     if (!keChuanContainerIvar) { LogMessage(@"[S1] 致命错误: 找不到总容器 '課傳' 的ivar。"); g_isExtractingKeChuanDetail = NO; if(completion) completion(); return; }
     id keChuanContainer = object_getIvar(self, keChuanContainerIvar);
@@ -529,11 +528,11 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             if(labels.count >= 2) {
                 UILabel *dizhiLabel = labels[labels.count-2]; UILabel *tianjiangLabel = labels[labels.count-1];
                 if (dizhiLabel.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"contextView": chuanView, @"taskType": @"diZhi"}];
+                    [g_keChuanWorkQueue addObject:[@{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"contextView": chuanView, @"taskType": @"diZhi"} mutableCopy]];
                     [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]];
                 }
                 if (tianjiangLabel.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"contextView": chuanView, @"taskType": @"tianJiang"}];
+                    [g_keChuanWorkQueue addObject:[@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"contextView": chuanView, @"taskType": @"tianJiang"} mutableCopy]];
                     [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]];
                 }
             }
@@ -557,7 +556,7 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             if (ivar) {
                 UILabel *label = (UILabel *)object_getIvar(siKeContainer, ivar);
                 if (label && [label isKindOfClass:[UILabel class]] && label.gestureRecognizers.count > 0) {
-                    [g_keChuanWorkQueue addObject:@{@"gesture": label.gestureRecognizers.firstObject, @"contextView": siKeContainer, @"taskType": taskType}];
+                    [g_keChuanWorkQueue addObject:[@{@"gesture": label.gestureRecognizers.firstObject, @"contextView": siKeContainer, @"taskType": taskType} mutableCopy]];
                     NSString *finalTitle = [NSString stringWithFormat:@"%@ (%@)", fullTitle, label.text];
                     [g_keChuanTitleQueue addObject:finalTitle];
                 }
@@ -574,7 +573,7 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
     if (g_keChuanWorkQueue.count == 0) { LogMessage(@"[S1] 队列为空，未找到任何可提取项。"); g_isExtractingKeChuanDetail = NO; if(completion) completion(); return; }
     
-    // 注入完成回调
+    // 注入完成回调到最后一个任务
     [g_keChuanWorkQueue.lastObject setValue:completion forKey:@"completion"];
     
     LogMessage(@"[S1] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_keChuanWorkQueue.count);
@@ -600,7 +599,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                  g_s1_finalResult = @"[S1 提取失败: 标题和内容数量不匹配]";
             }
             
-            // 如果不是复合提取模式, 则弹窗提示
             if (!g_isPerformingCompositeExtraction) {
                 [UIPasteboard generalPasteboard].string = g_s1_finalResult;
                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
@@ -612,17 +610,17 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         return;
     }
     
-    NSDictionary *task = g_keChuanWorkQueue.firstObject;
+    NSMutableDictionary *task = g_keChuanWorkQueue.firstObject;
     void (^completion)(void) = [task valueForKey:@"completion"];
 
+    [g_keChuanWorkQueue removeObjectAtIndex:0];
+    
     NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
     UIGestureRecognizer *gestureToTrigger = task[@"gesture"];
-    UIView *contextView = task[@"contextView"];
     NSString *taskType = task[@"taskType"];
     
     LogMessage(@"[S1] 正在处理: %@ (类型: %@)", title, taskType);
     
-    // 关键BUG修复点: 修正致命的拼写错误
     SEL actionToPerform = [taskType isEqualToString:@"tianJiang"] ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳摘要WithSender:");
     
     if ([self respondsToSelector:actionToPerform]) {
@@ -630,9 +628,7 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         [self performSelector:actionToPerform withObject:gestureToTrigger];
         #pragma clang diagnostic pop
-        [g_keChuanWorkQueue removeObjectAtIndex:0]; // 成功触发后再移除
         
-        // 检查是否是最后一个任务，如果是则执行回调
         if (g_keChuanWorkQueue.count == 0 && completion) {
              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 completion();
@@ -641,8 +637,7 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     } else {
         LogMessage(@"[S1] 错误！方法 %@ 不存在。", NSStringFromSelector(actionToPerform));
         [g_capturedKeChuanDetailArray addObject:@"[提取失败: 方法不存在]"];
-        [g_keChuanWorkQueue removeObjectAtIndex:0];
-        [self processKeChuanQueue_Truth_S1]; // 继续处理下一个
+        [self processKeChuanQueue_Truth_S1];
     }
 }
 
@@ -652,7 +647,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 // =========================================================================
 %new
 - (NSString *)formatNianmingGejuFromView_S2:(UIView *)contentView {
-    // (代码与S2原始版本相同)
     Class cellClass = NSClassFromString(@"六壬大占.格局單元"); if (!cellClass) return @"";
     NSMutableArray *cells = [NSMutableArray array]; FindSubviewsOfClassRecursive(cellClass, contentView, cells);
     [cells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
@@ -703,7 +697,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (void)extractKePanInfo_S2_WithCompletion:(void (^)(NSString *kePanText))completion {
-    // (代码与S2原始版本几乎相同, 增加了LogMessage)
     #define SafeString(str) (str ?: @"")
     g_extractedData = [NSMutableDictionary dictionary];
     LogMessage(@"[S2-KePan] 提取时间、月将、空亡等基础信息...");
@@ -718,7 +711,7 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     
     LogMessage(@"[S2-KePan] 提取四课信息...");
     NSMutableString *siKe = [NSMutableString string]; Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
-    if(siKeViewClass){ /* ... S2 原始代码 ... */
+    if(siKeViewClass){
         NSMutableArray *siKeViews=[NSMutableArray array]; FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
         if(siKeViews.count > 0){
             UIView *container=siKeViews.firstObject; NSMutableArray *labels=[NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], container, labels);
@@ -740,7 +733,7 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
     LogMessage(@"[S2-KePan] 提取三传信息...");
     NSMutableString *sanChuan = [NSMutableString string]; Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
-    if(sanChuanViewClass){ /* ... S2 原始代码 ... */ 
+    if(sanChuanViewClass){
         NSMutableArray *scViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, scViews); [scViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
         NSArray *titles = @[@"初传:", @"中传:", @"末传:"]; NSMutableArray *lines = [NSMutableArray array];
         for(NSUInteger i = 0; i < scViews.count; i++){
@@ -780,7 +773,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (void)extractNianmingInfo_S2_WithCompletion:(void (^)(NSString *nianmingText))completion {
-    // (代码与S2原始版本相同, 增加了LogMessage)
     g_isExtractingNianming = YES;
     g_capturedZhaiYaoArray = [NSMutableArray array];
     g_capturedGeJuArray = [NSMutableArray array];
@@ -843,7 +835,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (NSString *)extractTextFromFirstViewOfClassName_S2:(NSString *)className separator:(NSString *)separator {
-    // (代码与S2原始版本相同)
     Class targetViewClass = NSClassFromString(className); if (!targetViewClass) { LogMessage(@"[S2] 类名 '%@' 未找到。", className); return @""; }
     NSMutableArray *targetViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(targetViewClass, self.view, targetViews);
     if (targetViews.count == 0) return @"";
@@ -855,14 +846,18 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (NSString *)extractTianDiPanInfo_S2 {
-    // (代码与S2原始版本几乎相同)
     @try {
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類"); if (!plateViewClass) return @"天地盘提取失败: 找不到视图类";
         UIWindow *keyWindow = self.view.window; if (!keyWindow) return @"天地盘提取失败: 找不到keyWindow";
         NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews); if (plateViews.count == 0) return @"天地盘提取失败: 找不到视图实例";
         UIView *plateView = plateViews.firstObject;
         
-        id diGongDict=GetIvarValueSafely(plateView,@"地宮宮名列"), tianShenDict=GetIvarValueSafely(plateView,@"天神宮名列"), tianJiangDict=GetIvarValueSafely(plateView,@"天將宮名列");
+        // --- BUG FIX ---
+        // Correctly declare each variable on its own line to avoid syntax errors.
+        id diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
+        id tianShenDict = GetIvarValueSafely(plateView, @"天神宮名列");
+        id tianJiangDict = GetIvarValueSafely(plateView, @"天將宮名列");
+
         if (!diGongDict || !tianShenDict || !tianJiangDict) return @"天地盘提取失败: 未能获取核心数据字典";
         
         NSArray *diGongLayers=[diGongDict allValues], *tianShenLayers=[tianShenDict allValues], *tianJiangLayers=[tianJiangDict allValues];
