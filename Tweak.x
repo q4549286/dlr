@@ -1,10 +1,11 @@
-// EchoAIO-Combined-Tweak.x
+// EchoAIO-Combined-Tweak-FIXED.x
 // =========================================================================
 //                  EchoAI All-in-One Combined Tweak
 //
 //  - Merged by AI on 2024-XX-XX
 //  - Combines KeChuan Detail Extractor and Advanced Full-Plate Extractor.
 //  - Features a unified control panel and global logging system.
+//  - FIX: Corrected Logos syntax for method hooks (-).
 // =========================================================================
 
 #import <UIKit/UIKit.h>
@@ -55,27 +56,18 @@ static void EchoLog(NSString *format, ...) {
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         NSString *fullMessage = [logPrefix stringByAppendingString:message];
         
-        // Prepend new log message
         NSString *oldText = g_logTextView.text ?: @"";
         g_logTextView.text = [NSString stringWithFormat:@"%@\n%@", fullMessage, oldText];
         
-        // Also print to Xcode/Console log for debugging
         NSLog(@"[EchoAI-Tweak] %@", message);
     });
 }
 
 
 // --- Helper Functions (Combined & Deduplicated) ---
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
-    if (!view || !storage) return;
-    if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
-    for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
-}
-
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) { if (!object || !ivarNameSuffix) return nil; unsigned int ivarCount; Ivar *ivars = class_copyIvarList([object class], &ivarCount); if (!ivars) { free(ivars); return nil; } id value = nil; for (unsigned int i = 0; i < ivarCount; i++) { Ivar ivar = ivars[i]; const char *name = ivar_getName(ivar); if (name) { NSString *ivarName = [NSString stringWithUTF8String:name]; if ([ivarName hasSuffix:ivarNameSuffix]) { value = object_getIvar(object, ivar); break; } } } free(ivars); return value; }
-
 static NSString * GetStringFromLayer(id layer) { if (layer && [layer respondsToSelector:@selector(string)]) { id stringValue = [layer valueForKey:@"string"]; if ([stringValue isKindOfClass:[NSString class]]) return stringValue; if ([stringValue isKindOfClass:[NSAttributedString class]]) return ((NSAttributedString *)stringValue).string; } return @"?"; }
-
 static UIImage * createWatermarkImage(NSString *text, UIFont *font, UIColor *textColor, CGSize tileSize, CGFloat angle) { UIGraphicsBeginImageContextWithOptions(tileSize, NO, 0); CGContextRef context = UIGraphicsGetCurrentContext(); CGContextTranslateCTM(context, tileSize.width / 2, tileSize.height / 2); CGContextRotateCTM(context, angle * M_PI / 180); NSDictionary *attributes = @{NSFontAttributeName: font, NSForegroundColorAttributeName: textColor}; CGSize textSize = [text sizeWithAttributes:attributes]; CGRect textRect = CGRectMake(-textSize.width / 2, -textSize.height / 2, textSize.width, textSize.height); [text drawInRect:textRect withAttributes:attributes]; UIImage *image = UIGraphicsGetImageFromCurrentImageContext(); UIGraphicsEndImageContext(); return image; }
 
 static NSString * const CustomFooterText = @"\n\n"
@@ -86,15 +78,37 @@ static NSString * const CustomFooterText = @"\n\n"
 
 
 // =========================================================================
-// 2. UI 微调 Hooks (来自原脚本，保持不变)
+// 2. UI 微调 Hooks (语法已修复)
 // =========================================================================
 %hook UILabel
-(void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
-(void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
+// CORRECTED: Added leading '-' to declare instance method
+- (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
+
+// CORRECTED: Added leading '-' to declare instance method
+- (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
 %end
 
 %hook UIWindow
-(void)layoutSubviews { %orig; if (self.windowLevel != UIWindowLevelNormal) { return; } NSInteger watermarkTag = 998877; if ([self viewWithTag:watermarkTag]) { return; } NSString *watermarkText = @"Echo定制"; UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; CGFloat rotationAngle = -30.0; CGSize tileSize = CGSizeMake(150, 100); UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; watermarkView.tag = watermarkTag; watermarkView.userInteractionEnabled = NO; watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; [self addSubview:watermarkView]; [self sendSubviewToBack:watermarkView]; }
+// CORRECTED: Added leading '-' to declare instance method
+- (void)layoutSubviews { 
+    %orig; 
+    if (self.windowLevel != UIWindowLevelNormal) { return; } 
+    NSInteger watermarkTag = 998877; 
+    if ([self viewWithTag:watermarkTag]) { return; } 
+    NSString *watermarkText = @"Echo定制"; 
+    UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; 
+    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; 
+    CGFloat rotationAngle = -30.0; 
+    CGSize tileSize = CGSizeMake(150, 100); 
+    UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); 
+    UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; 
+    watermarkView.tag = watermarkTag; 
+    watermarkView.userInteractionEnabled = NO; 
+    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; 
+    watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; 
+    [self addSubview:watermarkView]; 
+    [self sendSubviewToBack:watermarkView]; 
+}
 %end
 
 // =========================================================================
@@ -298,7 +312,6 @@ static NSString * const CustomFooterText = @"\n\n"
         return;
     }
     
-    // Create Panel
     g_mainControlPanel = [[UIView alloc] initWithFrame:CGRectMake(0, 0, keyWindow.bounds.size.width - 20, keyWindow.bounds.size.height - 150)];
     g_mainControlPanel.center = keyWindow.center;
     g_mainControlPanel.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.95];
@@ -307,7 +320,6 @@ static NSString * const CustomFooterText = @"\n\n"
     g_mainControlPanel.layer.borderWidth = 1.0;
     g_mainControlPanel.clipsToBounds = YES;
     
-    // Title
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, g_mainControlPanel.bounds.size.width, 30)];
     titleLabel.text = @"Echo 高级工具";
     titleLabel.textColor = [UIColor whiteColor];
@@ -315,7 +327,6 @@ static NSString * const CustomFooterText = @"\n\n"
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [g_mainControlPanel addSubview:titleLabel];
     
-    // Buttons
     CGFloat buttonWidth = (g_mainControlPanel.bounds.size.width - 40) / 2;
     UIButton *simpleButton = [UIButton buttonWithType:UIButtonTypeSystem];
     simpleButton.frame = CGRectMake(15, 60, buttonWidth, 44);
@@ -348,7 +359,6 @@ static NSString * const CustomFooterText = @"\n\n"
         [g_mainControlPanel addSubview:btn];
     }
     
-    // Log Text View
     g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 175, g_mainControlPanel.bounds.size.width - 20, g_mainControlPanel.bounds.size.height - 185)];
     g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:1.0];
     g_logTextView.textColor = [UIColor colorWithRed:0.2 green:1.0 blue:0.4 alpha:1.0];
@@ -358,7 +368,6 @@ static NSString * const CustomFooterText = @"\n\n"
     g_logTextView.text = @"日志控制台已就绪。\n";
     [g_mainControlPanel addSubview:g_logTextView];
     
-    // Add to window with animation
     g_mainControlPanel.transform = CGAffineTransformMakeScale(1.1, 1.1);
     g_mainControlPanel.alpha = 0;
     [keyWindow addSubview:g_mainControlPanel];
@@ -382,7 +391,7 @@ static NSString * const CustomFooterText = @"\n\n"
     } else {
         EchoLog(@"没有可复制的简单提取结果，或队列数量不匹配。标题: %lu, 内容: %lu", (unsigned long)g_keChuanTitleQueue.count, (unsigned long)g_capturedKeChuanDetailArray.count);
     }
-    [self toggleMainPanel_Echo]; // Close panel
+    [self toggleMainPanel_Echo];
 }
 
 %new
@@ -390,7 +399,7 @@ static NSString * const CustomFooterText = @"\n\n"
     if(g_logTextView) {
         g_logTextView.text = @"日志已清空。\n";
     }
-    [self toggleMainPanel_Echo]; // Close panel
+    [self toggleMainPanel_Echo];
 }
 
 // --- Simple Extraction (KeChuan) Logic ---
@@ -410,7 +419,6 @@ static NSString * const CustomFooterText = @"\n\n"
     if (!keChuanContainer) { EchoLog(@"致命错误: '課傳' 总容器视图为nil。"); g_isExtractingSimple = NO; return; }
     EchoLog(@"成功获取总容器 '課傳': %@", keChuanContainer);
 
-    // Part A: 三传提取
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
     NSMutableArray *sanChuanResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, keChuanContainer, sanChuanResults);
     
@@ -436,7 +444,6 @@ static NSString * const CustomFooterText = @"\n\n"
         }
     }
   
-    // Part B: 四课提取
     Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
     NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, keChuanContainer, siKeResults);
 
@@ -508,7 +515,6 @@ static NSString * const CustomFooterText = @"\n\n"
     if ([taskType isEqualToString:@"tianJiang"]) {
         actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
     } else {
-        // Corrected spelling as per original script's fix
         actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
     }
     
@@ -521,7 +527,7 @@ static NSString * const CustomFooterText = @"\n\n"
     } else {
         EchoLog(@"错误！方法 %@ 不存在。", NSStringFromSelector(actionToPerform));
         [g_capturedKeChuanDetailArray addObject:@"[提取失败: 方法不存在]"];
-        [self processSimpleExtractionQueue_Echo]; // Process next item
+        [self processSimpleExtractionQueue_Echo];
     }
 }
 
@@ -538,7 +544,7 @@ static NSString * const CustomFooterText = @"\n\n"
     UIView *progressView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 200, 120)];
     progressView.center = keyWindow.center; progressView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.75]; progressView.layer.cornerRadius = 10; progressView.tag = 556677;
     UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
-    spinner.color = [UIColor whiteColor]; spinner.center = CGPointMake(100, 45); [spinner startAnimating]; [progressView addSubview:spinner];
+    spinner.center = CGPointMake(100, 45); [spinner startAnimating]; [progressView addSubview:spinner];
     UILabel *progressLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 80, 180, 30)];
     progressLabel.textColor = [UIColor whiteColor]; progressLabel.textAlignment = NSTextAlignmentCenter; progressLabel.font = [UIFont systemFontOfSize:14]; progressLabel.adjustsFontSizeToFitWidth = YES;
     progressLabel.text = @"提取课盘信息..."; [progressView addSubview:progressLabel];
@@ -610,8 +616,8 @@ static NSString * const CustomFooterText = @"\n\n"
     g_complexExtractedData[@"四课"] = siKe;
 
     EchoLog(@"复合提取: 正在解析三传...");
-    NSMutableString *sanChuan = [NSMutableString string]; Class sanChuanViewClass = NSClassFromString(@"六壬大占.三傳視圖"); // Note: Corrected from 傳視圖 to 三傳視圖 for consistency
-    if(!sanChuanViewClass) sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖"); // Fallback
+    NSMutableString *sanChuan = [NSMutableString string]; Class sanChuanViewClass = NSClassFromString(@"六壬大占.三傳視圖");
+    if(!sanChuanViewClass) sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
     if(sanChuanViewClass){
         NSMutableArray *scViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, scViews); [scViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
         NSArray *titles = @[@"初传:", @"中传:", @"末传:"]; NSMutableArray *lines = [NSMutableArray array];
@@ -645,7 +651,7 @@ static NSString * const CustomFooterText = @"\n\n"
             NSString *qiZheng = g_complexExtractedData[@"七政四余"] ? [NSString stringWithFormat:@"七政四余:\n%@\n\n", g_complexExtractedData[@"七政四余"]] : @"";
             NSString *tianDiPan = g_complexExtractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_complexExtractedData[@"天地盘"]] : @"";
             NSString *finalText = [NSString stringWithFormat:@"%@\n\n月将: %@\n空亡: %@\n三宫时: %@\n昼夜: %@\n课体: %@\n九宗门: %@\n\n%@%@\n%@\n\n%@%@%@%@", SafeString(g_complexExtractedData[@"时间块"]), SafeString(g_complexExtractedData[@"月将"]), SafeString(g_complexExtractedData[@"空亡"]), SafeString(g_complexExtractedData[@"三宫时"]), SafeString(g_complexExtractedData[@"昼夜"]), SafeString(g_complexExtractedData[@"课体"]), SafeString(g_complexExtractedData[@"九宗门"]), tianDiPan, SafeString(g_complexExtractedData[@"四课"]), SafeString(g_complexExtractedData[@"三传"]), biFa, geJu, fangFa, qiZheng];
-            g_complexExtractedData = nil; // Clear data for this part
+            g_complexExtractedData = nil;
             if (completion) { completion([finalText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
         });
     });
