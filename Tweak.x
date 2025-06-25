@@ -293,7 +293,7 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
     // --- 标题 ---
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, g_mainControlPanelView.bounds.size.width, 30)];
-    titleLabel.text = @"EchoAI 高级功能";
+    titleLabel.text = @"Echo定制版高级功能";
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -302,13 +302,13 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     // --- 按钮 ---
     UIButton *simpleButton = [UIButton buttonWithType:UIButtonTypeSystem];
     simpleButton.frame = CGRectMake(15, 50, g_mainControlPanelView.bounds.size.width/2 - 22.5, 44);
-    [simpleButton setTitle:@"简单提取" forState:UIControlStateNormal];
+    [simpleButton setTitle:@"Easy mode" forState:UIControlStateNormal];
     [simpleButton addTarget:self action:@selector(executeSimpleExtraction) forControlEvents:UIControlEventTouchUpInside];
     simpleButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.86 alpha:1.0]; // Dodger Blue
     
     UIButton *compositeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     compositeButton.frame = CGRectMake(g_mainControlPanelView.bounds.size.width/2 + 7.5, 50, g_mainControlPanelView.bounds.size.width/2 - 22.5, 44);
-    [compositeButton setTitle:@"复合提取" forState:UIControlStateNormal];
+    [compositeButton setTitle:@"Power！！！" forState:UIControlStateNormal];
     [compositeButton addTarget:self action:@selector(executeCompositeExtraction) forControlEvents:UIControlEventTouchUpInside];
     compositeButton.backgroundColor = [UIColor colorWithRed:0.9 green:0.4 blue:0.13 alpha:1.0]; // Orange
 
@@ -358,36 +358,36 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
 %new
 - (void)executeSimpleExtraction {
-    LogMessage(@"--- 开始执行 [简单提取] ---");
-    [self showProgressHUD:@"正在执行简单提取..."];
+    LogMessage(@"--- 开始执行 [Easy mode] ---");
+    [self showProgressHUD:@"正在执行Easy mode..."];
     [self performSimpleAnalysis_S2_WithCompletion:^(NSString *resultText) {
         [self hideProgressHUD];
         [UIPasteboard generalPasteboard].string = resultText;
-        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"简单提取结果已成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"Easy mode结果已成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
         [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:successAlert animated:YES completion:nil];
-        LogMessage(@"--- [简单提取] 任务全部完成 ---");
+        LogMessage(@"--- [Easy mode] 任务全部完成 ---");
     }];
 }
 
 %new
 - (void)executeCompositeExtraction {
-    LogMessage(@"--- 开始执行 [复合提取] ---");
+    LogMessage(@"--- 开始执行 [Power！！！] ---");
     g_isPerformingCompositeExtraction = YES;
     
     [self showProgressHUD:@"步骤 1/3: 提取课盘信息..."];
     [self extractKePanInfo_S2_WithCompletion:^(NSString *kePanText) {
         g_s2_baseTextCache = kePanText;
-        LogMessage(@"[复合提取] 课盘信息提取完成。");
+        LogMessage(@"[Power！！！] 课盘信息提取完成。");
 
         [self updateProgressHUD:@"步骤 2/3: 提取课传详情..."];
         [self startExtraction_Truth_S1_WithCompletion:^{
-            LogMessage(@"[复合提取] 课传详情提取完成。");
+            LogMessage(@"[Power！！！] 课传详情提取完成。");
 
             [self updateProgressHUD:@"步骤 3/3: 提取年命信息..."];
             [self extractNianmingInfo_S2_WithCompletion:^(NSString *nianmingText) {
                 [self hideProgressHUD];
-                LogMessage(@"[复合提取] 年命信息提取完成。");
+                LogMessage(@"[Power！！！] 年命信息提取完成。");
 
                 NSMutableString *finalResult = [g_s2_baseTextCache mutableCopy];
                 
@@ -417,10 +417,10 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                 
                 [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 
-                UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"复合提取完成" message:@"所有信息已合并，并成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+                UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"Power！！！完成" message:@"所有信息已合并，并成功复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
                 [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:successAlert animated:YES completion:nil];
-                LogMessage(@"--- [复合提取] 任务全部完成 ---");
+                LogMessage(@"--- [Power！！！] 任务全部完成 ---");
 
                 g_isPerformingCompositeExtraction = NO;
                 g_s2_baseTextCache = nil;
