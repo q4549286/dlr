@@ -13,10 +13,12 @@ static void LogMessage(NSString *format, ...);
 // --- S1 (Truth Extractor) 全局变量 ---
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
-// FIX #2: Changed to NSMutableDictionary to match the type of objects being stored.
 static NSMutableArray<NSMutableDictionary *> *g_keChuanWorkQueue = nil;
 static NSMutableArray<NSString *> *g_keChuanTitleQueue = nil;
-static NSString *g_s1_finalResult = nil; // 用于存储S1的最终结果
+static NSString *g_s1_finalResult = nil;
+// FIX: Dedicated completion handler for the S1 process to solve the race condition.
+static void (^g_s1_completion_handler)(void) = nil;
+
 
 // --- S2 (Advanced Analysis) 全局变量 ---
 static NSMutableDictionary *g_extractedData = nil;
@@ -28,7 +30,7 @@ static NSMutableArray *g_capturedGeJuArray = nil;
 // --- 全局UI与状态 ---
 static UIView *g_mainControlPanelView = nil;
 static BOOL g_isPerformingCompositeExtraction = NO;
-static NSString *g_s2_baseTextCache = nil; // 用于在复合提取中缓存S2基础部分的结果
+static NSString *g_s2_baseTextCache = nil;
 
 // --- 自定义文本块 (来自S2) ---
 static NSString * const CustomFooterText = @"\n\n"
@@ -373,51 +375,44 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     LogMessage(@"--- 开始执行 [复合提取] ---");
     g_isPerformingCompositeExtraction = YES;
     
-    // 步骤 1: 执行S2的基础部分 (课盘等)
     [self showProgressHUD:@"步骤 1/3: 提取课盘信息..."];
     [self extractKePanInfo_S2_WithCompletion:^(NSString *kePanText) {
-        g_s2_baseTextCache = kePanText; // 缓存结果
+        g_s2_baseTextCache = kePanText;
         LogMessage(@"[复合提取] 课盘信息提取完成。");
 
-        // 步骤 2: 执行S1的详细提取
         [self updateProgressHUD:@"步骤 2/3: 提取课传详情..."];
         [self startExtraction_Truth_S1_WithCompletion:^{
             LogMessage(@"[复合提取] 课传详情提取完成。");
 
-            // 步骤 3: 执行S2的年命部分
             [self updateProgressHUD:@"步骤 3/3: 提取年命信息..."];
             [self extractNianmingInfo_S2_WithCompletion:^(NSString *nianmingText) {
                 [self hideProgressHUD];
                 LogMessage(@"[复合提取] 年命信息提取完成。");
 
-                // --- 最终合并 ---
                 NSMutableString *finalResult = [g_s2_baseTextCache mutableCopy];
                 
-                // 插入S1的结果
                 NSString *s1ResultString = g_s1_finalResult ?: @"";
                 if (s1ResultString.length > 0) {
+                    NSString *s1Formatted = [NSString stringWithFormat:@"\n\n====================\n【课传详解】\n====================\n\n%@", s1ResultString];
                     NSRange qiZhengRange = [finalResult rangeOfString:@"七政四余:"];
                     if (qiZhengRange.location != NSNotFound) {
-                        // 找到七政四余块的末尾
                         NSRange nextBlockRange = [finalResult rangeOfString:@"\n\n" options:0 range:NSMakeRange(qiZhengRange.location, finalResult.length - qiZhengRange.location)];
                         if (nextBlockRange.location != NSNotFound) {
-                            NSString *s1Formatted = [NSString stringWithFormat:@"\n\n====================\n【课传详解】\n====================\n\n%@", s1ResultString];
                             [finalResult insertString:s1Formatted atIndex:nextBlockRange.location];
+                        } else {
+                            [finalResult appendString:s1Formatted];
                         }
                     } else {
-                        // 如果没有七政四余, 加到末尾
-                        [finalResult appendFormat:@"\n\n====================\n【课传详解】\n====================\n\n%@", s1ResultString];
+                        [finalResult appendString:s1Formatted];
                     }
                 }
                 
-                // 附加S2的年命结果
                 if (nianmingText && nianmingText.length > 0) {
                     NSString *formattedNianming = [nianmingText stringByReplacingOccurrencesOfString:@"【年命格局】" withString:@""];
                     formattedNianming = [formattedNianming stringByReplacingOccurrencesOfString:@"【格局方法】" withString:@"【年命格局】"];
                     [finalResult appendFormat:@"\n\n====================\n【年命分析】\n====================\n\n%@", formattedNianming];
                 }
 
-                // 附加页脚
                 [finalResult appendString:CustomFooterText];
                 
                 [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -427,7 +422,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
                 [self presentViewController:successAlert animated:YES completion:nil];
                 LogMessage(@"--- [复合提取] 任务全部完成 ---");
 
-                // 清理
                 g_isPerformingCompositeExtraction = NO;
                 g_s2_baseTextCache = nil;
                 g_s1_finalResult = nil;
@@ -449,7 +443,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     progressView.layer.cornerRadius = 10;
     progressView.tag = progressViewTag;
     
-    // FIX #1: Use modern API for activity indicator style.
     UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     spinner.color = [UIColor whiteColor];
     spinner.center = CGPointMake(110, 50);
@@ -506,14 +499,15 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
     
     LogMessage(@"[S1] 开始提取任务...");
     g_isExtractingKeChuanDetail = YES;
+    g_s1_completion_handler = completion; // Store completion block globally.
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
   
     Ivar keChuanContainerIvar = class_getInstanceVariable([self class], "課傳");
-    if (!keChuanContainerIvar) { LogMessage(@"[S1] 致命错误: 找不到总容器 '課傳' 的ivar。"); g_isExtractingKeChuanDetail = NO; if(completion) completion(); return; }
+    if (!keChuanContainerIvar) { LogMessage(@"[S1] 致命错误: 找不到总容器 '課傳' 的ivar。"); g_isExtractingKeChuanDetail = NO; if(g_s1_completion_handler) g_s1_completion_handler(); g_s1_completion_handler = nil; return; }
     id keChuanContainer = object_getIvar(self, keChuanContainerIvar);
-    if (!keChuanContainer || ![keChuanContainer isKindOfClass:[UIView class]]) { LogMessage(@"[S1] 致命错误: '課傳' 总容器视图为nil或类型错误。"); g_isExtractingKeChuanDetail = NO; if(completion) completion(); return; }
+    if (!keChuanContainer || ![keChuanContainer isKindOfClass:[UIView class]]) { LogMessage(@"[S1] 致命错误: '課傳' 总容器视图为nil或类型错误。"); g_isExtractingKeChuanDetail = NO; if(g_s1_completion_handler) g_s1_completion_handler(); g_s1_completion_handler = nil; return; }
     LogMessage(@"[S1] 成功获取总容器 '課傳': %@", keChuanContainer);
 
     // Part A: 三传提取
@@ -574,10 +568,13 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         }
     }
 
-    if (g_keChuanWorkQueue.count == 0) { LogMessage(@"[S1] 队列为空，未找到任何可提取项。"); g_isExtractingKeChuanDetail = NO; if(completion) completion(); return; }
-    
-    // 注入完成回调到最后一个任务
-    [g_keChuanWorkQueue.lastObject setValue:completion forKey:@"completion"];
+    if (g_keChuanWorkQueue.count == 0) {
+        LogMessage(@"[S1] 队列为空，未找到任何可提取项。");
+        g_isExtractingKeChuanDetail = NO;
+        if(g_s1_completion_handler) g_s1_completion_handler();
+        g_s1_completion_handler = nil;
+        return;
+    }
     
     LogMessage(@"[S1] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_keChuanWorkQueue.count);
     [self processKeChuanQueue_Truth_S1];
@@ -589,7 +586,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         if (g_isExtractingKeChuanDetail) {
             LogMessage(@"[S1] 全部任务处理完毕！");
             
-            // 格式化S1的最终结果
             NSMutableString *resultStr = [NSMutableString string];
             if (g_capturedKeChuanDetailArray && g_keChuanTitleQueue && g_capturedKeChuanDetailArray.count == g_keChuanTitleQueue.count) {
                 for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
@@ -601,21 +597,18 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             } else {
                  g_s1_finalResult = @"[S1 提取失败: 标题和内容数量不匹配]";
             }
-            
-            if (!g_isPerformingCompositeExtraction) {
-                [UIPasteboard generalPasteboard].string = g_s1_finalResult;
-                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"所有详情已提取并复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
-                [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-                [self presentViewController:alert animated:YES completion:nil];
-            }
         }
-        g_isExtractingKeChuanDetail = NO; 
+        g_isExtractingKeChuanDetail = NO;
+        
+        // FIX: Call and clear the global completion handler here, ensuring S1 is truly finished.
+        if (g_s1_completion_handler) {
+            g_s1_completion_handler();
+            g_s1_completion_handler = nil;
+        }
         return;
     }
     
     NSMutableDictionary *task = g_keChuanWorkQueue.firstObject;
-    void (^completion)(void) = [task valueForKey:@"completion"];
-
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     
     NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
@@ -631,12 +624,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         [self performSelector:actionToPerform withObject:gestureToTrigger];
         #pragma clang diagnostic pop
-        
-        if (g_keChuanWorkQueue.count == 0 && completion) {
-             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                completion();
-             });
-        }
     } else {
         LogMessage(@"[S1] 错误！方法 %@ 不存在。", NSStringFromSelector(actionToPerform));
         [g_capturedKeChuanDetailArray addObject:@"[提取失败: 方法不存在]"];
@@ -865,7 +852,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         if (diGongLayers.count!=12||tianShenLayers.count!=12||tianJiangLayers.count!=12) return @"天地盘提取失败: 数据长度不匹配";
         
         NSMutableArray *allLayerInfos = [NSMutableArray array];
-        // FIX #3: Reverted coordinate conversion logic to the original, correct syntax.
         CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
         void (^processLayers)(NSArray *, NSString *) = ^(NSArray *layers, NSString *type) {
             for (id layer in layers) {
@@ -889,7 +875,6 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             NSMutableArray *group = palaceGroups[groupAngle];
             if (group.count < 3) continue;
             [group sortUsingComparator:^NSComparisonResult(id o1, id o2) { return [o2[@"radius"] compare:o1[@"radius"]]; }];
-            // The order of text extraction depends on radius sorting; typically outer->inner is diPan->tianPan->tianJiang
             NSString *diPanText = @"?";
             NSString *tianPanText = @"?";
             NSString *tianJiangText = @"?";
