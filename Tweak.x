@@ -17,13 +17,12 @@ static void LogToScreen(NSString *format, ...) {
     va_start(args, format);
     NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
     va_end(args);
-    NSLog(@"[DetectorV13] %@", message);
+    NSLog(@"[DetectorV13.1] %@", message);
     if (g_logStorageString) {
         [g_logStorageString appendFormat:@"%@\n", message];
     }
 }
 
-// 新增：递归搜索手势的函数
 static void FindGestureRecognizersRecursive(UIView *view, NSMutableArray *storage) {
     if (!view) return;
     if (view.gestureRecognizers.count > 0) {
@@ -40,9 +39,9 @@ static void FindGestureRecognizersRecursive(UIView *view, NSMutableArray *storag
 // 界面与观察核心
 // =========================================================================
 @interface UIViewController (OnDeviceLogger)
-- (void)toggleLoggerPanel_V13;
-- (void)armAndHideLogger_V13;
-- (void)copyLogsAndClose_V13;
+- (void)toggleLoggerPanel_V13_1;
+- (void)armAndHideLogger_V13_1;
+- (void)copyLogsAndClose_V13_1;
 @end
 
 %hook UIViewController
@@ -53,7 +52,7 @@ static void FindGestureRecognizersRecursive(UIView *view, NSMutableArray *storag
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
-            NSInteger buttonTag = 130013;
+            NSInteger buttonTag = 131131;
             if ([keyWindow viewWithTag:buttonTag]) { [[keyWindow viewWithTag:buttonTag] removeFromSuperview]; }
             
             UIButton *loggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -64,34 +63,39 @@ static void FindGestureRecognizersRecursive(UIView *view, NSMutableArray *storag
             loggerButton.backgroundColor = [UIColor systemIndigoColor];
             [loggerButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             loggerButton.layer.cornerRadius = 8;
-            [loggerButton addTarget:self action:@selector(toggleLoggerPanel_V13) forControlEvents:UIControlEventTouchUpInside];
+            [loggerButton addTarget:self action:@selector(toggleLoggerPanel_V13_1) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:loggerButton];
         });
     }
 }
 
 %new
-- (void)toggleLoggerPanel_V13 {
+- (void)toggleLoggerPanel_V13_1 {
     if (g_loggerPanel && g_loggerPanel.superview) {
         [g_loggerPanel removeFromSuperview];
         g_loggerPanel = nil; g_logTextView = nil; g_logStorageString = nil; g_isLoggerArmed = NO;
         return;
     }
     UIWindow *keyWindow = self.view.window;
-    g_loggerPanel = [[UIView alloc] initWithFrame:CGRectMake(10, 100, keyWindow.bounds.size.width - 20, keyWindow.bounds.size.height - 200)];
+    
+    // 【【【【 UI修改：窗口变小 】】】】
+    CGFloat panelWidth = keyWindow.bounds.size.width - 20;
+    CGFloat panelHeight = 350; // 大大减小高度
+    g_loggerPanel = [[UIView alloc] initWithFrame:CGRectMake(10, 100, panelWidth, panelHeight)];
     g_loggerPanel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.95];
     g_loggerPanel.layer.cornerRadius = 12; g_loggerPanel.clipsToBounds = YES;
     
+    // 【【【【 UI修改：调整内部布局 】】】】
     UIButton *armButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    armButton.frame = CGRectMake(10, 10, g_loggerPanel.bounds.size.width - 20, 40);
+    armButton.frame = CGRectMake(10, 10, panelWidth - 20, 40);
     [armButton setTitle:@"准备侦测 (点击后隐藏)" forState:UIControlStateNormal];
-    [armButton addTarget:self action:@selector(armAndHideLogger_V13) forControlEvents:UIControlEventTouchUpInside];
+    [armButton addTarget:self action:@selector(armAndHideLogger_V13_1) forControlEvents:UIControlEventTouchUpInside];
     armButton.backgroundColor = [UIColor systemGreenColor];
     [armButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     armButton.layer.cornerRadius = 8;
     [g_loggerPanel addSubview:armButton];
     
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 60, g_loggerPanel.bounds.size.width - 20, g_loggerPanel.bounds.size.height - 120)];
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 60, panelWidth - 20, panelHeight - 120)];
     g_logTextView.backgroundColor = [UIColor blackColor];
     g_logTextView.textColor = [UIColor greenColor];
     g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12];
@@ -100,9 +104,9 @@ static void FindGestureRecognizersRecursive(UIView *view, NSMutableArray *storag
     [g_loggerPanel addSubview:g_logTextView];
     
     UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    copyButton.frame = CGRectMake(10, g_loggerPanel.bounds.size.height - 50, g_loggerPanel.bounds.size.width - 20, 40);
+    copyButton.frame = CGRectMake(10, panelHeight - 50, panelWidth - 20, 40);
     [copyButton setTitle:@"复制日志并关闭" forState:UIControlStateNormal];
-    [copyButton addTarget:self action:@selector(copyLogsAndClose_V13) forControlEvents:UIControlEventTouchUpInside];
+    [copyButton addTarget:self action:@selector(copyLogsAndClose_V13_1) forControlEvents:UIControlEventTouchUpInside];
     copyButton.backgroundColor = [UIColor systemOrangeColor];
     [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     copyButton.layer.cornerRadius = 8;
@@ -112,7 +116,7 @@ static void FindGestureRecognizersRecursive(UIView *view, NSMutableArray *storag
 }
 
 %new
-- (void)armAndHideLogger_V13 {
+- (void)armAndHideLogger_V13_1 {
     g_isLoggerArmed = YES;
     g_logStorageString = [NSMutableString string];
     if (g_loggerPanel) {
@@ -121,15 +125,15 @@ static void FindGestureRecognizersRecursive(UIView *view, NSMutableArray *storag
 }
 
 %new
-- (void)copyLogsAndClose_V13 {
+- (void)copyLogsAndClose_V13_1 {
     if (g_logTextView.text.length > 0) {
         [UIPasteboard generalPasteboard].string = g_logTextView.text;
     }
-    [self toggleLoggerPanel_V13];
+    [self toggleLoggerPanel_V13_1];
 }
 
 // =========================================================================
-// 核心侦测逻辑
+// 核心侦测逻辑 (与V13完全相同)
 // =========================================================================
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
@@ -141,7 +145,7 @@ static void FindGestureRecognizersRecursive(UIView *view, NSMutableArray *storag
             g_isLoggerArmed = NO;
 
             LogToScreen(@"==================================================");
-            LogToScreen(@"=========== 极简侦测(V13)已触发！ ===========");
+            LogToScreen(@"=========== 极简侦测(V13.1)已触发！ ===========");
             
             UICollectionViewCell *cell = [collectionView cellForItemAtIndexPath:indexPath];
             if (cell) {
@@ -149,7 +153,7 @@ static void FindGestureRecognizersRecursive(UIView *view, NSMutableArray *storag
                 LogToScreen(@"\n--- 正在递归搜索此单元格内部的所有手势 ---");
                 
                 NSMutableArray *foundGestures = [NSMutableArray array];
-                FindGestureRecognizersRecursive(cell, foundGestures); // 从cell本身开始搜索
+                FindGestureRecognizersRecursive(cell, foundGestures);
                 
                 if (foundGestures.count == 0) {
                     LogToScreen(@"【重大发现】: 单元格内部没有任何直接的手势！");
@@ -162,7 +166,6 @@ static void FindGestureRecognizersRecursive(UIView *view, NSMutableArray *storag
                         LogToScreen(@"手势类型: %@", [gesture class]);
                         LogToScreen(@"附加到的视图: %@", targetView);
                         
-                        // 使用更安全的方式获取Target和Action
                         @try {
                             Ivar targetsIvar = class_getInstanceVariable([UIGestureRecognizer class], "_targets");
                             if (targetsIvar) {
