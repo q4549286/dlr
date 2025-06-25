@@ -1,5 +1,5 @@
-// Filename: CombinedExtractor_v4.3_CompileFix
-// 描述: 修复了v4.2中的编译错误。将复杂的三元运算符改写为if-else，以提高兼容性。
+// Filename: CombinedExtractor_v5.0_SplitView
+// 描述: 最终解决方案！根据截图发现的“UIStackView + UITableView”并列结构，进行分区提取。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -36,7 +36,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[CombinedExtractor-v4.3] %@", message);
+        NSLog(@"[CombinedExtractor-v5.0] %@", message);
     });
 }
 
@@ -46,57 +46,31 @@ static void LogMessage(NSString *format, ...) {
 
 static void processKeTiWorkQueue(void);
 
-// ================== 两阶段智能提取函数 (已修复) ==================
-static NSString* extractDataFromStackView(UIView *rootView, BOOL includeXiangJie) {
+// ================== 分区提取函数 (最终版) ==================
+static NSString* extractDataFromSplitView(UIView *rootView, BOOL includeXiangJie) {
     if (!rootView) return @"[错误: 根视图为空]";
+    
+    NSMutableString *finalResult = [NSMutableString string];
 
+    // --- Part 1: 从 UIStackView 提取上半部分内容 ---
     NSMutableArray *stackViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
-    if (stackViews.count == 0) return @"[错误: 未在视图中找到UIStackView]";
-
-    UIStackView *mainStackView = stackViews.firstObject;
-    NSArray *arrangedSubviews = mainStackView.arrangedSubviews;
-    if (arrangedSubviews.count == 0) return @"[错误: UIStackView中没有内容]";
     
-    NSMutableArray<NSString *> *preXiangJieBlocks = [NSMutableArray array];
-    NSMutableArray<UILabel *> *xiangJieLabels = [NSMutableArray array];
-    
-    NSMutableString *currentContent = [NSMutableString string];
-    NSString *currentTitle = nil;
-    BOOL parsingXiangJie = NO;
+    if (stackViews.count > 0) {
+        UIStackView *mainStackView = stackViews.firstObject;
+        NSMutableString *currentContent = [NSMutableString string];
+        NSString *currentTitle = nil;
+        
+        for (UIView *subview in mainStackView.arrangedSubviews) {
+            if (![subview isKindOfClass:[UILabel class]]) continue;
+            UILabel *label = (UILabel *)subview;
+            if (!label.text || label.text.length == 0) continue;
 
-    for (UIView *subview in arrangedSubviews) {
-        if (![subview isKindOfClass:[UILabel class]]) continue;
-        
-        UILabel *label = (UILabel *)subview;
-        if (!label.text || label.text.length == 0) continue;
-        
-        if ([label.text isEqualToString:@"详解"]) {
-            parsingXiangJie = YES;
-            if (currentTitle) {
-                NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                if (trimmedContent.length > 0) {
-                    [preXiangJieBlocks addObject:[NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent]];
-                } else {
-                    [preXiangJieBlocks addObject:currentTitle];
-                }
-                currentTitle = nil;
-                [currentContent setString:@""];
-            }
-            continue;
-        }
-        
-        if (!parsingXiangJie) {
             BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0;
             if (isTitle) {
                 if (currentTitle) {
                     NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    // --- FIX: 将三元运算符改为 if-else ---
-                    if (trimmedContent.length > 0) {
-                        [preXiangJieBlocks addObject:[NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent]];
-                    } else {
-                        [preXiangJieBlocks addObject:currentTitle];
-                    }
+                    [finalResult appendFormat:@"%@\n%@\n\n", currentTitle, trimmedContent];
                 }
                 currentTitle = label.text;
                 [currentContent setString:@""];
@@ -104,34 +78,41 @@ static NSString* extractDataFromStackView(UIView *rootView, BOOL includeXiangJie
                 if (currentContent.length > 0) [currentContent appendString:@" "];
                 [currentContent appendString:label.text];
             }
-        } else {
-            [xiangJieLabels addObject:label];
+        }
+        // 处理最后一个块
+        if (currentTitle) {
+            NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            [finalResult appendFormat:@"%@\n%@\n\n", currentTitle, trimmedContent];
         }
     }
-    
-    if (currentTitle) {
-        NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        // --- FIX: 将三元运算符改为 if-else ---
-        if (trimmedContent.length > 0) {
-            [preXiangJieBlocks addObject:[NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent]];
-        } else {
-            [preXiangJieBlocks addObject:currentTitle];
-        }
-    }
-    
-    NSMutableString *finalResult = [NSMutableString stringWithString:[preXiangJieBlocks componentsJoinedByString:@"\n\n"]];
-    
-    if (includeXiangJie && xiangJieLabels.count > 0) {
-        [finalResult appendString:@"\n\n--- 详解 ---\n\n"];
-        
-        for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) {
-            UILabel *titleLabel = xiangJieLabels[i];
+
+    // --- Part 2: 从 IntrinsicTableView 提取“详解”内容 ---
+    if (includeXiangJie) {
+        Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
+        if (tableViewClass) {
+            NSMutableArray *tableViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive(tableViewClass, rootView, tableViews);
             
-            if (i + 1 < xiangJieLabels.count) {
-                UILabel *contentLabel = xiangJieLabels[i+1];
-                [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, contentLabel.text];
-            } else {
-                [finalResult appendFormat:@"%@→\n\n", titleLabel.text];
+            if (tableViews.count > 0) {
+                UIView *xiangJieTable = tableViews.firstObject;
+                
+                NSMutableArray *xiangJieLabels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], xiangJieTable, xiangJieLabels);
+                
+                if (xiangJieLabels.count > 0) {
+                    [finalResult appendString:@"--- 详解 ---\n\n"];
+                    
+                    // 两两配对
+                    for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) {
+                        UILabel *titleLabel = xiangJieLabels[i];
+                        if (i + 1 < xiangJieLabels.count) {
+                            UILabel *contentLabel = xiangJieLabels[i+1];
+                            [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, contentLabel.text];
+                        } else {
+                            [finalResult appendFormat:@"%@→\n\n", titleLabel.text];
+                        }
+                    }
+                }
             }
         }
     }
@@ -151,7 +132,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         void (^extractionCompletion)(void) = ^{
             if (completion) { completion(); }
             
-            NSString *extractedText = extractDataFromStackView(vcToPresent.view, g_shouldIncludeXiangJie);
+            NSString *extractedText = extractDataFromSplitView(vcToPresent.view, g_shouldIncludeXiangJie);
             
             if ([g_currentTaskType isEqualToString:@"KeTi"]) {
                 [g_keTi_resultsArray addObject:extractedText];
@@ -245,12 +226,12 @@ static void processKeTiWorkQueue() {
     panel.tag = 889900;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemOrangeColor].CGColor;
+    panel.layer.borderColor = [UIColor systemBlueColor].CGColor;
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"大六壬终极提取器 v4.3";
-    titleLabel.textColor = [UIColor systemOrangeColor];
+    titleLabel.text = @"大六壬终极提取器 v5.0";
+    titleLabel.textColor = [UIColor systemBlueColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
@@ -288,7 +269,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"终极提取器 v4.3 (编译修复版) 已就绪。";
+    g_logView.text = @"终极提取器 v5.0 (分区提取版) 已就绪。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -393,6 +374,6 @@ static void processKeTiWorkQueue() {
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[CombinedExtractor-v4.3] 终极提取器 v4.3 (编译修复版) 已准备就绪。");
+        NSLog(@"[CombinedExtractor-v5.0] 终极提取器 v5.0 (分区提取版) 已准备就绪。");
     }
 }
