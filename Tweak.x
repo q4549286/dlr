@@ -272,7 +272,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             [g_keChuanWorkQueue addObject:@{
                 @"taskType": @"keTi",
                 @"collectionView": keTiCollectionView,
-                @"indexPath": path
+                @"indexPath": path,
+                @"contextView": keTiCollectionView
             }];
             [g_keChuanTitleQueue addObject:[NSString stringWithFormat:@"课体 - %@", title]];
             LogMessage(@"【课体】已添加任务: %@ (路径: %@)", title, path);
@@ -303,7 +304,15 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     
     NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
     NSString *taskType = task[@"taskType"];
+    UIView *contextView = task[@"contextView"];
+    
     LogMessage(@"正在处理: %@ (类型: %@)", title, taskType);
+    
+    Ivar keChuanIvar = class_getInstanceVariable([self class], "課傳");
+    if (keChuanIvar && contextView) {
+        object_setIvar(self, keChuanIvar, contextView);
+        LogMessage(@"第0步: 成功设置 '課傳' ivar -> %@", contextView);
+    }
 
     if ([taskType isEqualToString:@"keTi"]) {
         UICollectionView *collectionView = task[@"collectionView"];
@@ -311,7 +320,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         id delegate = collectionView.delegate;
         SEL selector = @selector(collectionView:didSelectItemAtIndexPath:);
         
-        LogMessage(@"第0+1步: 调用代理方法 %@", NSStringFromSelector(selector));
+        LogMessage(@"第1步: 调用代理方法 %@", NSStringFromSelector(selector));
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         [delegate performSelector:selector withObject:collectionView withObject:indexPath];
@@ -319,14 +328,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
     } else {
         UIGestureRecognizer *gestureToTrigger = task[@"gesture"];
-        UIView *contextView = task[@"contextView"];
-        
-        Ivar keChuanIvar = class_getInstanceVariable([self class], "課傳");
-        if (keChuanIvar) {
-            object_setIvar(self, keChuanIvar, contextView);
-            LogMessage(@"第0步: 成功设置 '課傳' ivar -> %@", contextView);
-        }
-        
         SEL actionToPerform = nil;
         if ([taskType isEqualToString:@"tianJiang"]) {
             actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
