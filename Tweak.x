@@ -4,7 +4,7 @@
 // =========================================================================
 // 1. 宏定义、全局变量与辅助函数
 // =========================================================================
-#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V13-Compact] " format), ##VA_ARGS)
+#define EchoLog(format, ...) NSLog((@"[EchoAI-Combined-V13-Compact] " format), ##__VA_ARGS__)
 // --- 全局状态变量 ---
 static NSInteger const CombinedButtonTag = 112244;
 static NSInteger const ProgressViewTag = 556677;
@@ -172,7 +172,7 @@ static UIImage *createWatermarkImage(NSString *text, UIFont *font, UIColor *text
         FindSubviewsOfClassRecursive([UILabel class], cell, labelsInCell);
         if (labelsInCell.count > 0) {
             // 第一个label是标题
-            UILabel *titleLabel = labelsInCell[0];
+            U UILabel *titleLabel = labelsInCell[0];
             NSString *title = [[titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
             
             // 后续所有label都是内容
