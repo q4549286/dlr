@@ -1,4 +1,4 @@
-// Filename: EchoUltimateMonitorExtractor.x
+// Filename: EchoUltimateDetectorExtractor.x
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -7,7 +7,6 @@
 // 1. 全局变量与UI元素
 // =========================================================================
 
-static BOOL g_isGestureMonitoring = NO;
 static BOOL g_isDetailExtracting = NO;
 
 static UIView *g_panelView = nil;
@@ -30,11 +29,9 @@ static void PanelLog(NSString *format, ...) {
     dispatch_async(dispatch_get_main_queue(), ^{
         NSString *timestamp = [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterNoStyle timeStyle:NSDateFormatterMediumStyle];
         NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text];
-        if (newText.length > 3000) { // 防止日志过长
-            newText = [newText substringToIndex:3000];
-        }
+        if (newText.length > 3000) { newText = [newText substringToIndex:3000]; }
         g_logView.text = newText;
-        NSLog(@"[EchoUltimate] %@", message);
+        NSLog(@"[EchoDetector] %@", message);
     });
 }
 
@@ -50,7 +47,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 // =========================================================================
 @interface UIViewController (EchoUltimate)
 - (void)setupUltimatePanel;
-- (void)toggleGestureMonitoring:(UIButton *)sender;
+- (void)detectGestureActions; // 新的探测方法
 - (void)startExtractionWithProvidedAction;
 - (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer;
 - (void)dismissKeyboard;
@@ -58,30 +55,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 
 // =========================================================================
-// 4. Logos Hooks
+// 4. Logos Hooks (现在只有一个Hook了)
 // =========================================================================
-
-%hook UIGestureRecognizer
-// 手势监控的Hook
-- (void)addTarget:(id)target action:(SEL)action {
-    %orig;
-    if (g_isGestureMonitoring && self.view) {
-        NSString *logMessage = [NSString stringWithFormat:@"View: %@\nTarget: %@\nAction: %@",
-                                  NSStringFromClass([self.view class]),
-                                  NSStringFromClass([target class]),
-                                  NSStringFromSelector(action)];
-        PanelLog(@"--- GESTURE DETECTED ---\n%@\n-------------------------", logMessage);
-        
-        // 自动将找到的函数名填入输入框
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (g_actionTextField) {
-                g_actionTextField.text = NSStringFromSelector(action);
-                 PanelLog(@"已将函数名 '%@' 自动填入输入框。", NSStringFromSelector(action));
-            }
-        });
-    }
-}
-%end
 
 %hook UIViewController
 
@@ -96,9 +71,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 if (completion) completion();
                 NSMutableArray<UILabel *> *labels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], vc.view, labels);
-                [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                    return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
-                }];
+                [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
                 NSMutableArray<NSString *> *textParts = [NSMutableArray array];
                 for (UILabel *label in labels) {
                     if (label.text.length > 0) {
@@ -147,7 +120,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     g_panelView.tag = 998877;
     g_panelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
     g_panelView.layer.cornerRadius = 12;
-    g_panelView.layer.borderColor = [UIColor yellowColor].CGColor;
+    g_panelView.layer.borderColor = [UIColor systemOrangeColor].CGColor;
     g_panelView.layer.borderWidth = 1.0;
     g_panelView.clipsToBounds = YES;
 
@@ -160,27 +133,27 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     CGFloat yPos = 10.0;
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, yPos, 300, 20)];
-    titleLabel.text = @"终极监控提取器";
-    titleLabel.textColor = [UIColor yellowColor];
+    titleLabel.text = @"运行时探测提取器 v2";
+    titleLabel.textColor = [UIColor systemOrangeColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [g_panelView addSubview:titleLabel];
     yPos += 30;
 
-    // 监控按钮
-    UIButton *monitorButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    monitorButton.frame = CGRectMake(15, yPos, 270, 35);
-    [monitorButton setTitle:@"1. 开始监控手势" forState:UIControlStateNormal];
-    [monitorButton addTarget:self action:@selector(toggleGestureMonitoring:) forControlEvents:UIControlEventTouchUpInside];
-    monitorButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.4 blue:0.8 alpha:1.0];
-    [monitorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    monitorButton.layer.cornerRadius = 5;
-    [g_panelView addSubview:monitorButton];
+    // 探测按钮
+    UIButton *detectButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    detectButton.frame = CGRectMake(15, yPos, 270, 35);
+    [detectButton setTitle:@"1. 探测'课体'手势" forState:UIControlStateNormal];
+    [detectButton addTarget:self action:@selector(detectGestureActions) forControlEvents:UIControlEventTouchUpInside];
+    detectButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.4 blue:0.8 alpha:1.0];
+    [detectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    detectButton.layer.cornerRadius = 5;
+    [g_panelView addSubview:detectButton];
     yPos += 45;
 
     // 函数名输入框
     g_actionTextField = [[UITextField alloc] initWithFrame:CGRectMake(15, yPos, 270, 35)];
-    g_actionTextField.placeholder = @"监控到的函数名将显示在此";
+    g_actionTextField.placeholder = @"探测到的函数名将显示在此";
     g_actionTextField.borderStyle = UITextBorderStyleRoundedRect;
     g_actionTextField.font = [UIFont systemFontOfSize:14];
     g_actionTextField.autocorrectionType = UITextAutocorrectionTypeNo;
@@ -206,7 +179,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     g_logView.textColor = [UIColor greenColor];
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
-    g_logView.text = @"请按步骤操作：\n1. 点击'开始监控'。\n2. 点击App界面上的'课体'。\n3. 函数名会自动填入上方。\n4. 点击'用此函数名提取'。";
+    g_logView.text = @"请按步骤操作：\n1. 点击'探测手势'。\n2. 函数名会自动填入上方。\n3. 点击'用此函数名提取'。";
     g_logView.layer.cornerRadius = 5;
     [g_panelView addSubview:g_logView];
 
@@ -214,21 +187,67 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)toggleGestureMonitoring:(UIButton *)sender {
-    g_isGestureMonitoring = !g_isGestureMonitoring;
-    if (g_isGestureMonitoring) {
-        [sender setTitle:@"监控中... (再次点击停止)" forState:UIControlStateNormal];
-        sender.backgroundColor = [UIColor redColor];
-        PanelLog(@"手势监控已开始，请点击目标UI元素...");
-    } else {
-        [sender setTitle:@"1. 开始监控手势" forState:UIControlStateNormal];
-        sender.backgroundColor = [UIColor colorWithRed:0.1 green:0.4 blue:0.8 alpha:1.0];
-        PanelLog(@"手势监控已停止。");
+- (void)detectGestureActions {
+    [self dismissKeyboard];
+    PanelLog(@"开始探测'课体'视图上的手势...");
+
+    // 1. 找到目标视图
+    Class keTiViewClass = NSClassFromString(@"六壬大占.課體視圖");
+    if (!keTiViewClass) {
+        PanelLog(@"错误: 找不到 '六壬大占.課體視圖' 类。");
+        return;
+    }
+    NSMutableArray *targetViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(keTiViewClass, self.view, targetViews);
+    if (targetViews.count == 0) {
+        PanelLog(@"错误: 未找到课体视图实例。");
+        return;
+    }
+    UIView *keTiView = targetViews.firstObject;
+    PanelLog(@"成功找到'课体'视图: %@", keTiView);
+
+    // 2. 检查手势
+    if (keTiView.gestureRecognizers.count == 0) {
+        PanelLog(@"错误: '课体'视图上没有任何手势识别器。");
+        return;
+    }
+
+    // 3. 使用运行时深入分析手势
+    // UIGestureRecognizer 内部有一个 _targets 数组，存储了所有目标和动作信息。
+    // 我们可以通过 KVC (Key-Value Coding) 来访问这个私有属性。
+    BOOL foundAction = NO;
+    for (UIGestureRecognizer *gesture in keTiView.gestureRecognizers) {
+        PanelLog(@"分析手势: %@", gesture);
+        // 使用 KVC 访问私有属性 _targets
+        // 这是一个包含 UIGestureRecognizerTarget 对象的数组
+        NSArray *targets = [gesture valueForKey:@"targets"];
+        if (targets && targets.count > 0) {
+            // 遍历所有目标
+            for (id gestureTarget in targets) {
+                // UIGestureRecognizerTarget 对象有两个关键属性：_target 和 _action
+                id target = [gestureTarget valueForKey:@"target"];
+                SEL action = (SEL)[gestureTarget valueForKey:@"action"];
+                
+                NSString *actionString = NSStringFromSelector(action);
+                PanelLog(@"--- GESTURE DETECTED ---\nTarget: %@\nAction: %@\n-------------------------", [target class], actionString);
+
+                if (actionString && !foundAction) {
+                    g_actionTextField.text = actionString;
+                    PanelLog(@"已将第一个找到的函数名 '%@' 自动填入输入框。", actionString);
+                    foundAction = YES; // 只自动填写第一个找到的
+                }
+            }
+        }
+    }
+    
+    if (!foundAction) {
+        PanelLog(@"探测完成，但未能从手势中解析出任何动作(action)。这可能是一个非常特殊的手势实现。");
     }
 }
 
 %new
 - (void)startExtractionWithProvidedAction {
+    // 这个函数的实现和上一个版本完全一样，无需改动
     [self dismissKeyboard];
     NSString *actionName = g_actionTextField.text;
     if (!actionName || actionName.length == 0) {
@@ -243,7 +262,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
     PanelLog(@"准备使用函数 '%@' 进行提取...", actionName);
 
-    // 找到课体视图
     Class keTiViewClass = NSClassFromString(@"六壬大占.課體視圖");
     if (!keTiViewClass) {
         PanelLog(@"错误: 找不到 '六壬大占.課體視圖' 类。");
@@ -256,7 +274,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         return;
     }
     UIView *keTiView = targetViews.firstObject;
-
     UIGestureRecognizer *gestureToTrigger = keTiView.gestureRecognizers.firstObject;
     if (!gestureToTrigger) {
         PanelLog(@"错误: 课体视图上没有找到手势。");
