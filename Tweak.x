@@ -1,4 +1,4 @@
-// Filename: UltimateDelegateMonitor_v11.1_Fixed.x
+// Filename: UltimateDelegateMonitor_v11.2_FinalFixed.x
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -18,7 +18,7 @@ static void PanelLog(NSString *format, ...) {
         NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text];
         if (newText.length > 5000) { newText = [newText substringToIndex:5000]; }
         g_logView.text = newText;
-        NSLog(@"[DelegateMonitor-v11.1] %@", message);
+        NSLog(@"[DelegateMonitor-v11.2] %@", message);
     });
 }
 
@@ -55,13 +55,17 @@ static void PanelLog(NSString *format, ...) {
     return shouldReceive;
 }
 
-// 可选：Hook另一个常见的代理方法
+// *** FIX: Corrected the code by placing the logic inside the method implementation ***
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
+    // 首先，调用原始方法
     BOOL shouldBegin = %orig;
+
+    // 打印信息
     PanelLog(@"--- GESTURE DELEGATE CALLED (shouldBegin) ---\n- Gesture: %@ on %@\n- Delegate Method Result: %s\n--------------------",
              NSStringFromClass([gestureRecognizer class]),
              NSStringFromClass([gestureRecognizer.view class]),
              shouldBegin ? "YES" : "NO");
+             
     return shouldBegin;
 }
 
@@ -93,7 +97,7 @@ static void PanelLog(NSString *format, ...) {
     panelView.layer.borderWidth = 1.5;
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, 300, 20)];
-    titleLabel.text = @"手势代理监控器 v11.1";
+    titleLabel.text = @"手势代理监控器 v11.2";
     titleLabel.textColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.8 alpha:1.0];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
