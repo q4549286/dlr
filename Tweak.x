@@ -1,5 +1,5 @@
-// Filename: CombinedExtractor_v4.0_StackView_Complete
-// 描述: 最终解决方案！根据Flex截图，直接从UIStackView中提取有序的UILabel，并智能格式化。
+// Filename: CombinedExtractor_v4.2_Complete
+// 描述: 最终修复版。采用两阶段提取，智能处理“详解”部分的特殊配对结构。此为完整代码，可直接编译。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -36,7 +36,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[CombinedExtractor-v4.0] %@", message);
+        NSLog(@"[CombinedExtractor-v4.2] %@", message);
     });
 }
 
@@ -46,30 +46,27 @@ static void LogMessage(NSString *format, ...) {
 
 static void processKeTiWorkQueue(void);
 
-// ================== 基于UIStackView的最终提取函数 ==================
+// ================== 两阶段智能提取函数 ==================
 static NSString* extractDataFromStackView(UIView *rootView, BOOL includeXiangJie) {
     if (!rootView) return @"[错误: 根视图为空]";
 
-    // 1. 找到那个核心的 UIStackView
     NSMutableArray *stackViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
+    if (stackViews.count == 0) return @"[错误: 未在视图中找到UIStackView]";
 
-    if (stackViews.count == 0) {
-        return @"[错误: 未在视图中找到UIStackView]";
-    }
-
-    UIStackView *mainStackView = stackViews.firstObject; // 假设只有一个主要的StackView
+    UIStackView *mainStackView = stackViews.firstObject;
     NSArray *arrangedSubviews = mainStackView.arrangedSubviews;
-
-    if (arrangedSubviews.count == 0) {
-        return @"[错误: UIStackView中没有内容]";
-    }
+    if (arrangedSubviews.count == 0) return @"[错误: UIStackView中没有内容]";
     
-    // 2. 遍历 arrangedSubviews 并格式化
-    NSMutableArray<NSString *> *formattedBlocks = [NSMutableArray array];
+    // --- 两阶段提取逻辑 ---
+    
+    // 阶段一：处理“详解”之前的内容
+    NSMutableArray<NSString *> *preXiangJieBlocks = [NSMutableArray array];
+    NSMutableArray<UILabel *> *xiangJieLabels = [NSMutableArray array];
+    
     NSMutableString *currentContent = [NSMutableString string];
     NSString *currentTitle = nil;
-    BOOL inXiangJieSection = NO;
+    BOOL parsingXiangJie = NO;
 
     for (UIView *subview in arrangedSubviews) {
         if (![subview isKindOfClass:[UILabel class]]) continue;
@@ -77,69 +74,71 @@ static NSString* extractDataFromStackView(UIView *rootView, BOOL includeXiangJie
         UILabel *label = (UILabel *)subview;
         if (!label.text || label.text.length == 0) continue;
         
-        NSString *labelText = label.text;
-        
-        // 特殊处理：如果遇到“详解”，但用户不想要，则直接跳过后续所有处理
-        if ([labelText isEqualToString:@"详解"] && !includeXiangJie) {
-            break; 
-        }
-        
-        if ([labelText isEqualToString:@"详解"]) {
-            inXiangJieSection = YES;
-        }
-
-        // 关键逻辑：通过字体是否为粗体来判断是否为标题
-        BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0;
-        
-        if (isTitle) {
-            // 遇到了一个新的标题，先把之前缓存的标题和内容保存起来
+        // 检查是否进入详解阶段
+        if ([label.text isEqualToString:@"详解"]) {
+            parsingXiangJie = YES;
+            // 将详解前的最后一个块保存起来
             if (currentTitle) {
                 NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 if (trimmedContent.length > 0) {
-                     // 根据是否在详解区，决定格式
-                    if (inXiangJieSection && ![currentTitle isEqualToString:@"详解"]) {
-                        [formattedBlocks addObject:[NSString stringWithFormat:@"%@→%@", currentTitle, trimmedContent]];
-                    } else {
-                        [formattedBlocks addObject:[NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent]];
-                    }
+                    [preXiangJieBlocks addObject:[NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent]];
                 } else {
-                    [formattedBlocks addObject:currentTitle];
+                    [preXiangJieBlocks addObject:currentTitle];
                 }
+                currentTitle = nil;
+                [currentContent setString:@""];
             }
-
-            // 更新当前标题并重置内容缓存
-            currentTitle = labelText;
-            [currentContent setString:@""];
-
+            continue; // 跳过“详解”这个标签本身
+        }
+        
+        if (!parsingXiangJie) {
+            // --- 仍在处理前半部分 ---
+            BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0;
+            if (isTitle) {
+                if (currentTitle) {
+                    NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    [preXiangJieBlocks addObject:[trimmedContent.length > 0 ? [NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent] : currentTitle]];
+                }
+                currentTitle = label.text;
+                [currentContent setString:@""];
+            } else {
+                if (currentContent.length > 0) [currentContent appendString:@" "];
+                [currentContent appendString:label.text];
+            }
         } else {
-            // 如果是正文，追加到当前内容缓存
-            // 如果一个标题下有多行正文，用空格连接它们，避免过多换行
-            if (currentContent.length > 0) {
-                [currentContent appendString:@" "];
-            }
-            [currentContent appendString:labelText];
+            // --- 已进入详解阶段，收集所有label ---
+            [xiangJieLabels addObject:label];
         }
     }
     
-    // 不要忘记处理最后一个块
+    // 不要忘记处理循环结束后的最后一个普通块
     if (currentTitle) {
         NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (trimmedContent.length > 0) {
-            if (inXiangJieSection && ![currentTitle isEqualToString:@"详解"]) {
-                [formattedBlocks addObject:[NSString stringWithFormat:@"%@→%@", currentTitle, trimmedContent]];
-            } else {
-                [formattedBlocks addObject:[NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent]];
-            }
-        } else {
-             [formattedBlocks addObject:currentTitle];
-        }
+        [preXiangJieBlocks addObject:[trimmedContent.length > 0 ? [NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent] : currentTitle]];
     }
     
-    // 将所有块用两个换行符连接起来
-    NSString *fullText = [formattedBlocks componentsJoinedByString:@"\n\n"];
-    fullText = [fullText stringByReplacingOccurrencesOfString:@"详解\n\n" withString:@"\n\n--- 详解 ---\n\n"];
+    // --- 组合最终结果 ---
+    NSMutableString *finalResult = [NSMutableString stringWithString:[preXiangJieBlocks componentsJoinedByString:@"\n\n"]];
+    
+    // 阶段二：处理“详解”部分
+    if (includeXiangJie && xiangJieLabels.count > 0) {
+        [finalResult appendString:@"\n\n--- 详解 ---\n\n"];
+        
+        // 两两配对
+        for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) {
+            UILabel *titleLabel = xiangJieLabels[i];
+            
+            if (i + 1 < xiangJieLabels.count) {
+                UILabel *contentLabel = xiangJieLabels[i+1];
+                [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, contentLabel.text];
+            } else {
+                // 如果是奇数个，最后一个标题没有内容
+                [finalResult appendFormat:@"%@→\n\n", titleLabel.text];
+            }
+        }
+    }
 
-    return [fullText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
 
@@ -154,7 +153,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         void (^extractionCompletion)(void) = ^{
             if (completion) { completion(); }
             
-            // 使用全新的、基于StackView的提取函数
             NSString *extractedText = extractDataFromStackView(vcToPresent.view, g_shouldIncludeXiangJie);
             
             if ([g_currentTaskType isEqualToString:@"KeTi"]) {
@@ -189,11 +187,9 @@ static void processKeTiWorkQueue() {
         for (NSUInteger i = 0; i < g_keTi_resultsArray.count; i++) {
             NSString *itemText = g_keTi_resultsArray[i];
             NSString *itemTitle = [NSString stringWithFormat:@"课体 %lu", (unsigned long)i + 1];
-            // 尝试从内容中解析真实标题
             NSRange titleRange = [itemText rangeOfString:@"\n"];
             if (titleRange.location != NSNotFound) {
                  NSString* firstLine = [itemText substringToIndex:titleRange.location];
-                 // 检查第一行是否包含“课”字，以确定它是否是一个有效的标题
                  if ([firstLine containsString:@"课"]) {
                     itemTitle = firstLine;
                  }
@@ -251,12 +247,12 @@ static void processKeTiWorkQueue() {
     panel.tag = 889900;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemTealColor].CGColor;
+    panel.layer.borderColor = [UIColor systemOrangeColor].CGColor;
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"大六壬终极提取器 v4.0";
-    titleLabel.textColor = [UIColor systemTealColor];
+    titleLabel.text = @"大六壬终极提取器 v4.2";
+    titleLabel.textColor = [UIColor systemOrangeColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
@@ -294,7 +290,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"终极提取器 v4.0 (StackView版) 已就绪。";
+    g_logView.text = @"终极提取器 v4.2 (两阶段版) 已就绪。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -341,7 +337,6 @@ static void processKeTiWorkQueue() {
         FindSubviewsOfClassRecursive([UICollectionView class], keyWindow, allCVs);
         
         for (UICollectionView *cv in allCVs) {
-            // 修正寻找目标CollectionView的逻辑，使其更健壮
             for (id cell in cv.visibleCells) {
                 if ([cell isKindOfClass:keTiCellClass]) {
                     g_keTi_targetCV = cv;
@@ -391,7 +386,6 @@ static void processKeTiWorkQueue() {
     panel.center = CGPointMake(panel.center.x + translation.x, panel.center.y + translation.y);
     [recognizer setTranslation:CGPointZero inView:panel.superview];
 }
-
 %end
 
 // =================================================================
@@ -401,6 +395,6 @@ static void processKeTiWorkQueue() {
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[CombinedExtractor-v4.0] 终极提取器 v4.0 (StackView版) 已准备就绪。");
+        NSLog(@"[CombinedExtractor-v4.2] 终极提取器 v4.2 (两阶段版) 已准备就绪。");
     }
 }
