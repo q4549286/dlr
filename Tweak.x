@@ -75,15 +75,88 @@ static UIImage * createWatermarkImage(NSString *text, UIFont *font, UIColor *tex
 
 
 // =====================================================================================
-// 2. UI微调 Hooks (UILabel, UIWindow) - 来自原脚本2，保持不变
+// 2. UI微调 Hooks (UILabel, UIWindow) - 来自原脚本2，已修正
 // =====================================================================================
 %hook UILabel
-(void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
-(void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
+- (void)setText:(NSString *)text {
+    if (!text) {
+        %orig(text);
+        return;
+    }
+    NSString *newString = nil;
+    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) {
+        newString = @"定制";
+    } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
+    
+    if (newString) {
+        %orig(newString);
+        return;
+    }
+    
+    NSMutableString *simplifiedText = [text mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, kCFStringTransformMandarinLatin, NO);
+    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, kCFStringTransformLatinHangul, NO);
+    %orig(simplifiedText);
+}
+
+- (void)setAttributedText:(NSAttributedString *)attributedText {
+    if (!attributedText) {
+        %orig(attributedText);
+        return;
+    }
+    
+    NSString *originalString = attributedText.string;
+    NSString *newString = nil;
+    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) {
+        newString = @"定制";
+    } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
+    
+    if (newString) {
+        NSMutableAttributedString *newAttr = [attributedText mutableCopy];
+        [newAttr.mutableString setString:newString];
+        %orig(newAttr);
+        return;
+    }
+    
+    NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, kCFStringTransformMandarinLatin, NO);
+    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, kCFStringTransformLatinHangul, NO);
+    %orig(finalAttributedText);
+}
 %end
 
 %hook UIWindow
-(void)layoutSubviews { %orig; if (self.windowLevel != UIWindowLevelNormal) { return; } NSInteger watermarkTag = 998877; if ([self viewWithTag:watermarkTag]) { return; } NSString *watermarkText = @"Echo定制"; UIFont *watermarkFont = [UIFont systemFontOfSize:16.0]; UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12]; CGFloat rotationAngle = -30.0; CGSize tileSize = CGSizeMake(150, 100); UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle); UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds]; watermarkView.tag = watermarkTag; watermarkView.userInteractionEnabled = NO; watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage]; [self addSubview:watermarkView]; [self sendSubviewToBack:watermarkView]; }
+- (void)layoutSubviews {
+    %orig;
+    if (self.windowLevel != UIWindowLevelNormal) {
+        return;
+    }
+    NSInteger watermarkTag = 998877;
+    if ([self viewWithTag:watermarkTag]) {
+        return;
+    }
+    NSString *watermarkText = @"Echo定制";
+    UIFont *watermarkFont = [UIFont systemFontOfSize:16.0];
+    UIColor *watermarkColor = [UIColor.blackColor colorWithAlphaComponent:0.12];
+    CGFloat rotationAngle = -30.0;
+    CGSize tileSize = CGSizeMake(150, 100);
+    UIImage *patternImage = createWatermarkImage(watermarkText, watermarkFont, watermarkColor, tileSize, rotationAngle);
+    UIView *watermarkView = [[UIView alloc] initWithFrame:self.bounds];
+    watermarkView.tag = watermarkTag;
+    watermarkView.userInteractionEnabled = NO;
+    watermarkView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    watermarkView.backgroundColor = [UIColor colorWithPatternImage:patternImage];
+    [self addSubview:watermarkView];
+    [self sendSubviewToBack:watermarkView];
+}
 %end
 
 
@@ -517,7 +590,7 @@ static UIImage * createWatermarkImage(NSString *text, UIFont *font, UIColor *tex
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanWorkQueue = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
-  
+
     Ivar keChuanContainerIvar = class_getInstanceVariable([self class], "課傳");
     if (!keChuanContainerIvar) { LogMessage(@"致命错误: 找不到总容器 '課傳' 的ivar。"); g_isExtractingKeChuanDetail = NO; return; }
     UIView *keChuanContainer = object_getIvar(self, keChuanContainerIvar);
@@ -547,16 +620,16 @@ static UIImage * createWatermarkImage(NSString *text, UIFont *font, UIColor *tex
             }
         }
     }
-  
+
     // Part B: 四课提取
     Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
     NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, keChuanContainer, siKeResults);
     if (siKeResults.count > 0) {
         UIView *siKeContainer = siKeResults.firstObject;
         NSDictionary *keDefinitions[] = {
-            @{@"title": @"第一课", @"xiaShen": @"日",    @"shangShen": @"日上", @"tianJiang": @"日上天將"},
+            @{@"title": @"第一课", @"xiaShen": @"日",   @"shangShen": @"日上", @"tianJiang": @"日上天將"},
             @{@"title": @"第二课", @"xiaShen": @"日上", @"shangShen": @"日陰", @"tianJiang": @"日陰天將"},
-            @{@"title": @"第三课", @"xiaShen": @"辰",    @"shangShen": @"辰上", @"tianJiang": @"辰上天將"},
+            @{@"title": @"第三课", @"xiaShen": @"辰",   @"shangShen": @"辰上", @"tianJiang": @"辰上天將"},
             @{@"title": @"第四课", @"xiaShen": @"辰上", @"shangShen": @"辰陰", @"tianJiang": @"辰陰天將"}
         };
         void (^addTaskBlock)(const char*, NSString*, NSString*) = ^(const char* ivarName, NSString* fullTitle, NSString* taskType) {
@@ -605,7 +678,7 @@ static UIImage * createWatermarkImage(NSString *text, UIFont *font, UIColor *tex
         }
         return;
     }
-  
+
     NSDictionary *task = g_keChuanWorkQueue.firstObject; 
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     
@@ -706,11 +779,17 @@ static UIImage * createWatermarkImage(NSString *text, UIFont *font, UIColor *tex
     LogMessage(@"提取: 毕法, 格局, 方法, 七政 (后台弹窗)...");
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         SEL sBiFa=NSSelectorFromString(@"顯示法訣總覽"), sGeJu=NSSelectorFromString(@"顯示格局總覽"), sQiZheng=NSSelectorFromString(@"顯示七政信息WithSender:"), sFangFa=NSSelectorFromString(@"顯示方法總覽");
-        #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored "-Warc-performSelector-leaks"") code; _Pragma("clang diagnostic pop")
+        #define SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING(code) \
+            _Pragma("clang diagnostic push") \
+            _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
+            code; \
+            _Pragma("clang diagnostic pop")
+            
         if ([self respondsToSelector:sBiFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:sBiFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:sGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:sGeJu withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:sFangFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:sFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:sQiZheng]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_PERFORM_SELECTOR_LEAK_WARNING([self performSelector:sQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
+        
         dispatch_async(dispatch_get_main_queue(), ^{
             NSString *biFa = g_extractedData[@"毕法"]?:@"", *geJu = g_extractedData[@"格局"]?:@"", *fangFa = g_extractedData[@"方法"]?:@"";
             NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"]; for (NSString *t in trash) { biFa=[biFa stringByReplacingOccurrencesOfString:t withString:@""]; geJu=[geJu stringByReplacingOccurrencesOfString:t withString:@""]; fangFa=[fangFa stringByReplacingOccurrencesOfString:t withString:@""]; }
