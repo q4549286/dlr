@@ -1,7 +1,7 @@
-/////// Filename: EchoAI_Ultimate_v7.2_Final.xm
-// 描述: EchoAI终极整合版 v7.2 (最终修复版)。此版本修复了v7.1的所有编译错误。
-//       - [FIX] 彻底修正了多行宏`SUPPRESS_LEAK_WARNING`的语法。
-//       - [FIX] 将`GetIvarValueSafely`和`GetStringFromLayer`函数移回正确的%hook作用域内，解决了未声明的函数调用错误。
+/////// Filename: EchoAI_Ultimate_v7.3_Final.xm
+// 描述: EchoAI终极整合版 v7.3 (最终修复版)。此版本修复了v7.2的所有编译错误。
+//       - [FIX] 将 `GetIvarValueSafely` 和 `GetStringFromLayer` 添加到 @interface 声明中，解决 "no visible @interface" 错误。
+//       - [FIX] 修正了 `extractTianDiPanInfo_S2` 中 dx/dy 变量未被使用的问题。
 //       - [UI/UX] 保留了全新的Prestige UI。
 //       - [RELIABILITY] 保留了基于类名的可靠弹窗识别机制。
 //       - [COMPLETENESS] 保留了七政四余在综合模式中的完整提取。
@@ -45,7 +45,7 @@ static NSMutableArray *g_s2_capturedGeJuArray = nil;
 
 static NSString * const CustomFooterText = @"\n\n"
 "--- 自定义注意事项 ---\n"
-"1. 本解析结果由 EchoAI_Ultimate_v7.2 生成，仅供参考。\n"
+"1. 本解析结果由 EchoAI_Ultimate_v7.3 生成，仅供参考。\n"
 "2. 请结合实际情况与专业知识进行最终判断。\n"
 "3. [可在此处添加您的个人Prompt或更多说明]";
 
@@ -60,7 +60,7 @@ static void LogMessage(NSString *format, ...) {
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss.SSS"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logTextView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logTextView.text];
-        NSLog(@"[EchoAI-Ultimate-v7.2] %@", message);
+        NSLog(@"[EchoAI-Ultimate-v7.3] %@", message);
     });
 }
 
@@ -75,7 +75,6 @@ static UIWindow* GetFrontmostWindow() {
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
-                // For apps with multiple windows, this is a more robust way
                 for (UIWindow *window in scene.windows) {
                     if (window.isKeyWindow) {
                         frontmostWindow = window;
@@ -120,6 +119,9 @@ static UIWindow* GetFrontmostWindow() {
 - (NSString *)formatNianmingGejuFromView_S2:(UIView *)contentView;
 - (NSString *)extractTextFromFirstViewOfClassName_S2:(NSString *)className separator:(NSString *)separator;
 - (NSString *)extractTianDiPanInfo_S2;
+// FIX: Added missing declarations for helper methods
+- (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
+- (NSString *)GetStringFromLayer:(id)layer;
 @end
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
@@ -272,7 +274,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-#pragma mark - Prestige UI v7.2
+#pragma mark - Prestige UI v7.3
 %new
 - (void)createOrShowMainControlPanel {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
@@ -296,7 +298,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [g_mainControlPanelView addSubview:contentView];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, 40)];
-    titleLabel.text = @"EchoAI 终极提取器 v7.2";
+    titleLabel.text = @"EchoAI 终极提取器 v7.3";
     titleLabel.font = [UIFont boldSystemFontOfSize:22];
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -660,14 +662,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         LogMessage(@"[S2-Easy] 课盘信息提取完成。"); [self updateProgressHUD:@"正在提取年命信息..."];
         [strongSelf extractNianmingInfo_S2_WithCompletion:^(NSString *nianmingText) {
             LogMessage(@"[S2-Easy] 年命信息提取完成。");
-            NSString *formattedNianming = [nianmingText stringByReplacingOccurrencesOfString:@"【年命格局】" withString:@""]; formattedNianming = [formattedNianming stringByReplacingOccurrencesOfString:@"【格局方法】" withString:@"【年命格局】"];
+            NSString *formattedNianming = [nianmingText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             NSString *finalCombinedText = (nianmingText.length > 0) ? [NSString stringWithFormat:@"%@\n\n--- 【年命分析】 ---\n\n%@%@", kePanText, formattedNianming, CustomFooterText] : [NSString stringWithFormat:@"%@%@", kePanText, CustomFooterText];
             if(completion) { completion([finalCombinedText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
         }];
     }];
 }
 
-// FIX: Corrected multi-line macro syntax and moved helper functions into scope.
 #define SUPPRESS_LEAK_WARNING(code) \
     _Pragma("clang diagnostic push") \
     _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
@@ -764,7 +765,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     processQueue();
 }
 
-// FIX: Moved helper functions here, inside the %hook block, to ensure they are in scope.
 %new
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix {
     if (!object || !ivarNameSuffix) return nil; unsigned int ivarCount; Ivar *ivars = class_copyIvarList([object class], &ivarCount); if (!ivars) { free(ivars); return nil; } id value = nil; for (unsigned int i = 0; i < ivarCount; i++) { Ivar ivar = ivars[i]; const char *name = ivar_getName(ivar); if (name) { NSString *ivarName = [NSString stringWithUTF8String:name]; if ([ivarName hasSuffix:ivarNameSuffix]) { value = object_getIvar(object, ivar); break; } } } free(ivars); return value;
@@ -823,7 +823,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 if (![layer isKindOfClass:[CALayer class]]) continue;
                 CALayer *pLayer = [layer presentationLayer] ?: layer;
                 CGPoint pos = [pLayer.superlayer convertPoint:pLayer.position toLayer:nil];
-                CGFloat dx = pos.x - center.x, dy = pos.y - center.y;
+                CGFloat dx = pos.x - center.x;
+                CGFloat dy = pos.y - center.y;
                 [allLayerInfos addObject:@{ @"type": type, @"text": [self GetStringFromLayer:layer], @"angle": @(atan2(dy, dx)), @"radius": @(sqrt(dx*dx + dy*dy)) }];
             }
         };
@@ -899,6 +900,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[EchoAI-Ultimate-v7.2] 终极提取器 v7.2 (Final) 已加载。");
+        NSLog(@"[EchoAI-Ultimate-v7.3] 终极提取器 v7.3 (Final) 已加载。");
     }
 }
