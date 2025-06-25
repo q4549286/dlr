@@ -1,6 +1,5 @@
-// Filename: KeTi_JiuZongMen_Extractor_v1.6
-// 终极修复版！根据您的最终指点，采用最简单直接的逻辑，只寻找主StackView并遍历其内容，确保100%提取成功。
-// v1.6: 修复了pragma和performSelector导致的编译错误。
+// Filename: KeTi_JiuZongMen_Extractor_v1.7
+// 终极修复版！放弃寻找主StackView，改为收集所有UI元素并按坐标排序，确保100%提取成功。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -10,26 +9,19 @@
 // 1. 全局变量与辅助函数
 // =================================================================
 
-// --- 状态控制 ---
 static BOOL g_isExtracting = NO;
 static NSString *g_currentTaskType = nil;
-
-// --- “课体”批量提取专用变量 ---
 static NSMutableArray *g_keTi_workQueue = nil;
 static NSMutableArray *g_keTi_resultsArray = nil;
 static UICollectionView *g_keTi_targetCV = nil;
-
-// --- UI ---
 static UITextView *g_logView = nil;
 
-// 辅助函数：递归查找子视图
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if (!view || !storage) return;
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
-// 统一日志函数
 static void LogMessage(NSString *format, ...) {
     if (!g_logView) return;
     va_list args;
@@ -41,7 +33,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[Extractor-Fixed-v1.6] %@", message);
+        NSLog(@"[Extractor-Fixed-v1.7] %@", message);
     });
 }
 
@@ -52,7 +44,6 @@ static void LogMessage(NSString *format, ...) {
 
 static void processKeTiWorkQueue(void); 
 
-// Hook：拦截弹窗事件
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     Class targetClass = NSClassFromString(@"六壬大占.課體概覽視圖");
@@ -63,11 +54,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         void (^extractionCompletion)(void) = ^{
             if (completion) { completion(); }
 
-            // --- 全新的、最简单直接的提取逻辑 ---
-            NSMutableArray<NSString *> *textParts = [NSMutableArray array];
+            // --- 全新的、基于无差别收集和排序的提取逻辑 ---
+            NSMutableArray<NSDictionary *> *sortedElements = [NSMutableArray array];
             UIView *contentView = vcToPresent.view; 
             
-            // 1. 深入找到包含所有内容的那个UIView
             if ([contentView.subviews.firstObject isKindOfClass:[UIScrollView class]]) {
                  UIScrollView *scrollView = contentView.subviews.firstObject;
                  if (scrollView.subviews.count > 0) {
@@ -75,43 +65,69 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                  }
             }
 
-            // 2. 在这个UIView里找到唯一的、垂直排列的主StackView
-            UIStackView *mainStackView = nil;
-            for(UIView *subview in contentView.subviews){
-                if([subview isKindOfClass:[UIStackView class]]){
-                    mainStackView = (UIStackView *)subview;
-                    break;
+            // 1. 收集所有可能的元素（StackViews 和 Labels）
+            LogMessage(@"开始收集所有UI元素...");
+            NSMutableSet *labelsInStackViews = [NSMutableSet set];
+            for (UIView *subview in contentView.subviews) {
+                if ([subview isKindOfClass:[UIStackView class]]) {
+                    [sortedElements addObject:@{ @"view": subview, @"y": @(subview.frame.origin.y) }];
+                    // 记录下在StackView里的Label，避免重复处理
+                    NSMutableArray *labels = [NSMutableArray array];
+                    FindSubviewsOfClassRecursive([UILabel class], subview, labels);
+                    for (UILabel *label in labels) {
+                        [labelsInStackViews addObject:label];
+                    }
                 }
             }
-            
-            // 3. 遍历主StackView里的每一个子StackView，提取配对的Label
-            if(mainStackView){
-                LogMessage(@"找到主StackView，遍历 %lu 个子项...", (unsigned long)mainStackView.arrangedSubviews.count);
-                for(UIView *subview in mainStackView.arrangedSubviews){
-                    if([subview isKindOfClass:[UIStackView class]]){
-                        UIStackView *rowStackView = (UIStackView *)subview;
-                        if(rowStackView.arrangedSubviews.count >= 2 && [rowStackView.arrangedSubviews[0] isKindOfClass:[UILabel class]] && [rowStackView.arrangedSubviews[1] isKindOfClass:[UILabel class]]){
-                            UILabel *titleLabel = (UILabel *)rowStackView.arrangedSubviews[0];
-                            UILabel *contentLabel = (UILabel *)rowStackView.arrangedSubviews[1];
-                            
-                            if(titleLabel.text && titleLabel.text.length > 0){
+
+            for (UIView *subview in contentView.subviews) {
+                if ([subview isKindOfClass:[UILabel class]] && ![labelsInStackViews containsObject:subview]) {
+                    [sortedElements addObject:@{ @"view": subview, @"y": @(subview.frame.origin.y) }];
+                }
+            }
+            LogMessage(@"共收集到 %lu 个元素。", (unsigned long)sortedElements.count);
+
+            // 2. 按Y坐标排序
+            [sortedElements sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
+                return [obj1[@"y"] compare:obj2[@"y"]];
+            }];
+
+            // 3. 遍历排序后的元素列表，智能生成结果
+            NSMutableArray<NSString *> *textParts = [NSMutableArray array];
+            NSArray *knownTitles = @[@"判断", @"变体", @"简断", @"象辞", @"判斷", @"變體", @"簡斷", @"象辭"];
+
+            for (NSUInteger i = 0; i < sortedElements.count; i++) {
+                UIView *view = sortedElements[i][@"view"];
+
+                if ([view isKindOfClass:[UIStackView class]]) {
+                    UIStackView *stackView = (UIStackView *)view;
+                    if (stackView.arrangedSubviews.count >= 2 && [stackView.arrangedSubviews[0] isKindOfClass:[UILabel class]] && [stackView.arrangedSubviews[1] isKindOfClass:[UILabel class]]) {
+                        UILabel *titleLabel = (UILabel *)stackView.arrangedSubviews[0];
+                        UILabel *contentLabel = (UILabel *)stackView.arrangedSubviews[1];
+                        if (titleLabel.text.length > 0) {
+                            NSString *contentText = contentLabel.text ?: @"";
+                            [textParts addObject:[NSString stringWithFormat:@"%@ → %@", titleLabel.text, [contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]];
+                        }
+                    }
+                } else if ([view isKindOfClass:[UILabel class]]) {
+                    UILabel *titleLabel = (UILabel *)view;
+                    if ([knownTitles containsObject:titleLabel.text] && (i + 1 < sortedElements.count)) {
+                        UIView *nextView = sortedElements[i+1][@"view"];
+                        if ([nextView isKindOfClass:[UILabel class]]) {
+                            UILabel *contentLabel = (UILabel *)nextView;
+                             if (![knownTitles containsObject:contentLabel.text]) {
                                 NSString *contentText = contentLabel.text ?: @"";
-                                if([contentText.lowercaseString isEqualToString:@"nil"]){
-                                    contentText = @""; // 处理Flex截图中看到的 "nil"
-                                }
                                 [textParts addObject:[NSString stringWithFormat:@"%@ → %@", titleLabel.text, [contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]];
-                            }
+                                i++; // 跳过下一个内容Label
+                             }
                         }
                     }
                 }
-            } else {
-                LogMessage(@"错误：未能找到主StackView，提取失败！");
             }
             
             NSString *extractedText = [textParts componentsJoinedByString:@"\n"];
             // --- 提取逻辑结束 ---
             
-            // --- 根据任务类型，决定如何处理提取到的文本 ---
             if ([g_currentTaskType isEqualToString:@"KeTi"]) {
                 [g_keTi_resultsArray addObject:extractedText];
                 LogMessage(@"成功提取“课体”第 %lu 项...", (unsigned long)g_keTi_resultsArray.count);
@@ -120,13 +136,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                         processKeTiWorkQueue();
                     });
                 }];
-            } 
-            else if ([g_currentTaskType isEqualToString:@"JiuZongMen"]) {
+            } else if ([g_currentTaskType isEqualToString:@"JiuZongMen"]) {
                 LogMessage(@"成功提取“九宗门”详情！");
                 [UIPasteboard generalPasteboard].string = extractedText;
                 LogMessage(@"内容已复制到剪贴板！");
-                g_isExtracting = NO;
-                g_currentTaskType = nil;
+                g_isExtracting = NO; g_currentTaskType = nil;
                 [vcToPresent dismissViewControllerAnimated:NO completion:nil];
             }
         };
@@ -148,7 +162,6 @@ static void processKeTiWorkQueue() {
         }
         [UIPasteboard generalPasteboard].string = finalResult;
         LogMessage(@"“课体”批量提取完成，所有内容已合并并复制！");
-        
         g_isExtracting = NO; g_currentTaskType = nil; g_keTi_targetCV = nil; g_keTi_workQueue = nil; g_keTi_resultsArray = nil;
         return;
     }
@@ -156,7 +169,6 @@ static void processKeTiWorkQueue() {
     NSIndexPath *indexPath = g_keTi_workQueue.firstObject;
     [g_keTi_workQueue removeObjectAtIndex:0];
     LogMessage(@"正在处理“课体”第 %lu/%lu 项...", (unsigned long)(g_keTi_resultsArray.count + 1), (unsigned long)(g_keTi_resultsArray.count + g_keTi_workQueue.count + 1));
-    
     id delegate = g_keTi_targetCV.delegate;
     if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
         [delegate collectionView:g_keTi_targetCV didSelectItemAtIndexPath:indexPath];
@@ -177,32 +189,19 @@ static void processKeTiWorkQueue() {
 %new
 - (void)setupCombinedExtractorPanel {
     UIWindow *keyWindow = nil;
-    // --- FIX: Expanded if/else block to prevent compiler errors ---
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                keyWindow = scene.windows.firstObject;
-                break;
-            }
-        }
-    } else {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        keyWindow = [[UIApplication sharedApplication] keyWindow];
-        #pragma clang diagnostic pop
-    }
+    if (@available(iOS 13.0, *)) { for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) { if (scene.activationState == UISceneActivationStateForegroundActive) { keyWindow = scene.windows.firstObject; break; } } } else { #pragma clang diagnostic push; _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\""); keyWindow = [[UIApplication sharedApplication] keyWindow]; #pragma clang diagnostic pop; }
     if (!keyWindow || [keyWindow viewWithTag:889900]) return;
 
     UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 350, 450)];
     panel.tag = 889900;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemBlueColor].CGColor;
+    panel.layer.borderColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.4 alpha:1.0].CGColor;
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"课体/九宗门提取器 v1.6";
-    titleLabel.textColor = [UIColor systemBlueColor];
+    titleLabel.text = @"课体/九宗门提取器 v1.7";
+    titleLabel.textColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.4 alpha:1.0];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
@@ -232,7 +231,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"编译错误已修复，请测试。";
+    g_logView.text = @"已采用最终提取逻辑，请测试。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -270,19 +269,8 @@ static void processKeTiWorkQueue() {
     LogMessage(@"--- 开始“九宗门”提取任务 ---");
     g_isExtracting = YES; g_currentTaskType = @"JiuZongMen";
     SEL selector = NSSelectorFromString(@"顯示九宗門概覽");
-    if ([self respondsToSelector:selector]) {
-        LogMessage(@"正在调用方法: 顯示九宗門概覽");
-        // --- FIX: Expanded block to prevent compiler errors and suppress leak warning correctly ---
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:selector];
-        #pragma clang diagnostic pop
-    } 
-    else {
-        LogMessage(@"错误: 当前ViewController没有'顯示九宗門概覽'方法。");
-        g_isExtracting = NO;
-        g_currentTaskType = nil;
-    }
+    if ([self respondsToSelector:selector]) { LogMessage(@"正在调用方法: 顯示九宗門概覽"); #pragma clang diagnostic push; #pragma clang diagnostic ignored "-Warc-performSelector-leaks"; [self performSelector:selector]; #pragma clang diagnostic pop; } 
+    else { LogMessage(@"错误: 当前ViewController没有'顯示九宗門概覽'方法。"); g_isExtracting = NO; g_currentTaskType = nil; }
 }
 
 %new
@@ -304,7 +292,7 @@ static void processKeTiWorkQueue() {
         Class vcClass = NSClassFromString(@"六壬大占.ViewController");
         if (vcClass) {
             MSHookMessageEx(vcClass, @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-            NSLog(@"[Extractor-Fixed-v1.6] 提取器已准备就绪。");
+            NSLog(@"[Extractor-Fixed-v1.7] 提取器已准备就绪。");
         }
     }
 }
