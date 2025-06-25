@@ -1,55 +1,128 @@
+// Filename: EchoGestureMonitor.x
+
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-// =========================================================================
-//  主逻辑 - 使用方法交换进行安全探测
-// =========================================================================
+static BOOL g_isMonitoring = NO;
+static UITextView *g_monitorLogView = nil;
+static UIView *g_monitorPanelView = nil;
 
-// 我们将交换 NSObject 的方法，这样可以捕获到所有对象的调用
-%hook NSObject
-
-// - (id)forwardingTargetForSelector:(SEL)aSelector
-// 这是消息转发的第一步。如果一个对象自己不能实现某个方法，系统会调用这个函数。
-// 我们可以利用它来窥探是哪个对象被调用了哪个方法。
-- (id)forwardingTargetForSelector:(SEL)aSelector {
+// --- 辅助函数：记录日志 ---
+static void MonitorLog(NSString *format, ...) {
+    if (!g_monitorLogView) return;
+    va_list args;
+    va_start(args, format);
+    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+    va_end(args);
     
-    // 我们只关心目标App中的类
-    NSString *className = NSStringFromClass([self class]);
-    if ([className hasPrefix:@"六壬大占"]) {
-         // 在系统日志中打印我们捕获到的信息
-         NSLog(@"[Probe] Target: %@ | Received Selector: %@", className, NSStringFromSelector(aSelector));
-    }
-
-    // 调用原始的实现，确保App正常运行
-    return %orig;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSString *newText = [NSString stringWithFormat:@"%@\n%@", message, g_monitorLogView.text];
+        if (newText.length > 2000) { // 防止日志过长
+            newText = [newText substringToIndex:2000];
+        }
+        g_monitorLogView.text = newText;
+        NSLog(@"[GestureMonitor] %@", message);
+    });
 }
 
-// respondsToSelector: 也是一个非常好的监控点
-- (BOOL)respondsToSelector:(SEL)aSelector {
-    NSString *className = NSStringFromClass([self class]);
-    if ([className hasPrefix:@"六壬大占"]) {
-         // 我们只打印包含 "WithSender" 或 "摘要" 或 "詳情" 的方法，以减少干扰信息
-         NSString *selectorName = NSStringFromSelector(aSelector);
-         if ([selectorName containsString:@"WithSender"] || [selectorName containsString:@"摘要"] || [selectorName containsString:@"詳情"] || [selectorName containsString:@"课体"] || [selectorName containsString:@"課體"]) {
-            NSLog(@"[Probe] Target: %@ | Responds to Selector: %@", className, selectorName);
-         }
+// --- 核心Hook：拦截手势添加 ---
+%hook UIGestureRecognizer
+- (void)addTarget:(id)target action:(SEL)action {
+    %orig;
+    if (g_isMonitoring && self.view) {
+        MonitorLog(@"--- Event Detected ---\nView: %@\nTarget: %@\nAction: %@\n--------------------",
+                   NSStringFromClass([self.view class]),
+                   NSStringFromClass([target class]),
+                   NSStringFromSelector(action));
     }
-    return %orig;
 }
-
 %end
 
+// --- UI控制 ---
+@interface UIViewController (EchoMonitorControl)
+- (void)setupMonitorWindow;
+- (void)toggleMonitoring:(UIButton *)sender;
+- (void)handlePan:(UIPanGestureRecognizer *)recognizer;
+@end
 
-// 我们不再需要按钮了，因为现在是全局监控
-// 所以 ViewController 的 hook 可以暂时移除或注释掉
-
-/*
 %hook UIViewController
-
 - (void)viewDidLoad {
     %orig;
-    // ... 不再需要添加按钮 ...
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self setupMonitorWindow];
+        });
+    }
+}
+%end
+
+%new
+@implementation UIViewController (EchoMonitorControl)
+
+- (void)setupMonitorWindow {
+    UIWindow *keyWindow = self.view.window;
+    if (!keyWindow || [keyWindow viewWithTag:778899]) return;
+
+    g_monitorPanelView = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 250, 200)];
+    g_monitorPanelView.tag = 778899;
+    g_monitorPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.85];
+    g_monitorPanelView.layer.cornerRadius = 10;
+    g_monitorPanelView.layer.borderColor = [UIColor cyanColor].CGColor;
+    g_monitorPanelView.layer.borderWidth = 1.0;
+    g_monitorPanelView.clipsToBounds = YES;
+
+    // 拖动手势
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+    [g_monitorPanelView addGestureRecognizer:pan];
+    
+    // 标题
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, 250, 20)];
+    titleLabel.text = @"手势监控器";
+    titleLabel.textColor = [UIColor cyanColor];
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    titleLabel.font = [UIFont boldSystemFontOfSize:16];
+    [g_monitorPanelView addSubview:titleLabel];
+    
+    // 控制按钮
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.frame = CGRectMake(10, 30, 230, 30);
+    [button setTitle:@"开始监控" forState:UIControlStateNormal];
+    [button addTarget:self action:@selector(toggleMonitoring:) forControlEvents:UIControlEventTouchUpInside];
+    button.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.2 alpha:1.0];
+    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    button.layer.cornerRadius = 5;
+    [g_monitorPanelView addSubview:button];
+
+    // 日志视图
+    g_monitorLogView = [[UITextView alloc] initWithFrame:CGRectMake(10, 70, 230, 120)];
+    g_monitorLogView.backgroundColor = [UIColor blackColor];
+    g_monitorLogView.textColor = [UIColor greenColor];
+    g_monitorLogView.font = [UIFont fontWithName:@"Menlo" size:11];
+    g_monitorLogView.editable = NO;
+    g_monitorLogView.text = @"点击'开始监控'后,触摸屏幕元素。";
+    [g_monitorPanelView addSubview:g_monitorLogView];
+
+    [keyWindow addSubview:g_monitorPanelView];
 }
 
+- (void)toggleMonitoring:(UIButton *)sender {
+    g_isMonitoring = !g_isMonitoring;
+    if (g_isMonitoring) {
+        [sender setTitle:@"停止监控" forState:UIControlStateNormal];
+        sender.backgroundColor = [UIColor redColor];
+        g_monitorLogView.text = @"监控已开始...\n";
+    } else {
+        [sender setTitle:@"开始监控" forState:UIControlStateNormal];
+        sender.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.2 alpha:1.0];
+    }
+}
+
+- (void)handlePan:(UIPanGestureRecognizer *)recognizer {
+    CGPoint translation = [recognizer translationInView:g_monitorPanelView.superview];
+    g_monitorPanelView.center = CGPointMake(g_monitorPanelView.center.x + translation.x, g_monitorPanelView.center.y + translation.y);
+    [recognizer setTranslation:CGPointZero inView:g_monitorPanelView.superview];
+}
+
+@end
 %end
-*/
