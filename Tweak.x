@@ -47,7 +47,7 @@ static void LogToScreen(NSString *format, ...) {
             }
             
             UIButton *loggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            loggerButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
+            loggerButton.frame = CGRectMake(keyWindow.bounds.size.width - 77, 22, 70, 36);
             loggerButton.tag = buttonTag;
             [loggerButton setTitle:@"日志面板" forState:UIControlStateNormal];
             loggerButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
