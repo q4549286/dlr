@@ -1,4 +1,4 @@
-// Filename: UltimateRuntimeMonitor_v13_Final.x
+// Filename: UltimateShotgunMonitor_v12.4_Final.x
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -18,104 +18,79 @@ static void PanelLog(NSString *format, ...) {
         NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text];
         if (newText.length > 5000) { newText = [newText substringToIndex:5000]; }
         g_logView.text = newText;
-        NSLog(@"[RuntimeMonitor-v13] %@", message);
+        NSLog(@"[ShotgunMonitor-v12.4] %@", message);
     });
-}
-
-// 这是我们统一的监控实现。所有被交换的方法都会调用这里。
-// IMP是C函数指针，代表一个方法的具体实现
-static void MyUniversalMonitorImplementation(id self, SEL _cmd, id sender) {
-    // _cmd 变量包含了被调用的原始方法名 (SEL)
-    PanelLog(@"方法被调用: %@", NSStringFromSelector(_cmd));
-    
-    // 我们需要调用原始的实现，但因为我们交换了它，
-    // 所以再次调用 [self performSelector:_cmd] 会导致死循环。
-    // 在这个纯监控脚本里，我们可以暂时不调用原始实现，
-    // 因为我们只想知道是哪个方法被调用了。
-    // 如果App崩溃或行为异常，说明必须调用原始方法。
-    // 但为了找到函数名，这一步是值得的。
 }
 
 // UIViewController 分类接口
-@interface UIViewController (RuntimeMonitorUI)
-- (void)setupRuntimeMonitorPanel;
+@interface UIViewController (ShotgunMonitorUI)
+- (void)setupShotgunMonitorPanel;
 - (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer;
 @end
 
-
 // ========================================================
-// 核心Hook：只Hook一个安全的方法
+// 核心Hook：广撒网，Hook所有可疑方法
 // ========================================================
 %hook 六壬大占.ViewController
 
-// 我们只hook viewDidLoad，这是100%安全且会被调用的
-- (void)viewDidLoad {
-    %orig;
+// *** FINAL FIX: Corrected ALL method signatures based on compiler feedback and logic ***
 
-    // 为了防止重复交换，使用 dispatch_once
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        PanelLog(@"ViewController did load. Preparing to swizzle methods...");
-        
-        // 我们要监控的方法列表
-        NSArray<NSString *> *selectorsToSwizzle = @[
-            @"切換時間模式WithSender:", @"切換行年神煞WithSender:", @"切換旬日",
-            @"切換晝夜功能", @"切回自然晝夜WithSender:", @"時間流逝With定時器:",
-            @"顯示參數設置", @"顯示法訣總覽", @"顯示方法總覽", @"顯示格局總覽",
-            @"顯示九宗門概覽", @"顯示課傳天將摘要WithSender:", @"顯示課傳摘要WithSender:",
-            @"顯示門類選擇", @"顯示七政信息WithSender:", @"顯示起課選擇",
-            @"顯示三宮時信息WithSender:", @"顯示神煞WithSender:", @"顯示時間選擇",
-            @"顯示天地盤觸摸WithSender:", @"顯示天地盤長時觸摸WithSender:",
-            @"顯示新增行年視圖", @"顯示行年總表視圖", @"顯示占案存課"
-        ];
-        
-        Class targetClass = [self class];
-        
-        for (NSString *selectorString in selectorsToSwizzle) {
-            SEL originalSelector = NSSelectorFromString(selectorString);
-            
-            // 检查类是否真的有这个方法，防止崩溃
-            if ([targetClass instancesRespondToSelector:originalSelector]) {
-                Method originalMethod = class_getInstanceMethod(targetClass, originalSelector);
-                // 将原始方法替换为我们的通用监控实现
-                method_setImplementation(originalMethod, (IMP)MyUniversalMonitorImplementation);
-                PanelLog(@"Swizzled: %@", selectorString);
-            } else {
-                 PanelLog(@"Warning: Method not found, skipped: %@", selectorString);
-            }
-        }
-    });
-    
-    // 创建UI面板
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self setupRuntimeMonitorPanel];
-    });
-}
+- (void)切換時間模式WithSender:(id)sender { PanelLog(@"方法被调用: 切換時間模式WithSender:"); %orig; }
+- (void)切換行年神煞WithSender:(id)sender { PanelLog(@"方法被调用: 切換行年神煞WithSender:"); %orig; }
+- (void)切換旬日 { PanelLog(@"方法被调用: 切換旬日"); %orig; } // *** FIX: Removed parameter, this was the source of the error ***
+- (void)切換晝夜功能 { PanelLog(@"方法被调用: 切換晝夜功能"); %orig; }
+- (void)切回自然晝夜WithSender:(id)sender { PanelLog(@"方法被调用: 切回自然晝夜WithSender:"); %orig; }
+- (void)時間流逝With定時器:(id)timer { PanelLog(@"方法被调用: 時間流逝With定時器:"); %orig; }
+
+- (void)顯示參數設置 { PanelLog(@"方法被调用: 顯示參數設置"); %orig; }
+- (void)顯示法訣總覽 { PanelLog(@"方法被调用: 顯示法訣總覽"); %orig; }
+- (void)顯示方法總覽 { PanelLog(@"方法被调用: 顯示方法總覽"); %orig; }
+- (void)顯示格局總覽 { PanelLog(@"方法被调用: 顯示格局總覽"); %orig; }
+- (void)顯示九宗門概覽 { PanelLog(@"方法被调用: 顯示九宗門概覽"); %orig; }
+- (void)顯示課傳天將摘要WithSender:(id)sender { PanelLog(@"方法被调用: 顯示課傳天將摘要WithSender:"); %orig; }
+- (void)顯示課傳摘要WithSender:(id)sender { PanelLog(@"方法被调用: 顯示課傳摘要WithSender:"); %orig; }
+- (void)顯示門類選擇 { PanelLog(@"方法被调用: 顯示門類選擇"); %orig; }
+- (void)顯示七政信息WithSender:(id)sender { PanelLog(@"方法被调用: 顯示七政信息WithSender:"); %orig; }
+- (void)顯示起課選擇 { PanelLog(@"方法被调用: 顯示起課選擇"); %orig; }
+- (void)顯示三宮時信息WithSender:(id)sender { PanelLog(@"方法被调用: 顯示三宮時信息WithSender:"); %orig; }
+- (void)顯示神煞WithSender:(id)sender { PanelLog(@"方法被调用: 顯示神煞WithSender:"); %orig; }
+- (void)顯示時間選擇 { PanelLog(@"方法被调用: 顯示時間選擇"); %orig; }
+- (void)顯示天地盤觸摸WithSender:(id)sender { PanelLog(@"方法被调用: 顯示天地盤觸摸WithSender:"); %orig; }
+- (void)顯示天地盤長時觸摸WithSender:(id)sender { PanelLog(@"方法被调用: 顯示天地盤長時觸摸WithSender:"); %orig; }
+- (void)顯示新增行年視圖 { PanelLog(@"方法被调用: 顯示新增行年視圖"); %orig; }
+- (void)顯示行年總表視圖 { PanelLog(@"方法被调用: 顯示行年總表視圖"); %orig; }
+- (void)顯示占案存課 { PanelLog(@"方法被调用: 顯示占案存課"); %orig; }
 
 %end
 
 
 %hook UIViewController
-%new
-- (void)setupRuntimeMonitorPanel {
-    // 检查是否是目标VC，避免在其他VC上创建
-    if (![self isKindOfClass:NSClassFromString(@"六壬大占.ViewController")]) {
-        return;
+
+- (void)viewDidLoad {
+    %orig;
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self setupShotgunMonitorPanel];
+        });
     }
-    
+}
+
+%new
+- (void)setupShotgunMonitorPanel {
     UIWindow *keyWindow = self.view.window;
-    if (!keyWindow || [keyWindow viewWithTag:131313]) return;
+    if (!keyWindow || [keyWindow viewWithTag:121212]) return;
 
     UIView *panelView = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 300, 250)];
-    panelView.tag = 131313;
+    panelView.tag = 121212;
     panelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
     panelView.layer.cornerRadius = 10;
-    panelView.layer.borderColor = [UIColor systemPurpleColor].CGColor;
+    panelView.layer.borderColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.5 alpha:1.0].CGColor;
     panelView.layer.borderWidth = 1.5;
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, 300, 20)];
-    titleLabel.text = @"运行时监控器 v13";
-    titleLabel.textColor = [UIColor systemPurpleColor];
+    titleLabel.text = @"广撒网监控器 v12.4";
+    titleLabel.textColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.5 alpha:1.0];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panelView addSubview:titleLabel];
@@ -141,4 +116,5 @@ static void MyUniversalMonitorImplementation(id self, SEL _cmd, id sender) {
     panel.center = CGPointMake(panel.center.x + translation.x, panel.center.y + translation.y);
     [recognizer setTranslation:CGPointZero inView:panel.superview];
 }
+
 %end
