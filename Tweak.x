@@ -1,5 +1,5 @@
-// Filename: KeTiMultiExtractor_v1.2
-// 采纳了你的建议，模仿你原始脚本的成功逻辑来查找目标，修复了找不到视图的问题。
+// Filename: KeTiMultiExtractor_v1.3
+// 最终修正版。采用更健壮的逻辑，遍历所有可见单元格来定位目标，确保成功。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -9,20 +9,18 @@
 // 1. 全局变量与辅助函数
 // =================================================================
 
-static BOOL g_isMultiExtracting = NO;               // 标记是否正在执行批量任务
-static NSMutableArray *g_workQueue = nil;           // 待处理的任务队列 (存放每个单元的indexPath)
-static NSMutableArray *g_resultsArray = nil;        // 存放每次提取到的结果
-static UICollectionView *g_targetCollectionView = nil; // 目标CollectionView
-static UITextView *g_logView = nil;                 // 日志窗口
+static BOOL g_isMultiExtracting = NO;
+static NSMutableArray *g_workQueue = nil;
+static NSMutableArray *g_resultsArray = nil;
+static UICollectionView *g_targetCollectionView = nil;
+static UITextView *g_logView = nil;
 
-// 辅助函数：递归查找子视图
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if (!view || !storage) return;
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
-// 统一日志函数
 static void LogMessage(NSString *format, ...) {
     if (!g_logView) return;
     va_list args;
@@ -43,15 +41,12 @@ static void LogMessage(NSString *format, ...) {
 // 2. 核心的Hook与队列处理逻辑
 // =================================================================
 
-// 前向声明，因为presentViewController的hook需要调用它
 static void processWorkQueue(void); 
 
-// Hook：拦截弹窗事件
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     Class targetClass = NSClassFromString(@"六壬大占.課體概覽視圖");
     
-    // 只在我们的批量任务执行时，才拦截目标窗口
     if (g_isMultiExtracting && targetClass && [vcToPresent isKindOfClass:targetClass]) {
         vcToPresent.view.alpha = 0.0f; animated = NO;
         
@@ -74,7 +69,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [g_resultsArray addObject:[textParts componentsJoinedByString:@"\n"]];
             LogMessage(@"成功提取第 %lu 项...", (unsigned long)g_resultsArray.count);
             
-            // 自动关闭弹窗，并在关闭后处理下一个任务
             [vcToPresent dismissViewControllerAnimated:NO completion:^{
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     processWorkQueue();
@@ -87,18 +81,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-// 任务队列处理器
 static void processWorkQueue() {
     if (g_workQueue.count == 0) {
         LogMessage(@"所有 %lu 项任务处理完毕！", (unsigned long)g_resultsArray.count);
-        
         NSMutableString *finalResult = [NSMutableString string];
         for (NSUInteger i = 0; i < g_resultsArray.count; i++) {
             [finalResult appendFormat:@"--- 第 %lu 项详情 ---\n", (unsigned long)i + 1];
             [finalResult appendString:g_resultsArray[i]];
             [finalResult appendString:@"\n\n"];
         }
-        
         [UIPasteboard generalPasteboard].string = finalResult;
         LogMessage(@"批量提取完成，所有内容已合并并复制到剪贴板！");
         
@@ -111,7 +102,7 @@ static void processWorkQueue() {
     
     NSIndexPath *indexPath = g_workQueue.firstObject;
     [g_workQueue removeObjectAtIndex:0];
-    LogMessage(@"正在处理第 %lu/%lu 项...", (unsigned long)(g_resultsArray.count + 1), (unsigned long)(g_resultsArray.count + g_workQueue.count + 1));
+    LogMessage(@"正在处理第 %lu/%lu 项 (indexPath: %ld-%ld)...", (unsigned long)(g_resultsArray.count + 1), (unsigned long)(g_resultsArray.count + g_workQueue.count + 1), (long)indexPath.section, (long)indexPath.item);
     
     id delegate = g_targetCollectionView.delegate;
     if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
@@ -158,12 +149,12 @@ static void processWorkQueue() {
     panel.tag = 789002;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemTealColor].CGColor; // 正确道路版用青色
+    panel.layer.borderColor = [UIColor systemGreenColor].CGColor;
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"课体批量提取器 v1.2";
-    titleLabel.textColor = [UIColor systemTealColor];
+    titleLabel.text = @"课体批量提取器 v1.3";
+    titleLabel.textColor = [UIColor systemGreenColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
@@ -172,7 +163,7 @@ static void processWorkQueue() {
     extractButton.frame = CGRectMake(20, 50, panel.bounds.size.width - 40, 44);
     [extractButton setTitle:@"一键提取全部课体" forState:UIControlStateNormal];
     [extractButton addTarget:self action:@selector(startMultiExtraction) forControlEvents:UIControlEventTouchUpInside];
-    extractButton.backgroundColor = [UIColor systemTealColor];
+    extractButton.backgroundColor = [UIColor systemGreenColor];
     [extractButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     extractButton.layer.cornerRadius = 8;
@@ -180,11 +171,11 @@ static void processWorkQueue() {
 
     g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, 110, panel.bounds.size.width - 20, panel.bounds.size.height - 120)];
     g_logView.backgroundColor = [UIColor blackColor];
-    g_logView.textColor = [UIColor systemTealColor];
+    g_logView.textColor = [UIColor systemGreenColor];
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"已更新查找逻辑，请重试。";
+    g_logView.text = @"已采用最终查找逻辑，请重试。";
     [panel addSubview:g_logView];
     [keyWindow addSubview:panel];
 }
@@ -216,19 +207,22 @@ static void processWorkQueue() {
     FindSubviewsOfClassRecursive([UICollectionView class], keyWindow, allCVs);
     LogMessage(@"在窗口中找到 %lu 个 UICollectionView。", (unsigned long)allCVs.count);
     
-    // --- 核心修复：模仿你原始脚本的逻辑，通过检查 'visibleCells' 来寻找目标 ---
+    // --- 核心修复：遍历所有可见单元格来定位目标 ---
     for (UICollectionView *cv in allCVs) {
         LogMessage(@"正在检查位于 (%.0f, %.0f) 的 CollectionView...", cv.frame.origin.x, cv.frame.origin.y);
-        if (cv.visibleCells.count > 0) {
-            // 检查第一个可见单元格的类型
-            if ([cv.visibleCells.firstObject isKindOfClass:keTiCellClass]) {
+        for (UICollectionViewCell *cell in cv.visibleCells) {
+             LogMessage(@"--> 检查可见单元格，类型: %@", NSStringFromClass([cell class]));
+             if ([cell isKindOfClass:keTiCellClass]) {
                 LogMessage(@"成功匹配! 目标确定!");
                 g_targetCollectionView = cv;
-                break;
-            }
+                break; // 找到了，跳出内层循环
+             }
+        }
+        if (g_targetCollectionView) {
+            break; // 找到了，跳出外层循环
         }
     }
-    // -------------------------------------------------------------------
+    // --------------------------------------------------
 
     if (!g_targetCollectionView) { LogMessage(@"错误: 在整个窗口中都找不到包含课体视图的UICollectionView。"); return; }
     
@@ -236,24 +230,27 @@ static void processWorkQueue() {
     g_workQueue = [NSMutableArray array];
     g_resultsArray = [NSMutableArray array];
     
-    // 重新从数据源获取所有单元格的indexPath，确保完整性
     NSInteger totalItems = 0;
     if ([g_targetCollectionView.dataSource respondsToSelector:@selector(collectionView:numberOfItemsInSection:)]) {
         totalItems = [g_targetCollectionView.dataSource collectionView:g_targetCollectionView numberOfItemsInSection:0];
     }
     
+    if (totalItems == 0) {
+        LogMessage(@"警告：目标列表的数据源报告有0个单元格。");
+    }
+
     for (NSInteger i = 0; i < totalItems; i++) {
         [g_workQueue addObject:[NSIndexPath indexPathForItem:i inSection:0]];
     }
 
     if (g_workQueue.count == 0) {
-        LogMessage(@"错误: 未找到任何课体单元。");
+        LogMessage(@"错误: 未找到任何课体单元来创建任务队列。");
         g_isMultiExtracting = NO;
         return;
     }
 
     LogMessage(@"发现 %lu 个课体单元，开始处理队列...", (unsigned long)g_workQueue.count);
-    processWorkQueue(); // 启动队列处理器
+    processWorkQueue();
 }
 %end
 
