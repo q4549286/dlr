@@ -1,4 +1,4 @@
-// Filename: UltimateShotgunMonitor_v12.x
+// Filename: UltimateShotgunMonitor_v12.1_Fixed.x
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -18,13 +18,14 @@ static void PanelLog(NSString *format, ...) {
         NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text];
         if (newText.length > 5000) { newText = [newText substringToIndex:5000]; }
         g_logView.text = newText;
-        NSLog(@"[ShotgunMonitor-v12] %@", message);
+        NSLog(@"[ShotgunMonitor-v12.1] %@", message);
     });
 }
 
 // UIViewController 分类接口
 @interface UIViewController (ShotgunMonitorUI)
 - (void)setupShotgunMonitorPanel;
+- (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer;
 @end
 
 // ========================================================
@@ -32,7 +33,7 @@ static void PanelLog(NSString *format, ...) {
 // ========================================================
 %hook 六壬大占.ViewController
 
-// --- 把您列表里的所有可疑方法都加进来 ---
+// *** FIX: Added correct method signatures for all hooked methods ***
 
 - (void)切換時間模式WithSender:(id)sender {
     PanelLog(@"方法被调用: 切換時間模式WithSender:");
@@ -152,7 +153,7 @@ static void PanelLog(NSString *format, ...) {
     panelView.layer.borderWidth = 1.5;
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, 300, 20)];
-    titleLabel.text = @"广撒网监控器 v12";
+    titleLabel.text = @"广撒网监控器 v12.1";
     titleLabel.textColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.5 alpha:1.0];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
