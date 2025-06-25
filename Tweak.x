@@ -1,4 +1,4 @@
-// Filename: EchoKeTiDetailExtractor_Fixed.x
+// Filename: EchoKeTiDetailExtractor_Final_Fixed.x
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -213,7 +213,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         NSLog(@"[KeTiExtractor-Start] 方法已调用，等待弹窗被Hook拦截...");
 
     } else {
-        NSString *errorMsg = [NSString stringWithFormat:@"[错误] 控制器不响应方法 '%@'", NSStringFromSelector(actionToToPerform)];
+        // *** FIX: Corrected variable name from 'actionToToPerform' to 'actionToPerform' ***
+        NSString *errorMsg = [NSString stringWithFormat:@"[错误] 控制器不响应方法 '%@'", NSStringFromSelector(actionToPerform)];
         NSLog(@"[KeTiExtractor-Start] %@", errorMsg);
         if (completion) completion(errorMsg);
     }
