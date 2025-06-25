@@ -113,13 +113,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, 40)];
     titleLabel.text = @"Echo 六壬解析引擎 v12.0";
     titleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
-    titleLabel.textColor = [UIColor labelColor]; // 自适应明暗模式
+    titleLabel.textColor = [UIColor blackColor];
     titleLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:titleLabel];
     UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 50, contentView.bounds.size.width, contentView.bounds.size.height - 120)]; [contentView addSubview:scrollView];
 
     CGFloat currentY = 10;
     UIButton* (^createButton)(NSString*, NSInteger, UIColor*) = ^(NSString* title, NSInteger tag, UIColor* color) { UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem]; [btn setTitle:title forState:UIControlStateNormal]; btn.tag = tag; btn.backgroundColor = color; [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; btn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBold]; btn.titleLabel.adjustsFontSizeToFitWidth = YES; btn.titleLabel.minimumScaleFactor = 0.8; btn.layer.cornerRadius = 8; return btn; };
-    UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { UILabel *label = [[UILabel alloc] init]; label.text = title; label.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold]; label.textColor = [UIColor secondaryLabelColor]; return label; }; // 使用次级标题颜色
+    UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { UILabel *label = [[UILabel alloc] init]; label.text = title; label.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold]; label.textColor = [UIColor darkGrayColor];
+ return label; }; // 使用次级标题颜色
     
     // [MODIFIED] 更新了分区标题和按钮命名/颜色
     UILabel *sec1Title = createSectionTitle(@"核心解析");
@@ -147,14 +148,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     // [MODIFIED] 更新了日志区域的视觉效果和初始文本
     g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, contentView.bounds.size.height - 230, contentView.bounds.size.width, 170)];
-    g_logTextView.backgroundColor = [UIColor secondarySystemBackground];
-    g_logTextView.textColor = [UIColor secondaryLabelColor];
+    g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+    g_logTextView.textColor = [UIColor colorWithRed:0.6 green:0.6 blue:0.6 alpha:1.0];
     g_logTextView.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightRegular];
     g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8;
     g_logTextView.text = @"[Echo引擎]：就绪。\n";
     [contentView addSubview:g_logTextView];
     
-    UIButton *copyButton = createButton(@"复制日志并关闭", 999, [UIColor systemGray2Color]);
+    UIButton *copyButton = createButton(@"复制日志并关闭", 999, [UIColor grayColor]);
     copyButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, contentView.bounds.size.width - 30, 40); [contentView addSubview:copyButton];
     g_mainControlPanelView.alpha = 0; [keyWindow addSubview:g_mainControlPanelView]; [UIView animateWithDuration:0.4 animations:^{ g_mainControlPanelView.alpha = 1.0; }];
 }
