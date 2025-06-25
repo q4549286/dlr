@@ -3,7 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数 (无变化)
+// 1. 全局变量与辅助函数
 // =========================================================================
 static BOOL g_isExtractingKeChuanDetail = NO;
 static NSMutableArray *g_capturedKeChuanDetailArray = nil;
@@ -44,17 +44,78 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 - (void)processKeChuanQueue_Truth;
 - (void)createOrShowControlPanel_Truth;
 - (void)copyAndClose_Truth;
-// 【新】为课体添加调试方法
-- (void)debug_ExploreKeTi;
+// 【新】视图层级打印调试方法
+- (void)debug_DumpViewHierarchy;
+- (void)dumpViewRecursive:(UIView *)view withIndent:(NSString *)indent;
 @end
 
 %hook UIViewController
 
-// --- viewDidLoad, presentViewController, copyAndClose_Truth (无变化) ---
-- (void)viewDidLoad { %orig; /* ... */ }
-- (void)presentViewController:(UIViewController *)vc animated:(BOOL)flag completion:(void (^)(void))completion { /* ... */ }
-%new
-- (void)copyAndClose_Truth { /* ... */ }
+// --- viewDidLoad ---
+- (void)viewDidLoad {
+    %orig;
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
+            NSInteger controlButtonTag = 556691;
+            if ([keyWindow viewWithTag:controlButtonTag]) { [[keyWindow viewWithTag:controlButtonTag] removeFromSuperview]; }
+            
+            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
+            controlButton.tag = controlButtonTag;
+            [controlButton setTitle:@"提取面板" forState:UIControlStateNormal];
+            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            controlButton.backgroundColor = [UIColor purpleColor];
+            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            controlButton.layer.cornerRadius = 8;
+            [controlButton addTarget:self action:@selector(createOrShowControlPanel_Truth) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:controlButton];
+        });
+    }
+}
+
+// --- presentViewController ---
+- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
+    if (g_isExtractingKeChuanDetail) {
+        NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
+        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"] || [vcClassName containsString:@"課體摘要視圖"]) {
+            LogMessage(@"捕获到弹窗: %@", vcClassName);
+            viewControllerToPresent.view.alpha = 0.0f; flag = NO;
+            
+            void (^newCompletion)(void) = ^{
+                if (completion) { completion(); }
+                
+                UIView *contentView = viewControllerToPresent.view;
+                NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                    if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
+                    if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+                    return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+                }];
+                
+                NSMutableArray<NSString *> *textParts = [NSMutableArray array];
+                for (UILabel *label in allLabels) {
+                    if (label.text && label.text.length > 0) {
+                        [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
+                    }
+                }
+                NSString *fullDetail = [textParts componentsJoinedByString:@"\n"];
+                [g_capturedKeChuanDetailArray addObject:fullDetail];
+                LogMessage(@"成功提取内容 (共 %lu 条)", (unsigned long)g_capturedKeChuanDetailArray.count);
+                
+                [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
+                    const double kDelayInSeconds = 0.2; 
+                    LogMessage(@"弹窗已关闭，延迟 %.1f 秒后处理下一个...", kDelayInSeconds);
+                    [self processKeChuanQueue_Truth];
+                }];
+            };
+            %orig(viewControllerToPresent, flag, newCompletion);
+            return;
+        }
+    }
+    %orig(viewControllerToPresent, flag, completion);
+}
 
 %new
 - (void)createOrShowControlPanel_Truth {
@@ -75,12 +136,12 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     [startButton addTarget:self action:@selector(startExtraction_Truth) forControlEvents:UIControlEventTouchUpInside];
     startButton.backgroundColor = [UIColor systemGreenColor]; [startButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; startButton.layer.cornerRadius = 8;
     
-    // 【新】课体调试按钮
-    UIButton *ketiDebugButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    ketiDebugButton.frame = CGRectMake(170, 10, 150, 40);
-    [ketiDebugButton setTitle:@"探索课体(Debug)" forState:UIControlStateNormal];
-    [ketiDebugButton addTarget:self action:@selector(debug_ExploreKeTi) forControlEvents:UIControlEventTouchUpInside];
-    ketiDebugButton.backgroundColor = [UIColor systemRedColor]; [ketiDebugButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; ketiDebugButton.layer.cornerRadius = 8;
+    // 【新】视图层级打印按钮
+    UIButton *debugButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    debugButton.frame = CGRectMake(170, 10, 150, 40);
+    [debugButton setTitle:@"打印视图层级(Debug)" forState:UIControlStateNormal];
+    [debugButton addTarget:self action:@selector(debug_DumpViewHierarchy) forControlEvents:UIControlEventTouchUpInside];
+    debugButton.backgroundColor = [UIColor systemRedColor]; [debugButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; debugButton.layer.cornerRadius = 8;
     
     // 复制按钮
     UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -94,104 +155,57 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     g_logTextView.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0]; g_logTextView.textColor = [UIColor systemGreenColor]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12]; g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8; g_logTextView.text = @"日志控制台已准备就绪。\n";
     
     [g_controlPanelView addSubview:startButton];
-    [g_controlPanelView addSubview:ketiDebugButton];
+    [g_controlPanelView addSubview:debugButton];
     [g_controlPanelView addSubview:copyButton];
     [g_controlPanelView addSubview:g_logTextView];
     [keyWindow addSubview:g_controlPanelView];
 }
 
-// --- 原有功能，保持不变 ---
 %new
-- (void)startExtraction_Truth { /* ... */ }
-%new
-- (void)processKeChuanQueue_Truth { /* ... */ }
-// 省略这些方法的完整实现，以保持清晰
+- (void)copyAndClose_Truth { /* ... 原有代码保持不变 ... */ }
 
+%new
+- (void)startExtraction_Truth { /* ... 原有代码保持不变 ... */ }
+
+%new
+- (void)processKeChuanQueue_Truth { /* ... 原有代码保持不变 ... */ }
 
 // =========================================================================
-// 【【【【【 新增的课体信息探索模块 】】】】】
+// 【【【【【 新增的视图层级打印模块 】】】】】
 // =========================================================================
 %new
-- (void)debug_ExploreKeTi {
-    LogMessage(@"--- 开始【课体】信息探索 ---");
+- (void)debug_DumpViewHierarchy {
+    LogMessage(@"--- 开始打印 ViewController 的完整视图层级 ---");
+    [self dumpViewRecursive:self.view withIndent:@""];
+    LogMessage(@"\n--- 视图层级打印完毕 ---");
+}
 
-    Class ketiViewClass = NSClassFromString(@"六壬大占.課體視圖");
-    if (!ketiViewClass) {
-        LogMessage(@"【探索】错误：找不到 課體視圖 类。");
-        return;
+%new
+- (void)dumpViewRecursive:(UIView *)view withIndent:(NSString *)indent {
+    if (!view) return;
+
+    NSString *className = NSStringFromClass([view class]);
+    NSString *frame = NSStringFromCGRect(view.frame);
+    
+    NSString *extraInfo = @"";
+    if ([view isKindOfClass:[UILabel class]]) {
+        UILabel *label = (UILabel *)view;
+        if (label.text) {
+             extraInfo = [NSString stringWithFormat:@" (Text: '%@')", label.text];
+        }
     }
 
-    NSMutableArray *ketiViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(ketiViewClass, self.view, ketiViews);
-
-    if (ketiViews.count == 0) {
-        LogMessage(@"【探索】错误：在视图层级中找不到 課體視圖 的实例。");
-        return;
+    LogMessage(@"%@+ %@, Frame: %@%@", indent, className, frame, extraInfo);
+    
+    // 如果这个视图的类名包含“重審門”，我们就特别关注它
+    if ([className containsString:@"重審門"]) {
+        LogMessage(@"%@  【【【！！！发现疑似目标容器！！！】】】", indent);
     }
     
-    UIView *ketiView = ketiViews.firstObject;
-    LogMessage(@"【探索】成功找到 課體視圖 实例: %@", ketiView);
-
-    // 使用 runtime 获取手势的所有目标-动作对
-    Ivar targetsIvar = class_getInstanceVariable([UIGestureRecognizer class], "_targets");
-    if (!targetsIvar) {
-         LogMessage(@"【探索】致命错误: 无法访问手势的 '_targets' 私有变量。无法继续。");
-         return;
+    NSString *newIndent = [NSString stringWithFormat:@"  %@", indent];
+    for (UIView *subview in view.subviews) {
+        [self dumpViewRecursive:subview withIndent:newIndent];
     }
-
-    int gestureIndex = 0;
-    for (UIGestureRecognizer *gesture in ketiView.gestureRecognizers) {
-        LogMessage(@"\n\n============== 正在分析手势 #%d: %@ ==============", gestureIndex, [gesture class]);
-        
-        NSArray *targets = object_getIvar(gesture, targetsIvar);
-        
-        if (!targets || targets.count == 0) {
-            LogMessage(@"【探索】手势 #%d 没有找到任何目标(target)。", gestureIndex);
-            gestureIndex++;
-            continue;
-        }
-
-        int targetIndex = 0;
-        for (id targetWrapper in targets) {
-            SEL action = NULL;
-            id target = nil;
-            @try {
-                action = [targetWrapper performSelector:@selector(action)];
-                target = [targetWrapper performSelector:@selector(target)];
-            } @catch (NSException *exception) {
-                LogMessage(@"【探索】获取 target/action 失败: %@", exception);
-                continue;
-            }
-
-            if (target && action) {
-                LogMessage(@"\n--- 手势 #%d 的目标 #%d ---", gestureIndex, targetIndex);
-                LogMessage(@"【目标对象】: %@", target);
-                LogMessage(@"【目标类名】: %@", [target class]);
-                LogMessage(@"【执行动作】: %@", NSStringFromSelector(action));
-
-                LogMessage(@"\n--- 开始列出目标对象【%@】的所有方法 ---", [target class]);
-                unsigned int methodCount = 0;
-                Method *methods = class_copyMethodList([target class], &methodCount);
-                if (methods) {
-                    for (unsigned int i = 0; i < methodCount; i++) {
-                        Method method = methods[i];
-                        NSString *methodName = NSStringFromSelector(method_getName(method));
-                        // 筛选出我们可能感兴趣的方法
-                        if ([methodName containsString:@"點擊"] || [methodName containsString:@"課"] || [methodName containsString:@"tap"] || [methodName containsString:@"handle"]) {
-                            LogMessage(@"    - (找到可疑方法): %@", methodName);
-                        }
-                    }
-                    free(methods);
-                    LogMessage(@"--- 方法列表结束 ---");
-                } else {
-                    LogMessage(@"    - 无法获取该对象的方法列表。");
-                }
-            }
-            targetIndex++;
-        }
-        gestureIndex++;
-    }
-    LogMessage("\n\n============== 探索完毕 ==============");
 }
 
 %end
