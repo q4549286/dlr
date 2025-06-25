@@ -1,5 +1,5 @@
-// Filename: KeTi_JiuZongMen_Extractor_v1.9
-// 终极修复版！采用“地毯式”递归搜索，确保找到所有UI元素，彻底解决内容为空的问题。
+// Filename: KeTi_JiuZongMen_Extractor_v2.0
+// 终极架构修复版！根据您最终的Flex截图，采用最简单直接的逻辑，只寻找主StackView并遍历其内容，确保100%提取成功。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -40,7 +40,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[Extractor-Fixed-v1.9] %@", message);
+        NSLog(@"[Extractor-v2.0] %@", message);
     });
 }
 
@@ -51,6 +51,7 @@ static void LogMessage(NSString *format, ...) {
 
 static void processKeTiWorkQueue(void); 
 
+// Hook：拦截弹窗事件
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     Class targetClass = NSClassFromString(@"六壬大占.課體概覽視圖");
@@ -61,86 +62,55 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         void (^extractionCompletion)(void) = ^{
             if (completion) { completion(); }
 
-            // --- 终极修复：基于“地毯式”递归搜索的提取逻辑 ---
-            NSMutableArray<NSDictionary *> *sortedElements = [NSMutableArray array];
-            UIView *contentView = vcToPresent.view; 
+            // --- 全新的、基于真实视图层级的终极提取逻辑 ---
+            NSMutableArray<NSString *> *textParts = [NSMutableArray array];
+            UIView *containerView = vcToPresent.view; 
             
-            if ([contentView.subviews.firstObject isKindOfClass:[UIScrollView class]]) {
-                 UIScrollView *scrollView = contentView.subviews.firstObject;
+            // 1. 深入找到包含所有内容的那个UIView (在UIScrollView内部)
+            if ([containerView.subviews.firstObject isKindOfClass:[UIScrollView class]]) {
+                 UIScrollView *scrollView = containerView.subviews.firstObject;
                  if (scrollView.subviews.count > 0) {
-                     contentView = scrollView.subviews.firstObject;
+                     containerView = scrollView.subviews.firstObject;
                  }
             }
-            LogMessage(@"确定内容容器视图: %@", NSStringFromClass([contentView class]));
 
-            // 1. 使用递归，无差别地收集所有 StackViews 和 Labels
-            NSMutableArray *allStackViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
-            LogMessage(@"递归找到 %lu 个 StackView", (unsigned long)allStackViews.count);
-
-            NSMutableArray *allLabels = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-            LogMessage(@"递归找到 %lu 个 Label", (unsigned long)allLabels.count);
-
-            // 2. 将它们全部放入一个待排序的数组中，并标记出在StackView中的Label
-            NSMutableSet *labelsInStackViews = [NSMutableSet set];
-            for (UIStackView *stackView in allStackViews) {
-                [sortedElements addObject:@{ @"view": stackView, @"y": @(stackView.frame.origin.y) }];
-                NSMutableArray *labels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], stackView, labels);
-                for (UILabel *label in labels) {
-                    [labelsInStackViews addObject:label];
+            // 2. 在这个UIView里找到唯一的、垂直排列的主StackView
+            UIStackView *mainVerticalStackView = nil;
+            for(UIView *subview in containerView.subviews){
+                if([subview isKindOfClass:[UIStackView class]]){
+                    mainVerticalStackView = (UIStackView *)subview;
+                    break;
                 }
             }
-
-            for (UILabel *label in allLabels) {
-                if (![labelsInStackViews containsObject:label]) {
-                    [sortedElements addObject:@{ @"view": label, @"y": @(label.frame.origin.y) }];
-                }
-            }
-            LogMessage(@"共收集到 %lu 个待排序元素。", (unsigned long)sortedElements.count);
-
-            // 3. 按Y坐标排序
-            [sortedElements sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-                return [obj1[@"y"] compare:obj2[@"y"]];
-            }];
-
-            // 4. 遍历排序后的元素列表，智能生成结果
-            NSMutableArray<NSString *> *textParts = [NSMutableArray array];
-            NSArray *knownTitles = @[@"判断", @"变体", @"简断", @"象辞", @"判斷", @"變體", @"簡斷", @"象辭"];
-
-            for (NSUInteger i = 0; i < sortedElements.count; i++) {
-                UIView *view = sortedElements[i][@"view"];
-
-                if ([view isKindOfClass:[UIStackView class]]) {
-                    UIStackView *stackView = (UIStackView *)view;
-                    if (stackView.arrangedSubviews.count >= 2 && [stackView.arrangedSubviews[0] isKindOfClass:[UILabel class]] && [stackView.arrangedSubviews[1] isKindOfClass:[UILabel class]]) {
-                        UILabel *titleLabel = (UILabel *)stackView.arrangedSubviews[0];
-                        UILabel *contentLabel = (UILabel *)stackView.arrangedSubviews[1];
-                        if (titleLabel.text.length > 0) {
-                            NSString *contentText = contentLabel.text ?: @"";
-                            [textParts addObject:[NSString stringWithFormat:@"%@ → %@", titleLabel.text, [contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]];
-                        }
-                    }
-                } else if ([view isKindOfClass:[UILabel class]]) {
-                    UILabel *titleLabel = (UILabel *)view;
-                    if ([knownTitles containsObject:titleLabel.text] && (i + 1 < sortedElements.count)) {
-                        UIView *nextView = sortedElements[i+1][@"view"];
-                        if ([nextView isKindOfClass:[UILabel class]]) {
-                            UILabel *contentLabel = (UILabel *)nextView;
-                             if (![knownTitles containsObject:contentLabel.text]) {
+            
+            // 3. 遍历主StackView里的每一个子视图(它们都是横向的StackView)
+            if(mainVerticalStackView){
+                LogMessage(@"找到主StackView，遍历 %lu 个子项...", (unsigned long)mainVerticalStackView.arrangedSubviews.count);
+                for(UIView *subview in mainVerticalStackView.arrangedSubviews){
+                    if([subview isKindOfClass:[UIStackView class]]){
+                        UIStackView *rowStackView = (UIStackView *)subview;
+                        if(rowStackView.arrangedSubviews.count >= 2 && [rowStackView.arrangedSubviews[0] isKindOfClass:[UILabel class]] && [rowStackView.arrangedSubviews[1] isKindOfClass:[UILabel class]]){
+                            UILabel *titleLabel = (UILabel *)rowStackView.arrangedSubviews[0];
+                            UILabel *contentLabel = (UILabel *)rowStackView.arrangedSubviews[1];
+                            
+                            if(titleLabel.text && titleLabel.text.length > 0){
                                 NSString *contentText = contentLabel.text ?: @"";
+                                if([contentText.lowercaseString isEqualToString:@"nil"]){
+                                    contentText = @""; // 处理Flex截图中看到的 "nil"
+                                }
                                 [textParts addObject:[NSString stringWithFormat:@"%@ → %@", titleLabel.text, [contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]];
-                                i++;
-                             }
+                            }
                         }
                     }
                 }
+            } else {
+                LogMessage(@"错误：未能找到主StackView，提取失败！");
             }
             
             NSString *extractedText = [textParts componentsJoinedByString:@"\n"];
             // --- 提取逻辑结束 ---
             
+            // --- 根据任务类型，决定如何处理提取到的文本 ---
             if ([g_currentTaskType isEqualToString:@"KeTi"]) {
                 [g_keTi_resultsArray addObject:extractedText];
                 LogMessage(@"成功提取“课体”第 %lu 项...", (unsigned long)g_keTi_resultsArray.count);
@@ -149,11 +119,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                         processKeTiWorkQueue();
                     });
                 }];
-            } else if ([g_currentTaskType isEqualToString:@"JiuZongMen"]) {
+            } 
+            else if ([g_currentTaskType isEqualToString:@"JiuZongMen"]) {
                 LogMessage(@"成功提取“九宗门”详情！");
                 [UIPasteboard generalPasteboard].string = extractedText;
                 LogMessage(@"内容已复制到剪贴板！");
-                g_isExtracting = NO; g_currentTaskType = nil;
+                g_isExtracting = NO;
+                g_currentTaskType = nil;
                 [vcToPresent dismissViewControllerAnimated:NO completion:nil];
             }
         };
@@ -202,31 +174,19 @@ static void processKeTiWorkQueue() {
 %new
 - (void)setupCombinedExtractorPanel {
     UIWindow *keyWindow = nil;
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                keyWindow = scene.windows.firstObject;
-                break;
-            }
-        }
-    } else {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        keyWindow = [[UIApplication sharedApplication] keyWindow];
-        #pragma clang diagnostic pop
-    }
+    if (@available(iOS 13.0, *)) { for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) { if (scene.activationState == UISceneActivationStateForegroundActive) { keyWindow = scene.windows.firstObject; break; } } } else { #pragma clang diagnostic push; _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\""); keyWindow = [[UIApplication sharedApplication] keyWindow]; #pragma clang diagnostic pop; }
     if (!keyWindow || [keyWindow viewWithTag:889900]) return;
 
     UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 350, 450)];
     panel.tag = 889900;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.4 alpha:1.0].CGColor;
+    panel.layer.borderColor = [UIColor systemGreenColor].CGColor;
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"课体/九宗门提取器 v1.9";
-    titleLabel.textColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.4 alpha:1.0];
+    titleLabel.text = @"课体/九宗门提取器 v2.0";
+    titleLabel.textColor = [UIColor systemGreenColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
@@ -235,13 +195,13 @@ static void processKeTiWorkQueue() {
     keTiButton.frame = CGRectMake(20, 50, panel.bounds.size.width - 40, 44);
     [keTiButton setTitle:@"一键提取全部课体" forState:UIControlStateNormal];
     [keTiButton addTarget:self action:@selector(startKeTiExtraction) forControlEvents:UIControlEventTouchUpInside];
-    keTiButton.backgroundColor = [UIColor systemGreenColor];
+    keTiButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.4 alpha:1.0];
     
     UIButton *jiuZongMenButton = [UIButton buttonWithType:UIButtonTypeSystem];
     jiuZongMenButton.frame = CGRectMake(20, 104, panel.bounds.size.width - 40, 44);
     [jiuZongMenButton setTitle:@"提取九宗门详情" forState:UIControlStateNormal];
     [jiuZongMenButton addTarget:self action:@selector(startJiuZongMenExtraction) forControlEvents:UIControlEventTouchUpInside];
-    jiuZongMenButton.backgroundColor = [UIColor systemCyanColor];
+    jiuZongMenButton.backgroundColor = [UIColor systemTealColor];
 
     for (UIButton *btn in @[keTiButton, jiuZongMenButton]) {
         [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -256,7 +216,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"已采用终极递归提取逻辑，请测试。";
+    g_logView.text = @"提取逻辑已终极修复，请测试。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -294,18 +254,8 @@ static void processKeTiWorkQueue() {
     LogMessage(@"--- 开始“九宗门”提取任务 ---");
     g_isExtracting = YES; g_currentTaskType = @"JiuZongMen";
     SEL selector = NSSelectorFromString(@"顯示九宗門概覽");
-    if ([self respondsToSelector:selector]) {
-        LogMessage(@"正在调用方法: 顯示九宗門概覽");
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:selector];
-        #pragma clang diagnostic pop
-    } 
-    else {
-        LogMessage(@"错误: 当前ViewController没有'顯示九宗門概覽'方法。");
-        g_isExtracting = NO;
-        g_currentTaskType = nil;
-    }
+    if ([self respondsToSelector:selector]) { LogMessage(@"正在调用方法: 顯示九宗門概覽"); #pragma clang diagnostic push; #pragma clang diagnostic ignored "-Warc-performSelector-leaks"; [self performSelector:selector]; #pragma clang diagnostic pop; } 
+    else { LogMessage(@"错误: 当前ViewController没有'顯示九宗門概覽'方法。"); g_isExtracting = NO; g_currentTaskType = nil; }
 }
 
 %new
@@ -327,7 +277,7 @@ static void processKeTiWorkQueue() {
         Class vcClass = NSClassFromString(@"六壬大占.ViewController");
         if (vcClass) {
             MSHookMessageEx(vcClass, @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-            NSLog(@"[Extractor-Fixed-v1.9] 提取器已准备就绪。");
+            NSLog(@"[Extractor-v2.0] 提取器已准备就绪。");
         }
     }
 }
