@@ -1,5 +1,5 @@
-// Filename: CombinedExtractor_v4.2_Complete
-// 描述: 最终修复版。采用两阶段提取，智能处理“详解”部分的特殊配对结构。此为完整代码，可直接编译。
+// Filename: CombinedExtractor_v4.3_CompileFix
+// 描述: 修复了v4.2中的编译错误。将复杂的三元运算符改写为if-else，以提高兼容性。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -36,7 +36,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[CombinedExtractor-v4.2] %@", message);
+        NSLog(@"[CombinedExtractor-v4.3] %@", message);
     });
 }
 
@@ -46,7 +46,7 @@ static void LogMessage(NSString *format, ...) {
 
 static void processKeTiWorkQueue(void);
 
-// ================== 两阶段智能提取函数 ==================
+// ================== 两阶段智能提取函数 (已修复) ==================
 static NSString* extractDataFromStackView(UIView *rootView, BOOL includeXiangJie) {
     if (!rootView) return @"[错误: 根视图为空]";
 
@@ -58,9 +58,6 @@ static NSString* extractDataFromStackView(UIView *rootView, BOOL includeXiangJie
     NSArray *arrangedSubviews = mainStackView.arrangedSubviews;
     if (arrangedSubviews.count == 0) return @"[错误: UIStackView中没有内容]";
     
-    // --- 两阶段提取逻辑 ---
-    
-    // 阶段一：处理“详解”之前的内容
     NSMutableArray<NSString *> *preXiangJieBlocks = [NSMutableArray array];
     NSMutableArray<UILabel *> *xiangJieLabels = [NSMutableArray array];
     
@@ -74,10 +71,8 @@ static NSString* extractDataFromStackView(UIView *rootView, BOOL includeXiangJie
         UILabel *label = (UILabel *)subview;
         if (!label.text || label.text.length == 0) continue;
         
-        // 检查是否进入详解阶段
         if ([label.text isEqualToString:@"详解"]) {
             parsingXiangJie = YES;
-            // 将详解前的最后一个块保存起来
             if (currentTitle) {
                 NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 if (trimmedContent.length > 0) {
@@ -88,16 +83,20 @@ static NSString* extractDataFromStackView(UIView *rootView, BOOL includeXiangJie
                 currentTitle = nil;
                 [currentContent setString:@""];
             }
-            continue; // 跳过“详解”这个标签本身
+            continue;
         }
         
         if (!parsingXiangJie) {
-            // --- 仍在处理前半部分 ---
             BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0;
             if (isTitle) {
                 if (currentTitle) {
                     NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    [preXiangJieBlocks addObject:[trimmedContent.length > 0 ? [NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent] : currentTitle]];
+                    // --- FIX: 将三元运算符改为 if-else ---
+                    if (trimmedContent.length > 0) {
+                        [preXiangJieBlocks addObject:[NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent]];
+                    } else {
+                        [preXiangJieBlocks addObject:currentTitle];
+                    }
                 }
                 currentTitle = label.text;
                 [currentContent setString:@""];
@@ -106,25 +105,25 @@ static NSString* extractDataFromStackView(UIView *rootView, BOOL includeXiangJie
                 [currentContent appendString:label.text];
             }
         } else {
-            // --- 已进入详解阶段，收集所有label ---
             [xiangJieLabels addObject:label];
         }
     }
     
-    // 不要忘记处理循环结束后的最后一个普通块
     if (currentTitle) {
         NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        [preXiangJieBlocks addObject:[trimmedContent.length > 0 ? [NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent] : currentTitle]];
+        // --- FIX: 将三元运算符改为 if-else ---
+        if (trimmedContent.length > 0) {
+            [preXiangJieBlocks addObject:[NSString stringWithFormat:@"%@\n%@", currentTitle, trimmedContent]];
+        } else {
+            [preXiangJieBlocks addObject:currentTitle];
+        }
     }
     
-    // --- 组合最终结果 ---
     NSMutableString *finalResult = [NSMutableString stringWithString:[preXiangJieBlocks componentsJoinedByString:@"\n\n"]];
     
-    // 阶段二：处理“详解”部分
     if (includeXiangJie && xiangJieLabels.count > 0) {
         [finalResult appendString:@"\n\n--- 详解 ---\n\n"];
         
-        // 两两配对
         for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) {
             UILabel *titleLabel = xiangJieLabels[i];
             
@@ -132,7 +131,6 @@ static NSString* extractDataFromStackView(UIView *rootView, BOOL includeXiangJie
                 UILabel *contentLabel = xiangJieLabels[i+1];
                 [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, contentLabel.text];
             } else {
-                // 如果是奇数个，最后一个标题没有内容
                 [finalResult appendFormat:@"%@→\n\n", titleLabel.text];
             }
         }
@@ -251,7 +249,7 @@ static void processKeTiWorkQueue() {
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"大六壬终极提取器 v4.2";
+    titleLabel.text = @"大六壬终极提取器 v4.3";
     titleLabel.textColor = [UIColor systemOrangeColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -290,7 +288,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"终极提取器 v4.2 (两阶段版) 已就绪。";
+    g_logView.text = @"终极提取器 v4.3 (编译修复版) 已就绪。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -395,6 +393,6 @@ static void processKeTiWorkQueue() {
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[CombinedExtractor-v4.2] 终极提取器 v4.2 (两阶段版) 已准备就绪。");
+        NSLog(@"[CombinedExtractor-v4.3] 终极提取器 v4.3 (编译修复版) 已准备就绪。");
     }
 }
