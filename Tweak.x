@@ -1,8 +1,8 @@
-/////// Filename: EchoAI_Ultimate_v9.1_SyntaxFix.xm
-// 描述: EchoAI终极整合版 v9.1 (语法修复版)。此版本修复了v9.0中致命的Logos语法错误。
-//       - [CRITICAL FIX] 将 `%hook UILabel` 从错误嵌套的位置移出，解决了"%hook does not make sense inside a block"编译错误。
-//       - [MAINTAINED] 100%保留了v9.0中从参照脚本恢复的所有可靠逻辑。
-//       - [MAINTAINED] 所有UI和功能均保持不变，只为编译成功。
+/////// Filename: EchoAI_Ultimate_v9.2_ARC_Fix.xm
+// 描述: EchoAI终极整合版 v9.2 (ARC兼容修复版)。此版本修复了由于不兼容的ivar获取方式导致的编译错误。
+//       - [CRITICAL FIX] 替换了非ARC兼容的GetIvarValueSafely函数为Apple官方推荐的`object_getIvar`，解决了所有指针和类型转换编译错误。
+//       - [MAINTAINED] 100%保留了v9.0/v9.1中从参照脚本恢复的所有可靠业务逻辑（弹窗触发、文本格式化等）。
+//       - [MAINTAINED] 所有UI和功能均保持不变，目标是稳定、可编译、可运行。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -37,14 +37,14 @@ static NSMutableArray *g_capturedGeJuArray = nil;
 
 static NSString * const CustomFooterText = @"\n\n"
 "--- 自定义注意事项 ---\n"
-"1. 本解析结果由 EchoAI_Ultimate_v9.1 生成，仅供参考。\n"
+"1. 本解析结果由 EchoAI_Ultimate_v9.2 生成，仅供参考。\n"
 "2. 请结合实际情况与专业知识进行最终判断。\n"
 "3. [可在此处添加您的个人Prompt或更多说明]";
 
 #define SafeString(str) (str ?: @"")
 
 #pragma mark - Helper Functions
-static void LogMessage(NSString *format, ...) { if (!g_logTextView) return; va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args); dispatch_async(dispatch_get_main_queue(), ^{ NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss.SSS"]; NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]]; g_logTextView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logTextView.text]; NSLog(@"[EchoAI-Ultimate-v9.1] %@", message); }); }
+static void LogMessage(NSString *format, ...) { if (!g_logTextView) return; va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args); dispatch_async(dispatch_get_main_queue(), ^{ NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss.SSS"]; NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]]; g_logTextView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logTextView.text]; NSLog(@"[EchoAI-Ultimate-v9.2] %@", message); }); }
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@available(iOS 13.0, *)) { for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) { if (scene.activationState == UISceneActivationStateForegroundActive) { for (UIWindow *window in scene.windows) { if (window.isKeyWindow) { frontmostWindow = window; break; } } if (frontmostWindow) break; } } } if (!frontmostWindow) { \
     _Pragma("clang diagnostic push") \
@@ -67,7 +67,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 // S2 Core Logic Methods (New names)
 - (void)startKeChuanExtraction_S2_WithCompletion:(void (^)(void))completion; - (void)processKeChuanQueue_S2;
 // S2 Helper Methods
-- (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix; - (NSString *)GetStringFromLayer:(id)layer;
+- (NSString *)GetStringFromLayer:(id)layer;
 // Restored methods from reference script
 - (void)performCombinedAnalysis;
 - (void)extractKePanInfoWithCompletion:(void (^)(NSString *kePanText))completion;
@@ -79,7 +79,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 
-// [FIX] Moved hook to the top level, outside of any other method.
 %hook UILabel
 - (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
 - (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
@@ -110,7 +109,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds]; g_mainControlPanelView.tag = panelTag; g_mainControlPanelView.backgroundColor = [UIColor clearColor];
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]]; blurView.frame = g_mainControlPanelView.bounds; [g_mainControlPanelView addSubview:blurView];
     UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)]; [g_mainControlPanelView addSubview:contentView];
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, 40)]; titleLabel.text = @"EchoAI 终极提取器 v9.1"; titleLabel.font = [UIFont boldSystemFontOfSize:22]; titleLabel.textColor = [UIColor whiteColor]; titleLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:titleLabel];
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, 40)]; titleLabel.text = @"EchoAI 终极提取器 v9.2"; titleLabel.font = [UIFont boldSystemFontOfSize:22]; titleLabel.textColor = [UIColor whiteColor]; titleLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:titleLabel];
     UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 50, contentView.bounds.size.width, contentView.bounds.size.height - 120)]; [contentView addSubview:scrollView];
 
     CGFloat currentY = 10;
@@ -244,7 +243,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView { Class cellClass = NSClassFromString(@"六壬大占.格局單元"); if (!cellClass) return @""; NSMutableArray *cells = [NSMutableArray array]; FindSubviewsOfClassRecursive(cellClass, contentView, cells); [cells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }]; NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array]; for (UIView *cell in cells) { NSMutableArray *labelsInCell = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], cell, labelsInCell); if (labelsInCell.count > 0) { UILabel *titleLabel = labelsInCell[0]; NSString *title = [[titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] stringByReplacingOccurrencesOfString:@"\n" withString:@" "]; NSMutableString *contentString = [NSMutableString string]; if (labelsInCell.count > 1) { for (NSUInteger i = 1; i < labelsInCell.count; i++) { [contentString appendString:((UILabel *)labelsInCell[i]).text]; } } NSString *content = [[contentString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] stringByReplacingOccurrencesOfString:@"\n" withString:@" "]; NSString *pair = [NSString stringWithFormat:@"%@→%@", title, content]; if (![formattedPairs containsObject:pair]) { [formattedPairs addObject:pair]; } } } return [formattedPairs componentsJoinedByString:@"\n"]; }
 %new
-- (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix { if (!object || !ivarNameSuffix) return nil; unsigned int ivarCount; Ivar *ivars = class_copyIvarList([object class], &ivarCount); if (!ivars) { free(ivars); return nil; } id value = nil; for (unsigned int i = 0; i < ivarCount; i++) { Ivar ivar = ivars[i]; const char *name = ivar_getName(ivar); if (name) { NSString *ivarName = [NSString stringWithUTF8String:name]; if ([ivarName hasSuffix:ivarNameSuffix]) { ptrdiff_t offset = ivar_getOffset(ivar); void **ivar_ptr = (void **)((__bridge void *)object + offset); value = (__bridge id)(*ivar_ptr); break; } } } free(ivars); return value; }
+- (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix { if (!object || !ivarNameSuffix) return nil; unsigned int ivarCount; Ivar *ivars = class_copyIvarList([object class], &ivarCount); if (!ivars) { free(ivars); return nil; } id value = nil; for (unsigned int i = 0; i < ivarCount; i++) { Ivar ivar = ivars[i]; const char *name = ivar_getName(ivar); if (name) { NSString *ivarName = [NSString stringWithUTF8String:name]; if ([ivarName hasSuffix:ivarNameSuffix]) { value = object_getIvar(object, ivar); break; } } } free(ivars); return value; }
 %new
 - (NSString *)GetStringFromLayer:(id)layer { if (layer && [layer respondsToSelector:@selector(string)]) { id stringValue = [layer valueForKey:@"string"]; if ([stringValue isKindOfClass:[NSString class]]) return stringValue; if ([stringValue isKindOfClass:[NSAttributedString class]]) return ((NSAttributedString *)stringValue).string; } return @"?"; }
 %end
@@ -257,4 +256,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 // =========================================================================
 // 5. 构造函数
 // =========================================================================
-%ctor { @autoreleasepool { MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController); NSLog(@"[EchoAI-Ultimate-v9.1] 终极提取器 v9.1 (SyntaxFix) 已加载。"); } }
+%ctor { @autoreleasepool { MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController); NSLog(@"[EchoAI-Ultimate-v9.2] 终极提取器 v9.2 (ARC_Fix) 已加载。"); } }
