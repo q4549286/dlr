@@ -1,15 +1,24 @@
-// Filename: UltimateProbe_v11.x
+// Filename: UltimateProbe_v11.2_Final.x
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-// 全局UI变量
+// =========================================================================
+// 1. 全局UI变量 & 辅助函数
+// =========================================================================
+
 static UITextView *g_logView = nil;
 
 // 统一日志输出
 static void PanelLog(NSString *format, ...) {
     if (!g_logView) return;
-    // 为了极致的性能，我们不在日志里加时间戳了
+    
+    // 修正了之前版本中缺失的变量参数处理逻辑
+    va_list args;
+    va_start(args, format);
+    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+    va_end(args);
+
     dispatch_async(dispatch_get_main_queue(), ^{
         g_logView.text = [NSString stringWithFormat:@"%@\n%@", message, g_logView.text];
         if (g_logView.text.length > 2000) {
@@ -18,14 +27,18 @@ static void PanelLog(NSString *format, ...) {
     });
 }
 
-// UIViewController 分类接口
+// =========================================================================
+// 2. UIViewController 分类接口
+// =========================================================================
 @interface UIViewController (ProbeUI)
 - (void)setupProbePanel;
+- (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer;
 @end
 
-// ========================================================
-// 核心Hook：拦截最底层的 UIWindow sendEvent
-// ========================================================
+
+// =========================================================================
+// 3. 核心Hook：拦截最底层的 UIWindow sendEvent
+// =========================================================================
 %hook UIWindow
 
 - (void)sendEvent:(UIEvent *)event {
@@ -50,6 +63,9 @@ static void PanelLog(NSString *format, ...) {
 %end
 
 
+// =========================================================================
+// 4. UIViewController Hook 与新方法实现
+// =========================================================================
 %hook UIViewController
 
 - (void)viewDidLoad {
@@ -75,7 +91,7 @@ static void PanelLog(NSString *format, ...) {
     panelView.layer.borderWidth = 2.0;
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, 250, 20)];
-    titleLabel.text = @"终极探针 v11";
+    titleLabel.text = @"终极探针 v11.2";
     titleLabel.textColor = [UIColor magentaColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -91,6 +107,7 @@ static void PanelLog(NSString *format, ...) {
 
     [keyWindow addSubview:panelView];
     
+    // 修正了之前版本中的拼写错误
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
     [panelView addGestureRecognizer:pan];
 }
