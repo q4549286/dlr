@@ -1,35 +1,30 @@
-// Filename: CombinedExtractor_v3.1_Fixed
-// 描述: 修正了v3.0中的编译错误。
+// Filename: CombinedExtractor_v3.2_FinalFixed
+// 描述: 最终修复版。解决了“详解”部分为TableView的问题，深入其内部提取数据。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <substrate.h>
 
 // =================================================================
-// 1. 全局变量与辅助函数
+// 1. 全局变量与辅助函数 (无变化)
 // =================================================================
 
-// --- 状态控制 ---
 static BOOL g_isExtracting = NO;
 static NSString *g_currentTaskType = nil;
 static BOOL g_shouldIncludeXiangJie = NO;
 
-// --- “课体”批量提取专用变量 ---
 static NSMutableArray *g_keTi_workQueue = nil;
 static NSMutableArray *g_keTi_resultsArray = nil;
 static UICollectionView *g_keTi_targetCV = nil;
 
-// --- UI ---
 static UITextView *g_logView = nil;
 
-// 辅助函数：递归查找子视图
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if (!view || !storage) return;
     if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
-// 统一日志函数
 static void LogMessage(NSString *format, ...) {
     if (!g_logView) return;
     va_list args;
@@ -41,11 +36,10 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[CombinedExtractor-v3.1] %@", message);
+        NSLog(@"[CombinedExtractor-v3.2] %@", message);
     });
 }
 
-// 辅助函数：通过运行时安全地获取实例变量的值
 static id GetIvarValueSafely(id object, const char *ivarName) {
     Ivar ivar = class_getInstanceVariable([object class], ivarName);
     if (ivar) {
@@ -55,17 +49,15 @@ static id GetIvarValueSafely(id object, const char *ivarName) {
 }
 
 // =================================================================
-// 2. 核心的Hook与队列处理逻辑
+// 2. 核心的Hook与队列处理逻辑 (extractDataFromModel 已更新)
 // =================================================================
 
 static void processKeTiWorkQueue(void);
 
-// 全新的核心提取函数
+// ================== 再次重写的核心提取函数 ==================
 static NSString* extractDataFromModel(id viewController, BOOL includeXiangJie) {
     if (!viewController) return @"[错误: 目标控制器为空]";
 
-    // 定义数据模型的实例变量名 (根据你的截图)
-    // FIX: 修正了字典值的语法错误，加上了@
     NSDictionary<NSString *, NSString *> *dataMap = @{
         @"课名": @"課名",
         @"判断": @"判斷",
@@ -76,7 +68,7 @@ static NSString* extractDataFromModel(id viewController, BOOL includeXiangJie) {
 
     NSMutableString *resultString = [NSMutableString string];
 
-    // 1. 提取普通字段
+    // 1. 提取普通字段 (这部分逻辑正确，保持不变)
     for (NSString *title in @[@"课名", @"判断", @"变体", @"简断", @"故象曰"]) {
         const char *ivarName = [dataMap[title] UTF8String];
         id value = GetIvarValueSafely(viewController, ivarName);
@@ -87,20 +79,52 @@ static NSString* extractDataFromModel(id viewController, BOOL includeXiangJie) {
 
     // 2. 根据选项，决定是否提取“详解”
     if (includeXiangJie) {
-        id xiangJieValue = GetIvarValueSafely(viewController, "詳解表");
+        // --- 核心修正：处理内嵌的 UITableView ---
+        id xiangJieTableView = GetIvarValueSafely(viewController, "詳解表");
         
-        if (xiangJieValue) {
+        if (xiangJieTableView && [xiangJieTableView isKindOfClass:[UITableView class]]) {
             [resultString appendString:@"--- 详解 ---\n\n"];
             
-            if ([xiangJieValue isKindOfClass:[NSDictionary class]]) {
-                NSDictionary *xiangJieDict = (NSDictionary *)xiangJieValue;
-                for (id key in xiangJieDict) {
-                    [resultString appendFormat:@"%@→%@\n\n", key, xiangJieDict[key]];
+            UITableView *tableView = (UITableView *)xiangJieTableView;
+            id<UITableViewDataSource> dataSource = tableView.dataSource;
+            
+            if (dataSource) {
+                NSInteger sections = 1;
+                if ([dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)]) {
+                    sections = [dataSource numberOfSectionsInTableView:tableView];
                 }
-            } else if ([xiangJieValue isKindOfClass:[NSArray class]]) {
-                 [resultString appendFormat:@"%@\n\n", [xiangJieValue description]];
-            } else {
-                 [resultString appendFormat:@"%@\n\n", [xiangJieValue description]];
+
+                for (NSInteger section = 0; section < sections; section++) {
+                    NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
+                    for (NSInteger row = 0; row < rows; row++) {
+                        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
+                        UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
+                        
+                        if (cell) {
+                            // 标题-正文 结构通常在 UITableViewCell 的 textLabel 和 detailTextLabel 中
+                            // 或者在 cell 的 contentView 的子视图中
+                            NSString *titleText = cell.textLabel.text;
+                            NSString *detailText = cell.detailTextLabel.text;
+
+                            if (titleText && titleText.length > 0) {
+                                // 拼接成 key->value 的形式
+                                [resultString appendFormat:@"%@→%@", titleText, (detailText ?: @"")];
+                            } else {
+                                // 如果cell结构更复杂，遍历cell的所有UILabel
+                                NSMutableArray *labelsInCell = [NSMutableArray array];
+                                FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
+                                if (labelsInCell.count >= 2) {
+                                     UILabel *titleLabel = labelsInCell[0];
+                                     UILabel *contentLabel = labelsInCell[1];
+                                     [resultString appendFormat:@"%@→%@", titleLabel.text, contentLabel.text];
+                                } else if (labelsInCell.count == 1) {
+                                     [resultString appendString:((UILabel *)labelsInCell[0]).text];
+                                }
+                            }
+                            [resultString appendString:@"\n\n"];
+                        }
+                    }
+                }
             }
         }
     }
@@ -108,7 +132,8 @@ static NSString* extractDataFromModel(id viewController, BOOL includeXiangJie) {
     return [resultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// Hook：拦截弹窗事件
+
+// Hook：拦截弹窗事件 (无变化)
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     Class targetClass = NSClassFromString(@"六壬大占.課體概覽視圖");
@@ -145,7 +170,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-// “课体”任务队列处理器
+// “课体”任务队列处理器 (无变化)
 static void processKeTiWorkQueue() {
     if (g_keTi_workQueue.count == 0) {
         LogMessage(@"所有 %lu 项“课体”任务处理完毕！", (unsigned long)g_keTi_resultsArray.count);
@@ -159,7 +184,6 @@ static void processKeTiWorkQueue() {
             }
             [finalResult appendFormat:@"--- %@ ---\n\n%@\n\n\n", itemTitle, itemText];
         }
-        // FIX: 修正了属性赋值语法，使用 = 而不是 :
         [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         LogMessage(@"“课体”批量提取完成，所有内容已合并并复制！");
         
@@ -182,7 +206,7 @@ static void processKeTiWorkQueue() {
 }
 
 // =================================================================
-// 3. UI 和控制逻辑
+// 3. UI 和控制逻辑 (无变化)
 // =================================================================
 
 @interface UIViewController (CombinedExtractor)
@@ -216,7 +240,7 @@ static void processKeTiWorkQueue() {
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"大六壬终极提取器 v3.1";
+    titleLabel.text = @"大六壬终极提取器 v3.2";
     titleLabel.textColor = [UIColor systemIndigoColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -255,7 +279,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"终极提取器 v3.1 (数据模型版) 已就绪。";
+    g_logView.text = @"终极提取器 v3.2 (TableView版) 已就绪。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -364,12 +388,13 @@ static void processKeTiWorkQueue() {
 %end
 
 // =================================================================
-// 4. 构造函数
+// 4. 构造函数 (无变化)
 // =================================================================
 
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[CombinedExtractor-v3.1] 终极提取器 v3.1 (数据模型版) 已准备就绪。");
+        NSLog(@"[CombinedExtractor-v3.2] 终极提取器 v3.2 (TableView版) 已准备就绪。");
     }
 }
+
