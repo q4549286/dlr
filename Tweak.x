@@ -1,5 +1,5 @@
-// Filename: KeTiMultiExtractor_v1.0
-// 终极版！提供UI按钮，可一键自动点击所有可见的“课体”单元，并批量提取详情。
+// Filename: KeTiMultiExtractor_v1.1
+// 修复了找不到UICollectionView的问题，将搜索范围扩大到整个窗口。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -164,12 +164,12 @@ static void processWorkQueue() {
     panel.tag = 789002;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemGreenColor].CGColor;
+    panel.layer.borderColor = [UIColor systemOrangeColor].CGColor; // 修复版用橙色
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"课体批量提取器 v1.0";
-    titleLabel.textColor = [UIColor systemGreenColor];
+    titleLabel.text = @"课体批量提取器 v1.1";
+    titleLabel.textColor = [UIColor systemOrangeColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
@@ -178,7 +178,7 @@ static void processWorkQueue() {
     extractButton.frame = CGRectMake(20, 50, panel.bounds.size.width - 40, 44);
     [extractButton setTitle:@"一键提取全部课体" forState:UIControlStateNormal];
     [extractButton addTarget:self action:@selector(startMultiExtraction) forControlEvents:UIControlEventTouchUpInside];
-    extractButton.backgroundColor = [UIColor systemGreenColor];
+    extractButton.backgroundColor = [UIColor systemOrangeColor];
     [extractButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     extractButton.layer.cornerRadius = 8;
@@ -186,7 +186,7 @@ static void processWorkQueue() {
 
     g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, 110, panel.bounds.size.width - 20, panel.bounds.size.height - 120)];
     g_logView.backgroundColor = [UIColor blackColor];
-    g_logView.textColor = [UIColor systemGreenColor];
+    g_logView.textColor = [UIColor systemOrangeColor];
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
@@ -201,43 +201,64 @@ static void processWorkQueue() {
     
     LogMessage(@"--- 开始批量提取任务 ---");
 
+    // --- 核心修复：扩大搜索范围到整个窗口 ---
+    UIWindow *keyWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) { keyWindow = scene.windows.firstObject; break; }
+        }
+    } else {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        keyWindow = [[UIApplication sharedApplication] keyWindow];
+        #pragma clang diagnostic pop
+    }
+    if (!keyWindow) { LogMessage(@"错误: 找不到主窗口。"); return; }
+    
     g_targetCollectionView = nil;
     Class keTiCellClass = NSClassFromString(@"六壬大占.課體視圖");
     if (!keTiCellClass) { LogMessage(@"错误: 找不到 '六壬大占.課體視圖' 类。"); return; }
     
     NSMutableArray<UICollectionView *> *allCVs = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UICollectionView class], self.view, allCVs);
+    FindSubviewsOfClassRecursive([UICollectionView class], keyWindow, allCVs); // 在整个窗口中搜索
+    // ------------------------------------
     
     for (UICollectionView *cv in allCVs) {
-        for (UIView *cell in cv.visibleCells) {
-            if ([cell isKindOfClass:keTiCellClass]) { g_targetCollectionView = cv; break; }
+        // 使用reloadData确保我们能看到所有单元格，即使它们暂时不可见
+        [cv reloadData]; 
+        // 稍微延迟以等待UI更新
+        [cv layoutIfNeeded];
+        
+        // 检查DataSource中的单元格总数，而不是只看可见的
+        NSInteger items = 0;
+        if ([cv.dataSource respondsToSelector:@selector(collectionView:numberOfItemsInSection:)]) {
+            items = [cv.dataSource collectionView:cv numberOfItemsInSection:0];
         }
-        if (g_targetCollectionView) break;
+        
+        if (items > 0) {
+             // 检查第一个单元格的类型来确认是不是目标
+            UICollectionViewCell *cell = [cv.dataSource collectionView:cv cellForItemAtIndexPath:[NSIndexPath indexPathForItem:0 inSection:0]];
+            if (cell && [cell isKindOfClass:keTiCellClass]) {
+                g_targetCollectionView = cv;
+                break;
+            }
+        }
     }
 
-    if (!g_targetCollectionView) { LogMessage(@"错误: 找不到包含课体视图的UICollectionView。"); return; }
+    if (!g_targetCollectionView) { LogMessage(@"错误: 在整个窗口中都找不到包含课体视图的UICollectionView。"); return; }
     
     g_isMultiExtracting = YES;
     g_workQueue = [NSMutableArray array];
     g_resultsArray = [NSMutableArray array];
     
-    NSMutableArray *cellsToSort = [NSMutableArray array];
-    for (UICollectionViewCell *cell in g_targetCollectionView.visibleCells) {
-        if ([cell isKindOfClass:keTiCellClass]) { [cellsToSort addObject:cell]; }
-    }
-    
-    // 按从左到右的顺序排序
-    [cellsToSort sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-        return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)];
-    }];
-
-    for (UICollectionViewCell *cell in cellsToSort) {
-        NSIndexPath *indexPath = [g_targetCollectionView indexPathForCell:cell];
-        if (indexPath) { [g_workQueue addObject:indexPath]; }
+    // 从数据源获取所有单元格的indexPath，而不是只看可见的
+    NSInteger totalItems = [g_targetCollectionView.dataSource collectionView:g_targetCollectionView numberOfItemsInSection:0];
+    for (NSInteger i = 0; i < totalItems; i++) {
+        [g_workQueue addObject:[NSIndexPath indexPathForItem:i inSection:0]];
     }
 
     if (g_workQueue.count == 0) {
-        LogMessage(@"错误: 未找到任何可见的课体单元。");
+        LogMessage(@"错误: 未找到任何课体单元。");
         g_isMultiExtracting = NO;
         return;
     }
