@@ -1,4 +1,4 @@
-// Filename: UltimateDelegateMonitor_v11.2_FinalFixed.x
+// Filename: UltimateProbe_v11.x
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -9,64 +9,42 @@ static UITextView *g_logView = nil;
 // 统一日志输出
 static void PanelLog(NSString *format, ...) {
     if (!g_logView) return;
-    va_list args;
-    va_start(args, format);
-    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args);
+    // 为了极致的性能，我们不在日志里加时间戳了
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *timestamp = [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterNoStyle timeStyle:NSDateFormatterMediumStyle];
-        NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text];
-        if (newText.length > 5000) { newText = [newText substringToIndex:5000]; }
-        g_logView.text = newText;
-        NSLog(@"[DelegateMonitor-v11.2] %@", message);
+        g_logView.text = [NSString stringWithFormat:@"%@\n%@", message, g_logView.text];
+        if (g_logView.text.length > 2000) {
+            g_logView.text = [g_logView.text substringToIndex:2000];
+        }
     });
 }
 
 // UIViewController 分类接口
-@interface UIViewController (DelegateMonitorUI)
-- (void)setupDelegateMonitorPanel;
-- (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer;
+@interface UIViewController (ProbeUI)
+- (void)setupProbePanel;
 @end
 
-
 // ========================================================
-// 核心Hook：拦截手势代理方法
-// 我们Hook的是 `六壬大占.ViewController` 自身
+// 核心Hook：拦截最底层的 UIWindow sendEvent
 // ========================================================
-%hook 六壬大占.ViewController
+%hook UIWindow
 
-// *** FIX: Corrected the code by placing the logic inside the method implementation ***
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
-    // 首先，调用原始方法，确保功能正常
-    BOOL shouldReceive = %orig;
+- (void)sendEvent:(UIEvent *)event {
+    // 只要有事件进来，就在日志打印一个点
+    // 我们把PanelLog放在原始函数调用之前，确保第一时间看到反应
+    PanelLog(@".");
 
-    // 获取触摸点和被触摸的视图
-    UIView *touchedView = touch.view;
-    CGPoint location = [touch locationInView:touch.window];
-    
-    // 打印所有信息
-    PanelLog(@"--- GESTURE DELEGATE CALLED (shouldReceiveTouch) ---\n- Gesture: %@\n- On View: %@\n- Touched View: %@\n- Touch Location: %@\n- Delegate Method Result: %s\n--------------------",
-             NSStringFromClass([gestureRecognizer class]),
-             NSStringFromClass([gestureRecognizer.view class]),
-             NSStringFromClass([touchedView class]),
-             NSStringFromCGPoint(location),
-             shouldReceive ? "YES" : "NO");
+    // 调用原始方法，否则App会卡死
+    %orig;
 
-    return shouldReceive;
-}
-
-// *** FIX: Corrected the code by placing the logic inside the method implementation ***
-- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
-    // 首先，调用原始方法
-    BOOL shouldBegin = %orig;
-
-    // 打印信息
-    PanelLog(@"--- GESTURE DELEGATE CALLED (shouldBegin) ---\n- Gesture: %@ on %@\n- Delegate Method Result: %s\n--------------------",
-             NSStringFromClass([gestureRecognizer class]),
-             NSStringFromClass([gestureRecognizer.view class]),
-             shouldBegin ? "YES" : "NO");
-             
-    return shouldBegin;
+    // 为了避免日志刷屏太快，我们只在触摸结束时打印详细信息
+    if (event.type == UIEventTypeTouches) {
+        UITouch *touch = [event.allTouches anyObject];
+        if (touch.phase == UITouchPhaseEnded) {
+            CGPoint location = [touch locationInView:self];
+            UIView *hitView = [self hitTest:location withEvent:event];
+            PanelLog(@"--- TOUCH ENDED on: %@ ---", NSStringFromClass([hitView class]));
+        }
+    }
 }
 
 %end
@@ -79,36 +57,36 @@ static void PanelLog(NSString *format, ...) {
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self setupDelegateMonitorPanel];
+            [self setupProbePanel];
         });
     }
 }
 
 %new
-- (void)setupDelegateMonitorPanel {
+- (void)setupProbePanel {
     UIWindow *keyWindow = self.view.window;
     if (!keyWindow || [keyWindow viewWithTag:111111]) return;
 
-    UIView *panelView = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 300, 250)];
+    UIView *panelView = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 250, 200)];
     panelView.tag = 111111;
     panelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
     panelView.layer.cornerRadius = 10;
-    panelView.layer.borderColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.8 alpha:1.0].CGColor;
-    panelView.layer.borderWidth = 1.5;
+    panelView.layer.borderColor = [UIColor magentaColor].CGColor;
+    panelView.layer.borderWidth = 2.0;
     
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, 300, 20)];
-    titleLabel.text = @"手势代理监控器 v11.2";
-    titleLabel.textColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.8 alpha:1.0];
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, 250, 20)];
+    titleLabel.text = @"终极探针 v11";
+    titleLabel.textColor = [UIColor magentaColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panelView addSubview:titleLabel];
     
-    g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, 40, 280, 200)];
+    g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, 35, 230, 155)];
     g_logView.backgroundColor = [UIColor blackColor];
     g_logView.textColor = [UIColor whiteColor];
-    g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
-    g_logView.editable = YES;
-    g_logView.text = @"监控已自动开始。\n请点击App界面上的“课体”区域，本窗口会显示手势代理方法的调用情况。";
+    g_logView.font = [UIFont fontWithName:@"Menlo" size:12];
+    g_logView.editable = NO;
+    g_logView.text = @"监控已开始。\n请在屏幕上随意滑动或点击。\n如果Hook成功，本窗口会疯狂刷屏 '.'";
     [panelView addSubview:g_logView];
 
     [keyWindow addSubview:panelView];
