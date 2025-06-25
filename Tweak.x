@@ -1,9 +1,9 @@
-/////// Filename: EchoAI_Ultimate_v6.0_Fixed.xm
-// 描述: EchoAI终极整合版 v6.0。该版本整合了 CombinedExtractor_v5.3 (脚本1) 与 EchoAI-CombinedPowerhouse (脚本2) 的全部功能。
-//       - 修复了v6.0的编译错误，包括keyWindow弃用、方法上下文错误和选择器未声明等问题。
+/////// Filename: EchoAI_Ultimate_v6.1_CompilerFix.xm
+// 描述: EchoAI终极整合版 v6.1。该版本整合了 CombinedExtractor_v5.3 (脚本1) 与 EchoAI-CombinedPowerhouse (脚本2) 的全部功能。
+//       - 修复了v6.0的编译错误，为@interface中的Block参数添加了必需的标识符 (parameter name)。
 //       - 采用全新标签页UI，分类清晰，外观专业。
 //       - 保留并分离了两个脚本的所有核心单项提取功能。
-//       - 增强了 "终极模式 (Power Mode)"，实现一键提取全盘信息，包括课体、九宗门、课传详解、年命等。
+//       - 增强了 "终极模式 (Power Mode)"，实现一键提取全盘信息。
 //       - 统一并美化了所有输出内容的格式，增强可读性。
 
 #import <UIKit/UIKit.h>
@@ -48,7 +48,7 @@ static NSString *g_s2_baseTextCacheForPowerMode = nil;
 // --- 自定义文本块 (来自S2) ---
 static NSString * const CustomFooterText = @"\n\n"
 "--- 自定义注意事项 ---\n"
-"1. 本解析结果由 EchoAI_Ultimate_v6.0 生成，仅供参考。\n"
+"1. 本解析结果由 EchoAI_Ultimate_v6.1 生成，仅供参考。\n"
 "2. 请结合实际情况与专业知识进行最终判断。\n"
 "3. [可在此处添加您的个人Prompt或更多说明]";
 
@@ -67,7 +67,7 @@ static void LogMessage(NSString *format, ...) {
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         NSString *fullMessage = [logPrefix stringByAppendingString:message];
         g_logTextView.text = [NSString stringWithFormat:@"%@\n%@", fullMessage, g_logTextView.text];
-        NSLog(@"[EchoAI-Ultimate-v6.0] %@", message);
+        NSLog(@"[EchoAI-Ultimate-v6.1] %@", message);
     });
 }
 
@@ -95,7 +95,8 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 static UIWindow* GetFrontmostWindow() {
     UIWindow *frontmostWindow = nil;
     if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+        NSSet *connectedScenes = [UIApplication sharedApplication].connectedScenes;
+        for (UIWindowScene *scene in connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
                 for (UIWindow *window in scene.windows) {
                     if (window.isKeyWindow) {
@@ -206,7 +207,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 
 // S1 - “课体”批量提取任务处理器
 static void processKeTiWorkQueue_S1() {
-    // FIX: Removed unused 'vc' variable
     if (g_s1_keTi_workQueue.count == 0) {
         LogMessage(@"[S1] 所有 %lu 项“课体”任务处理完毕！", (unsigned long)g_s1_keTi_resultsArray.count);
         NSMutableString *finalResult = [NSMutableString string];
@@ -251,7 +251,6 @@ static NSString* GetStringFromLayer(id layer) { if (layer && [layer respondsToSe
 // =========================================================================
 // 3. UI微调 & 核心Hook (统一入口)
 // =========================================================================
-// FIX: Comprehensive interface declaration for all new methods.
 @interface UIViewController (EchoAIUltimatePowerhouse)
 // UI Methods
 - (void)createOrShowMainControlPanel;
@@ -269,10 +268,11 @@ static NSString* GetStringFromLayer(id layer) { if (layer && [layer respondsToSe
 - (void)extractSinglePopupInfoWithTaskName:(NSString*)taskName selectorName:(NSString*)selectorName;
 // S2 Core Logic Methods
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion;
+// FIX: Added parameter names (e.g., 'completion') to the block arguments.
+- (void)performSimpleAnalysis_S2_WithCompletion:(void (^)(NSString *resultText))completion;
+- (void)extractKePanInfo_S2_WithCompletion:(void (^)(NSString *kePanText))completion;
+- (void)extractNianmingInfo_S2_WithCompletion:(void (^)(NSString *nianmingText))completion;
 - (void)processKeChuanQueue_Truth_S2;
-- (void)performSimpleAnalysis_S2_WithCompletion:(void (^)(NSString *resultText));
-- (void)extractKePanInfo_S2_WithCompletion:(void (^)(NSString *kePanText));
-- (void)extractNianmingInfo_S2_WithCompletion:(void (^)(NSString *nianmingText));
 // S2 Helper Methods
 - (NSString *)formatNianmingGejuFromView_S2:(UIView *)contentView;
 - (NSString *)extractTextFromFirstViewOfClassName_S2:(NSString *)className separator:(NSString *)separator;
@@ -464,7 +464,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 // =========================================================================
-// 4. 新的UI和控制逻辑 (v6.0)
+// 4. 新的UI和控制逻辑 (v6.1)
 // =========================================================================
 
 %new
@@ -489,7 +489,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
     // --- 标题 ---
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, g_mainControlPanelView.bounds.size.width, 30)];
-    titleLabel.text = @"EchoAI 终极提取器 v6.0";
+    titleLabel.text = @"EchoAI 终极提取器 v6.1";
     titleLabel.font = [UIFont boldSystemFontOfSize:20];
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -660,7 +660,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 // =========================================================================
-// 5. 按钮事件处理与任务分发 (v6.0)
+// 5. 按钮事件处理与任务分发 (v6.1)
 // =========================================================================
 
 %new
@@ -846,7 +846,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 // 6. 脚本2原有核心功能实现 (保持结构)
 // =========================================================================
 
-// FIX: Helper methods moved inside the %hook block
 %new
 - (NSString *)formatNianmingGejuFromView_S2:(UIView *)contentView {
     Class cellClass = NSClassFromString(@"六壬大占.格局單元"); if (!cellClass) return @"";
@@ -1152,6 +1151,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[EchoAI-Ultimate-v6.0_Fixed] 终极提取器 v6.0 已加载，整合力量，蓄势待发。");
+        NSLog(@"[EchoAI-Ultimate-v6.1_CompilerFix] 终极提取器 v6.1 已加载，整合力量，蓄势待发。");
     }
 }
