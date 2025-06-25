@@ -293,7 +293,7 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
 
     // --- 标题 ---
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, g_mainControlPanelView.bounds.size.width, 30)];
-    titleLabel.text = @"Echo定制版高级功能";
+    titleLabel.text = @"Echo定制版大六壬高级功能";
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.textAlignment = NSTextAlignmentCenter;
