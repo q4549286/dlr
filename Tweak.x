@@ -1,5 +1,5 @@
-// Filename: InfoHunter_v1.1 (方法嗅探版)
-// 升级版！现在会监控所有可疑的“显示”方法，以找出完整的调用链。
+// Filename: InfoHunter_v1.2 (编译修复版)
+// 修复了宏定义和ARC内存管理导致的编译错误。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -49,22 +49,44 @@ static void Tweak_collectionView_didSelectItemAtIndexPath(id self, SEL _cmd, UIC
     Original_collectionView_didSelectItemAtIndexPath(self, _cmd, collectionView, indexPath);
 }
 
-// --- 监控 #3: 全面拦截所有可疑的“显示”方法 (核心升级！) ---
-// 我们把所有可能的方法都hook了，看看到底是哪个被调用
-#define DECLARE_AND_LOG_HOOK(name, ret, ...) \
-    static ret (*Original_##name)(id, SEL, ##__VA_ARGS__); \
-    static ret Tweak_##name(id self, SEL _cmd, ##__VA_ARGS__) { \
-        LogMessage(@"[⭐️ 方法命中! ⭐️] 调用的方法是: %s", #name); \
-        Original_##name(self, _cmd, ##__VA_ARGS__); \
-    }
+// --- 监控 #3: 全面拦截所有可疑的“显示”方法 (核心升级！已移除宏) ---
+// 为每个方法编写完整的hook，避免宏带来的编译问题。
 
-DECLARE_AND_LOG_HOOK(顯示課傳天將摘要WithSender, void, id sender);
-DECLARE_AND_LOG_HOOK(顯示課傳摘要WithSender, void, id sender);
-DECLARE_AND_LOG_HOOK(顯示法訣總覽, void);
-DECLARE_AND_LOG_HOOK(顯示格局總覽, void);
-DECLARE_AND_LOG_HOOK(顯示方法總覽, void);
-DECLARE_AND_LOG_HOOK(顯示七政信息WithSender, void, id sender);
-// ...你可以把更多可疑方法加在这里
+static void (*Original_顯示課傳天將摘要WithSender)(id, SEL, id);
+static void Tweak_顯示課傳天將摘要WithSender(id self, SEL _cmd, id sender) {
+    LogMessage(@"[⭐️ 方法命中! ⭐️] 调用的方法是: 顯示課傳天將摘要WithSender:");
+    Original_顯示課傳天將摘要WithSender(self, _cmd, sender);
+}
+
+static void (*Original_顯示課傳摘要WithSender)(id, SEL, id);
+static void Tweak_顯示課傳摘要WithSender(id self, SEL _cmd, id sender) {
+    LogMessage(@"[⭐️ 方法命中! ⭐️] 调用的方法是: 顯示課傳摘要WithSender:");
+    Original_顯示課傳摘要WithSender(self, _cmd, sender);
+}
+
+static void (*Original_顯示法訣總覽)(id, SEL);
+static void Tweak_顯示法訣總覽(id self, SEL _cmd) {
+    LogMessage(@"[⭐️ 方法命中! ⭐️] 调用的方法是: 顯示法訣總覽");
+    Original_顯示法訣總覽(self, _cmd);
+}
+
+static void (*Original_顯示格局總覽)(id, SEL);
+static void Tweak_顯示格局總覽(id self, SEL _cmd) {
+    LogMessage(@"[⭐️ 方法命中! ⭐️] 调用的方法是: 顯示格局總覽");
+    Original_顯示格局總覽(self, _cmd);
+}
+
+static void (*Original_顯示方法總覽)(id, SEL);
+static void Tweak_顯示方法總覽(id self, SEL _cmd) {
+    LogMessage(@"[⭐️ 方法命中! ⭐️] 调用的方法是: 顯示方法總覽");
+    Original_顯示方法總覽(self, _cmd);
+}
+
+static void (*Original_顯示七政信息WithSender)(id, SEL, id);
+static void Tweak_顯示七政信息WithSender(id self, SEL _cmd, id sender) {
+    LogMessage(@"[⭐️ 方法命中! ⭐️] 调用的方法是: 顯示七政信息WithSender:");
+    Original_顯示七政信息WithSender(self, _cmd, sender);
+}
 
 
 // =================================================================
@@ -97,26 +119,27 @@ DECLARE_AND_LOG_HOOK(顯示七政信息WithSender, void, id sender);
     panel.tag = 998811;
     panel.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemGreenColor].CGColor;
+    panel.layer.borderColor = [UIColor systemBlueColor].CGColor; // 修复版用蓝色
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"方法嗅探器 v1.1";
-    titleLabel.textColor = [UIColor systemGreenColor];
+    titleLabel.text = @"方法嗅探器 v1.2";
+    titleLabel.textColor = [UIColor systemBlueColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
     
     g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, 50, panel.bounds.size.width - 20, panel.bounds.size.height - 60)];
     g_logView.backgroundColor = [UIColor blackColor];
-    g_logView.textColor = [UIColor systemGreenColor];
+    g_logView.textColor = [UIColor systemBlueColor];
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
     g_logView.text = @"方法嗅探器已就绪。\n\n请手动点击'课体'，然后观察日志，寻找 [⭐️ 方法命中! ⭐️] 这条记录。";
     [panel addSubview:g_logView];
 
-    UIButton *closeButton = [[UIButton buttonWithType:UIButtonTypeSystem] retain];
+    // 修复ARC错误：直接创建，不要调用 retain
+    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     closeButton.frame = CGRectMake(panel.bounds.size.width - 50, 5, 40, 40);
     [closeButton setTitle:@"X" forState:UIControlStateNormal];
     [closeButton.titleLabel setFont:[UIFont boldSystemFontOfSize:20]];
