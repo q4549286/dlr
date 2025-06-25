@@ -1,102 +1,26 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-// =========================================================================
-// 全局变量及UI
-// =========================================================================
-static UIView *g_loggerPanel = nil;
-static UITextView *g_logTextView = nil;
-static BOOL g_isHitTestArmed = NO;
-static id g_hitTestHook = nil; // 用于存储我们的Hook
+static UITextView *g_finalTextView = nil;
 
-static void LogToScreen(NSString *format, ...) {
+// 日志函数
+static void LogToFinalPanel(NSString *format, ...) {
     va_list args;
     va_start(args, format);
     NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
     va_end(args);
-    NSLog(@"[TruthV15] %@", message);
+    NSLog(@"[ExtractorV16] %@", message);
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (g_logTextView) {
-            NSString *currentText = g_logTextView.text;
-            g_logTextView.text = [currentText stringByAppendingFormat:@"%@\n", message];
+        if (g_finalTextView) {
+            NSString *currentText = g_finalTextView.text;
+            g_finalTextView.text = [currentText stringByAppendingFormat:@"%@\n", message];
         }
     });
 }
 
-// 递归搜索手势的函数
-static void FindGesture(UIView *view) {
-    if (!view) return;
-    
-    LogToScreen(@"\n--- 正在检查视图: %@ ---", [view class]);
-
-    if (view.gestureRecognizers.count > 0) {
-        LogToScreen(@"【【【【【 重大发现！！！】】】】】");
-        LogToScreen(@"在视图 [%@] 上找到了 %lu 个手势！", [view class], (unsigned long)view.gestureRecognizers.count);
-        for (UIGestureRecognizer *gesture in view.gestureRecognizers) {
-            LogToScreen(@"\n--- 手势详情 ---");
-            LogToScreen(@"手势类型: %@", [gesture class]);
-            @try {
-                Ivar targetsIvar = class_getInstanceVariable([UIGestureRecognizer class], "_targets");
-                if (targetsIvar) {
-                    NSArray *targets = object_getIvar(gesture, targetsIvar);
-                    id targetWrapper = targets.firstObject;
-                    id finalTarget = [targetWrapper valueForKey:@"target"];
-                    SEL finalAction = NSSelectorFromString([targetWrapper valueForKey:@"description"]); // 更hack的方式获取action
-                    if (!finalAction) { // 如果上面失败，换一种方式
-                         finalAction = [[targetWrapper valueForKey:@"action"] pointerValue];
-                    }
-                    LogToScreen(@"手势目标 (Target): %@", finalTarget);
-                    LogToScreen(@"响应方法 (Action): %@", NSStringFromSelector(finalAction));
-                }
-            } @catch (NSException *e) {
-                LogToScreen(@"获取手势 Target/Action 时发生错误: %@", e);
-            }
-        }
-        LogToScreen(@"【【【【【 检查结束 】】】】】");
-    } else {
-         LogToScreen(@"-> 该视图上没有手势。正在检查父视图...");
-         FindGesture(view.superview); // 向上递归
-    }
-}
-
-// =========================================================================
-// 主界面和Hook逻辑
-// =========================================================================
-@interface UIViewController (TruthFinder)
-- (void)toggleTruthPanel_V15;
-- (void)armHitTest_V15;
-- (void)copyLogsAndClose_V15;
+@interface UIViewController (FinalExtractor)
+- (void)startFinalExtractionProcess;
 @end
-
-%hook UIView
-// 这是我们的核心，Hook所有UIView的hitTest
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *hitView = %orig; // 先调用原始实现，得到最终的命中视图
-    
-    if (g_isHitTestArmed && hitView && event.type == UIEventTypeTouches) {
-        // 一旦命中，立刻解除武装，防止重复触发
-        g_isHitTestArmed = NO; 
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            LogToScreen(@"==============================================");
-            LogToScreen(@"真相捕获！系统认定的命中视图 (HitView):");
-            LogToScreen(@"%@", hitView);
-            LogToScreen(@"==============================================");
-
-            // 开始从这个命中视图向上追溯手势
-            FindGesture(hitView);
-
-            // 显示日志面板
-            if (g_loggerPanel) {
-                g_loggerPanel.hidden = NO;
-            }
-        });
-    }
-    
-    return hitView;
-}
-%end
-
 
 %hook UIViewController
 
@@ -104,76 +28,115 @@ static void FindGesture(UIView *view) {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
-            NSInteger buttonTag = 150150;
+            NSInteger buttonTag = 160160;
             if ([keyWindow viewWithTag:buttonTag]) { [[keyWindow viewWithTag:buttonTag] removeFromSuperview]; }
-            UIButton *truthButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            truthButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
-            truthButton.tag = buttonTag;
-            [truthButton setTitle:@"真相面板" forState:UIControlStateNormal];
-            truthButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            truthButton.backgroundColor = [UIColor systemRedColor];
-            [truthButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            truthButton.layer.cornerRadius = 8;
-            [truthButton addTarget:self action:@selector(toggleTruthPanel_V15) forControlEvents:UIControlEventTouchUpInside];
-            [keyWindow addSubview:truthButton];
+            
+            UIButton *extractButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            extractButton.frame = CGRectMake(keyWindow.bounds.size.width - 200, keyWindow.bounds.size.height - 60, 180, 44);
+            extractButton.tag = buttonTag;
+            [extractButton setTitle:@"开始终极提取" forState:UIControlStateNormal];
+            extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:18];
+            extractButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0];
+            [extractButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            extractButton.layer.cornerRadius = 8;
+            [extractButton addTarget:self action:@selector(startFinalExtractionProcess) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:extractButton];
+
+            // 创建一个用于显示结果的文本视图
+            g_finalTextView = [[UITextView alloc] initWithFrame:CGRectMake(20, 100, keyWindow.bounds.size.width - 40, keyWindow.bounds.size.height - 200)];
+            g_finalTextView.backgroundColor = [UIColor blackColor];
+            g_finalTextView.textColor = [UIColor whiteColor];
+            g_finalTextView.font = [UIFont fontWithName:@"Menlo" size:14];
+            g_finalTextView.editable = NO;
+            g_finalTextView.hidden = YES;
+            g_finalTextView.layer.cornerRadius = 12;
+            [keyWindow addSubview:g_finalTextView];
         });
     }
 }
 
 %new
-- (void)toggleTruthPanel_V15 {
-    if (g_loggerPanel && g_loggerPanel.superview) {
-        [g_loggerPanel removeFromSuperview];
-        g_loggerPanel = nil; g_logTextView = nil; g_isHitTestArmed = NO;
+- (void)startFinalExtractionProcess {
+    g_finalTextView.hidden = NO;
+    g_finalTextView.text = @"终极提取开始...\n";
+
+    UICollectionView *ketiView = [self valueForKey:@"課體視圖"];
+    if (!ketiView) {
+        LogToFinalPanel(@"错误：找不到 '課體視圖' (UICollectionView)。");
         return;
     }
-    UIWindow *keyWindow = self.view.window;
-    g_loggerPanel = [[UIView alloc] initWithFrame:CGRectMake(10, 100, keyWindow.bounds.size.width - 20, 350)];
-    g_loggerPanel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.95];
-    g_loggerPanel.layer.cornerRadius = 12;
 
-    UIButton *armButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    armButton.frame = CGRectMake(10, 10, g_loggerPanel.bounds.size.width - 20, 40);
-    [armButton setTitle:@"准备监视 (点击后隐藏)" forState:UIControlStateNormal];
-    [armButton addTarget:self action:@selector(armHitTest_V15) forControlEvents:UIControlEventTouchUpInside];
-    armButton.backgroundColor = [UIColor systemGreenColor];
-    [armButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    armButton.layer.cornerRadius = 8;
-    [g_loggerPanel addSubview:armButton];
+    id delegate = ketiView.delegate;
+    if (!delegate) {
+        LogToFinalPanel(@"错误：'課體視圖' 没有代理 (delegate)。");
+        return;
+    }
+    
+    NSInteger itemCount = [ketiView.dataSource collectionView:ketiView numberOfItemsInSection:0];
+    LogToFinalPanel(@"发现 %ld 个课体单元格，开始遍历...", (long)itemCount);
 
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 60, g_loggerPanel.bounds.size.width - 20, g_loggerPanel.bounds.size.height - 120)];
-    g_logTextView.backgroundColor = [UIColor blackColor];
-    g_logTextView.textColor = [UIColor greenColor];
-    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12];
-    g_logTextView.editable = NO;
-    g_logTextView.text = @"请点击上方绿色按钮，然后点击一个【课体】单元格来捕获真相。";
-    [g_loggerPanel addSubview:g_logTextView];
+    // 使用递归函数来处理异步流程
+    __block void (^processItemAtIndex)(NSInteger) = ^(NSInteger index) {
+        if (index >= itemCount) {
+            LogToFinalPanel(@"\n--- 所有课体提取完毕！---");
+            return;
+        }
 
-    UIButton *copyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    copyButton.frame = CGRectMake(10, g_loggerPanel.bounds.size.height - 50, g_loggerPanel.bounds.size.width - 20, 40);
-    [copyButton setTitle:@"复制真相并关闭" forState:UIControlStateNormal];
-    [copyButton addTarget:self action:@selector(copyLogsAndClose_V15) forControlEvents:UIControlEventTouchUpInside];
-    copyButton.backgroundColor = [UIColor systemOrangeColor];
-    [copyButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    copyButton.layer.cornerRadius = 8;
-    [g_loggerPanel addSubview:copyButton];
+        LogToFinalPanel(@"\n---------------------------------");
+        LogToFinalPanel(@"正在处理第 %ld 个单元格...", (long)index);
+        NSIndexPath *indexPath = [NSIndexPath indexPathForItem:index inSection:0];
+        
+        // 1. 强行调用 delegate 方法
+        if ([delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
+            LogToFinalPanel(@"-> 步骤1: 强制调用 didSelectItemAtIndexPath:");
+            [delegate collectionView:ketiView didSelectItemAtIndexPath:indexPath];
+        } else {
+             LogToFinalPanel(@"-> 步骤1: 代理不响应 didSelectItemAtIndexPath:");
+        }
 
-    [keyWindow addSubview:g_loggerPanel];
-}
+        // 2. 等待弹窗出现
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            LogToFinalPanel(@"-> 步骤2: 等待0.8秒后，寻找弹窗...");
 
-%new
-- (void)armHitTest_V15 {
-    g_isHitTestArmed = YES;
-    if (g_logTextView) { g_logTextView.text = @""; }
-    if (g_loggerPanel) { g_loggerPanel.hidden = YES; }
-}
+            UIViewController *presentedVC = self.presentedViewController;
+            if (presentedVC) {
+                LogToFinalPanel(@"-> 步骤3: 成功找到弹窗！(%@)", [presentedVC class]);
+                
+                // 3. 在弹窗中寻找文本
+                // 假设文本在弹窗的 view 的某个子 UILabel 中，我们递归搜索
+                NSMutableArray<NSString *> *foundTexts = [NSMutableArray array];
+                void (^findLabelsRecursive)(UIView*) = ^(UIView* view) {
+                    if ([view isKindOfClass:[UILabel class]]) {
+                        UILabel *label = (UILabel *)view;
+                        if (label.text.length > 0) {
+                            [foundTexts addObject:label.text];
+                        }
+                    }
+                    for (UIView *subview in view.subviews) {
+                        findLabelsRecursive(subview);
+                    }
+                };
+                findLabelsRecursive(presentedVC.view);
+                
+                LogToFinalPanel(@"-> 提取内容: %@", [foundTexts componentsJoinedByString:@" | "]);
 
-%new
-- (void)copyLogsAndClose_V15 {
-    if (g_logTextView.text.length > 0) { [UIPasteboard generalPasteboard].string = g_logTextView.text; }
-    [self toggleTruthPanel_V15];
+                // 4. 关闭弹窗
+                [presentedVC dismissViewControllerAnimated:NO completion:^{
+                    LogToFinalPanel(@"-> 步骤4: 关闭弹窗，准备下一个。");
+                    processItemAtIndex(index + 1); // 处理下一个
+                }];
+
+            } else {
+                LogToFinalPanel(@"-> 步骤3: 未找到弹窗。");
+                processItemAtIndex(index + 1); // 直接处理下一个
+            }
+        });
+    };
+
+    // 从第一个开始
+    processItemAtIndex(0);
 }
 
 %end
