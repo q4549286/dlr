@@ -1,5 +1,6 @@
-// Filename: KeTi_JiuZongMen_Extractor_v1.4
+// Filename: KeTi_JiuZongMen_Extractor_v1.5
 // 终极修复版！根据您的最终指点，采用最简单直接的逻辑，只寻找主StackView并遍历其内容，确保100%提取成功。
+// v1.5: 修复了编译错误 (缺少 %end)。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -40,7 +41,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[Extractor-Fixed-v1.4] %@", message);
+        NSLog(@"[Extractor-Fixed-v1.5] %@", message);
     });
 }
 
@@ -187,7 +188,7 @@ static void processKeTiWorkQueue() {
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"课体/九宗门提取器 v1.4";
+    titleLabel.text = @"课体/九宗门提取器 v1.5";
     titleLabel.textColor = [UIColor systemPurpleColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -261,4 +262,25 @@ static void processKeTiWorkQueue() {
 }
 
 %new
-- (void)handlePanelPan:(UIPan
+- (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer {
+    UIView *panel = recognizer.view;
+    CGPoint translation = [recognizer translationInView:panel.superview];
+    panel.center = CGPointMake(panel.center.x + translation.x, panel.center.y + translation.y);
+    [recognizer setTranslation:CGPointZero inView:panel.superview];
+}
+
+%end // <--- THIS WAS THE MISSING LINE
+
+// =================================================================
+// 4. 构造函数
+// =================================================================
+
+%ctor {
+    @autoreleasepool {
+        Class vcClass = NSClassFromString(@"六壬大占.ViewController");
+        if (vcClass) {
+            MSHookMessageEx(vcClass, @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
+            NSLog(@"[Extractor-Fixed-v1.5] 提取器已准备就绪。");
+        }
+    }
+}
