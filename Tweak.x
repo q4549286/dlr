@@ -1,5 +1,5 @@
-// Filename: KeTiMultiExtractor_v1.3
-// 最终修正版。采用更健壮的逻辑，遍历所有可见单元格来定位目标，确保成功。
+// Filename: KeTiMultiExtractor_v1.4
+// 最终修正版。根据你的指点，修正了目标类名，走上了正确的道路。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -149,12 +149,12 @@ static void processWorkQueue() {
     panel.tag = 789002;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemGreenColor].CGColor;
+    panel.layer.borderColor = [UIColor systemIndigoColor].CGColor;
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"课体批量提取器 v1.3";
-    titleLabel.textColor = [UIColor systemGreenColor];
+    titleLabel.text = @"课体批量提取器 v1.4";
+    titleLabel.textColor = [UIColor systemIndigoColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
@@ -163,7 +163,7 @@ static void processWorkQueue() {
     extractButton.frame = CGRectMake(20, 50, panel.bounds.size.width - 40, 44);
     [extractButton setTitle:@"一键提取全部课体" forState:UIControlStateNormal];
     [extractButton addTarget:self action:@selector(startMultiExtraction) forControlEvents:UIControlEventTouchUpInside];
-    extractButton.backgroundColor = [UIColor systemGreenColor];
+    extractButton.backgroundColor = [UIColor systemIndigoColor];
     [extractButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     extractButton.layer.cornerRadius = 8;
@@ -171,7 +171,7 @@ static void processWorkQueue() {
 
     g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, 110, panel.bounds.size.width - 20, panel.bounds.size.height - 120)];
     g_logView.backgroundColor = [UIColor blackColor];
-    g_logView.textColor = [UIColor systemGreenColor];
+    g_logView.textColor = [UIColor systemIndigoColor];
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
@@ -200,8 +200,10 @@ static void processWorkQueue() {
     if (!keyWindow) { LogMessage(@"错误: 找不到主窗口。"); return; }
     
     g_targetCollectionView = nil;
-    Class keTiCellClass = NSClassFromString(@"六壬大占.課體視圖");
-    if (!keTiCellClass) { LogMessage(@"错误: 找不到 '六壬大占.課體視圖' 类。"); return; }
+    
+    // --- 核心修复：使用正确的类名 '六壬大占.課體單元' ---
+    Class keTiCellClass = NSClassFromString(@"六壬大占.課體單元");
+    if (!keTiCellClass) { LogMessage(@"错误: 找不到 '六壬大占.課體單元' 类。"); return; }
     
     NSMutableArray<UICollectionView *> *allCVs = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UICollectionView class], keyWindow, allCVs);
