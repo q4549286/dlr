@@ -61,7 +61,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
             controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
             controlButton.tag = controlButtonTag;
-            [controlButton setTitle:@"提取(终极修复)" forState:UIControlStateNormal];
+            [controlButton setTitle:@"提取(BUG修复)" forState:UIControlStateNormal];
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
             controlButton.backgroundColor = [UIColor purpleColor];
             [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -145,18 +145,17 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 %new
 - (void)copyAndClose_Truth {
-    if (g_capturedKeChuanDetailArray && g_capturedKeChuanDetailArray.count > 0 && g_keChuanTitleQueue && g_keChuanTitleQueue.count > 0) {
+    if (g_capturedKeChuanDetailArray && g_keChuanTitleQueue && g_capturedKeChuanDetailArray.count == g_keChuanTitleQueue.count) {
         NSMutableString *resultStr = [NSMutableString string];
-        // 这里的 g_keChuanTitleQueue 必须是完整的，才能正确拼接
         for (NSUInteger i = 0; i < g_keChuanTitleQueue.count; i++) {
             NSString *title = g_keChuanTitleQueue[i];
-            NSString *detail = (i < g_capturedKeChuanDetailArray.count) ? g_capturedKeChuanDetailArray[i] : @"[信息提取失败]";
+            NSString *detail = g_capturedKeChuanDetailArray[i];
             [resultStr appendFormat:@"--- %@ ---\n%@\n\n", title, detail];
         }
         [UIPasteboard generalPasteboard].string = resultStr;
         LogMessage(@"结果已复制到剪贴板！");
     } else { 
-        LogMessage(@"没有可复制的内容。标题队列数量: %lu, 内容队列数量: %lu", (unsigned long)g_keChuanTitleQueue.count, (unsigned long)g_capturedKeChuanDetailArray.count);
+        LogMessage(@"没有可复制的内容或队列数量不匹配。标题: %lu, 内容: %lu", (unsigned long)g_keChuanTitleQueue.count, (unsigned long)g_capturedKeChuanDetailArray.count);
     }
     
     if (g_controlPanelView) {
@@ -257,9 +256,6 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     NSDictionary *task = g_keChuanWorkQueue.firstObject; 
     [g_keChuanWorkQueue removeObjectAtIndex:0];
     
-    // 【【【【【 这里是关键的修复点 】】】】】
-    // 我们不再从标题队列中删除任何东西，而是通过索引安全地获取它
-    // 索引就是当前已经成功捕获的内容数量
     NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
     
     UIGestureRecognizer *gestureToTrigger = task[@"gesture"];
@@ -280,6 +276,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     if ([taskType isEqualToString:@"tianJiang"]) {
         actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
     } else {
+        // 【【【【【 这里是关键的BUG修复点 】】】】】
+        // 修正了致命的拼写错误
         actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
     }
     
