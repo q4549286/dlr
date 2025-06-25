@@ -1,5 +1,5 @@
-// Filename: InfoHunter_v1.3 (UI显示修复版)
-// 修复了UI不显示的问题，并增加了诊断日志。
+// Filename: InfoHunter_v1.4 (窗口可拖动版)
+// 将窗口移到右下角，并增加了拖动功能，解决了遮挡问题。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -98,6 +98,7 @@ static void Tweak_顯示七政信息WithSender(id self, SEL _cmd, id sender) {
 @interface UIViewController (InfoHunter)
 - (void)setupHunterPanel;
 - (void)closeHunterPanel;
+- (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer; // 新增拖动方法
 @end
 
 %hook UIViewController
@@ -106,13 +107,11 @@ static void Tweak_顯示七政信息WithSender(id self, SEL _cmd, id sender) {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (!targetClass) {
-        // 如果连类都找不到，就没必要继续了
         NSLog(@"[InfoHunter-Diag] 致命错误: 找不到 '六壬大占.ViewController' 这个类。");
         return;
     }
 
     if ([self isKindOfClass:targetClass]) {
-        // 确认我们处在正确的ViewController
         NSLog(@"[InfoHunter-Diag] 成功进入目标ViewController: %@", self);
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self setupHunterPanel];
@@ -122,7 +121,6 @@ static void Tweak_顯示七政信息WithSender(id self, SEL _cmd, id sender) {
 
 %new
 - (void)setupHunterPanel {
-    // --- 核心修复：使用现代、可靠的方式寻找当前窗口 ---
     UIWindow *keyWindow = nil;
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *windowScene in [UIApplication sharedApplication].connectedScenes) {
@@ -132,13 +130,11 @@ static void Tweak_顯示七政信息WithSender(id self, SEL _cmd, id sender) {
             }
         }
     } else {
-        // 为旧版iOS保留的备用方案
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Wdeprecated-declarations"
         keyWindow = [[UIApplication sharedApplication] keyWindow];
         #pragma clang diagnostic pop
     }
-    // --------------------------------------------------
 
     if (!keyWindow) {
         NSLog(@"[InfoHunter-Diag] UI创建失败: 找不到可用的 keyWindow。");
@@ -146,42 +142,51 @@ static void Tweak_顯示七政信息WithSender(id self, SEL _cmd, id sender) {
     }
     
     if ([keyWindow viewWithTag:998811]) {
-        NSLog(@"[InfoHunter-Diag] UI已存在，不再重复创建。");
-        return; // UI已存在
+        return;
     }
     
     NSLog(@"[InfoHunter-Diag] 成功找到 keyWindow，正在创建UI面板...");
 
-    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 350, 400)];
+    // --- 核心修改：调整窗口大小和位置到右下角 ---
+    CGFloat panelWidth = 320;
+    CGFloat panelHeight = 250;
+    CGFloat xPos = keyWindow.bounds.size.width - panelWidth - 20; // 离右边20
+    CGFloat yPos = keyWindow.bounds.size.height - panelHeight - 40; // 离下边40
+    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(xPos, yPos, panelWidth, panelHeight)];
     panel.tag = 998811;
+    panel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin;
     panel.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemRedColor].CGColor; // UI修复版用红色
+    panel.layer.borderColor = [UIColor systemPurpleColor].CGColor; // 可拖动版用紫色
     panel.layer.borderWidth = 1.5;
 
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"方法嗅探器 v1.3";
-    titleLabel.textColor = [UIColor systemRedColor];
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, panelWidth, 20)];
+    titleLabel.text = @"方法嗅探器 v1.4";
+    titleLabel.textColor = [UIColor systemPurpleColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
     
-    g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, 50, panel.bounds.size.width - 20, panel.bounds.size.height - 60)];
+    g_logView = [[UITextView alloc] initWithFrame:CGRectMake(10, 50, panelWidth - 20, panelHeight - 60)];
     g_logView.backgroundColor = [UIColor blackColor];
-    g_logView.textColor = [UIColor systemRedColor];
+    g_logView.textColor = [UIColor systemPurpleColor];
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"UI显示已修复！\n\n请手动点击'课体'，然后观察日志，寻找 [⭐️ 方法命中! ⭐️] 这条记录。";
+    g_logView.text = @"UI位置已调整！\n\n1. 请点击'课体'。\n2. 观察日志中的[⭐️方法命中]。\n3. 你可以按住此窗口进行拖动。";
     [panel addSubview:g_logView];
 
     UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeButton.frame = CGRectMake(panel.bounds.size.width - 50, 5, 40, 40);
+    closeButton.frame = CGRectMake(panelWidth - 50, 5, 40, 40);
     [closeButton setTitle:@"X" forState:UIControlStateNormal];
     [closeButton.titleLabel setFont:[UIFont boldSystemFontOfSize:20]];
     [closeButton setTitleColor:[UIColor lightGrayColor] forState:UIControlStateNormal];
     [closeButton addTarget:self action:@selector(closeHunterPanel) forControlEvents:UIControlEventTouchUpInside];
     [panel addSubview:closeButton];
+    
+    // --- 新增：为面板增加拖动手势 ---
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
+    [panel addGestureRecognizer:pan];
     
     [keyWindow addSubview:panel];
     NSLog(@"[InfoHunter-Diag] UI面板已成功添加到窗口。");
@@ -194,6 +199,14 @@ static void Tweak_顯示七政信息WithSender(id self, SEL _cmd, id sender) {
         [panel removeFromSuperview];
     }
     g_logView = nil;
+}
+
+%new
+- (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer {
+    UIView *panel = recognizer.view;
+    CGPoint translation = [recognizer translationInView:panel.superview];
+    panel.center = CGPointMake(panel.center.x + translation.x, panel.center.y + translation.y);
+    [recognizer setTranslation:CGPointZero inView:panel.superview];
 }
 
 %end
