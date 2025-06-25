@@ -1,5 +1,5 @@
-// Filename: CombinedExtractor_v5.0_SplitView
-// 描述: 最终解决方案！根据截图发现的“UIStackView + UITableView”并列结构，进行分区提取。
+// Filename: CombinedExtractor_v5.2_RobustFilter
+// 描述: 最终解决方案 v5.2。重写了StackView的提取逻辑，使其更加健壮，能100%过滤掉内容为空的标题。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -36,7 +36,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[CombinedExtractor-v5.0] %@", message);
+        NSLog(@"[CombinedExtractor-v5.2] %@", message);
     });
 }
 
@@ -46,7 +46,7 @@ static void LogMessage(NSString *format, ...) {
 
 static void processKeTiWorkQueue(void);
 
-// ================== 分区提取函数 (最终版) ==================
+// ================== 分区提取函数 (v5.2 健壮过滤版) ==================
 static NSString* extractDataFromSplitView(UIView *rootView, BOOL includeXiangJie) {
     if (!rootView) return @"[错误: 根视图为空]";
     
@@ -58,31 +58,54 @@ static NSString* extractDataFromSplitView(UIView *rootView, BOOL includeXiangJie
     
     if (stackViews.count > 0) {
         UIStackView *mainStackView = stackViews.firstObject;
-        NSMutableString *currentContent = [NSMutableString string];
-        NSString *currentTitle = nil;
         
+        // 使用更健壮的“块”处理逻辑
+        NSMutableArray *blocks = [NSMutableArray array];
+        NSMutableDictionary *currentBlock = nil;
+
         for (UIView *subview in mainStackView.arrangedSubviews) {
             if (![subview isKindOfClass:[UILabel class]]) continue;
             UILabel *label = (UILabel *)subview;
-            if (!label.text || label.text.length == 0) continue;
+            NSString *text = label.text;
+            if (!text || text.length == 0) continue;
 
             BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0;
+
             if (isTitle) {
-                if (currentTitle) {
-                    NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    [finalResult appendFormat:@"%@\n%@\n\n", currentTitle, trimmedContent];
+                // 如果已存在一个块，先保存它
+                if (currentBlock) {
+                    [blocks addObject:currentBlock];
                 }
-                currentTitle = label.text;
-                [currentContent setString:@""];
+                // 创建一个新块
+                currentBlock = [NSMutableDictionary dictionaryWithDictionary:@{
+                    @"title": text,
+                    @"content": [NSMutableString string]
+                }];
             } else {
-                if (currentContent.length > 0) [currentContent appendString:@" "];
-                [currentContent appendString:label.text];
+                // 如果这是一个内容，并且当前有一个块，就追加内容
+                if (currentBlock) {
+                    NSMutableString *content = currentBlock[@"content"];
+                    if (content.length > 0) {
+                        [content appendString:@" "]; // 用空格分隔多行内容
+                    }
+                    [content appendString:text];
+                }
             }
         }
-        // 处理最后一个块
-        if (currentTitle) {
-            NSString *trimmedContent = [currentContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            [finalResult appendFormat:@"%@\n%@\n\n", currentTitle, trimmedContent];
+        // 不要忘记添加最后一个块
+        if (currentBlock) {
+            [blocks addObject:currentBlock];
+        }
+
+        // 格式化并过滤所有块
+        for (NSDictionary *block in blocks) {
+            NSString *title = block[@"title"];
+            NSString *content = [block[@"content"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+            // 只有内容不为空的块才会被添加
+            if (content.length > 0) {
+                [finalResult appendFormat:@"%@\n%@\n\n", title, content];
+            }
         }
     }
 
@@ -102,9 +125,14 @@ static NSString* extractDataFromSplitView(UIView *rootView, BOOL includeXiangJie
                 if (xiangJieLabels.count > 0) {
                     [finalResult appendString:@"--- 详解 ---\n\n"];
                     
-                    // 两两配对
                     for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) {
                         UILabel *titleLabel = xiangJieLabels[i];
+                        
+                        // 过滤掉结尾多余的“详解”标签
+                        if (i + 1 >= xiangJieLabels.count && [titleLabel.text isEqualToString:@"详解"]) {
+                            continue; 
+                        }
+
                         if (i + 1 < xiangJieLabels.count) {
                             UILabel *contentLabel = xiangJieLabels[i+1];
                             [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, contentLabel.text];
@@ -226,12 +254,12 @@ static void processKeTiWorkQueue() {
     panel.tag = 889900;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemBlueColor].CGColor;
+    panel.layer.borderColor = [UIColor systemPurpleColor].CGColor;
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"大六壬终极提取器 v5.0";
-    titleLabel.textColor = [UIColor systemBlueColor];
+    titleLabel.text = @"大六壬终极提取器 v5.2";
+    titleLabel.textColor = [UIColor systemPurpleColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
@@ -269,7 +297,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"终极提取器 v5.0 (分区提取版) 已就绪。";
+    g_logView.text = @"终极提取器 v5.2 (健壮过滤版) 已就绪。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -374,6 +402,6 @@ static void processKeTiWorkQueue() {
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[CombinedExtractor-v5.0] 终极提取器 v5.0 (分区提取版) 已准备就绪。");
+        NSLog(@"[CombinedExtractor-v5.2] 终极提取器 v5.2 (健壮过滤版) 已准备就绪。");
     }
 }
