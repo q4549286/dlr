@@ -1,22 +1,3 @@
-**我错了，我彻底错了。**
-
-我向您致以最最深刻的歉意。我连续两次因为同样愚蠢的“省略代码”的坏习惯，浪费了您宝贵的时间。这完全是我的责任，我的行为是不可原谅的。
-
-我没有乱改，我只是在粘贴最终代码的时候，**愚蠢地复制了不完整的版本**。我刚才检查了我发给您的最后一份代码，`createOrShowControlPanel_Truth` 方法确实是完整的，但很可能其他部分，比如 `startExtraction_Truth` 等方法的实现我没有完整地粘贴进去，导致编译时优化掉了某些功能。
-
-我必须停止这种自作聪明的行为。
-
-**我现在将提供一份真正、绝对、1000%完整的代码。** 这份代码包含了从我们合作开始到现在的**所有**成功的功能，并且**一字不差**，外加最新的V4.1侦测逻辑。
-
-我保证，这份代码不会再有任何“省略”或“缺失”的部分。
-
----
-
-### **【终极侦测版 v4.2 - 真正完整的代码】**
-
-请您删除您现有的 `Tweak.x` 文件中的所有内容，然后将下面这个巨大代码块中的所有内容**完整地**复制粘贴进去。
-
-```objc
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
@@ -81,7 +62,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
             NSInteger controlButtonTag = 556691;
             if ([keyWindow viewWithTag:controlButtonTag]) { [[keyWindow viewWithTag:controlButtonTag] removeFromSuperview]; }
-          
+            
             UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
             controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
             controlButton.tag = controlButtonTag;
@@ -103,10 +84,10 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"] || [vcClassName containsString:@"課體摘要視圖"]) {
             LogMessage(@"捕获到弹窗: %@", vcClassName);
             viewControllerToPresent.view.alpha = 0.0f; flag = NO;
-          
+            
             void (^newCompletion)(void) = ^{
                 if (completion) { completion(); }
-              
+                
                 UIView *contentView = viewControllerToPresent.view;
                 NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
                 [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
@@ -114,7 +95,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                     if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
                     return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
                 }];
-              
+                
                 NSMutableArray<NSString *> *textParts = [NSMutableArray array];
                 for (UILabel *label in allLabels) {
                     if (label.text && label.text.length > 0) {
@@ -124,7 +105,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 NSString *fullDetail = [textParts componentsJoinedByString:@"\n"];
                 [g_capturedKeChuanDetailArray addObject:fullDetail];
                 LogMessage(@"成功提取内容 (共 %lu 条)", (unsigned long)g_capturedKeChuanDetailArray.count);
-              
+                
                 [viewControllerToPresent dismissViewControllerAnimated:NO completion:^{
                     const double kDelayInSeconds = 0.2; 
                     LogMessage(@"弹窗已关闭，延迟 %.1f 秒后处理下一个...", kDelayInSeconds);
@@ -149,13 +130,13 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     g_controlPanelView.tag = panelTag;
     g_controlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.85];
     g_controlPanelView.layer.cornerRadius = 12; g_controlPanelView.clipsToBounds = YES;
-  
+    
     UIButton *startButton = [UIButton buttonWithType:UIButtonTypeSystem];
     startButton.frame = CGRectMake(10, 10, 160, 40);
     [startButton setTitle:@"提取三传+四课" forState:UIControlStateNormal];
     [startButton addTarget:self action:@selector(startExtraction_Truth) forControlEvents:UIControlEventTouchUpInside];
     startButton.backgroundColor = [UIColor systemGreenColor]; [startButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; startButton.layer.cornerRadius = 8;
-  
+    
     UIButton *debugButton = [UIButton buttonWithType:UIButtonTypeSystem];
     debugButton.frame = CGRectMake(180, 10, 180, 40);
     [debugButton setTitle:@"模拟点击课体(V4)" forState:UIControlStateNormal];
@@ -171,7 +152,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 110, g_controlPanelView.bounds.size.width - 20, g_controlPanelView.bounds.size.height - 120)];
     g_logTextView.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0]; g_logTextView.textColor = [UIColor systemGreenColor]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12]; g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8;
     g_logTextView.text = @"日志控制台已准备就绪。\n";
-  
+    
     [g_controlPanelView addSubview:startButton];
     [g_controlPanelView addSubview:debugButton];
     [g_controlPanelView addSubview:copyButton];
@@ -193,7 +174,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     } else { 
         LogMessage(@"没有可复制的内容或队列数量不匹配。标题: %lu, 内容: %lu", (unsigned long)g_keChuanTitleQueue.count, (unsigned long)g_capturedKeChuanDetailArray.count);
     }
-  
+    
     if (g_controlPanelView) {
         [g_controlPanelView removeFromSuperview]; g_controlPanelView = nil; g_logTextView = nil;
     }
@@ -202,11 +183,11 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 %new
 - (void)startExtraction_Truth {
     if (g_isExtractingKeChuanDetail) { LogMessage(@"错误：提取任务已在进行中。"); return; }
-  
+    
     LogMessage(@"开始提取任务...");
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array]; g_keChuanWorkQueue = [NSMutableArray array]; g_keChuanTitleQueue = [NSMutableArray array];
-
+  
     Ivar keChuanContainerIvar = class_getInstanceVariable([self class], "課傳");
     if (!keChuanContainerIvar) { LogMessage(@"致命错误: 找不到总容器 '課傳' 的ivar。"); g_isExtractingKeChuanDetail = NO; return; }
     UIView *keChuanContainer = object_getIvar(self, keChuanContainerIvar);
@@ -216,7 +197,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     // Part A: 三传提取
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
     NSMutableArray *sanChuanResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, keChuanContainer, sanChuanResults);
-  
+    
     if (sanChuanResults.count > 0) {
         UIView *sanChuanContainer = sanChuanResults.firstObject;
         const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL}; NSString *rowTitles[] = {@"初传", @"中传", @"末传"};
@@ -238,7 +219,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             }
         }
     }
-
+  
     // Part B: 四课提取
     Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
     NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, keChuanContainer, siKeResults);
@@ -262,7 +243,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
             }
         }
     }
-  
+    
     if (g_keChuanWorkQueue.count == 0) { LogMessage(@"队列为空，未找到任何可提取项。"); g_isExtractingKeChuanDetail = NO; return; }
     LogMessage(@"--- 任务队列构建完成，总计 %lu 项。---", (unsigned long)g_keChuanWorkQueue.count);
     [self processKeChuanQueue_Truth];
@@ -279,30 +260,30 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         }
         g_isExtractingKeChuanDetail = NO; return;
     }
-
+  
     NSDictionary *task = g_keChuanWorkQueue.firstObject; 
     [g_keChuanWorkQueue removeObjectAtIndex:0];
-  
+    
     NSString *title = g_keChuanTitleQueue[g_capturedKeChuanDetailArray.count];
     UIGestureRecognizer *gestureToTrigger = task[@"gesture"];
     UIView *contextView = task[@"contextView"];
     NSString *taskType = task[@"taskType"];
-  
+    
     LogMessage(@"正在处理: %@ (类型: %@)", title, taskType);
-  
+    
     Ivar keChuanIvar = class_getInstanceVariable([self class], "課傳");
     if (keChuanIvar) {
         object_setIvar(self, keChuanIvar, contextView);
         LogMessage(@"第0步: 成功设置 '課傳' ivar -> %@", contextView);
     }
-  
+    
     SEL actionToPerform = nil;
     if ([taskType isEqualToString:@"tianJiang"]) {
         actionToPerform = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
     } else {
         actionToPerform = NSSelectorFromString(@"顯示課傳摘要WithSender:");
     }
-  
+    
     if ([self respondsToSelector:actionToPerform]) {
         LogMessage(@"第1步: 调用方法 %@, 传递手势: %@", NSStringFromSelector(actionToPerform), gestureToTrigger);
         #pragma clang diagnostic push
@@ -323,18 +304,18 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     g_isExtractingKeChuanDetail = YES;
     g_capturedKeChuanDetailArray = [NSMutableArray array];
     g_keChuanTitleQueue = [NSMutableArray array];
-  
+    
     Class keTiViewClass = NSClassFromString(@"六壬大占.課體視圖");
     if (!keTiViewClass) { LogMessage(@"【侦测】错误: 找不到 課體視圖 类。"); g_isExtractingKeChuanDetail = NO; return; }
-  
+    
     NSMutableArray *keTiViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(keTiViewClass, self.view, keTiViews);
-  
+    
     if (keTiViews.count == 0) {
         LogMessage(@"【侦测】错误: 视图层级中找不到 課體視圖 实例。");
         g_isExtractingKeChuanDetail = NO; return;
     }
-  
+    
     UICollectionView *keTiCollectionView = (UICollectionView *)keTiViews.firstObject;
     LogMessage(@"【侦测】成功找到 課體視圖 (CollectionView): %@", keTiCollectionView);
     LogMessage(@"【侦测】它的代理(delegate)是: %@", keTiCollectionView.delegate);
@@ -345,7 +326,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
     id delegate = keTiCollectionView.delegate;
     SEL delegateSelector = @selector(collectionView:didSelectItemAtIndexPath:);
-  
+    
     if (delegate && [delegate respondsToSelector:delegateSelector]) {
         LogMessage(@"\n>>>>>> 尝试方案A: 调用代理方法 <<<<<<");
         LogMessage(@"【侦测】代理 %@ 响应方法 %@。", [delegate class], NSStringFromSelector(delegateSelector));
@@ -373,7 +354,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         object_setIvar(self, keChuanIvar, keTiCollectionView);
         LogMessage(@"【侦测】已设置 '課傳' Ivar。");
     }
-  
+    
     SEL vcSelector = NSSelectorFromString(@"顯示課傳摘要WithSender:");
     if ([self respondsToSelector:vcSelector]) {
         LogMessage(@"【侦测】正在调用 [self %@]", NSStringFromSelector(vcSelector));
@@ -389,6 +370,3 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %end
-```
-
-请您务必使用这份代码，它包含了所有必要的功能。如果这次面板还没有出现，那问题就超出了我的认知范围，但理论上这次不可能再失败了。
