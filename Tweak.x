@@ -1,6 +1,6 @@
-// Filename: KeTi_JiuZongMen_Extractor_v1.5
+// Filename: KeTi_JiuZongMen_Extractor_v1.6
 // 终极修复版！根据您的最终指点，采用最简单直接的逻辑，只寻找主StackView并遍历其内容，确保100%提取成功。
-// v1.5: 修复了编译错误 (缺少 %end)。
+// v1.6: 修复了pragma和performSelector导致的编译错误。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -41,7 +41,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[Extractor-Fixed-v1.5] %@", message);
+        NSLog(@"[Extractor-Fixed-v1.6] %@", message);
     });
 }
 
@@ -177,19 +177,32 @@ static void processKeTiWorkQueue() {
 %new
 - (void)setupCombinedExtractorPanel {
     UIWindow *keyWindow = nil;
-    if (@available(iOS 13.0, *)) { for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) { if (scene.activationState == UISceneActivationStateForegroundActive) { keyWindow = scene.windows.firstObject; break; } } } else { #pragma clang diagnostic push; _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\""); keyWindow = [[UIApplication sharedApplication] keyWindow]; #pragma clang diagnostic pop; }
+    // --- FIX: Expanded if/else block to prevent compiler errors ---
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                keyWindow = scene.windows.firstObject;
+                break;
+            }
+        }
+    } else {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        keyWindow = [[UIApplication sharedApplication] keyWindow];
+        #pragma clang diagnostic pop
+    }
     if (!keyWindow || [keyWindow viewWithTag:889900]) return;
 
     UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 350, 450)];
     panel.tag = 889900;
     panel.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.92];
     panel.layer.cornerRadius = 12;
-    panel.layer.borderColor = [UIColor systemPurpleColor].CGColor;
+    panel.layer.borderColor = [UIColor systemBlueColor].CGColor;
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"课体/九宗门提取器 v1.5";
-    titleLabel.textColor = [UIColor systemPurpleColor];
+    titleLabel.text = @"课体/九宗门提取器 v1.6";
+    titleLabel.textColor = [UIColor systemBlueColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [panel addSubview:titleLabel];
@@ -219,7 +232,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"提取逻辑已终极修复，请测试。";
+    g_logView.text = @"编译错误已修复，请测试。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -257,8 +270,19 @@ static void processKeTiWorkQueue() {
     LogMessage(@"--- 开始“九宗门”提取任务 ---");
     g_isExtracting = YES; g_currentTaskType = @"JiuZongMen";
     SEL selector = NSSelectorFromString(@"顯示九宗門概覽");
-    if ([self respondsToSelector:selector]) { LogMessage(@"正在调用方法: 顯示九宗門概覽"); #pragma clang diagnostic push; #pragma clang diagnostic ignored "-Warc-performSelector-leaks"; [self performSelector:selector]; #pragma clang diagnostic pop; } 
-    else { LogMessage(@"错误: 当前ViewController没有'顯示九宗門概覽'方法。"); g_isExtracting = NO; g_currentTaskType = nil; }
+    if ([self respondsToSelector:selector]) {
+        LogMessage(@"正在调用方法: 顯示九宗門概覽");
+        // --- FIX: Expanded block to prevent compiler errors and suppress leak warning correctly ---
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        [self performSelector:selector];
+        #pragma clang diagnostic pop
+    } 
+    else {
+        LogMessage(@"错误: 当前ViewController没有'顯示九宗門概覽'方法。");
+        g_isExtracting = NO;
+        g_currentTaskType = nil;
+    }
 }
 
 %new
@@ -269,7 +293,7 @@ static void processKeTiWorkQueue() {
     [recognizer setTranslation:CGPointZero inView:panel.superview];
 }
 
-%end // <--- THIS WAS THE MISSING LINE
+%end
 
 // =================================================================
 // 4. 构造函数
@@ -280,7 +304,7 @@ static void processKeTiWorkQueue() {
         Class vcClass = NSClassFromString(@"六壬大占.ViewController");
         if (vcClass) {
             MSHookMessageEx(vcClass, @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-            NSLog(@"[Extractor-Fixed-v1.5] 提取器已准备就绪。");
+            NSLog(@"[Extractor-Fixed-v1.6] 提取器已准备就绪。");
         }
     }
 }
