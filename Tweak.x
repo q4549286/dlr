@@ -1,4 +1,4 @@
-// Filename: UltimateShotgunMonitor_v12.4_Final.x
+// Filename: UltimateShotgunMonitor_v12.5_Final.x
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -7,20 +7,7 @@
 static UITextView *g_logView = nil;
 
 // 统一日志输出
-static void PanelLog(NSString *format, ...) {
-    if (!g_logView) return;
-    va_list args;
-    va_start(args, format);
-    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args);
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *timestamp = [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterNoStyle timeStyle:NSDateFormatterMediumStyle];
-        NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text];
-        if (newText.length > 5000) { newText = [newText substringToIndex:5000]; }
-        g_logView.text = newText;
-        NSLog(@"[ShotgunMonitor-v12.4] %@", message);
-    });
-}
+static void PanelLog(NSString *format, ...) { if (!g_logView) return; va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args); dispatch_async(dispatch_get_main_queue(), ^{ NSString *timestamp = [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterNoStyle timeStyle:NSDateFormatterMediumStyle]; NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text]; if (newText.length > 5000) { newText = [newText substringToIndex:5000]; } g_logView.text = newText; NSLog(@"[ShotgunMonitor-v12.5] %@", message); }); }
 
 // UIViewController 分类接口
 @interface UIViewController (ShotgunMonitorUI)
@@ -33,15 +20,14 @@ static void PanelLog(NSString *format, ...) {
 // ========================================================
 %hook 六壬大占.ViewController
 
-// *** FINAL FIX: Corrected ALL method signatures based on compiler feedback and logic ***
+// *** FINAL ATTEMPT: Assuming ALL methods with ':' have one (id) parameter ***
 
 - (void)切換時間模式WithSender:(id)sender { PanelLog(@"方法被调用: 切換時間模式WithSender:"); %orig; }
 - (void)切換行年神煞WithSender:(id)sender { PanelLog(@"方法被调用: 切換行年神煞WithSender:"); %orig; }
-- (void)切換旬日 { PanelLog(@"方法被调用: 切換旬日"); %orig; } // *** FIX: Removed parameter, this was the source of the error ***
+- (void)切換旬日:(id)sender { PanelLog(@"方法被调用: 切換旬日:"); %orig; }
 - (void)切換晝夜功能 { PanelLog(@"方法被调用: 切換晝夜功能"); %orig; }
 - (void)切回自然晝夜WithSender:(id)sender { PanelLog(@"方法被调用: 切回自然晝夜WithSender:"); %orig; }
 - (void)時間流逝With定時器:(id)timer { PanelLog(@"方法被调用: 時間流逝With定時器:"); %orig; }
-
 - (void)顯示參數設置 { PanelLog(@"方法被调用: 顯示參數設置"); %orig; }
 - (void)顯示法訣總覽 { PanelLog(@"方法被调用: 顯示法訣總覽"); %orig; }
 - (void)顯示方法總覽 { PanelLog(@"方法被调用: 顯示方法總覽"); %orig; }
@@ -62,7 +48,6 @@ static void PanelLog(NSString *format, ...) {
 - (void)顯示占案存課 { PanelLog(@"方法被调用: 顯示占案存課"); %orig; }
 
 %end
-
 
 %hook UIViewController
 
@@ -89,7 +74,7 @@ static void PanelLog(NSString *format, ...) {
     panelView.layer.borderWidth = 1.5;
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, 300, 20)];
-    titleLabel.text = @"广撒网监控器 v12.4";
+    titleLabel.text = @"广撒网监控器 v12.5";
     titleLabel.textColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.5 alpha:1.0];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
