@@ -125,7 +125,7 @@ static UIImage* createWatermarkImage(NSString *text, UIFont *font, UIColor *text
             UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
             controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
             controlButton.tag = controlButtonTag;
-            [controlButton setTitle:@"EchoAI 控制台" forState:UIControlStateNormal];
+            [controlButton setTitle:@"Echo定制控制台" forState:UIControlStateNormal];
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
             controlButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.4 blue:0.8 alpha:1.0]; // 更专业的蓝色
             [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
