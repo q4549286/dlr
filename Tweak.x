@@ -1,4 +1,4 @@
-// Filename: EchoUltimateDetectorExtractor.x
+// Filename: EchoUltimateDetectorExtractor_v2_1_Fixed.x
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -133,7 +133,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     CGFloat yPos = 10.0;
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, yPos, 300, 20)];
-    titleLabel.text = @"运行时探测提取器 v2";
+    titleLabel.text = @"运行时探测提取器 v2.1";
     titleLabel.textColor = [UIColor systemOrangeColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -213,20 +213,18 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 
     // 3. 使用运行时深入分析手势
-    // UIGestureRecognizer 内部有一个 _targets 数组，存储了所有目标和动作信息。
-    // 我们可以通过 KVC (Key-Value Coding) 来访问这个私有属性。
     BOOL foundAction = NO;
     for (UIGestureRecognizer *gesture in keTiView.gestureRecognizers) {
         PanelLog(@"分析手势: %@", gesture);
-        // 使用 KVC 访问私有属性 _targets
-        // 这是一个包含 UIGestureRecognizerTarget 对象的数组
         NSArray *targets = [gesture valueForKey:@"targets"];
         if (targets && targets.count > 0) {
-            // 遍历所有目标
             for (id gestureTarget in targets) {
-                // UIGestureRecognizerTarget 对象有两个关键属性：_target 和 _action
                 id target = [gestureTarget valueForKey:@"target"];
-                SEL action = (SEL)[gestureTarget valueForKey:@"action"];
+                
+                // *** FIX: Correctly unpack SEL from NSValue to avoid ARC error ***
+                NSValue *actionValue = [gestureTarget valueForKey:@"action"];
+                if (![actionValue isKindOfClass:[NSValue class]]) continue;
+                SEL action = [actionValue pointerValue];
                 
                 NSString *actionString = NSStringFromSelector(action);
                 PanelLog(@"--- GESTURE DETECTED ---\nTarget: %@\nAction: %@\n-------------------------", [target class], actionString);
@@ -234,7 +232,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
                 if (actionString && !foundAction) {
                     g_actionTextField.text = actionString;
                     PanelLog(@"已将第一个找到的函数名 '%@' 自动填入输入框。", actionString);
-                    foundAction = YES; // 只自动填写第一个找到的
+                    foundAction = YES;
                 }
             }
         }
