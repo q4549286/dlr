@@ -1,4 +1,4 @@
-// Filename: UltimateShotgunMonitor_v12.1_Fixed.x
+// Filename: UltimateShotgunMonitor_v12.2_Final.x
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -18,7 +18,7 @@ static void PanelLog(NSString *format, ...) {
         NSString *newText = [NSString stringWithFormat:@"[%@] %@\n%@", timestamp, message, g_logView.text];
         if (newText.length > 5000) { newText = [newText substringToIndex:5000]; }
         g_logView.text = newText;
-        NSLog(@"[ShotgunMonitor-v12.1] %@", message);
+        NSLog(@"[ShotgunMonitor-v12.2] %@", message);
     });
 }
 
@@ -33,7 +33,7 @@ static void PanelLog(NSString *format, ...) {
 // ========================================================
 %hook 六壬大占.ViewController
 
-// *** FIX: Added correct method signatures for all hooked methods ***
+// *** FIX: Corrected ALL method signatures from the list ***
 
 - (void)切換時間模式WithSender:(id)sender {
     PanelLog(@"方法被调用: 切換時間模式WithSender:");
@@ -43,12 +43,20 @@ static void PanelLog(NSString *format, ...) {
     PanelLog(@"方法被调用: 切換行年神煞WithSender:");
     %orig;
 }
+- (void)切換旬日 {
+    PanelLog(@"方法被调用: 切換旬日");
+    %orig;
+}
 - (void)切換晝夜功能 {
     PanelLog(@"方法被调用: 切換晝夜功能");
     %orig;
 }
 - (void)切回自然晝夜WithSender:(id)sender {
     PanelLog(@"方法被调用: 切回自然晝夜WithSender:");
+    %orig;
+}
+- (void)時間流逝With定時器:(id)timer { // *** FIX: Added parameter for the timer ***
+    PanelLog(@"方法被调用: 時間流逝With定時器:");
     %orig;
 }
 
@@ -153,7 +161,7 @@ static void PanelLog(NSString *format, ...) {
     panelView.layer.borderWidth = 1.5;
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, 300, 20)];
-    titleLabel.text = @"广撒网监控器 v12.1";
+    titleLabel.text = @"广撒网监控器 v12.2";
     titleLabel.textColor = [UIColor colorWithRed:0.9 green:0.2 blue:0.5 alpha:1.0];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
