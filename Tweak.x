@@ -1,11 +1,12 @@
-// EchoAIO-Combined-Tweak-FIXED.x
+// EchoAIO-Combined-Tweak-FIXED-V2.x
 // =========================================================================
 //                  EchoAI All-in-One Combined Tweak
 //
 //  - Merged by AI on 2024-XX-XX
 //  - Combines KeChuan Detail Extractor and Advanced Full-Plate Extractor.
 //  - Features a unified control panel and global logging system.
-//  - FIX: Corrected Logos syntax for method hooks (-).
+//  - FIX 1: Corrected Logos syntax for method hooks (-).
+//  - FIX 2: Replaced deprecated UIActivityIndicatorViewStyle.
 // =========================================================================
 
 #import <UIKit/UIKit.h>
@@ -81,15 +82,11 @@ static NSString * const CustomFooterText = @"\n\n"
 // 2. UI 微调 Hooks (语法已修复)
 // =========================================================================
 %hook UILabel
-// CORRECTED: Added leading '-' to declare instance method
 - (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
-
-// CORRECTED: Added leading '-' to declare instance method
 - (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
 %end
 
 %hook UIWindow
-// CORRECTED: Added leading '-' to declare instance method
 - (void)layoutSubviews { 
     %orig; 
     if (self.windowLevel != UIWindowLevelNormal) { return; } 
@@ -115,16 +112,11 @@ static NSString * const CustomFooterText = @"\n\n"
 // 3. 主功能区：UIViewController 整合
 // =========================================================================
 @interface UIViewController (EchoAICombinedAddons)
-// --- UI Control ---
 - (void)toggleMainPanel_Echo;
 - (void)copySimpleResultsAndClose_Echo;
 - (void)clearLogAndClose_Echo;
-
-// --- Simple Extraction (KeChuan) ---
 - (void)startSimpleExtraction_Echo;
 - (void)processSimpleExtractionQueue_Echo;
-
-// --- Complex Extraction (Full Plate) ---
 - (void)startComplexExtraction_Echo;
 - (void)extractComplexKePanInfo_Echo:(void (^)(NSString *kePanText))completion;
 - (void)extractComplexNianmingInfo_Echo:(void (^)(NSString *nianmingText))completion;
@@ -136,7 +128,6 @@ static NSString * const CustomFooterText = @"\n\n"
 
 %hook UIViewController
 
-// --- viewDidLoad: Inject the main trigger button ---
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
@@ -164,9 +155,7 @@ static NSString * const CustomFooterText = @"\n\n"
     }
 }
 
-// --- presentViewController: The master interceptor for all extraction tasks ---
 - (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    // --- Interceptor for Simple Extraction (KeChuan) ---
     if (g_isExtractingSimple) {
         NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
@@ -206,7 +195,6 @@ static NSString * const CustomFooterText = @"\n\n"
             return;
         }
     }
-    // --- Interceptor for Complex Extraction (KePan part) ---
     else if (g_isExtractingComplex && g_complexExtractedData && ![viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
         viewControllerToPresent.view.alpha = 0.0f; flag = NO;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -241,7 +229,6 @@ static NSString * const CustomFooterText = @"\n\n"
         });
         %orig(viewControllerToPresent, flag, completion); return;
     }
-    // --- Interceptor for Complex Extraction (Nianming part) ---
     else if (g_isExtractingNianming && g_currentItemToExtract_Nianming) {
         __weak typeof(self) weakSelf = self;
         if ([viewControllerToPresent isKindOfClass:[UIAlertController class]]) {
@@ -288,7 +275,6 @@ static NSString * const CustomFooterText = @"\n\n"
         }
     }
 
-    // --- If no extraction is active, proceed as normal ---
     %orig(viewControllerToPresent, flag, completion);
 }
 
@@ -296,7 +282,6 @@ static NSString * const CustomFooterText = @"\n\n"
 // 4. %new Methods: UI Panel, Simple & Complex Extraction Logic
 // =========================================================================
 
-// --- Main Control Panel ---
 %new
 - (void)toggleMainPanel_Echo {
     UIWindow *keyWindow = self.view.window; if (!keyWindow) { return; }
@@ -402,7 +387,6 @@ static NSString * const CustomFooterText = @"\n\n"
     [self toggleMainPanel_Echo];
 }
 
-// --- Simple Extraction (KeChuan) Logic ---
 %new
 - (void)startSimpleExtraction_Echo {
     if (g_isExtractingSimple || g_isExtractingComplex) { EchoLog(@"错误：已有提取任务在进行中。"); return; }
@@ -531,8 +515,6 @@ static NSString * const CustomFooterText = @"\n\n"
     }
 }
 
-
-// --- Complex Extraction (Full Plate) Logic ---
 %new
 - (void)startComplexExtraction_Echo {
     if (g_isExtractingSimple || g_isExtractingComplex) { EchoLog(@"错误：已有提取任务在进行中。"); return; }
@@ -543,8 +525,9 @@ static NSString * const CustomFooterText = @"\n\n"
     UIWindow *keyWindow = self.view.window;
     UIView *progressView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 200, 120)];
     progressView.center = keyWindow.center; progressView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.75]; progressView.layer.cornerRadius = 10; progressView.tag = 556677;
-    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
-    spinner.center = CGPointMake(100, 45); [spinner startAnimating]; [progressView addSubview:spinner];
+    // FIX: Replaced deprecated style with modern equivalent.
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    spinner.color = [UIColor whiteColor]; spinner.center = CGPointMake(100, 45); [spinner startAnimating]; [progressView addSubview:spinner];
     UILabel *progressLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 80, 180, 30)];
     progressLabel.textColor = [UIColor whiteColor]; progressLabel.textAlignment = NSTextAlignmentCenter; progressLabel.font = [UIFont systemFontOfSize:14]; progressLabel.adjustsFontSizeToFitWidth = YES;
     progressLabel.text = @"提取课盘信息..."; [progressView addSubview:progressLabel];
@@ -722,7 +705,6 @@ static NSString * const CustomFooterText = @"\n\n"
     processQueue();
 }
 
-// --- Complex Extraction Helpers ---
 %new
 - (NSString *)formatNianmingGejuFromView_Echo:(UIView *)contentView {
     Class cellClass = NSClassFromString(@"六壬大占.格局單元");
