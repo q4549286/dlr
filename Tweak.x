@@ -1,6 +1,5 @@
-// Filename: KeTi_JiuZongMen_Extractor_v2.1
-// 终极架构修复版！根据您最终的Flex截图，采用最简单直接的逻辑，只寻找主StackView并遍历其内容，确保100%提取成功。
-// v2.1: 修复了pragma和performSelector导致的编译错误。
+// Filename: KeTi_JiuZongMen_Extractor_v2.2
+// 终极架构修复版！根据您最终的Flex截图，采用最简单直接的逻辑，收集所有StackView并排序，确保100%提取成功。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -41,7 +40,7 @@ static void LogMessage(NSString *format, ...) {
         [formatter setDateFormat:@"HH:mm:ss"];
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         g_logView.text = [NSString stringWithFormat:@"%@%@\n%@", logPrefix, message, g_logView.text];
-        NSLog(@"[Extractor-v2.1] %@", message);
+        NSLog(@"[Extractor-v2.2] %@", message);
     });
 }
 
@@ -75,37 +74,31 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                  }
             }
 
-            // 2. 在这个UIView里找到唯一的、垂直排列的主StackView
-            UIStackView *mainVerticalStackView = nil;
-            for(UIView *subview in containerView.subviews){
-                if([subview isKindOfClass:[UIStackView class]]){
-                    mainVerticalStackView = (UIStackView *)subview;
-                    break;
-                }
-            }
+            // 2. 找到容器内所有的StackView
+            NSMutableArray<UIStackView *> *allRowStackViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UIStackView class], containerView, allRowStackViews);
             
-            // 3. 遍历主StackView里的每一个子视图(它们都是横向的StackView)
-            if(mainVerticalStackView){
-                LogMessage(@"找到主StackView，遍历 %lu 个子项...", (unsigned long)mainVerticalStackView.arrangedSubviews.count);
-                for(UIView *subview in mainVerticalStackView.arrangedSubviews){
-                    if([subview isKindOfClass:[UIStackView class]]){
-                        UIStackView *rowStackView = (UIStackView *)subview;
-                        if(rowStackView.arrangedSubviews.count >= 2 && [rowStackView.arrangedSubviews[0] isKindOfClass:[UILabel class]] && [rowStackView.arrangedSubviews[1] isKindOfClass:[UILabel class]]){
-                            UILabel *titleLabel = (UILabel *)rowStackView.arrangedSubviews[0];
-                            UILabel *contentLabel = (UILabel *)rowStackView.arrangedSubviews[1];
-                            
-                            if(titleLabel.text && titleLabel.text.length > 0){
-                                NSString *contentText = contentLabel.text ?: @"";
-                                if([contentText.lowercaseString isEqualToString:@"nil"]){
-                                    contentText = @""; // 处理Flex截图中看到的 "nil"
-                                }
-                                [textParts addObject:[NSString stringWithFormat:@"%@ → %@", titleLabel.text, [contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]];
-                            }
+            // 3. 按照Y坐标排序
+            [allRowStackViews sortUsingComparator:^NSComparisonResult(UIStackView *obj1, UIStackView *obj2) {
+                return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
+            }];
+
+            LogMessage(@"找到并排序了 %lu 个StackView，开始提取...", (unsigned long)allRowStackViews.count);
+            
+            // 4. 遍历排好序的StackView，提取配对的Label
+            for(UIStackView *rowStackView in allRowStackViews){
+                if(rowStackView.arrangedSubviews.count >= 2 && [rowStackView.arrangedSubviews[0] isKindOfClass:[UILabel class]] && [rowStackView.arrangedSubviews[1] isKindOfClass:[UILabel class]]){
+                    UILabel *titleLabel = (UILabel *)rowStackView.arrangedSubviews[0];
+                    UILabel *contentLabel = (UILabel *)rowStackView.arrangedSubviews[1];
+                    
+                    if(titleLabel.text && titleLabel.text.length > 0){
+                        NSString *contentText = contentLabel.text ?: @"";
+                        if([contentText.lowercaseString isEqualToString:@"nil"]){
+                            contentText = @""; // 处理Flex截图中看到的 "nil"
                         }
+                        [textParts addObject:[NSString stringWithFormat:@"%@ → %@", titleLabel.text, [contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]];
                     }
                 }
-            } else {
-                LogMessage(@"错误：未能找到主StackView，提取失败！");
             }
             
             NSString *extractedText = [textParts componentsJoinedByString:@"\n"];
@@ -175,20 +168,7 @@ static void processKeTiWorkQueue() {
 %new
 - (void)setupCombinedExtractorPanel {
     UIWindow *keyWindow = nil;
-    // --- FIX: Expanded if/else block to prevent compiler errors ---
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                keyWindow = scene.windows.firstObject;
-                break;
-            }
-        }
-    } else {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        keyWindow = [[UIApplication sharedApplication] keyWindow];
-        #pragma clang diagnostic pop
-    }
+    if (@available(iOS 13.0, *)) { for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) { if (scene.activationState == UISceneActivationStateForegroundActive) { keyWindow = scene.windows.firstObject; break; } } } else { #pragma clang diagnostic push; _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\""); keyWindow = [[UIApplication sharedApplication] keyWindow]; #pragma clang diagnostic pop; }
     if (!keyWindow || [keyWindow viewWithTag:889900]) return;
 
     UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(20, 100, 350, 450)];
@@ -199,7 +179,7 @@ static void processKeTiWorkQueue() {
     panel.layer.borderWidth = 1.5;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, 350, 20)];
-    titleLabel.text = @"课体/九宗门提取器 v2.1";
+    titleLabel.text = @"课体/九宗门提取器 v2.2";
     titleLabel.textColor = [UIColor systemGreenColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -230,7 +210,7 @@ static void processKeTiWorkQueue() {
     g_logView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logView.editable = NO;
     g_logView.layer.cornerRadius = 5;
-    g_logView.text = @"编译错误已修复，请测试。";
+    g_logView.text = @"终极修复版，请测试。";
     [panel addSubview:g_logView];
     
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
@@ -268,19 +248,8 @@ static void processKeTiWorkQueue() {
     LogMessage(@"--- 开始“九宗门”提取任务 ---");
     g_isExtracting = YES; g_currentTaskType = @"JiuZongMen";
     SEL selector = NSSelectorFromString(@"顯示九宗門概覽");
-    if ([self respondsToSelector:selector]) {
-        LogMessage(@"正在调用方法: 顯示九宗門概覽");
-        // --- FIX: Expanded block to prevent compiler errors and suppress leak warning correctly ---
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:selector];
-        #pragma clang diagnostic pop
-    } 
-    else {
-        LogMessage(@"错误: 当前ViewController没有'顯示九宗門概覽'方法。");
-        g_isExtracting = NO;
-        g_currentTaskType = nil;
-    }
+    if ([self respondsToSelector:selector]) { LogMessage(@"正在调用方法: 顯示九宗門概覽"); #pragma clang diagnostic push; #pragma clang diagnostic ignored "-Warc-performSelector-leaks"; [self performSelector:selector]; #pragma clang diagnostic pop; } 
+    else { LogMessage(@"错误: 当前ViewController没有'顯示九宗門概覽'方法。"); g_isExtracting = NO; g_currentTaskType = nil; }
 }
 
 %new
@@ -302,7 +271,7 @@ static void processKeTiWorkQueue() {
         Class vcClass = NSClassFromString(@"六壬大占.ViewController");
         if (vcClass) {
             MSHookMessageEx(vcClass, @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-            NSLog(@"[Extractor-v2.1] 提取器已准备就绪。");
+            NSLog(@"[Extractor-v2.2] 提取器已准备就绪。");
         }
     }
 }
