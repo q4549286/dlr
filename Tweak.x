@@ -136,17 +136,12 @@ static BOOL isInsideProblematicView(UIView *view) {
 %hook UILabel
 
 - (void)setText:(NSString *)text {
-    // [FIX] 安全检查：如果标签在UIDatePicker等视图内，则不进行任何修改，直接调用原始方法。
-    if (isInsideProblematicView(self)) {
-        %orig(text);
-        return;
-    }
-
     if (!text) {
         %orig(text);
         return;
     }
-    
+
+    // 首先处理已知安全的、基于字符串比较的替换
     NSString *newString = nil;
     if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
         newString = @"Echo";
@@ -155,29 +150,36 @@ static BOOL isInsideProblematicView(UIView *view) {
     } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) {
         newString = @"毕法";
     }
-    
+
     if (newString) {
         %orig(newString);
         return;
     }
     
-    NSMutableString *simplifiedText = [text mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
-    %orig(simplifiedText);
+    // [FIX] 使用 @try...@catch 块来包裹有风险的全局转换操作，这是最稳健的防崩溃方法。
+    @try {
+        // 增加一层类型检查作为额外的保险
+        if ([text isKindOfClass:[NSString class]]) {
+            NSMutableString *simplifiedText = [text mutableCopy];
+            CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
+            %orig(simplifiedText);
+        } else {
+            // 如果传入的不是标准NSString，直接使用原始版本
+            %orig(text);
+        }
+    } @catch (NSException *exception) {
+        // 如果在转换过程中发生任何异常（崩溃），则放弃转换，使用原始文本，从而防止闪退。
+        %orig(text);
+    }
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText {
-    // [FIX] 安全检查：同样应用于富文本设置
-    if (isInsideProblematicView(self)) {
-        %orig(attributedText);
-        return;
-    }
-
     if (!attributedText) {
         %orig(attributedText);
         return;
     }
-    
+
+    // 首先处理已知安全的替换
     NSString *originalString = attributedText.string;
     NSString *newString = nil;
     if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
@@ -187,17 +189,26 @@ static BOOL isInsideProblematicView(UIView *view) {
     } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
         newString = @"毕法";
     }
-    
+
     if (newString) {
         NSMutableAttributedString *newAttr = [attributedText mutableCopy];
         [newAttr.mutableString setString:newString];
         %orig(newAttr);
         return;
     }
-    
-    NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy];
-    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
-    %orig(finalAttributedText);
+
+    // [FIX] 同样对富文本使用 @try...@catch 保护
+    @try {
+        if ([attributedText isKindOfClass:[NSAttributedString class]]) {
+            NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy];
+            CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
+            %orig(finalAttributedText);
+        } else {
+            %orig(attributedText);
+        }
+    } @catch (NSException *exception) {
+        %orig(attributedText);
+    }
 }
 
 %end
