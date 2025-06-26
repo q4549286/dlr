@@ -1,9 +1,8 @@
-////////// Filename: Echo_AnalysisEngine_v12.2_NotifyFix.xm
-// 描述: Echo 六壬解析引擎 v12.2 (通知优化版)。此版本在v12.1基础上，引入了非阻塞式顶部通知来替代原有的UIAlertController，提升了操作流畅性和专业感。
-//       - [NEW] 新增 showEchoNotificationWithTitle:message: 方法，用于显示一个从顶部滑入并自动消失的自定义通知横幅。
-//       - [MODIFIED] 将“标准报告”和“深度解构”完成后的UIAlertController替换为新的非阻塞式通知，主面板不再被遮挡。
-//       - [MAINTAINED] v12.1的所有界面、命名和兼容性修复被完整保留。
-//       - [MAINTAINED] v11.1的全部核心提取功能和状态修复逻辑保持不变。
+////////// Filename: Echo_AnalysisEngine_v12.3_FinalCompileFix.xm
+// 描述: Echo 六壬解析引擎 v12.3 (最终编译修复版)。此版本修复了因UIActivityIndicatorView样式被弃用而导致的编译错误。
+//       - [CRITICAL FIX] 将已被废弃的 UIActivityIndicatorViewStyleWhiteLarge 替换为现代的 UIActivityIndicatorViewStyleLarge 并手动设置颜色，以通过新版SDK的编译检查。
+//       - [MAINTAINED] v12.2的所有功能、UI设计和非阻塞式通知被完整保留。
+//       - [MAINTAINED] 核心提取逻辑保持不变，确保功能稳定。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -58,7 +57,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 
 @interface UIViewController (EchoAnalysisEngine)
 - (void)createOrShowMainControlPanel; - (void)handleMasterButtonTap:(UIButton *)sender; - (void)showProgressHUD:(NSString *)text; - (void)updateProgressHUD:(NSString *)text; - (void)hideProgressHUD; - (void)copyLogAndClose;
-// [NEW] 声明新的通知方法
 - (void)showEchoNotificationWithTitle:(NSString *)title message:(NSString *)message;
 - (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include; - (void)processKeTiWorkQueue_S1;
 - (void)executeSimpleExtraction; - (void)executeCompositeExtraction; - (void)extractSinglePopupInfoWithTaskName:(NSString*)taskName;
@@ -109,7 +107,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)]; [g_mainControlPanelView addSubview:contentView];
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, 40)];
-    titleLabel.text = @"Echo 六壬解析引擎 v12.2";
+    titleLabel.text = @"Echo 六壬解析引擎 v12.3";
     titleLabel.font = [UIFont boldSystemFontOfSize:22];
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:titleLabel];
@@ -178,7 +176,35 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 %new
-- (void)showProgressHUD:(NSString *)text { UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return; NSInteger progressViewTag = 556677; UIView *existing = [keyWindow viewWithTag:progressViewTag]; if(existing) [existing removeFromSuperview]; UIView *progressView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 120)]; progressView.center = keyWindow.center; progressView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.8]; progressView.layer.cornerRadius = 10; progressView.tag = progressViewTag; UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge]; spinner.center = CGPointMake(110, 50); [spinner startAnimating]; [progressView addSubview:spinner]; UILabel *progressLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 85, 200, 30)]; progressLabel.textColor = [UIColor whiteColor]; progressLabel.textAlignment = NSTextAlignmentCenter; progressLabel.font = [UIFont systemFontOfSize:14]; progressLabel.adjustsFontSizeToFitWidth = YES; progressLabel.text = text; [progressView addSubview:progressLabel]; [keyWindow addSubview:progressView]; }
+- (void)showProgressHUD:(NSString *)text {
+    UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
+    NSInteger progressViewTag = 556677;
+    UIView *existing = [keyWindow viewWithTag:progressViewTag];
+    if(existing) [existing removeFromSuperview];
+    UIView *progressView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 120)];
+    progressView.center = keyWindow.center;
+    progressView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.8];
+    progressView.layer.cornerRadius = 10;
+    progressView.tag = progressViewTag;
+    
+    // [FIXED] 修复了因API废弃导致的编译错误
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    spinner.color = [UIColor whiteColor];
+    
+    spinner.center = CGPointMake(110, 50);
+    [spinner startAnimating];
+    [progressView addSubview:spinner];
+    
+    UILabel *progressLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 85, 200, 30)];
+    progressLabel.textColor = [UIColor whiteColor];
+    progressLabel.textAlignment = NSTextAlignmentCenter;
+    progressLabel.font = [UIFont systemFontOfSize:14];
+    progressLabel.adjustsFontSizeToFitWidth = YES;
+    progressLabel.text = text;
+    [progressView addSubview:progressLabel];
+    
+    [keyWindow addSubview:progressView];
+}
 %new
 - (void)updateProgressHUD:(NSString *)text { UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return; UIView *progressView = [keyWindow viewWithTag:556677]; if (progressView) { for (UIView *subview in progressView.subviews) { if ([subview isKindOfClass:[UILabel class]]) { ((UILabel *)subview).text = text; break; } } } }
 %new
@@ -190,14 +216,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIWindow *keyWindow = GetFrontmostWindow();
     if (!keyWindow) return;
 
-    // 创建容器
-    CGFloat topPadding = keyWindow.safeAreaInsets.top > 0 ? keyWindow.safeAreaInsets.top : 20;
+    CGFloat topPadding = 0;
+    if (@available(iOS 11.0, *)) {
+        topPadding = keyWindow.safeAreaInsets.top;
+    }
+    topPadding = topPadding > 0 ? topPadding : 20;
+
     CGFloat bannerWidth = keyWindow.bounds.size.width - 32;
     UIView *bannerView = [[UIView alloc] initWithFrame:CGRectMake(16, -100, bannerWidth, 60)];
     bannerView.layer.cornerRadius = 12;
     bannerView.clipsToBounds = YES;
-
-    // 毛玻璃背景
+    
     if (@available(iOS 8.0, *)) {
         UIVisualEffectView *blurEffectView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleProminent]];
         blurEffectView.frame = bannerView.bounds;
@@ -206,21 +235,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         bannerView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.9];
     }
 
-    // 图标
     UILabel *iconLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 20, 20, 20)];
     iconLabel.text = @"✓";
-    iconLabel.textColor = [UIColor colorWithRed:0.2 green:0.78 blue:0.35 alpha:1.0]; // Green color
+    iconLabel.textColor = [UIColor colorWithRed:0.2 green:0.78 blue:0.35 alpha:1.0];
     iconLabel.font = [UIFont boldSystemFontOfSize:16];
     [bannerView addSubview:iconLabel];
 
-    // 标题
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(45, 12, bannerWidth - 55, 20)];
     titleLabel.text = title;
     titleLabel.font = [UIFont boldSystemFontOfSize:15];
     titleLabel.textColor = [UIColor blackColor];
     [bannerView addSubview:titleLabel];
 
-    // 消息
     UILabel *messageLabel = [[UILabel alloc] initWithFrame:CGRectMake(45, 32, bannerWidth - 55, 16)];
     messageLabel.text = message;
     messageLabel.font = [UIFont systemFontOfSize:13];
@@ -229,7 +255,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     [keyWindow addSubview:bannerView];
 
-    // 动画
     [UIView animateWithDuration:0.5 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseInOut animations:^{
         bannerView.frame = CGRectMake(16, topPadding, bannerWidth, 60);
     } completion:nil];
@@ -244,19 +269,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     });
 }
 
-
 #pragma mark - Extraction Logic & Launchers
 %new
 - (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include { g_s1_isExtracting = YES; g_s1_currentTaskType = taskType; g_s1_shouldIncludeXiangJie = include; LogMessage(@"[任务启动] 模式: %@ (详情: %@)", taskType, include ? @"开启" : @"关闭"); if ([taskType isEqualToString:@"KeTi"]) { UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) { LogMessage(@"[错误] 无法找到主窗口。"); g_s1_isExtracting = NO; return; } Class keTiCellClass = NSClassFromString(@"六壬大占.課體單元"); if (!keTiCellClass) { LogMessage(@"[错误] 无法找到 '課體單元' 类。"); g_s1_isExtracting = NO; return; } NSMutableArray<UICollectionView *> *allCVs = [NSMutableArray array]; FindSubviewsOfClassRecursive([UICollectionView class], keyWindow, allCVs); for (UICollectionView *cv in allCVs) { for (id cell in cv.visibleCells) { if ([cell isKindOfClass:keTiCellClass]) { g_s1_keTi_targetCV = cv; break; } } if(g_s1_keTi_targetCV) break; } if (!g_s1_keTi_targetCV) { LogMessage(@"[错误] 无法找到包含“课体”的UICollectionView。"); g_s1_isExtracting = NO; return; } g_s1_keTi_workQueue = [NSMutableArray array]; g_s1_keTi_resultsArray = [NSMutableArray array]; NSInteger totalItems = [g_s1_keTi_targetCV.dataSource collectionView:g_s1_keTi_targetCV numberOfItemsInSection:0]; for (NSInteger i = 0; i < totalItems; i++) { [g_s1_keTi_workQueue addObject:[NSIndexPath indexPathForItem:i inSection:0]]; } if (g_s1_keTi_workQueue.count == 0) { LogMessage(@"[错误] 未找到任何“课体”单元来创建任务队列。"); g_s1_isExtracting = NO; return; } LogMessage(@"[解析] 发现 %lu 个“课体范式”单元，开始处理...", (unsigned long)g_s1_keTi_workQueue.count); [self processKeTiWorkQueue_S1]; } else if ([taskType isEqualToString:@"JiuZongMen"]) { SEL selector = NSSelectorFromString(@"顯示九宗門概覽"); if ([self respondsToSelector:selector]) { LogMessage(@"[调用] 正在请求“九宗门”数据..."); _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") [self performSelector:selector]; _Pragma("clang diagnostic pop") } else { LogMessage(@"[错误] 当前视图无法响应 '顯示九宗門概覽'。"); g_s1_isExtracting = NO; } } }
 %new
 - (void)processKeTiWorkQueue_S1 { if (g_s1_keTi_workQueue.count == 0) { LogMessage(@"[完成] 所有 %lu 项“课体范式”处理完毕。", (unsigned long)g_s1_keTi_resultsArray.count); NSMutableString *finalResult = [NSMutableString string]; for (NSUInteger i = 0; i < g_s1_keTi_resultsArray.count; i++) { NSString *itemText = g_s1_keTi_resultsArray[i]; NSArray *lines = [itemText componentsSeparatedByString:@"\n"]; NSString *itemTitle = (lines.count > 0 && [lines[0] containsString:@"课"]) ? lines[0] : [NSString stringWithFormat:@"未知课体 %lu", (unsigned long)i+1]; NSRange titleRange = [itemText rangeOfString:itemTitle]; NSString *content = (titleRange.location != NSNotFound) ? [itemText stringByReplacingCharactersInRange:titleRange withString:@""] : itemText; content = [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; [finalResult appendFormat:@"// %@\n\n%@\n\n\n", itemTitle, content]; } [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; LogMessage(@"[完成] “课体范式”批量解析完成，已合并同步。"); g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_keTi_targetCV = nil; g_s1_keTi_workQueue = nil; g_s1_keTi_resultsArray = nil; return; } NSIndexPath *indexPath = g_s1_keTi_workQueue.firstObject; [g_s1_keTi_workQueue removeObjectAtIndex:0]; LogMessage(@"[解析] 正在处理“课体范式” %lu/%lu...", (unsigned long)(g_s1_keTi_resultsArray.count + 1), (unsigned long)(g_s1_keTi_resultsArray.count + g_s1_keTi_workQueue.count + 1)); id delegate = g_s1_keTi_targetCV.delegate; if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) { [delegate collectionView:g_s1_keTi_targetCV didSelectItemAtIndexPath:indexPath]; } else { LogMessage(@"[错误] 无法触发单元点击事件。"); [self processKeTiWorkQueue_S1]; } }
 %new
-// [MODIFIED] 使用新的非阻塞式通知替代UIAlertController
 - (void)executeSimpleExtraction { LogMessage(@"[任务启动] 模式: 标准报告"); [self showProgressHUD:@"正在生成标准报告..."]; [self extractKePanInfoWithCompletion:^(NSString *kePanText) { [self updateProgressHUD:@"正在分析行年参数..."]; [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { [self hideProgressHUD]; NSString *finalCombinedText; if (nianmingText && nianmingText.length > 0) { finalCombinedText = [NSString stringWithFormat:@"%@\n\n// 行年参数\n\n%@%@", kePanText, nianmingText, CustomFooterText]; } else { finalCombinedText = [NSString stringWithFormat:@"%@%@", kePanText, CustomFooterText]; } [UIPasteboard generalPasteboard].string = [finalCombinedText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; 
     [self showEchoNotificationWithTitle:@"生成完毕" message:@"标准报告已同步至剪贴板。"];
     LogMessage(@"[完成] “标准报告”任务已完成。"); }]; }]; }
 %new
-// [MODIFIED] 使用新的非阻塞式通知替代UIAlertController
 - (void)executeCompositeExtraction { LogMessage(@"[任务启动] 模式: 深度解构"); [self showProgressHUD:@"步骤 1/3: 解析基础盘面..."]; [self extractKePanInfoWithCompletion:^(NSString *kePanText) { g_s2_baseTextCacheForPowerMode = kePanText; LogMessage(@"[解构] 基础盘面解析完成。"); [self updateProgressHUD:@"步骤 2/3: 推演课传流注..."]; [self startExtraction_Truth_S2_WithCompletion:^{ LogMessage(@"[解构] 课传流注推演完成。"); [self updateProgressHUD:@"步骤 3/3: 分析行年参数..."]; [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { [self hideProgressHUD]; LogMessage(@"[解构] 行年参数分析完成。"); NSMutableString *finalResult = [g_s2_baseTextCacheForPowerMode mutableCopy]; if (g_s2_finalResultFromKeChuan.length > 0) { [finalResult appendFormat:@"\n\n// 课传流注\n\n%@", g_s2_finalResultFromKeChuan]; } if (nianmingText.length > 0) { NSString *formattedNianming = [nianmingText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; [finalResult appendFormat:@"\n\n// 行年参数\n\n%@", formattedNianming]; } [finalResult appendString:CustomFooterText]; [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     [self showEchoNotificationWithTitle:@"解构完成" message:@"深度解构报告已合并并同步。"];
     LogMessage(@"--- [完成] “深度解构”任务已全部完成 ---"); g_s2_baseTextCacheForPowerMode = nil; g_s2_finalResultFromKeChuan = nil; }]; }]; }]; }
@@ -335,4 +357,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 // =========================================================================
 // 5. 构造函数
 // =========================================================================
-%ctor { @autoreleasepool { MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController); NSLog(@"[Echo解析引擎] v12.2 (NotifyFix) 已加载。"); } }
+%ctor { @autoreleasepool { MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController); NSLog(@"[Echo解析引擎] v12.3 (FinalCompileFix) 已加载。"); } }
