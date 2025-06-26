@@ -1,8 +1,8 @@
-////////// Filename: Echo_AnalysisEngine_v12.6_LifecycleHijack.xm
-// 描述: Echo 六壬解析引擎 v12.6 (生命周期劫持版)。此版本通过Hook视图生命周期，从根源上解决了提取过程中透明弹窗覆盖UI的问题，并加入了最终的美化动画。
-//       - [CRITICAL FIX] Hook UIViewController的viewWillAppear:方法，在数据提取弹窗显示前将其透明化，并始终保持主面板在最顶层。
-//       - [UI/UX] 为主控制面板增加了平滑的滑入/滑出过渡动画，提升整体质感。
-//       - [MAINTAINED] v12.5的所有功能、触感反馈、日志分级等特性被完整保留。
+////////// Filename: Echo_AnalysisEngine_v12.7_ImmersiveUI.xm
+// 描述: Echo 六壬解析引擎 v12.7 (融入式UI版)。此版本修复了编译错误，并将提取过程中的弹窗美化为与主UI统一的模糊背景，实现了终极的视觉与交互体验。
+//       - [CRITICAL FIX] 修复了因函数未使用导致的编译错误。
+//       - [UI/UX] 将提取过程中的弹窗改造为融入式的模糊背景，替代原有的透明化处理，视觉反馈更优雅、高级。
+//       - [MAINTAINED] v12.6的所有功能、动画、触感反馈等特性被完整保留。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -128,6 +128,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 - (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
 %end
 
+// [FIXED] 修复了unused-function编译错误
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     if (g_s1_isExtracting && [NSStringFromClass([vcToPresent class]) containsString:@"課體概覽視圖"]) {
@@ -157,10 +158,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
 
-// [NEW] 核心解决方案：劫持视图生命周期，从根源上解决UI覆盖问题
+    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
+}
+
 %hook UIViewController
 - (void)viewWillAppear:(BOOL)animated {
-    %orig; // 必须先调用原始实现
+    %orig; 
 
     BOOL shouldBeInvisible = NO;
     NSString *vcClassName = NSStringFromClass([self class]);
@@ -168,7 +171,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (g_s1_isExtracting || g_s2_isExtractingKeChuanDetail || g_isExtractingNianming || g_extractedData) {
         NSArray *targetClasses = @[
             @"課體概覽視圖", @"課傳摘要視圖", @"天將摘要視圖", @"年命摘要視圖", @"年命格局視圖",
-            @"法訣總覽", @"格局總覽", @"方法總覽", @"七政信息" // 包含所有可能的弹窗类名片段
+            @"法訣總覽", @"格局總覽", @"方法總覽", @"七政信息"
         ];
         for (NSString *target in targetClasses) {
             if ([vcClassName containsString:target]) {
@@ -178,9 +181,22 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
     }
     
+    // [MODIFIED] 升级为融入式UI美化方案
     if (shouldBeInvisible) {
-        self.view.alpha = 0.0f;
-        // 确保我们的面板始终在最上层
+        for (UIView *subview in self.view.subviews) {
+            [subview removeFromSuperview];
+        }
+        
+        self.view.backgroundColor = [UIColor clearColor];
+        if (@available(iOS 8.0, *)) {
+            UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+            blurView.frame = self.view.bounds;
+            blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            [self.view addSubview:blurView];
+        } else {
+            self.view.alpha = 0.0;
+        }
+
         dispatch_async(dispatch_get_main_queue(), ^{
             ensureMainPanelIsOnTop();
         });
@@ -206,7 +222,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
     NSInteger panelTag = 778899;
     if (g_mainControlPanelView && g_mainControlPanelView.superview) {
-        // [MODIFIED] 加入面板退出动画
         [UIView animateWithDuration:0.3 animations:^{
             g_mainControlPanelView.transform = CGAffineTransformMakeTranslation(0, -g_mainControlPanelView.bounds.size.height);
             g_mainControlPanelView.alpha = 0;
@@ -228,7 +243,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)]; [g_mainControlPanelView addSubview:contentView];
     
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, 40)];
-    titleLabel.text = @"Echo 六壬解析引擎 v12.6";
+    titleLabel.text = @"Echo 六壬解析引擎 v12.7";
     titleLabel.font = [UIFont boldSystemFontOfSize:22];
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:titleLabel];
@@ -274,7 +289,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIButton *copyButton = createButton(@"复制日志并关闭", 999, [UIColor darkGrayColor]);
     copyButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, contentView.bounds.size.width - 30, 40); [contentView addSubview:copyButton];
     
-    // [MODIFIED] 加入面板进入动画
     g_mainControlPanelView.transform = CGAffineTransformMakeTranslation(0, -keyWindow.bounds.size.height);
     g_mainControlPanelView.alpha = 0;
     [keyWindow addSubview:g_mainControlPanelView];
@@ -516,4 +530,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 // =========================================================================
 // 5. 构造函数
 // =========================================================================
-%ctor { @autoreleasepool { MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController); NSLog(@"[Echo解析引擎] v12.6 (LifecycleHijack) 已加载。"); } }
+%ctor { @autoreleasepool { MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController); NSLog(@"[Echo解析引擎] v12.7 (ImmersiveUI) 已加载。"); } }
