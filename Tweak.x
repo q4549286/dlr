@@ -114,9 +114,92 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 
+// [FIXED] 新增一个辅助函数，用于检查UILabel是否位于已知的、可能导致问题的系统视图内部。
+static BOOL isInsideProblematicView(UIView *view) {
+    if (!view) {
+        return NO;
+    }
+    // 向上遍历视图层级
+    UIView *currentView = view;
+    while (currentView.superview) {
+        // UIDatePicker 和它的私有实现类是主要嫌疑对象
+        if ([currentView isKindOfClass:NSClassFromString(@"UIDatePicker")] || 
+            [currentView isKindOfClass:NSClassFromString(@"_UIDatePickerView")] ||
+            [currentView isKindOfClass:NSClassFromString(@"_UIPickerView")]) {
+            return YES;
+        }
+        currentView = currentView.superview;
+    }
+    return NO;
+}
+
 %hook UILabel
-- (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
-- (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
+
+- (void)setText:(NSString *)text {
+    // [FIX] 安全检查：如果标签在UIDatePicker等视图内，则不进行任何修改，直接调用原始方法。
+    if (isInsideProblematicView(self)) {
+        %orig(text);
+        return;
+    }
+
+    if (!text) {
+        %orig(text);
+        return;
+    }
+    
+    NSString *newString = nil;
+    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) {
+        newString = @"定制";
+    } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
+    
+    if (newString) {
+        %orig(newString);
+        return;
+    }
+    
+    NSMutableString *simplifiedText = [text mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false);
+    %orig(simplifiedText);
+}
+
+- (void)setAttributedText:(NSAttributedString *)attributedText {
+    // [FIX] 安全检查：同样应用于富文本设置
+    if (isInsideProblematicView(self)) {
+        %orig(attributedText);
+        return;
+    }
+
+    if (!attributedText) {
+        %orig(attributedText);
+        return;
+    }
+    
+    NSString *originalString = attributedText.string;
+    NSString *newString = nil;
+    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) {
+        newString = @"定制";
+    } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
+    
+    if (newString) {
+        NSMutableAttributedString *newAttr = [attributedText mutableCopy];
+        [newAttr.mutableString setString:newString];
+        %orig(newAttr);
+        return;
+    }
+    
+    NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy];
+    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
+    %orig(finalAttributedText);
+}
+
 %end
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
