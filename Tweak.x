@@ -213,6 +213,46 @@ static BOOL isInsideProblematicView(UIView *view) {
 
 %end
 
+- (void)setAttributedText:(NSAttributedString *)attributedText {
+    if (!attributedText) {
+        %orig(attributedText);
+        return;
+    }
+
+    // 首先处理已知安全的替换
+    NSString *originalString = attributedText.string;
+    NSString *newString = nil;
+    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) {
+        newString = @"Echo";
+    } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) {
+        newString = @"定制";
+    } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) {
+        newString = @"毕法";
+    }
+
+    if (newString) {
+        NSMutableAttributedString *newAttr = [attributedText mutableCopy];
+        [newAttr.mutableString setString:newString];
+        %orig(newAttr);
+        return;
+    }
+
+    // [FIX] 同样对富文本使用 @try...@catch 保护
+    @try {
+        if ([attributedText isKindOfClass:[NSAttributedString class]]) {
+            NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy];
+            CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false);
+            %orig(finalAttributedText);
+        } else {
+            %orig(attributedText);
+        }
+    } @catch (NSException *exception) {
+        %orig(attributedText);
+    }
+}
+
+%end
+
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     // S1 专项分析拦截
