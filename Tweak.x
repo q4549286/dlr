@@ -130,9 +130,32 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    // 这个函数保持原样，核心逻辑转移到下面的viewWillAppear hook中
-    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
-}
+    if (g_s1_isExtracting && [NSStringFromClass([vcToPresent class]) containsString:@"課體概覽視圖"]) {
+        void (^extractionCompletion)(void) = ^{
+            if (completion) { completion(); }
+            NSString *extractedText = extractDataFromSplitView_S1(vcToPresent.view, g_s1_shouldIncludeXiangJie);
+            if ([g_s1_currentTaskType isEqualToString:@"KeTi"]) {
+                [g_s1_keTi_resultsArray addObject:extractedText];
+                LogMessage(LogLevelInfo, @"[解析] 成功处理“课体范式”第 %lu 项...", (unsigned long)g_s1_keTi_resultsArray.count);
+                [vcToPresent dismissViewControllerAnimated:NO completion:^{
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        [self processKeTiWorkQueue_S1];
+                    });
+                }];
+            } else if ([g_s1_currentTaskType isEqualToString:@"JiuZongMen"]) {
+                LogMessage(LogLevelSuccess, @"[解析] 成功处理“九宗门结构”...");
+                [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// 九宗门结构\n\n%@", extractedText];
+                LogMessage(LogLevelSuccess, @"[完成] 内容已同步至剪贴板。");
+                triggerHapticFeedback(UINotificationFeedbackTypeSuccess);
+                [self showEchoNotificationWithTitle:@"专项分析完成" message:@"九宗门结构已同步至剪贴板。"];
+                g_s1_isExtracting = NO;
+                g_s1_currentTaskType = nil;
+                [vcToPresent dismissViewControllerAnimated:NO completion:nil];
+            }
+        };
+        Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion);
+        return;
+    }
 
 // [NEW] 核心解决方案：劫持视图生命周期，从根源上解决UI覆盖问题
 %hook UIViewController
