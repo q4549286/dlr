@@ -216,7 +216,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 %new
-- (void)copyLogAndClose { if (g_logTextView && g_logTextView.text.length > 0) { [UIPasteboard generalPasteboard].string:g_logTextView.text; LogMessage(EchoLogTypeTask, @"日志内容已同步至剪贴板。"); } [self handleMasterButtonTap:nil]; }
+- (void)copyLogAndClose { if (g_logTextView && g_logTextView.text.length > 0) { [UIPasteboard generalPasteboard].string = g_logTextView.text; LogMessage(EchoLogTypeTask, @"日志内容已同步至剪贴板。"); } [self handleMasterButtonTap:nil]; }
 %new
 - (void)handleMasterButtonTap:(UIButton *)sender {
     if (!sender) { if (g_mainControlPanelView) { [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) { [g_mainControlPanelView removeFromSuperview]; g_mainControlPanelView = nil; g_logTextView = nil; }]; } return; }
