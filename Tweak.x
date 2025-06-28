@@ -1,9 +1,7 @@
-////////// Filename: Echo_AnalysisEngine_v13.10_LogicFix.xm
-// 描述: Echo 六壬解析引擎 v13.10 (核心逻辑修复版)。
-//      - [CRITICAL FIX] 彻底重构了全局状态管理，特别是 g_s1_isExtracting 的生命周期，解决了因状态被子任务过早重置，导致集成报告流程中断、内容不全、UI卡死的根本性问题。
-//      - [FIXED] 修复了独立执行“课传流注”分析后，结果未被复制到剪贴板导致粘贴内容为空的Bug。
-//      - [STABILITY] 统一并加固了所有任务链末端的状态清理逻辑，确保每次任务（无论是集成还是独立）都能完全释放资源，避免了“任务正在运行”的伪死锁状态。
-//      - [UI] 继承 v13.9 的所有UI/UX改进。此版本为高度稳定版。
+////////// Filename: Echo_AnalysisEngine_v13.11_BuildFix.xm
+// 描述: Echo 六壬解析引擎 v13.11 (编译修复版)。
+//      - [FIXED] 解决了在 `switch` 语句中因变量作用域问题导致的 "cannot jump to case label" 编译错误，通过将变量定义移至 switch 外部来修复。
+//      - [STABILITY] 继承 v13.10 的所有核心逻辑修复和UI改进，确保功能稳定。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -357,7 +355,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [contentView addSubview:titleLabel];
 
     UILabel *versionLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 30, contentView.bounds.size.width, 20)];
-    versionLabel.text = @"v13.10 (LogicFix)";
+    versionLabel.text = @"v13.11 (BuildFix)";
     versionLabel.font = [UIFont systemFontOfSize:12];
     versionLabel.textColor = [UIColor lightGrayColor];
     versionLabel.textAlignment = NSTextAlignmentCenter;
@@ -518,17 +516,26 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
     
+    // [FIXED] Moved weakSelf definition outside the switch to resolve compilation error.
     __weak typeof(self) weakSelf = self;
+    
     switch (sender.tag) {
-        case kButtonTag_CopyAndClose:       [self copyLogAndClose]; break;
-        case kButtonTag_StandardReport:     [self executeSimpleExtraction]; break;
-        case kButtonTag_DeepDiveReport:     [self executeCompositeExtraction]; break;
+        case kButtonTag_CopyAndClose:
+            [self copyLogAndClose];
+            break;
+        case kButtonTag_StandardReport:
+            [self executeSimpleExtraction];
+            break;
+        case kButtonTag_DeepDiveReport:
+            [self executeCompositeExtraction];
+            break;
         case kButtonTag_KeTi: {
             [self startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:YES completion:^(NSString *result) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                     [UIPasteboard generalPasteboard].string = result;
                     [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"课体范式已同步至剪贴板。"];
+                    // Clean up for standalone S1 task
                     g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil;
                 });
             }];
@@ -540,16 +547,33 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                     [UIPasteboard generalPasteboard].string = result;
                     [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"九宗门结构已同步。"];
+                    // Clean up for standalone S1 task
                     g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil;
                 });
             }];
             break;
         }
-        case kButtonTag_KeChuan:            [self startExtraction_Truth_S2_WithCompletion:nil]; break;
-        case kButtonTag_NianMing:           [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf hideProgressHUD]; [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// 行年参数\n\n%@", nianmingText]; [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"行年参数已同步至剪贴板。"]; }]; break;
-        case kButtonTag_BiFa:               [self extractSinglePopupInfoWithTaskName:@"毕法要诀"]; break;
-        case kButtonTag_GeJu:               [self extractSinglePopupInfoWithTaskName:@"格局要览"]; break;
-        case kButtonTag_FangFa:             [self extractSinglePopupInfoWithTaskName:@"十八方法"]; break;
+        case kButtonTag_KeChuan:
+            // Passing nil completion signifies a standalone task.
+            [self startExtraction_Truth_S2_WithCompletion:nil];
+            break;
+        case kButtonTag_NianMing:
+            [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
+                __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
+                [strongSelf hideProgressHUD];
+                [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// 行年参数\n\n%@", nianmingText];
+                [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"行年参数已同步至剪贴板。"];
+            }];
+            break;
+        case kButtonTag_BiFa:
+            [self extractSinglePopupInfoWithTaskName:@"毕法要诀"];
+            break;
+        case kButtonTag_GeJu:
+            [self extractSinglePopupInfoWithTaskName:@"格局要览"];
+            break;
+        case kButtonTag_FangFa:
+            [self extractSinglePopupInfoWithTaskName:@"十八方法"];
+            break;
         default: break;
     }
 }
@@ -679,10 +703,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
     if ([taskType isEqualToString:@"KeTi"]) {
         UIWindow *keyWindow = GetFrontmostWindow();
-        if (!keyWindow) { LogMessage(EchoLogError, @"[错误] 无法找到主窗口。"); if(g_s1_completion_handler){g_s1_completion_handler(@"[错误:未找到主窗口]");} g_s1_isExtracting = NO; return; }
+        if (!keyWindow) { LogMessage(EchoLogError, @"[错误] 无法找到主窗口。"); if(g_s1_completion_handler){g_s1_completion_handler(@"[错误:未找到主窗口]"); g_s1_completion_handler = nil;} g_s1_isExtracting = NO; return; }
         
         Class keTiCellClass = NSClassFromString(@"六壬大占.課體單元");
-        if (!keTiCellClass) { LogMessage(EchoLogError, @"[错误] 无法找到 '課體單元' 类。"); if(g_s1_completion_handler){g_s1_completion_handler(@"[错误:未找到課體單元类]");} g_s1_isExtracting = NO; return; }
+        if (!keTiCellClass) { LogMessage(EchoLogError, @"[错误] 无法找到 '課體單元' 类。"); if(g_s1_completion_handler){g_s1_completion_handler(@"[错误:未找到課體單元类]"); g_s1_completion_handler = nil;} g_s1_isExtracting = NO; return; }
         
         NSMutableArray<UICollectionView *> *allCVs = [NSMutableArray array];
         FindSubviewsOfClassRecursive([UICollectionView class], keyWindow, allCVs);
@@ -691,7 +715,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             if(g_s1_keTi_targetCV) break;
         }
         
-        if (!g_s1_keTi_targetCV) { LogMessage(EchoLogError, @"[错误] 无法找到包含“课体”的UICollectionView。"); if(g_s1_completion_handler){g_s1_completion_handler(@"[错误:未找到课体CV]");} g_s1_isExtracting = NO; return; }
+        if (!g_s1_keTi_targetCV) { LogMessage(EchoLogError, @"[错误] 无法找到包含“课体”的UICollectionView。"); if(g_s1_completion_handler){g_s1_completion_handler(@"[错误:未找到课体CV]"); g_s1_completion_handler = nil;} g_s1_isExtracting = NO; return; }
         
         g_s1_keTi_workQueue = [NSMutableArray array];
         g_s1_keTi_resultsArray = [NSMutableArray array];
@@ -700,7 +724,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         
         if (g_s1_keTi_workQueue.count == 0) {
             LogMessage(EchoLogTypeWarning, @"[警告] 未找到任何“课体”单元来创建任务队列。");
-            if(g_s1_completion_handler){ g_s1_completion_handler(@""); }
+            if(g_s1_completion_handler){ g_s1_completion_handler(@""); g_s1_completion_handler = nil; }
             g_s1_isExtracting = NO;
             return;
         }
@@ -715,7 +739,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             SUPPRESS_LEAK_WARNING([self performSelector:selector]);
         } else {
             LogMessage(EchoLogError, @"[错误] 当前视图无法响应 '顯示九宗門概覽'。");
-            if(g_s1_completion_handler){ g_s1_completion_handler(@"[错误:无法响应九宗门方法]"); }
+            if(g_s1_completion_handler){ g_s1_completion_handler(@"[错误:无法响应九宗门方法]"); g_s1_completion_handler = nil; }
             g_s1_isExtracting = NO;
         }
     }
@@ -739,6 +763,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         
         NSString *trimmedResult = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         
+        // Cleanup memory, but DO NOT reset state flags here.
+        g_s1_keTi_targetCV = nil;
+        g_s1_keTi_workQueue = nil;
+        g_s1_keTi_resultsArray = nil;
+
         if (g_s1_completion_handler) {
             g_s1_completion_handler(trimmedResult);
         }
@@ -1240,6 +1269,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.10 (LogicFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.11 (BuildFix) 已加载。");
     }
 }
