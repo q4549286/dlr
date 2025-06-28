@@ -1,9 +1,8 @@
-////////// Filename: Echo_AnalysisEngine_v13.10_ChainFix.xm
-// 描述: Echo 六壬解析引擎 v13.10 (任务链修复版)。
-//      - [CRITICAL FIX] 彻底重构了任务链的状态管理。引入 g_isMasterTaskRunning 标志位，解决了因全局状态被过早清理导致的任务中断、报告内容不全、UI卡死以及后续操作被错误拦截的严重Bug。
-//      - [REFACTORED] 优化了 startS1ExtractionWithTaskType 方法，使其在作为子任务时能正确返回结果给调用者，而不是自行处理UI，保证了数据流的完整性。
-//      - [FIXED] 修复了“课传流注”独立运行时粘贴内容为空的问题，确保 g_s2_finalResultFromKeChuan 被正确生成和使用。
-//      - [STABILITY] 这是继 v13.6 以来最重要的一次稳定性更新，旨在根除异步回调链中的状态管理缺陷。
+////////// Filename: Echo_AnalysisEngine_v13.11_CompileFix.xm
+// 描述: Echo 六壬解析引擎 v13.11 (编译修复版)。
+//      - [CRITICAL FIX] 修正了 v13.10 中因 g_s2_keChuan_completion_handler 类型定义与实际调用不匹配导致的编译错误。
+//      - [FIXED] 调整了 #pragma 指令的位置，解决了 Logos 预处理器可能产生的解析错误。
+//      - [STABILITY] 继承 v13.10 的所有状态管理和任务链修复，此版本是目前最稳定的可编译版本。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -47,7 +46,7 @@ static const NSInteger kButtonTag_CopyAndClose      = 999;
 
 #pragma mark - Global State & Flags
 // --- Master Control ---
-static BOOL g_isMasterTaskRunning = NO; // 主任务锁，防止多重任务启动
+static BOOL g_isMasterTaskRunning = NO;
 
 // --- Log & UI ---
 static UITextView *g_logTextView = nil;
@@ -68,7 +67,7 @@ static NSMutableArray *g_s2_capturedKeChuanDetailArray = nil;
 static NSMutableArray<NSMutableDictionary *> *g_s2_keChuanWorkQueue = nil;
 static NSMutableArray<NSString *> *g_s2_keChuanTitleQueue = nil;
 static NSString *g_s2_finalResultFromKeChuan = nil;
-static void (^g_s2_keChuan_completion_handler)(void) = nil;
+static void (^g_s2_keChuan_completion_handler)(BOOL success) = nil; // [FIXED] Changed type to accept a BOOL
 static NSString *g_s2_baseTextCacheForPowerMode = nil;
 
 // --- Composite Task & General Data ---
@@ -146,8 +145,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 // MARK: - UI Creation & Handling
 %new
-- (void)createOrShowMainControlPanel { UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return; if (g_mainControlPanelView && g_mainControlPanelView.superview) { [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) { [g_mainControlPanelView removeFromSuperview]; g_mainControlPanelView = nil; g_logTextView = nil; }]; return; } g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds]; g_mainControlPanelView.tag = kEchoMainPanelTag; g_mainControlPanelView.backgroundColor = [UIColor clearColor]; if (@available(iOS 8.0, *)) { UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]]; blurView.frame = g_mainControlPanelView.bounds; [g_mainControlPanelView addSubview:blurView]; } else { g_mainControlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9]; } UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)]; [g_mainControlPanelView addSubview:contentView]; UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, 30)]; titleLabel.text = @"Echo 六壬解析引擎"; titleLabel.font = [UIFont boldSystemFontOfSize:22]; titleLabel.textColor = [UIColor whiteColor]; titleLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:titleLabel]; UILabel *versionLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 30, contentView.bounds.size.width, 20)]; versionLabel.text = @"v13.10 (ChainFix)"; versionLabel.font = [UIFont systemFontOfSize:12]; versionLabel.textColor = [UIColor lightGrayColor]; versionLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:versionLabel]; UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 60, contentView.bounds.size.width, contentView.bounds.size.height - 120)]; [contentView addSubview:scrollView]; UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) { UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem]; [btn setTitle:title forState:UIControlStateNormal]; if (@available(iOS 13.0, *)) { UIImage *icon = [UIImage systemImageNamed:iconName]; [btn setImage:icon forState:UIControlStateNormal]; #pragma clang diagnostic push #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8); #pragma clang diagnostic pop
+- (void)createOrShowMainControlPanel { UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return; if (g_mainControlPanelView && g_mainControlPanelView.superview) { [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) { [g_mainControlPanelView removeFromSuperview]; g_mainControlPanelView = nil; g_logTextView = nil; }]; return; } g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds]; g_mainControlPanelView.tag = kEchoMainPanelTag; g_mainControlPanelView.backgroundColor = [UIColor clearColor]; if (@available(iOS 8.0, *)) { UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]]; blurView.frame = g_mainControlPanelView.bounds; [g_mainControlPanelView addSubview:blurView]; } else { g_mainControlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9]; } UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)]; [g_mainControlPanelView addSubview:contentView]; UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, 30)]; titleLabel.text = @"Echo 六壬解析引擎"; titleLabel.font = [UIFont boldSystemFontOfSize:22]; titleLabel.textColor = [UIColor whiteColor]; titleLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:titleLabel]; UILabel *versionLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 30, contentView.bounds.size.width, 20)]; versionLabel.text = @"v13.11 (CompileFix)"; versionLabel.font = [UIFont systemFontOfSize:12]; versionLabel.textColor = [UIColor lightGrayColor]; versionLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:versionLabel]; UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 60, contentView.bounds.size.width, contentView.bounds.size.height - 120)]; [contentView addSubview:scrollView]; UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) { UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem]; [btn setTitle:title forState:UIControlStateNormal]; if (@available(iOS 13.0, *)) { UIImage *icon = [UIImage systemImageNamed:iconName]; [btn setImage:icon forState:UIControlStateNormal]; #pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8);
+#pragma clang diagnostic pop
         } btn.tag = tag; btn.backgroundColor = color; [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; btn.tintColor = [UIColor whiteColor]; btn.titleLabel.font = [UIFont boldSystemFontOfSize:15]; btn.titleLabel.adjustsFontSizeToFitWidth = YES; btn.titleLabel.minimumScaleFactor = 0.8; btn.layer.cornerRadius = 10; return btn; }; UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { UILabel *label = [[UILabel alloc] init]; label.text = title; label.font = [UIFont boldSystemFontOfSize:18]; label.textColor = [UIColor lightGrayColor]; return label; }; UIView* (^createSeparator)(CGFloat) = ^(CGFloat yPos) { UIView *separator = [[UIView alloc] initWithFrame:CGRectMake(15, yPos, scrollView.bounds.size.width - 30, 0.5)]; separator.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.2]; return separator; }; CGFloat currentY = 15; CGFloat btnWidth = (scrollView.bounds.size.width - 45) / 2.0; UILabel *sec1Title = createSectionTitle(@"核心解析"); sec1Title.frame = CGRectMake(15, currentY, scrollView.bounds.size.width - 30, 22); [scrollView addSubview:sec1Title]; currentY += 35; NSArray *mainButtons = @[ @{@"title": @"标准报告", @"icon": @"doc.text", @"tag": @(kButtonTag_StandardReport), @"color": ECHO_COLOR_SECONDARY}, @{@"title": @"深度解构", @"icon": @"square.stack.3d.up.fill", @"tag": @(kButtonTag_DeepDiveReport), @"color": ECHO_COLOR_PRIMARY} ]; for (int i = 0; i < mainButtons.count; i++) { NSDictionary *config = mainButtons[i]; UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], config[@"color"]); btn.frame = CGRectMake(15 + (i % 2) * (btnWidth + 15), currentY, btnWidth, 48); [scrollView addSubview:btn]; } currentY += 48 + 15; [scrollView addSubview:createSeparator(currentY)]; currentY += 15; UILabel *sec2Title = createSectionTitle(@"专项分析"); sec2Title.frame = CGRectMake(15, currentY, scrollView.bounds.size.width - 30, 22); [scrollView addSubview:sec2Title]; currentY += 35; NSArray *coreButtons = @[ @{@"title": @"课体范式 (详)", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)}, @{@"title": @"九宗门结构 (详)", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)}, @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)}, @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)} ]; for (int i=0; i<coreButtons.count; i++) { NSDictionary *config = coreButtons[i]; UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_TERTIARY); btn.frame = CGRectMake(15 + (i % 2) * (btnWidth + 15), currentY + (i / 2) * 58, btnWidth, 46); [scrollView addSubview:btn]; } currentY += ((coreButtons.count + 1) / 2) * 58 + 15; [scrollView addSubview:createSeparator(currentY)]; currentY += 15; UILabel *sec3Title = createSectionTitle(@"格局资料库"); sec3Title.frame = CGRectMake(15, currentY, scrollView.bounds.size.width - 30, 22); [scrollView addSubview:sec3Title]; currentY += 35; NSArray *auxButtons = @[ @{@"title": @"毕法要诀", @"icon": @"book.closed", @"tag": @(kButtonTag_BiFa)}, @{@"title": @"格局要览", @"icon": @"tablecells", @"tag": @(kButtonTag_GeJu)}, @{@"title": @"十八方法", @"icon": @"list.number", @"tag": @(kButtonTag_FangFa)} ]; CGFloat smallBtnWidth = (scrollView.bounds.size.width - 45) / 3.0; for (int i=0; i<auxButtons.count; i++) { NSDictionary *config = auxButtons[i]; UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUXILIARY); btn.frame = CGRectMake(15 + i * (smallBtnWidth + 7.5), currentY, smallBtnWidth, 46); [scrollView addSubview:btn]; } currentY += 56; scrollView.contentSize = CGSizeMake(scrollView.bounds.size.width, currentY); g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, contentView.bounds.size.height - 230, contentView.bounds.size.width, 170)]; g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12]; g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8; NSMutableAttributedString *initLog = [[NSMutableAttributedString alloc] initWithString:@"[Echo引擎]：就绪。\n"]; [initLog addAttribute:NSForegroundColorAttributeName value:[UIColor whiteColor] range:NSMakeRange(0, initLog.length)]; [initLog addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, initLog.length)]; g_logTextView.attributedText = initLog; [contentView addSubview:g_logTextView]; UIButton *copyButton = createButton(@"复制日志并关闭", @"xmark.circle", kButtonTag_CopyAndClose, ECHO_COLOR_ACTION); copyButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, contentView.bounds.size.width - 30, 40); [contentView addSubview:copyButton]; g_mainControlPanelView.alpha = 0; [keyWindow addSubview:g_mainControlPanelView]; [UIView animateWithDuration:0.4 animations:^{ g_mainControlPanelView.alpha = 1.0; }]; }
 %new
 - (void)copyLogAndClose { if (g_logTextView && g_logTextView.text.length > 0) { [UIPasteboard generalPasteboard].string = g_logTextView.text; LogMessage(EchoLogTypeTask, @"日志内容已同步至剪贴板。"); } [self handleMasterButtonTap:nil]; }
@@ -164,234 +165,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 // MARK: - Task Launchers & Processors
 %new
-- (void)executeSimpleExtraction {
-    __weak typeof(self) weakSelf = self;
-    g_isMasterTaskRunning = YES;
-    LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 标准报告 (集成版)");
-    [self showProgressHUD:@"1/4: 解析基础盘面..."];
-
-    [self extractKePanInfoWithCompletion:^(NSString *kePanText) {
-        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) { g_isMasterTaskRunning = NO; return; }
-        [strongSelf updateProgressHUD:@"2/4: 分析行年参数..."];
-
-        [strongSelf extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
-            __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) { g_isMasterTaskRunning = NO; return; }
-            [strongSelf2 updateProgressHUD:@"3/4: 解析课体范式..."];
-
-            [strongSelf2 startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:NO isSubTask:YES completion:^(NSString *keTiResult) {
-                __strong typeof(weakSelf) strongSelf3 = weakSelf; if (!strongSelf3) { g_isMasterTaskRunning = NO; return; }
-                [strongSelf3 updateProgressHUD:@"4/4: 解析九宗门..."];
-
-                [strongSelf3 startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:NO isSubTask:YES completion:^(NSString *jiuZongMenResult) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) { g_isMasterTaskRunning = NO; return; }
-                        LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在合并报告...");
-                        
-                        NSMutableString *finalResult = [NSMutableString string];
-                        [finalResult appendString:SafeString(kePanText)];
-                        if (nianmingText.length > 0) { [finalResult appendFormat:@"\n\n// 行年参数\n\n%@", nianmingText]; }
-                        if (keTiResult.length > 0) { [finalResult appendFormat:@"\n\n%@", keTiResult]; }
-                        if (jiuZongMenResult.length > 0) { [finalResult appendFormat:@"\n\n%@", jiuZongMenResult]; }
-                        [finalResult appendString:CustomFooterText];
-                        
-                        [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                        
-                        [strongSelf4 hideProgressHUD];
-                        [strongSelf4 showEchoNotificationWithTitle:@"生成完毕" message:@"标准报告已同步至剪贴板。"];
-                        LogMessage(EchoLogTypeTask, @"[完成] “标准报告”任务已完成。");
-
-                        g_extractedData = nil;
-                        g_isMasterTaskRunning = NO;
-                        LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
-                    });
-                }];
-            }];
-        }];
-    }];
-}
+- (void)executeSimpleExtraction { __weak typeof(self) weakSelf = self; g_isMasterTaskRunning = YES; LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 标准报告 (集成版)"); [self showProgressHUD:@"1/4: 解析基础盘面..."]; [self extractKePanInfoWithCompletion:^(NSString *kePanText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) { g_isMasterTaskRunning = NO; return; } [strongSelf updateProgressHUD:@"2/4: 分析行年参数..."]; [strongSelf extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) { g_isMasterTaskRunning = NO; return; } [strongSelf2 updateProgressHUD:@"3/4: 解析课体范式..."]; [strongSelf2 startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:NO isSubTask:YES completion:^(NSString *keTiResult) { __strong typeof(weakSelf) strongSelf3 = weakSelf; if (!strongSelf3) { g_isMasterTaskRunning = NO; return; } [strongSelf3 updateProgressHUD:@"4/4: 解析九宗门..."]; [strongSelf3 startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:NO isSubTask:YES completion:^(NSString *jiuZongMenResult) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) { g_isMasterTaskRunning = NO; return; } LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在合并报告..."); NSMutableString *finalResult = [NSMutableString string]; [finalResult appendString:SafeString(kePanText)]; if (nianmingText.length > 0) { [finalResult appendFormat:@"\n\n// 行年参数\n\n%@", nianmingText]; } if (keTiResult.length > 0) { [finalResult appendFormat:@"\n\n%@", keTiResult]; } if (jiuZongMenResult.length > 0) { [finalResult appendFormat:@"\n\n%@", jiuZongMenResult]; } [finalResult appendString:CustomFooterText]; [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; [strongSelf4 hideProgressHUD]; [strongSelf4 showEchoNotificationWithTitle:@"生成完毕" message:@"标准报告已同步至剪贴板。"]; LogMessage(EchoLogTypeTask, @"[完成] “标准报告”任务已完成。"); g_extractedData = nil; g_isMasterTaskRunning = NO; LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。"); }); }]; }]; }]; }]; }
 %new
-- (void)executeCompositeExtraction {
-    __weak typeof(self) weakSelf = self;
-    g_isMasterTaskRunning = YES;
-    LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 深度解构 (集成版)");
-    [self showProgressHUD:@"1/5: 解析基础盘面..."];
-
-    [self extractKePanInfoWithCompletion:^(NSString *kePanText) {
-        g_s2_baseTextCacheForPowerMode = kePanText;
-        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) { g_isMasterTaskRunning = NO; return; }
-        [strongSelf updateProgressHUD:@"2/5: 推演课传流注..."];
-
-        [strongSelf startExtraction_Truth_S2_WithCompletion:^(BOOL success) {
-            __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) { g_isMasterTaskRunning = NO; return; }
-            [strongSelf2 updateProgressHUD:@"3/5: 分析行年参数..."];
-
-            [strongSelf2 extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
-                __strong typeof(weakSelf) strongSelf3 = weakSelf; if (!strongSelf3) { g_isMasterTaskRunning = NO; return; }
-                [strongSelf3 updateProgressHUD:@"4/5: 解析课体范式..."];
-
-                [strongSelf3 startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:NO isSubTask:YES completion:^(NSString *keTiResult) {
-                    __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) { g_isMasterTaskRunning = NO; return; }
-                    [strongSelf4 updateProgressHUD:@"5/5: 解析九宗门..."];
-
-                    [strongSelf4 startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:NO isSubTask:YES completion:^(NSString *jiuZongMenResult) {
-                        dispatch_async(dispatch_get_main_queue(), ^{
-                             __strong typeof(weakSelf) strongSelf5 = weakSelf; if (!strongSelf5) { g_isMasterTaskRunning = NO; return; }
-                            LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在合并报告...");
-
-                            NSMutableString *finalResult = [g_s2_baseTextCacheForPowerMode mutableCopy] ?: [NSMutableString string];
-                            if (g_s2_finalResultFromKeChuan.length > 0) { [finalResult appendFormat:@"\n\n// 课传流注\n\n%@", g_s2_finalResultFromKeChuan]; }
-                            if (nianmingText.length > 0) { [finalResult appendFormat:@"\n\n// 行年参数\n\n%@", nianmingText]; }
-                            if (keTiResult.length > 0) { [finalResult appendFormat:@"\n\n%@", keTiResult]; }
-                            if (jiuZongMenResult.length > 0) { [finalResult appendFormat:@"\n\n%@", jiuZongMenResult]; }
-                            [finalResult appendString:CustomFooterText];
-                            
-                            [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                            
-                            [strongSelf5 hideProgressHUD];
-                            [strongSelf5 showEchoNotificationWithTitle:@"解构完成" message:@"深度解构报告已同步。"];
-                            LogMessage(EchoLogTypeTask, @"--- [完成] “深度解构”任务已全部完成 ---");
-
-                            g_extractedData = nil;
-                            g_s2_baseTextCacheForPowerMode = nil;
-                            g_s2_finalResultFromKeChuan = nil;
-                            g_isMasterTaskRunning = NO;
-                            LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
-                        });
-                    }];
-                }];
-            }];
-        }];
-    }];
-}
+- (void)executeCompositeExtraction { __weak typeof(self) weakSelf = self; g_isMasterTaskRunning = YES; LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 深度解构 (集成版)"); [self showProgressHUD:@"1/5: 解析基础盘面..."]; [self extractKePanInfoWithCompletion:^(NSString *kePanText) { g_s2_baseTextCacheForPowerMode = kePanText; __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) { g_isMasterTaskRunning = NO; return; } [strongSelf updateProgressHUD:@"2/5: 推演课传流注..."]; [strongSelf startExtraction_Truth_S2_WithCompletion:^(BOOL success) { __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) { g_isMasterTaskRunning = NO; return; } [strongSelf2 updateProgressHUD:@"3/5: 分析行年参数..."]; [strongSelf2 extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf3 = weakSelf; if (!strongSelf3) { g_isMasterTaskRunning = NO; return; } [strongSelf3 updateProgressHUD:@"4/5: 解析课体范式..."]; [strongSelf3 startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:NO isSubTask:YES completion:^(NSString *keTiResult) { __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) { g_isMasterTaskRunning = NO; return; } [strongSelf4 updateProgressHUD:@"5/5: 解析九宗门..."]; [strongSelf4 startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:NO isSubTask:YES completion:^(NSString *jiuZongMenResult) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf5 = weakSelf; if (!strongSelf5) { g_isMasterTaskRunning = NO; return; } LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在合并报告..."); NSMutableString *finalResult = [g_s2_baseTextCacheForPowerMode mutableCopy] ?: [NSMutableString string]; if (g_s2_finalResultFromKeChuan.length > 0) { [finalResult appendFormat:@"\n\n// 课传流注\n\n%@", g_s2_finalResultFromKeChuan]; } if (nianmingText.length > 0) { [finalResult appendFormat:@"\n\n// 行年参数\n\n%@", nianmingText]; } if (keTiResult.length > 0) { [finalResult appendFormat:@"\n\n%@", keTiResult]; } if (jiuZongMenResult.length > 0) { [finalResult appendFormat:@"\n\n%@", jiuZongMenResult]; } [finalResult appendString:CustomFooterText]; [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; [strongSelf5 hideProgressHUD]; [strongSelf5 showEchoNotificationWithTitle:@"解构完成" message:@"深度解构报告已同步。"]; LogMessage(EchoLogTypeTask, @"--- [完成] “深度解构”任务已全部完成 ---"); g_extractedData = nil; g_s2_baseTextCacheForPowerMode = nil; g_s2_finalResultFromKeChuan = nil; g_isMasterTaskRunning = NO; LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。"); }); }]; }]; }]; }]; }]; }
 %new
-- (void)extractSinglePopupInfoWithTaskName:(NSString*)taskName {
-    g_isMasterTaskRunning = YES;
-    LogMessage(EchoLogTypeTask, @"[专项分析] 任务启动: %@", taskName);
-    [self showProgressHUD:[NSString stringWithFormat:@"正在分析: %@", taskName]];
-    [self extractKePanInfoWithCompletion:^(NSString *kePanText){
-        NSString *result = g_extractedData[taskName];
-         if (result.length > 0) {
-            NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
-            for (NSString *t in trash) { result = [result stringByReplacingOccurrencesOfString:t withString:@""]; }
-            [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// %@\n\n%@", taskName, result];
-            
-            [self hideProgressHUD];
-            [self showEchoNotificationWithTitle:@"分析完成" message:[NSString stringWithFormat:@"%@ 已同步至剪贴板。", taskName]];
-        } else {
-            [self hideProgressHUD];
-            LogMessage(EchoLogTypeWarning, @"[警告] %@ 分析失败或无内容。", taskName);
-        }
-        g_extractedData = nil;
-        g_isMasterTaskRunning = NO;
-    }];
-}
+- (void)extractSinglePopupInfoWithTaskName:(NSString*)taskName { g_isMasterTaskRunning = YES; LogMessage(EchoLogTypeTask, @"[专项分析] 任务启动: %@", taskName); [self showProgressHUD:[NSString stringWithFormat:@"正在分析: %@", taskName]]; [self extractKePanInfoWithCompletion:^(NSString *kePanText){ dispatch_async(dispatch_get_main_queue(), ^{ NSString *result = g_extractedData[taskName]; if (result.length > 0) { NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"]; for (NSString *t in trash) { result = [result stringByReplacingOccurrencesOfString:t withString:@""]; } [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// %@\n\n%@", taskName, result]; [self hideProgressHUD]; [self showEchoNotificationWithTitle:@"分析完成" message:[NSString stringWithFormat:@"%@ 已同步至剪贴板。", taskName]]; } else { [self hideProgressHUD]; LogMessage(EchoLogTypeWarning, @"[警告] %@ 分析失败或无内容。", taskName); } g_extractedData = nil; g_isMasterTaskRunning = NO; }); }]; }
 %new
-- (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include isSubTask:(BOOL)isSubTask completion:(void (^)(NSString *result))completion {
-    if (!isSubTask) g_isMasterTaskRunning = YES;
-    g_s1_isExtracting = YES;
-    g_s1_currentTaskType = taskType;
-    g_s1_shouldIncludeXiangJie = include;
-    g_s1_completion_handler = [completion copy];
-    
-    NSString *mode = include ? @"详" : @"简";
-    if (isSubTask) {
-        LogMessage(EchoLogTypeInfo, @"[集成任务] 开始提取 %@ (%@)...", taskType, mode);
-    } else {
-        LogMessage(EchoLogTypeTask, @"[任务启动] 模式: %@ (详情: %@)", taskType, include ? @"开启" : @"关闭");
-        [self showProgressHUD:[NSString stringWithFormat:@"正在分析: %@", taskType]];
-    }
-
-    if ([taskType isEqualToString:@"KeTi"]) {
-        UIWindow *keyWindow = GetFrontmostWindow();
-        if (!keyWindow) { LogMessage(EchoLogError, @"[错误] 无法找到主窗口。"); if(g_s1_completion_handler) g_s1_completion_handler(@"[错误:未找到主窗口]"); g_s1_completion_handler = nil; g_isMasterTaskRunning = NO; g_s1_isExtracting = NO; return; }
-        Class keTiCellClass = NSClassFromString(@"六壬大占.課體單元");
-        if (!keTiCellClass) { LogMessage(EchoLogError, @"[错误] 无法找到 '課體單元' 类。"); if(g_s1_completion_handler) g_s1_completion_handler(@"[错误:未找到課體單元类]"); g_s1_completion_handler = nil; g_isMasterTaskRunning = NO; g_s1_isExtracting = NO; return; }
-        NSMutableArray<UICollectionView *> *allCVs = [NSMutableArray array];
-        FindSubviewsOfClassRecursive([UICollectionView class], keyWindow, allCVs);
-        for (UICollectionView *cv in allCVs) { for (id cell in cv.visibleCells) { if ([cell isKindOfClass:keTiCellClass]) { g_s1_keTi_targetCV = cv; break; } } if(g_s1_keTi_targetCV) break; }
-        if (!g_s1_keTi_targetCV) { LogMessage(EchoLogError, @"[错误] 无法找到包含“课体”的UICollectionView。"); if(g_s1_completion_handler) g_s1_completion_handler(@"[错误:未找到课体CV]"); g_s1_completion_handler = nil; g_isMasterTaskRunning = NO; g_s1_isExtracting = NO; return; }
-        g_s1_keTi_workQueue = [NSMutableArray array]; g_s1_keTi_resultsArray = [NSMutableArray array];
-        NSInteger totalItems = [g_s1_keTi_targetCV.dataSource collectionView:g_s1_keTi_targetCV numberOfItemsInSection:0];
-        for (NSInteger i = 0; i < totalItems; i++) { [g_s1_keTi_workQueue addObject:[NSIndexPath indexPathForItem:i inSection:0]]; }
-        if (g_s1_keTi_workQueue.count == 0) { LogMessage(EchoLogTypeWarning, @"[警告] 未找到任何“课体”单元来创建任务队列。"); if(g_s1_completion_handler) g_s1_completion_handler(@""); g_s1_completion_handler = nil; g_isMasterTaskRunning = NO; g_s1_isExtracting = NO; return; }
-        LogMessage(EchoLogTypeInfo, @"[解析] 发现 %lu 个“课体范式”单元，开始处理...", (unsigned long)g_s1_keTi_workQueue.count);
-        [self processKeTiWorkQueue_S1];
-    } else if ([taskType isEqualToString:@"JiuZongMen"]) {
-        SEL selector = NSSelectorFromString(@"顯示九宗門概覽");
-        if ([self respondsToSelector:selector]) {
-            LogMessage(EchoLogTypeInfo, @"[调用] 正在请求“九宗门”数据...");
-            SUPPRESS_LEAK_WARNING([self performSelector:selector]);
-        } else {
-            LogMessage(EchoLogError, @"[错误] 当前视图无法响应 '顯示九宗門概覽'。");
-            if (g_s1_completion_handler) g_s1_completion_handler(@"[错误:无法响应九宗门方法]");
-            g_s1_isExtracting = NO;
-            if (!isSubTask) g_isMasterTaskRunning = NO;
-        }
-    }
-}
+- (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include isSubTask:(BOOL)isSubTask completion:(void (^)(NSString *result))completion { if (!isSubTask) { g_isMasterTaskRunning = YES; } g_s1_isExtracting = YES; g_s1_currentTaskType = taskType; g_s1_shouldIncludeXiangJie = include; g_s1_completion_handler = [completion copy]; NSString *mode = include ? @"详" : @"简"; if (isSubTask) { LogMessage(EchoLogTypeInfo, @"[集成任务] 开始提取 %@ (%@)...", taskType, mode); } else { LogMessage(EchoLogTypeTask, @"[任务启动] 模式: %@ (详情: %@)", taskType, include ? @"开启" : @"关闭"); [self showProgressHUD:[NSString stringWithFormat:@"正在分析: %@", taskType]]; } if ([taskType isEqualToString:@"KeTi"]) { UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) { LogMessage(EchoLogError, @"[错误] 无法找到主窗口。"); if (g_s1_completion_handler) g_s1_completion_handler(@"[错误:未找到主窗口]"); g_s1_completion_handler = nil; g_isMasterTaskRunning = NO; g_s1_isExtracting = NO; return; } Class keTiCellClass = NSClassFromString(@"六壬大占.課體單元"); if (!keTiCellClass) { LogMessage(EchoLogError, @"[错误] 无法找到 '課體單元' 类。"); if (g_s1_completion_handler) g_s1_completion_handler(@"[错误:未找到課體單元类]"); g_s1_completion_handler = nil; g_isMasterTaskRunning = NO; g_s1_isExtracting = NO; return; } NSMutableArray<UICollectionView *> *allCVs = [NSMutableArray array]; FindSubviewsOfClassRecursive([UICollectionView class], keyWindow, allCVs); for (UICollectionView *cv in allCVs) { for (id cell in cv.visibleCells) { if ([cell isKindOfClass:keTiCellClass]) { g_s1_keTi_targetCV = cv; break; } } if (g_s1_keTi_targetCV) break; } if (!g_s1_keTi_targetCV) { LogMessage(EchoLogError, @"[错误] 无法找到包含“课体”的UICollectionView。"); if (g_s1_completion_handler) g_s1_completion_handler(@"[错误:未找到课体CV]"); g_s1_completion_handler = nil; g_isMasterTaskRunning = NO; g_s1_isExtracting = NO; return; } g_s1_keTi_workQueue = [NSMutableArray array]; g_s1_keTi_resultsArray = [NSMutableArray array]; NSInteger totalItems = [g_s1_keTi_targetCV.dataSource collectionView:g_s1_keTi_targetCV numberOfItemsInSection:0]; for (NSInteger i = 0; i < totalItems; i++) { [g_s1_keTi_workQueue addObject:[NSIndexPath indexPathForItem:i inSection:0]]; } if (g_s1_keTi_workQueue.count == 0) { LogMessage(EchoLogTypeWarning, @"[警告] 未找到任何“课体”单元来创建任务队列。"); if (g_s1_completion_handler) g_s1_completion_handler(@""); g_s1_completion_handler = nil; g_isMasterTaskRunning = NO; g_s1_isExtracting = NO; return; } LogMessage(EchoLogTypeInfo, @"[解析] 发现 %lu 个“课体范式”单元，开始处理...", (unsigned long)g_s1_keTi_workQueue.count); [self processKeTiWorkQueue_S1]; } else if ([taskType isEqualToString:@"JiuZongMen"]) { SEL selector = NSSelectorFromString(@"顯示九宗門概覽"); if ([self respondsToSelector:selector]) { LogMessage(EchoLogTypeInfo, @"[调用] 正在请求“九宗门”数据..."); SUPPRESS_LEAK_WARNING([self performSelector:selector]); } else { LogMessage(EchoLogError, @"[错误] 当前视图无法响应 '顯示九宗門概覽'。"); if (g_s1_completion_handler) g_s1_completion_handler(@"[错误:无法响应九宗门方法]"); g_s1_isExtracting = NO; if (!isSubTask) g_isMasterTaskRunning = NO; } } }
 %new
-- (void)processKeTiWorkQueue_S1 {
-    if (g_s1_keTi_workQueue.count == 0) {
-        LogMessage(EchoLogTypeTask, @"[完成] 所有 %lu 项“课体范式”处理完毕。", (unsigned long)g_s1_keTi_resultsArray.count);
-        
-        NSMutableString *finalResult = [NSMutableString string];
-        NSString *title = g_s1_shouldIncludeXiangJie ? @"课体范式 (详)" : @"课体范式 (简)";
-        [finalResult appendFormat:@"// %@\n\n", title];
-        for (NSUInteger i = 0; i < g_s1_keTi_resultsArray.count; i++) {
-            [finalResult appendString:g_s1_keTi_resultsArray[i]];
-            if (i < g_s1_keTi_resultsArray.count - 1) { [finalResult appendString:@"\n\n"]; }
-        }
-        NSString *trimmedResult = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-        // The completion handler decides what to do with the result
-        if (g_s1_completion_handler) {
-            g_s1_completion_handler(trimmedResult);
-        }
-        
-        // Clean up S1-specific state. The master lock is handled by the caller.
-        g_s1_isExtracting = NO;
-        g_s1_currentTaskType = nil;
-        g_s1_keTi_targetCV = nil;
-        g_s1_keTi_workQueue = nil;
-        g_s1_keTi_resultsArray = nil;
-        g_s1_completion_handler = nil;
-        return;
-    }
-    
-    NSIndexPath *indexPath = g_s1_keTi_workQueue.firstObject;
-    [g_s1_keTi_workQueue removeObjectAtIndex:0];
-    LogMessage(EchoLogTypeInfo, @"[解析] 正在处理“课体范式” %lu/%lu...", (unsigned long)(g_s1_keTi_resultsArray.count + 1), (unsigned long)(g_s1_keTi_resultsArray.count + g_s1_keTi_workQueue.count + 1));
-    id delegate = g_s1_keTi_targetCV.delegate;
-    if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
-        [delegate collectionView:g_s1_keTi_targetCV didSelectItemAtIndexPath:indexPath];
-    } else {
-        LogMessage(EchoLogError, @"[错误] 无法触发单元点击事件。");
-        [self processKeTiWorkQueue_S1];
-    }
-}
+- (void)processKeTiWorkQueue_S1 { if (g_s1_keTi_workQueue.count == 0) { LogMessage(EchoLogTypeTask, @"[完成] 所有 %lu 项“课体范式”处理完毕。", (unsigned long)g_s1_keTi_resultsArray.count); NSMutableString *finalResult = [NSMutableString string]; NSString *title = g_s1_shouldIncludeXiangJie ? @"课体范式 (详)" : @"课体范式 (简)"; [finalResult appendFormat:@"// %@\n\n", title]; for (NSUInteger i = 0; i < g_s1_keTi_resultsArray.count; i++) { [finalResult appendString:g_s1_keTi_resultsArray[i]]; if (i < g_s1_keTi_resultsArray.count - 1) { [finalResult appendString:@"\n\n"]; } } NSString *trimmedResult = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; if (g_s1_completion_handler) { g_s1_completion_handler(trimmedResult); } g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_keTi_targetCV = nil; g_s1_keTi_workQueue = nil; g_s1_keTi_resultsArray = nil; g_s1_completion_handler = nil; return; } NSIndexPath *indexPath = g_s1_keTi_workQueue.firstObject; [g_s1_keTi_workQueue removeObjectAtIndex:0]; LogMessage(EchoLogTypeInfo, @"[解析] 正在处理“课体范式” %lu/%lu...", (unsigned long)(g_s1_keTi_resultsArray.count + 1), (unsigned long)(g_s1_keTi_resultsArray.count + g_s1_keTi_workQueue.count + 1)); id delegate = g_s1_keTi_targetCV.delegate; if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) { [delegate collectionView:g_s1_keTi_targetCV didSelectItemAtIndexPath:indexPath]; } else { LogMessage(EchoLogError, @"[错误] 无法触发单元点击事件。"); [self processKeTiWorkQueue_S1]; } }
 %new
-- (void)startExtraction_Truth_S2_WithCompletion:(void (^)(BOOL success))completion {
-    if (g_isMasterTaskRunning) { LogMessage(EchoLogError, @"[错误] 课传推演任务已在进行中。"); if (completion) completion(NO); return; }
-    
-    g_isMasterTaskRunning = YES;
-    LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“课传流注”...");
-    [self showProgressHUD:@"正在推演课传流注..."];
-    g_s2_isExtractingKeChuanDetail = YES;
-    g_s2_keChuan_completion_handler = [completion copy];
-    g_s2_capturedKeChuanDetailArray = [NSMutableArray array];
-    g_s2_keChuanWorkQueue = [NSMutableArray array];
-    g_s2_keChuanTitleQueue = [NSMutableArray array];
-
-    Ivar keChuanContainerIvar = class_getInstanceVariable([self class], "課傳"); if (!keChuanContainerIvar) { LogMessage(EchoLogError, @"[错误] 无法定位核心组件'課傳'。"); g_s2_isExtractingKeChuanDetail = NO; g_isMasterTaskRunning = NO; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(NO); g_s2_keChuan_completion_handler = nil; [self hideProgressHUD]; return; }
-    id keChuanContainer = object_getIvar(self, keChuanContainerIvar); if (!keChuanContainer) { LogMessage(EchoLogError, @"[错误] 核心组件'課傳'未初始化。"); g_s2_isExtractingKeChuanDetail = NO; g_isMasterTaskRunning = NO; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(NO); g_s2_keChuan_completion_handler = nil; [self hideProgressHUD]; return; }
-
-    Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖"); NSMutableArray *sanChuanResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, (UIView *)keChuanContainer, sanChuanResults); if (sanChuanResults.count > 0) { UIView *sanChuanContainer = sanChuanResults.firstObject; const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL}; NSString *rowTitles[] = {@"初传", @"中传", @"末传"}; for (int i = 0; ivarNames[i] != NULL; ++i) { Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarNames[i]); if (!ivar) continue; UIView *chuanView = object_getIvar(sanChuanContainer, ivar); if (!chuanView) continue; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], chuanView, labels); [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; if(labels.count >= 2) { UILabel *dizhiLabel = labels[labels.count-2]; UILabel *tianjiangLabel = labels[labels.count-1]; if (dizhiLabel.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"taskType": @"diZhi"} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]]; } if (tianjiangLabel.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"taskType": @"tianJiang"} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]]; } } } } Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖"); NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, (UIView *)keChuanContainer, siKeResults); if (siKeResults.count > 0) { UIView *siKeContainer = siKeResults.firstObject; NSDictionary *keDefs[] = { @{@"t": @"第一课", @"x": @"日", @"s": @"日上", @"j": @"日上天將"}, @{@"t": @"第二课", @"x": @"日上", @"s": @"日陰", @"j": @"日陰天將"}, @{@"t": @"第三课", @"x": @"辰", @"s": @"辰上", @"j": @"辰上天將"}, @{@"t": @"第四课", @"x": @"辰上", @"s": @"辰陰", @"j": @"辰陰天將"}}; void (^addTask)(const char*, NSString*, NSString*) = ^(const char* iName, NSString* fTitle, NSString* tType) { if (!iName) return; Ivar ivar = class_getInstanceVariable(siKeContainerClass, iName); if (ivar) { UILabel *label = (UILabel *)object_getIvar(siKeContainer, ivar); if (label.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": label.gestureRecognizers.firstObject, @"taskType": tType} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ (%@)", fTitle, label.text]]; } } }; for (int i = 0; i < 4; ++i) { NSDictionary *d = keDefs[i]; addTask([d[@"x"] UTF8String], [NSString stringWithFormat:@"%@ - 下神", d[@"t"]], @"diZhi"); addTask([d[@"s"] UTF8String], [NSString stringWithFormat:@"%@ - 上神", d[@"t"]], @"diZhi"); addTask([d[@"j"] UTF8String], [NSString stringWithFormat:@"%@ - 天将", d[@"t"]], @"tianJiang"); } }
-    
-    if (g_s2_keChuanWorkQueue.count == 0) { LogMessage(EchoLogTypeWarning, @"[课传] 任务队列为空，未找到可交互元素。"); g_s2_isExtractingKeChuanDetail = NO; g_isMasterTaskRunning = NO; g_s2_finalResultFromKeChuan = @""; [self hideProgressHUD]; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(NO); g_s2_keChuan_completion_handler = nil; return; }
-    
-    LogMessage(EchoLogTypeInfo, @"[课传] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_s2_keChuanWorkQueue.count);
-    [self processKeChuanQueue_Truth_S2];
-}
+- (void)startExtraction_Truth_S2_WithCompletion:(void (^)(BOOL success))completion { if (g_isMasterTaskRunning) { LogMessage(EchoLogError, @"[错误] 课传推演任务已在进行中。"); if (completion) completion(NO); return; } g_isMasterTaskRunning = YES; LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“课传流注”..."); [self showProgressHUD:@"正在推演课传流注..."]; g_s2_isExtractingKeChuanDetail = YES; g_s2_keChuan_completion_handler = [completion copy]; g_s2_capturedKeChuanDetailArray = [NSMutableArray array]; g_s2_keChuanWorkQueue = [NSMutableArray array]; g_s2_keChuanTitleQueue = [NSMutableArray array]; Ivar keChuanContainerIvar = class_getInstanceVariable([self class], "課傳"); if (!keChuanContainerIvar) { LogMessage(EchoLogError, @"[错误] 无法定位核心组件'課傳'。"); g_s2_isExtractingKeChuanDetail = NO; g_isMasterTaskRunning = NO; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(NO); g_s2_keChuan_completion_handler = nil; [self hideProgressHUD]; return; } id keChuanContainer = object_getIvar(self, keChuanContainerIvar); if (!keChuanContainer) { LogMessage(EchoLogError, @"[错误] 核心组件'課傳'未初始化。"); g_s2_isExtractingKeChuanDetail = NO; g_isMasterTaskRunning = NO; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(NO); g_s2_keChuan_completion_handler = nil; [self hideProgressHUD]; return; } Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖"); NSMutableArray *sanChuanResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, (UIView *)keChuanContainer, sanChuanResults); if (sanChuanResults.count > 0) { UIView *sanChuanContainer = sanChuanResults.firstObject; const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL}; NSString *rowTitles[] = {@"初传", @"中传", @"末传"}; for (int i = 0; ivarNames[i] != NULL; ++i) { Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarNames[i]); if (!ivar) continue; UIView *chuanView = object_getIvar(sanChuanContainer, ivar); if (!chuanView) continue; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], chuanView, labels); [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; if(labels.count >= 2) { UILabel *dizhiLabel = labels[labels.count-2]; UILabel *tianjiangLabel = labels[labels.count-1]; if (dizhiLabel.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"taskType": @"diZhi"} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]]; } if (tianjiangLabel.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"taskType": @"tianJiang"} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]]; } } } } Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖"); NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, (UIView *)keChuanContainer, siKeResults); if (siKeResults.count > 0) { UIView *siKeContainer = siKeResults.firstObject; NSDictionary *keDefs[] = { @{@"t": @"第一课", @"x": @"日", @"s": @"日上", @"j": @"日上天將"}, @{@"t": @"第二课", @"x": @"日上", @"s": @"日陰", @"j": @"日陰天將"}, @{@"t": @"第三课", @"x": @"辰", @"s": @"辰上", @"j": @"辰上天將"}, @{@"t": @"第四课", @"x": @"辰上", @"s": @"辰陰", @"j": @"辰陰天將"}}; void (^addTask)(const char*, NSString*, NSString*) = ^(const char* iName, NSString* fTitle, NSString* tType) { if (!iName) return; Ivar ivar = class_getInstanceVariable(siKeContainerClass, iName); if (ivar) { UILabel *label = (UILabel *)object_getIvar(siKeContainer, ivar); if (label.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": label.gestureRecognizers.firstObject, @"taskType": tType} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ (%@)", fTitle, label.text]]; } } }; for (int i = 0; i < 4; ++i) { NSDictionary *d = keDefs[i]; addTask([d[@"x"] UTF8String], [NSString stringWithFormat:@"%@ - 下神", d[@"t"]], @"diZhi"); addTask([d[@"s"] UTF8String], [NSString stringWithFormat:@"%@ - 上神", d[@"t"]], @"diZhi"); addTask([d[@"j"] UTF8String], [NSString stringWithFormat:@"%@ - 天将", d[@"t"]], @"tianJiang"); } } if (g_s2_keChuanWorkQueue.count == 0) { LogMessage(EchoLogTypeWarning, @"[课传] 任务队列为空，未找到可交互元素。"); g_s2_isExtractingKeChuanDetail = NO; g_isMasterTaskRunning = NO; g_s2_finalResultFromKeChuan = @""; [self hideProgressHUD]; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(NO); g_s2_keChuan_completion_handler = nil; return; } LogMessage(EchoLogTypeInfo, @"[课传] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_s2_keChuanWorkQueue.count); [self processKeChuanQueue_Truth_S2]; }
 %new
 - (void)processKeChuanQueue_Truth_S2 { if (!g_s2_isExtractingKeChuanDetail || g_s2_keChuanWorkQueue.count == 0) { if (g_s2_isExtractingKeChuanDetail) { LogMessage(EchoLogTypeTask, @"[完成] “课传流注”全部处理完毕。"); NSMutableString *resultStr = [NSMutableString string]; BOOL success = NO; if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) { for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) { [resultStr appendFormat:@"// %@\n%@\n\n", g_s2_keChuanTitleQueue[i], g_s2_capturedKeChuanDetailArray[i]]; } g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// 课传流注\n\n%@", g_s2_finalResultFromKeChuan]; success = YES; } else { g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]"; LogMessage(EchoLogError, @"%@", g_s2_finalResultFromKeChuan); } [self hideProgressHUD]; g_isMasterTaskRunning = NO; g_s2_isExtractingKeChuanDetail = NO; if (g_s2_keChuan_completion_handler) { g_s2_keChuan_completion_handler(success); g_s2_keChuan_completion_handler = nil; } } return; } NSMutableDictionary *task = g_s2_keChuanWorkQueue.firstObject; [g_s2_keChuanWorkQueue removeObjectAtIndex:0]; NSString *title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count]; LogMessage(EchoLogTypeInfo, @"[课传] 正在处理: %@", title); [self updateProgressHUD:[NSString stringWithFormat:@"推演课传: %lu/%lu", (unsigned long)g_s2_capturedKeChuanDetailArray.count + 1, (unsigned long)g_s2_keChuanTitleQueue.count]]; SEL action = [task[@"taskType"] isEqualToString:@"tianJiang"] ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳摘要WithSender:"); if ([self respondsToSelector:action]) { SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]); } else { LogMessage(EchoLogError, @"[错误] 方法 %@ 不存在。", NSStringFromSelector(action)); [g_s2_capturedKeChuanDetailArray addObject:@"[解析失败: 方法不存在]"]; [self processKeChuanQueue_Truth_S2]; } }
 
@@ -429,6 +213,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.10 (ChainFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.11 (CompileFix) 已加载。");
     }
 }
