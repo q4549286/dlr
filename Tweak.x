@@ -1,9 +1,7 @@
-////////// Filename: Echo_AnalysisEngine_v13.16_Ultimate.xm
-// 描述: Echo 六壬解析引擎 v13.16 (终极版)。
-//      - [ULTIMATE FIX] 根据Flex分析的精确视图类和手势识别器，重构了所有弹窗提取逻辑，完美复刻了“课传流注”的成功模式，从根本上解决了内容提取失败和UI干扰的问题。
-//      - [REFINED] 特殊处理了“行年参数”的提取流程，允许其按原始方式弹出必要的交互式Alert，而其他所有后台提取均采用无UI的模式。
-//      - [UI/UX] 最终排版校正：优化了报告脚部文案的间距，确保格式在任何情况下都保持整洁。
-//      - [STABILITY] 此版本是经过多轮迭代和问题修复的集大成之作，兼顾了强大的功能、顶级的性能和无缝的用户体验。
+////////// Filename: Echo_AnalysisEngine_v13.17_FinalBuildFix.xm
+// 描述: Echo 六壬解析引擎 v13.17 (最终编译修复版)。
+//      - [BUILD FIX] 修复了因三元运算符与类型强转混合使用导致的 "expected identifier" 编译错误，改为更安全、更明确的分步赋值逻辑。
+//      - [STABILITY] 此版本在v13.16的基础上修复了最后的编译障碍，是当前功能最完整且可编译的最终版本。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -209,19 +207,15 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    // REFINED: NianMing extraction requires original presentation logic for its UIAlertController.
     if (g_isExtractingNianming) {
         Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
         return;
     }
     
-    // ULTIMATE FIX: If any extraction is in progress, intercept the presentation and prevent it from appearing.
     if (g_s1_isExtracting || g_s2_isExtractingKeChuanDetail || g_extractedData) {
-        // Force the view to load its hierarchy to make data available for extraction
         [vcToPresent loadViewIfNeeded];
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            // S1 Extraction
             if (g_s1_isExtracting && [NSStringFromClass([vcToPresent class]) containsString:@"課體概覽視圖"]) {
                 NSString *extractedText = extractDataFromSplitView_S1(vcToPresent.view, g_s1_shouldIncludeXiangJie);
                 if ([g_s1_currentTaskType isEqualToString:@"KeTi"]) {
@@ -234,7 +228,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     if (g_s1_completion_handler) { g_s1_completion_handler(finalText); }
                 }
             }
-            // S2 Extraction
             else if (g_s2_isExtractingKeChuanDetail) {
                  NSString *vcClassName = NSStringFromClass([vcToPresent class]);
                  if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
@@ -245,7 +238,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     [self processKeChuanQueue_Truth_S2];
                  }
             }
-            // Generic Popup Extraction (BiFa, GeJu, etc.)
             else if (g_extractedData) {
                  NSString *title = vcToPresent.title ?: @"";
                  if (title.length == 0) {
@@ -350,7 +342,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.16" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.17" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, contentView.bounds.size.width, 30)];
@@ -920,22 +912,30 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     
     UITapGestureRecognizer *tap = targetView.gestureRecognizers.firstObject;
-    
-    // Simulate the tap gesture
-    // This will trigger the original `presentViewController`, which will be caught by our hook
-    if ([self respondsToSelector:@selector(顯示格局總覽:)]) { // Use any known selector from the family
-         SUPPRESS_LEAK_WARNING([self performSelector:@selector(顯示格局總覽:) withObject:tap]);
-    } else { // Fallback, less ideal but might work for some
+
+    // A known public selector to trigger the action, assuming the target is `self` (the main ViewController).
+    SEL knownAction = NSSelectorFromString(@"顯示格局總覽:"); 
+    if ([self respondsToSelector:knownAction]) {
+         SUPPRESS_LEAK_WARNING([self performSelector:knownAction withObject:tap]);
+    } else { 
+         // Fallback for introspection
          id target = [tap valueForKey:@"_targets"][0];
          id realTarget = [target valueForKey:@"_target"];
-         SEL action = (SEL)[[[target valueForKey:@"_action"] pointerValue] ?: nil];
+         
+         // [FIXED] Correctly and safely extract the SEL.
+         NSValue *actionValue = [target valueForKey:@"_action"];
+         SEL action = NULL;
+         if (actionValue) {
+            action = [actionValue pointerValue];
+         }
+         
          if (realTarget && action) {
             SUPPRESS_LEAK_WARNING([realTarget performSelector:action withObject:tap]);
+         } else {
+             LogMessage(EchoLogError, @"[错误] 无法通过内省找到手势的 Target-Action。");
          }
     }
     
-    // The data extraction now happens inside the Tweak_presentViewController hook
-    // We just need to wait and then call the completion
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         NSString *result = g_extractedData[taskName];
         if (!result) result = @""; // Ensure non-nil
@@ -1317,6 +1317,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.16 (Ultimate) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.17 (FinalBuildFix) 已加载。");
     }
 }
