@@ -209,15 +209,12 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    // [FIXED] Highest priority: let NianMing extraction proceed normally for its alerts.
     if (g_isExtractingNianming) {
         Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
         return;
     }
     
-    // [ULTIMATE FIX] If any other extraction is in progress, intercept and "swallow" the presentation.
     if (g_s1_isExtracting || g_s2_isExtractingKeChuanDetail || g_extractedData) {
-        // Force the view to load its hierarchy to make data available for extraction
         [vcToPresent loadViewIfNeeded];
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -282,10 +279,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
-
-// =========================================================================
-// 3. UI, 任务分发与核心逻辑实现
-// =========================================================================
 
 %hook UIViewController
 
@@ -594,7 +587,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     g_extractedData = [NSMutableDictionary dictionary];
     
-    // The selector is performed on `self` (the main VC), which triggers the hooked `presentViewController`
     SEL selector = NSSelectorFromString(selectorName);
     if ([self respondsToSelector:selector]) {
         SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]);
@@ -605,9 +597,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [self hideProgressHUD];
         return;
     }
-
-    // The data extraction and completion call now happens inside the hook, after a delay.
-    // We add a finalizer callback to clean up.
+    
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         NSString *result = g_extractedData[taskName];
         if (!result) result = @""; 
@@ -618,7 +608,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         g_extractedData = nil;
     });
 }
-// All other methods are included below
 %new
 - (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include completion:(void (^)(NSString *result))completion {
     g_s1_isExtracting = YES;
