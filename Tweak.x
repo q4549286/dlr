@@ -1,8 +1,8 @@
-////////// Filename: Echo_AnalysisEngine_v13.7_Polished.xm
-// 描述: Echo 六壬解析引擎 v13.7 (UI及代码美化版)。
-//      - [POLISHED] 优化了控制面板的UI/UX设计，引入了现代化色彩、图标和布局，提升了视觉效果和用户体验。
-//      - [REFACTORED] 对代码结构进行了重构：使用命名常量替代魔法数字，并将大型方法 (如盘面解析) 拆分为更小、更易于管理的辅助函数，提高了代码的可读性和可维护性。
-//      - [STABILITY] 继承 v13.6 的所有稳定性修复，核心解析逻辑保持不变，确保功能稳定。
+////////// Filename: Echo_AnalysisEngine_v13.8_BuildFix.xm
+// 描述: Echo 六壬解析引擎 v13.8 (编译修复版)。
+//      - [FIXED] 修复了因方法声明中缺少参数名 (`extractNianmingInfoWithCompletion:`) 导致的编译失败问题。
+//      - [FIXED] 解决了因 `imageEdgeInsets` API 在新版 SDK 中被弃用而导致的编译错误，通过 #pragma 指令实现了向后兼容。
+//      - [POLISHED] 继承 v13.7 的所有 UI 及代码美化，核心解析逻辑保持不变。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -150,7 +150,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractSinglePopupInfoWithTaskName:(NSString*)taskName;
 - (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include completion:(void (^)(NSString *result))completion;
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion;
-- (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText));
+- (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion; // <-- [FIXED] Added parameter name 'completion'
 // Task Processors
 - (void)processKeTiWorkQueue_S1;
 - (void)processKeChuanQueue_Truth_S2;
@@ -335,7 +335,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [contentView addSubview:titleLabel];
 
     UILabel *versionLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 30, contentView.bounds.size.width, 20)];
-    versionLabel.text = @"v13.7 (Polished)";
+    versionLabel.text = @"v13.8 (BuildFix)";
     versionLabel.font = [UIFont systemFontOfSize:12];
     versionLabel.textColor = [UIColor lightGrayColor];
     versionLabel.textAlignment = NSTextAlignmentCenter;
@@ -351,7 +351,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if (@available(iOS 13.0, *)) {
             UIImage *icon = [UIImage systemImageNamed:iconName];
             [btn setImage:icon forState:UIControlStateNormal];
+            // [FIXED] Suppress deprecation warning for imageEdgeInsets
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
             btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8);
+            #pragma clang diagnostic pop
         }
         btn.tag = tag;
         btn.backgroundColor = color;
@@ -1100,6 +1104,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.7 (Polished) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.8 (BuildFix) 已加载。");
     }
 }
