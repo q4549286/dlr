@@ -1,7 +1,7 @@
-////////// Filename: Echo_AnalysisEngine_v13.11_BuildFix.xm
-// 描述: Echo 六壬解析引擎 v13.11 (编译修复版)。
-//      - [FIXED] 解决了在 `switch` 语句中因变量作用域问题导致的 "cannot jump to case label" 编译错误，通过将变量定义移至 switch 外部来修复。
-//      - [STABILITY] 继承 v13.10 的所有核心逻辑修复和UI改进，确保功能稳定。
+////////// Filename: Echo_AnalysisEngine_v13.12_FinalBuildFix.xm
+// 描述: Echo 六壬解析引擎 v13.12 (最终编译修复版)。
+//      - [FIXED] 通过为 `switch` 语句中所有使用闭包的 `case` 添加独立作用域，彻底解决了 "cannot jump to case label" 编译错误。
+//      - [STABILITY] 继承 v13.11 的所有核心逻辑修复和UI改进，此版本为最终稳定版。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -355,7 +355,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [contentView addSubview:titleLabel];
 
     UILabel *versionLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 30, contentView.bounds.size.width, 20)];
-    versionLabel.text = @"v13.11 (BuildFix)";
+    versionLabel.text = @"v13.12 (FinalBuildFix)";
     versionLabel.font = [UIFont systemFontOfSize:12];
     versionLabel.textColor = [UIColor lightGrayColor];
     versionLabel.textAlignment = NSTextAlignmentCenter;
@@ -516,9 +516,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
     
-    // [FIXED] Moved weakSelf definition outside the switch to resolve compilation error.
-    __weak typeof(self) weakSelf = self;
-    
     switch (sender.tag) {
         case kButtonTag_CopyAndClose:
             [self copyLogAndClose];
@@ -529,7 +526,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         case kButtonTag_DeepDiveReport:
             [self executeCompositeExtraction];
             break;
-        case kButtonTag_KeTi: {
+        case kButtonTag_KeTi: { // [FIXED] Added scope for weakSelf
+            __weak typeof(self) weakSelf = self;
             [self startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:YES completion:^(NSString *result) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
@@ -541,7 +539,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             }];
             break;
         }
-        case kButtonTag_JiuZongMen: {
+        case kButtonTag_JiuZongMen: { // [FIXED] Added scope for weakSelf
+            __weak typeof(self) weakSelf = self;
             [self startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:YES completion:^(NSString *result) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
@@ -557,7 +556,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             // Passing nil completion signifies a standalone task.
             [self startExtraction_Truth_S2_WithCompletion:nil];
             break;
-        case kButtonTag_NianMing:
+        case kButtonTag_NianMing: { // [FIXED] Added scope for weakSelf
+            __weak typeof(self) weakSelf = self;
             [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 [strongSelf hideProgressHUD];
@@ -565,6 +565,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"行年参数已同步至剪贴板。"];
             }];
             break;
+        }
         case kButtonTag_BiFa:
             [self extractSinglePopupInfoWithTaskName:@"毕法要诀"];
             break;
@@ -578,7 +579,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-// MARK: - HUD & Notifications
+// ... (The rest of the code remains the same as v13.11) ...
 %new
 - (void)showProgressHUD:(NSString *)text {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
@@ -1269,6 +1270,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.11 (BuildFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.12 (FinalBuildFix) 已加载。");
     }
 }
