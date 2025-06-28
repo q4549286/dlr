@@ -1,8 +1,8 @@
-////////// Filename: Echo_AnalysisEngine_v13.13_PrecisionFix.xm
-// 描述: Echo 六壬解析引擎 v13.13 (精准提取修复版)。
-//      - [OPTIMIZED] 重构了“格局资料库”的提取逻辑。现在点击“毕法”、“格局”或“十八方法”按钮时，只会触发对应的弹窗进行精准、轻量化的内容提取，而不是完整解析整个盘面，大幅提升了响应速度和效率。
-//      - [REFACTORED] 新增了 `extractSpecificPopupWithSelectorName:taskName:completion:` 辅助函数，专门用于处理单一弹窗的提取任务。
-//      - [STABILITY] 继承 v13.12 的所有逻辑和编译修复，此版本在功能和性能上都更加完善。
+////////// Filename: Echo_AnalysisEngine_v13.14_UIPolish.xm
+// 描述: Echo 六壬解析引擎 v13.14 (UI及排版打磨版)。
+//      - [UI/UX] 全面刷新UI设计：采用更专业、内敛的蓝绿色系，统一辅助按钮颜色，调整标题与版本号布局，增加按钮描边效果，使整体界面更具现代感和专业性。
+//      - [REFINED] 优化了最终报告的排版：在各模块间使用更清晰的分隔符，并在报告末尾动态生成内容摘要行（如：// 上述信息包含：盘面总览、毕法要诀...），提升了输出内容的可读性和信息密度。
+//      - [STABILITY] 继承 v13.13 的所有核心逻辑和性能优化，此版本在视觉呈现和用户体验上达到新的高度。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -32,11 +32,10 @@ static const NSInteger kButtonTag_FangFa            = 305;
 static const NSInteger kButtonTag_CopyAndClose      = 999;
 
 // Colors
-#define ECHO_COLOR_PRIMARY      [UIColor colorWithRed:0.35 green:0.34 blue:0.84 alpha:1.0]
-#define ECHO_COLOR_SECONDARY    [UIColor colorWithRed:0.10 green:0.53 blue:0.53 alpha:1.0]
-#define ECHO_COLOR_TERTIARY     [UIColor colorWithWhite:0.35 alpha:1.0]
-#define ECHO_COLOR_AUXILIARY    [UIColor colorWithWhite:0.5 alpha:1.0]
-#define ECHO_COLOR_ACTION       [UIColor darkGrayColor]
+#define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
+#define ECHO_COLOR_MAIN_TEAL    [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
+#define ECHO_COLOR_AUX_GREY     [UIColor colorWithWhite:0.3 alpha:1.0]
+#define ECHO_COLOR_ACTION       [UIColor colorWithWhite:0.2 alpha:1.0]
 #define ECHO_COLOR_SUCCESS      [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
 #define ECHO_COLOR_LOG_TASK     [UIColor whiteColor]
 #define ECHO_COLOR_LOG_INFO     [UIColor lightGrayColor]
@@ -67,10 +66,6 @@ static NSString *g_currentItemToExtract = nil;
 static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 
-static NSString * const CustomFooterText = @"\n\n"
-"// 由 Echo 六壬解析引擎呈现\n"
-"// 数据为系统性参考，决策需审慎。";
-
 #define SafeString(str) (str ?: @"")
 
 #define SUPPRESS_LEAK_WARNING(code) \
@@ -80,6 +75,47 @@ static NSString * const CustomFooterText = @"\n\n"
     _Pragma("clang diagnostic pop")
 
 #pragma mark - Helper Functions
+static NSString* generateContentSummaryLine(NSString *fullReport) {
+    if (!fullReport || fullReport.length == 0) return @"";
+    
+    NSDictionary *keywordMap = @{
+        @"// 盘面总览": @"盘面总览",
+        @"// 课传流注": @"课传流注",
+        @"// 行年参数": @"行年参数",
+        @"// 课体范式": @"课体范式",
+        @"// 九宗门结构": @"九宗门",
+        @"// 毕法要诀": @"毕法要诀",
+        @"// 格局要览": @"格局要览",
+        @"// 十八方法": @"十八方法",
+        @"// 七政四余": @"七政四余"
+    };
+    
+    NSMutableArray *includedSections = [NSMutableArray array];
+    // Ordered keys to ensure summary follows a logical sequence
+    NSArray *orderedKeys = @[@"// 盘面总览", @"// 课传流注", @"// 行年参数", @"// 课体范式", @"// 九宗门结构", @"// 毕法要诀", @"// 格局要览", @"// 十八方法", @"// 七政四余"];
+    for (NSString *keyword in orderedKeys) {
+        if ([fullReport containsString:keyword]) {
+            [includedSections addObject:keywordMap[keyword]];
+        }
+    }
+    
+    if (includedSections.count > 0) {
+        return [NSString stringWithFormat:@"// 上述信息包含: %@\n", [includedSections componentsJoinedByString:@"、"]];
+    }
+    
+    return @"";
+}
+
+static NSString* formatFinalReport(NSString* rawReport) {
+    NSString *summaryLine = generateContentSummaryLine(rawReport);
+    NSString *footerText = @"\n\n"
+    "// 由 Echo 六壬解析引擎呈现\n"
+    "// 数据为系统性参考，决策需审慎。";
+    
+    return [NSString stringWithFormat:@"%@\n%@%@", rawReport, summaryLine, footerText];
+}
+
+
 typedef NS_ENUM(NSInteger, EchoLogType) {
     EchoLogTypeInfo,
     EchoLogTypeTask,
@@ -308,7 +344,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             controlButton.tag = kEchoControlButtonTag;
             [controlButton setTitle:@"Echo 解析" forState:UIControlStateNormal];
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            controlButton.backgroundColor = ECHO_COLOR_PRIMARY;
+            controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
             [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             controlButton.layer.cornerRadius = 18;
             controlButton.layer.shadowColor = [UIColor blackColor].CGColor;
@@ -347,25 +383,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)];
     [g_mainControlPanelView addSubview:contentView];
-  
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, 30)];
-    titleLabel.text = @"Echo 六壬解析引擎";
-    titleLabel.font = [UIFont boldSystemFontOfSize:22];
-    titleLabel.textColor = [UIColor whiteColor];
+    
+    NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
+    [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.14" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    [titleString appendAttributedString:versionString];
+
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, contentView.bounds.size.width, 30)];
+    titleLabel.attributedText = titleString;
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [contentView addSubview:titleLabel];
 
-    UILabel *versionLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 30, contentView.bounds.size.width, 20)];
-    versionLabel.text = @"v13.13 (PrecisionFix)";
-    versionLabel.font = [UIFont systemFontOfSize:12];
-    versionLabel.textColor = [UIColor lightGrayColor];
-    versionLabel.textAlignment = NSTextAlignmentCenter;
-    [contentView addSubview:versionLabel];
-
-    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 60, contentView.bounds.size.width, contentView.bounds.size.height - 120)];
+    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 50, contentView.bounds.size.width, contentView.bounds.size.height - 110)];
     [contentView addSubview:scrollView];
 
-    // --- Helpers for UI element creation ---
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
         [btn setTitle:title forState:UIControlStateNormal];
@@ -374,7 +405,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [btn setImage:icon forState:UIControlStateNormal];
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8);
+            btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 10);
             #pragma clang diagnostic pop
         }
         btn.tag = tag;
@@ -385,7 +416,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         btn.titleLabel.font = [UIFont boldSystemFontOfSize:15];
         btn.titleLabel.adjustsFontSizeToFitWidth = YES;
         btn.titleLabel.minimumScaleFactor = 0.8;
-        btn.layer.cornerRadius = 10;
+        btn.layer.cornerRadius = 12;
+        btn.layer.borderWidth = 1.0;
+        btn.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.1].CGColor;
         return btn;
     };
     UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) {
@@ -401,18 +434,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return separator;
     };
   
-    CGFloat currentY = 15;
+    CGFloat currentY = 20;
     CGFloat btnWidth = (scrollView.bounds.size.width - 45) / 2.0;
 
-    // --- Section 1: Core Analysis ---
     UILabel *sec1Title = createSectionTitle(@"核心解析");
     sec1Title.frame = CGRectMake(15, currentY, scrollView.bounds.size.width - 30, 22);
     [scrollView addSubview:sec1Title];
     currentY += 35;
 
     NSArray *mainButtons = @[
-        @{@"title": @"标准报告", @"icon": @"doc.text", @"tag": @(kButtonTag_StandardReport), @"color": ECHO_COLOR_SECONDARY},
-        @{@"title": @"深度解构", @"icon": @"square.stack.3d.up.fill", @"tag": @(kButtonTag_DeepDiveReport), @"color": ECHO_COLOR_PRIMARY}
+        @{@"title": @"标准报告", @"icon": @"doc.text", @"tag": @(kButtonTag_StandardReport), @"color": ECHO_COLOR_MAIN_TEAL},
+        @{@"title": @"深度解构", @"icon": @"square.stack.3d.up.fill", @"tag": @(kButtonTag_DeepDiveReport), @"color": ECHO_COLOR_MAIN_BLUE}
     ];
     for (int i = 0; i < mainButtons.count; i++) {
         NSDictionary *config = mainButtons[i];
@@ -420,35 +452,33 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         btn.frame = CGRectMake(15 + (i % 2) * (btnWidth + 15), currentY, btnWidth, 48);
         [scrollView addSubview:btn];
     }
-    currentY += 48 + 15;
+    currentY += 48 + 20;
     
     [scrollView addSubview:createSeparator(currentY)];
-    currentY += 15;
+    currentY += 20;
   
-    // --- Section 2: Specific Analysis ---
     UILabel *sec2Title = createSectionTitle(@"专项分析");
     sec2Title.frame = CGRectMake(15, currentY, scrollView.bounds.size.width - 30, 22);
     [scrollView addSubview:sec2Title];
     currentY += 35;
     
     NSArray *coreButtons = @[
-        @{@"title": @"课体范式 (详)", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)},
-        @{@"title": @"九宗门结构 (详)", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
+        @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)},
+        @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
         @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)},
         @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)}
     ];
     for (int i=0; i<coreButtons.count; i++) {
         NSDictionary *config = coreButtons[i];
-        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_TERTIARY);
+        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
         btn.frame = CGRectMake(15 + (i % 2) * (btnWidth + 15), currentY + (i / 2) * 58, btnWidth, 46);
         [scrollView addSubview:btn];
     }
-    currentY += ((coreButtons.count + 1) / 2) * 58 + 15;
+    currentY += ((coreButtons.count + 1) / 2) * 58 + 20;
 
     [scrollView addSubview:createSeparator(currentY)];
-    currentY += 15;
+    currentY += 20;
 
-    // --- Section 3: Database ---
     UILabel *sec3Title = createSectionTitle(@"格局资料库");
     sec3Title.frame = CGRectMake(15, currentY, scrollView.bounds.size.width - 30, 22);
     [scrollView addSubview:sec3Title];
@@ -459,18 +489,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         @{@"title": @"格局要览", @"icon": @"tablecells", @"tag": @(kButtonTag_GeJu)},
         @{@"title": @"十八方法", @"icon": @"list.number", @"tag": @(kButtonTag_FangFa)}
     ];
-    CGFloat smallBtnWidth = (scrollView.bounds.size.width - 45) / 3.0;
+    CGFloat smallBtnWidth = (scrollView.bounds.size.width - 50) / 3.0;
     for (int i=0; i<auxButtons.count; i++) {
         NSDictionary *config = auxButtons[i];
-        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUXILIARY);
-        btn.frame = CGRectMake(15 + i * (smallBtnWidth + 7.5), currentY, smallBtnWidth, 46);
+        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
+        btn.frame = CGRectMake(15 + i * (smallBtnWidth + 10), currentY, smallBtnWidth, 46);
         [scrollView addSubview:btn];
     }
     currentY += 56;
     
     scrollView.contentSize = CGSizeMake(scrollView.bounds.size.width, currentY);
   
-    // --- Log View and Close Button ---
     g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, contentView.bounds.size.height - 230, contentView.bounds.size.width, 170)];
     g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
     g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
@@ -533,7 +562,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [self startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:YES completion:^(NSString *result) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
-                    [UIPasteboard generalPasteboard].string = result;
+                    [UIPasteboard generalPasteboard].string = formatFinalReport(result);
                     [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"课体范式已同步至剪贴板。"];
                     g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil;
                 });
@@ -544,7 +573,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [self startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:YES completion:^(NSString *result) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
-                    [UIPasteboard generalPasteboard].string = result;
+                    [UIPasteboard generalPasteboard].string = formatFinalReport(result);
                     [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"九宗门结构已同步。"];
                     g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil;
                 });
@@ -557,8 +586,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         case kButtonTag_NianMing: {
             [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
+                NSString* rawReport = [NSString stringWithFormat:@"// 行年参数\n\n%@", nianmingText];
+                [UIPasteboard generalPasteboard].string = formatFinalReport(rawReport);
                 [strongSelf hideProgressHUD];
-                [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// 行年参数\n\n%@", nianmingText];
                 [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"行年参数已同步至剪贴板。"];
             }];
             break;
@@ -566,7 +596,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         case kButtonTag_BiFa: {
             [self extractSpecificPopupWithSelectorName:@"顯示法訣總覽" taskName:@"毕法要诀" completion:^(NSString *result) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
-                [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// %@\n\n%@", @"毕法要诀", result];
+                NSString* rawReport = [NSString stringWithFormat:@"// %@\n\n%@", @"毕法要诀", result];
+                [UIPasteboard generalPasteboard].string = formatFinalReport(rawReport);
                 [strongSelf hideProgressHUD];
                 [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"毕法要诀已同步。"];
             }];
@@ -575,7 +606,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         case kButtonTag_GeJu: {
             [self extractSpecificPopupWithSelectorName:@"顯示格局總覽" taskName:@"格局要览" completion:^(NSString *result) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
-                [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// %@\n\n%@", @"格局要览", result];
+                NSString* rawReport = [NSString stringWithFormat:@"// %@\n\n%@", @"格局要览", result];
+                [UIPasteboard generalPasteboard].string = formatFinalReport(rawReport);
                 [strongSelf hideProgressHUD];
                 [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"格局要览已同步。"];
             }];
@@ -584,7 +616,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         case kButtonTag_FangFa: {
             [self extractSpecificPopupWithSelectorName:@"顯示方法總覽" taskName:@"十八方法" completion:^(NSString *result) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
-                [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// %@\n\n%@", @"十八方法", result];
+                NSString* rawReport = [NSString stringWithFormat:@"// %@\n\n%@", @"十八方法", result];
+                [UIPasteboard generalPasteboard].string = formatFinalReport(rawReport);
                 [strongSelf hideProgressHUD];
                 [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"十八方法已同步。"];
             }];
@@ -594,7 +627,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-// MARK: - HUD & Notifications
 %new
 - (void)showProgressHUD:(NSString *)text {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
@@ -767,15 +799,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         
         NSMutableString *finalResult = [NSMutableString string];
         NSString *title = g_s1_shouldIncludeXiangJie ? @"课体范式 (详)" : @"课体范式 (简)";
-        [finalResult appendFormat:@"// %@\n\n", title];
-
-        for (NSUInteger i = 0; i < g_s1_keTi_resultsArray.count; i++) {
-            NSString *itemText = g_s1_keTi_resultsArray[i];
-            [finalResult appendString:itemText];
-            if (i < g_s1_keTi_resultsArray.count - 1) {
-                [finalResult appendString:@"\n\n"];
-            }
-        }
+        [finalResult appendFormat:@"// %@\n\n%@", title, [g_s1_keTi_resultsArray componentsJoinedByString:@"\n\n"]];
         
         NSString *trimmedResult = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         
@@ -823,14 +847,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                         __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) return;
                         LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在合并报告...");
                         
-                        NSMutableString *finalResult = [NSMutableString string];
-                        [finalResult appendString:kePanText];
-                        if (nianmingText.length > 0) { [finalResult appendFormat:@"\n\n// 行年参数\n\n%@", nianmingText]; }
-                        if (keTiResult.length > 0) { [finalResult appendFormat:@"\n\n%@", keTiResult]; }
-                        if (jiuZongMenResult.length > 0) { [finalResult appendFormat:@"\n\n%@", jiuZongMenResult]; }
-                        [finalResult appendString:CustomFooterText];
+                        NSMutableString *rawResult = [NSMutableString string];
+                        [rawResult appendString:kePanText];
+                        if (nianmingText.length > 0) { [rawResult appendFormat:@"\n\n---\n\n// 行年参数\n\n%@", nianmingText]; }
+                        if (keTiResult.length > 0) { [rawResult appendFormat:@"\n\n---\n\n%@", keTiResult]; }
+                        if (jiuZongMenResult.length > 0) { [rawResult appendFormat:@"\n\n---\n\n%@", jiuZongMenResult]; }
                         
-                        [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                        [UIPasteboard generalPasteboard].string = formatFinalReport(rawResult);
                         
                         [strongSelf4 hideProgressHUD];
                         [strongSelf4 showEchoNotificationWithTitle:@"生成完毕" message:@"标准报告已同步至剪贴板。"];
@@ -873,14 +896,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             __strong typeof(weakSelf) strongSelf5 = weakSelf; if (!strongSelf5) return;
                             LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在合并报告...");
 
-                            NSMutableString *finalResult = [g_s2_baseTextCacheForPowerMode mutableCopy];
-                            if (g_s2_finalResultFromKeChuan.length > 0) { [finalResult appendFormat:@"\n\n// 课传流注\n\n%@", g_s2_finalResultFromKeChuan]; }
-                            if (nianmingText.length > 0) { [finalResult appendFormat:@"\n\n// 行年参数\n\n%@", nianmingText]; }
-                            if (keTiResult.length > 0) { [finalResult appendFormat:@"\n\n%@", keTiResult]; }
-                            if (jiuZongMenResult.length > 0) { [finalResult appendFormat:@"\n\n%@", jiuZongMenResult]; }
-                            [finalResult appendString:CustomFooterText];
+                            NSMutableString *rawResult = [g_s2_baseTextCacheForPowerMode mutableCopy];
+                            if (g_s2_finalResultFromKeChuan.length > 0) { [rawResult appendFormat:@"\n\n---\n\n// 课传流注\n\n%@", g_s2_finalResultFromKeChuan]; }
+                            if (nianmingText.length > 0) { [rawResult appendFormat:@"\n\n---\n\n// 行年参数\n\n%@", nianmingText]; }
+                            if (keTiResult.length > 0) { [rawResult appendFormat:@"\n\n---\n\n%@", keTiResult]; }
+                            if (jiuZongMenResult.length > 0) { [rawResult appendFormat:@"\n\n---\n\n%@", jiuZongMenResult]; }
                             
-                            [UIPasteboard generalPasteboard].string = [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                            [UIPasteboard generalPasteboard].string = formatFinalReport(rawResult);
                             
                             [strongSelf5 hideProgressHUD];
                             [strongSelf5 showEchoNotificationWithTitle:@"解构完成" message:@"深度解构报告已同步。"];
@@ -909,7 +931,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             dispatch_sync(dispatch_get_main_queue(), ^{
                 SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]);
             });
-            [NSThread sleepForTimeInterval:0.5]; // Wait for popup to be intercepted
+            [NSThread sleepForTimeInterval:0.5];
         } else {
             LogMessage(EchoLogError, @"[错误] 无法响应选择器 '%@'", selectorName);
         }
@@ -921,14 +943,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 for (NSString *t in trash) { result = [result stringByReplacingOccurrencesOfString:t withString:@""]; }
             } else {
                 LogMessage(EchoLogTypeWarning, @"[警告] %@ 分析失败或无内容。", taskName);
-                result = @""; // Ensure non-nil result
+                result = @"";
             }
             
             if (completion) {
                 completion(result);
             }
             
-            g_extractedData = nil; // Clean up state
+            g_extractedData = nil;
         });
     });
 }
@@ -1001,7 +1023,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 
                 if (!g_s2_keChuan_completion_handler) {
-                    [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"// 课传流注\n\n%@", g_s2_finalResultFromKeChuan];
+                    NSString *rawReport = [NSString stringWithFormat:@"// 课传流注\n\n%@", g_s2_finalResultFromKeChuan];
+                    [UIPasteboard generalPasteboard].string = formatFinalReport(rawReport);
                     [self showEchoNotificationWithTitle:@"分析完成" message:@"课传流注已同步至剪贴板。"];
                 }
             } else {
@@ -1076,10 +1099,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 fangFa = [fangFa stringByReplacingOccurrencesOfString:t withString:@""];
             }
 
-            if (biFa.length > 0) biFa = [NSString stringWithFormat:@"\n// 毕法要诀\n%@", biFa];
-            if (geJu.length > 0) geJu = [NSString stringWithFormat:@"\n\n// 格局要览\n%@", geJu];
-            if (fangFa.length > 0) fangFa = [NSString stringWithFormat:@"\n\n// 十八方法\n%@", fangFa];
-            NSString *qiZheng = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"\n\n// 七政四余\n%@", g_extractedData[@"七政四余"]] : @"";
+            if (biFa.length > 0) biFa = [NSString stringWithFormat:@"\n\n---\n\n// 毕法要诀\n\n%@", biFa];
+            if (geJu.length > 0) geJu = [NSString stringWithFormat:@"\n\n---\n\n// 格局要览\n\n%@", geJu];
+            if (fangFa.length > 0) fangFa = [NSString stringWithFormat:@"\n\n---\n\n// 十八方法\n\n%@", fangFa];
+            NSString *qiZheng = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"\n\n---\n\n// 七政四余\n\n%@", g_extractedData[@"七政四余"]] : @"";
             NSString *tianDiPan = g_extractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_extractedData[@"天地盘"]] : @"";
 
             NSString *finalText = [NSString stringWithFormat:
@@ -1088,8 +1111,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 @"月将: %@ | 空亡: %@\n"
                 @"昼夜: %@ | 课体: %@\n"
                 @"九宗门: %@\n\n"
+                @"---\n\n"
                 @"// 天地盘\n%@\n"
+                @"---\n\n"
                 @"// 四课\n%@\n\n"
+                @"---\n\n"
                 @"// 三传\n%@%@%@%@%@",
                 SafeString(g_extractedData[@"时间块"]), SafeString(g_extractedData[@"月将"]), SafeString(g_extractedData[@"空亡"]),
                 SafeString(g_extractedData[@"昼夜"]), SafeString(g_extractedData[@"课体"]), SafeString(g_extractedData[@"九宗门"]),
@@ -1295,6 +1321,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.13 (PrecisionFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.14 (UIPolish) 已加载。");
     }
 }
