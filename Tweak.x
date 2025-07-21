@@ -109,8 +109,8 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
 static NSString* formatFinalReport(NSString* rawReport) {
     NSString *summaryLine = generateContentSummaryLine(rawReport);
     NSString *footerText = @"\n\n"
-    "// 由 Echo 六壬解析引擎呈现\n"
-    "// 数据为系统性参考，决策需审慎。";
+    "// 不要有任何遗漏，依据解析方法，根据以上所有内容结合大六壬所有技法，回答下面问题\n"
+    "// 问题：";
     
     return [NSString stringWithFormat:@"%@\n%@%@", [rawReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], summaryLine, footerText];
 }
