@@ -304,7 +304,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     }
                 }
                 NSString *content = [textParts componentsJoinedByString:@"\n"];
-                if ([title containsString:@"方法"]) g_extractedData[@"十八方法"] = content; else if ([title containsString:@"格局"]) g_extractedData[@"格局要览"] = content; else g_extractedData[@"毕法要诀"] = content;
+                if ([title containsString:@"方法"]) g_extractedData[@"解析方法"] = content; else if ([title containsString:@"格局"]) g_extractedData[@"格局要览"] = content; else g_extractedData[@"毕法要诀"] = content;
                 LogMessage(EchoLogTypeSuccess, @"[捕获] 成功解析弹窗 [%@]", title);
             } else if ([NSStringFromClass([vcToPresent class]) containsString:@"七政"]) {
                 NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels); [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
@@ -614,7 +614,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             break;
         }
         case kButtonTag_FangFa: {
-            [self extractSpecificPopupWithSelectorName:@"顯示方法總覽" taskName:@"十八方法" completion:^(NSString *result) {
+            [self extractSpecificPopupWithSelectorName:@"顯示方法總覽" taskName:@"解析方法" completion:^(NSString *result) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 NSString* rawReport = [NSString stringWithFormat:@"// %@\n\n%@", @"解析方法", result];
                 [UIPasteboard generalPasteboard].string = formatFinalReport(rawReport);
@@ -1091,7 +1091,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         
         dispatch_async(dispatch_get_main_queue(), ^{
             LogMessage(EchoLogTypeInfo, @"[盘面] 整合所有信息...");
-            NSString *biFa = g_extractedData[@"毕法要诀"] ?: @"", *geJu = g_extractedData[@"格局要览"] ?: @"", *fangFa = g_extractedData[@"十八方法"] ?: @"";
+            NSString *biFa = g_extractedData[@"毕法要诀"] ?: @"", *geJu = g_extractedData[@"格局要览"] ?: @"", *fangFa = g_extractedData[@"解析方法"] ?: @"";
             NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
             for (NSString *t in trash) {
                 biFa = [biFa stringByReplacingOccurrencesOfString:t withString:@""];
@@ -1101,7 +1101,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
             if (biFa.length > 0) biFa = [NSString stringWithFormat:@"\n\n---\n\n// 毕法要诀\n\n%@", biFa];
             if (geJu.length > 0) geJu = [NSString stringWithFormat:@"\n\n---\n\n// 格局要览\n\n%@", geJu];
-            if (fangFa.length > 0) fangFa = [NSString stringWithFormat:@"\n\n---\n\n// 十八方法\n\n%@", fangFa];
+            if (fangFa.length > 0) fangFa = [NSString stringWithFormat:@"\n\n---\n\n// 解析方法\n\n%@", fangFa];
             NSString *qiZheng = g_extractedData[@"七政四余"] ? [NSString stringWithFormat:@"\n\n---\n\n// 七政四余\n\n%@", g_extractedData[@"七政四余"]] : @"";
             NSString *tianDiPan = g_extractedData[@"天地盘"] ? [NSString stringWithFormat:@"%@\n", g_extractedData[@"天地盘"]] : @"";
 
