@@ -86,13 +86,13 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
         @"// 九宗门结构": @"九宗门",
         @"// 毕法要诀": @"毕法要诀",
         @"// 格局要览": @"格局要览",
-        @"// 十八方法": @"解析方法",
+        @"// 解析方法": @"解析方法",
         @"// 七政四余": @"七政四余"
     };
     
     NSMutableArray *includedSections = [NSMutableArray array];
     // Ordered keys to ensure summary follows a logical sequence
-    NSArray *orderedKeys = @[@"// 盘面总览", @"// 课传流注", @"// 行年参数", @"// 课体范式", @"// 九宗门结构", @"// 毕法要诀", @"// 格局要览", @"// 十八方法", @"// 七政四余"];
+    NSArray *orderedKeys = @[@"// 盘面总览", @"// 课传流注", @"// 行年参数", @"// 课体范式", @"// 九宗门结构", @"// 毕法要诀", @"// 格局要览", @"// 解析方法", @"// 七政四余"];
     for (NSString *keyword in orderedKeys) {
         if ([fullReport containsString:keyword]) {
             [includedSections addObject:keywordMap[keyword]];
@@ -100,7 +100,7 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
     }
     
     if (includedSections.count > 0) {
-        return [NSString stringWithFormat:@"// 不要有任何遗漏，依据解析方法，包含： %@\n", [includedSections componentsJoinedByString:@"、"]];
+        return [NSString stringWithFormat:@"// 不要有任何遗漏，以上内容包含： %@\n", [includedSections componentsJoinedByString:@"、"]];
     }
     
     return @"";
@@ -109,8 +109,8 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
 static NSString* formatFinalReport(NSString* rawReport) {
     NSString *summaryLine = generateContentSummaryLine(rawReport);
     NSString *footerText = @"\n\n"
-    "// 以及所有大六壬解析技巧方式回答下面问题\n"
-    "// 问题：";
+    "// 依据解析方法，以及所有大六壬解析技巧方式回答下面问题\n"
+    "// 问题：改为问题即可，越详细越好";
     
     return [NSString stringWithFormat:@"%@\n%@%@", rawReport, summaryLine, footerText];
 }
