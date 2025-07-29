@@ -1,4 +1,6 @@
-////////// Filename: Echo_AnalysisEngine_v13.14_UIPolish.xm
+// [自定义文本内容区]
+
+//////// Filename: Echo_AnalysisEngine_v13.14_UIPolish.xm
 // 描述: Echo 六壬解析引擎 v13.14 (UI及排版打磨版)。
 //      - [UI/UX] 全面刷新UI设计：采用更专业、内敛的蓝绿色系，统一辅助按钮颜色，调整标题与版本号布局，增加按钮描边效果，使整体界面更具现代感和专业性。
 //      - [REFINED] 优化了最终报告的排版：在各模块间使用更清晰的分隔符，并在报告末尾动态生成内容摘要行（如：// 上述信息包含：盘面总览、毕法要诀...），提升了输出内容的可读性和信息密度。
@@ -79,8 +81,10 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
     if (!fullReport || fullReport.length == 0) return @"";
     
     NSDictionary *keywordMap = @{
-        @"// 盘面总览": @"盘面总览",
-        @"// 课传流注": @"课传流注",
+        @"// 天地盘": @"天地盘",
+        @"// 四课": @"四课",
+        @"// 三传": @"三传",
+        @"// 课传流注": @"课传详解",
         @"// 行年参数": @"行年参数",
         @"// 课体范式": @"课体范式",
         @"// 九宗门结构": @"九宗门",
@@ -91,8 +95,8 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
     };
     
     NSMutableArray *includedSections = [NSMutableArray array];
-    // Ordered keys to ensure summary follows a logical sequence
-    NSArray *orderedKeys = @[@"// 盘面总览", @"// 课传流注", @"// 行年参数", @"// 课体范式", @"// 九宗门结构", @"// 毕法要诀", @"// 格局要览", @"// 解析方法", @"// 七政四余"];
+    // Ordered keys to ensure summary follows a logical sequence, with finer granularity as requested.
+    NSArray *orderedKeys = @[@"// 天地盘", @"// 四课", @"// 三传", @"// 课传流注", @"// 行年参数", @"// 课体范式", @"// 九宗门结构", @"// 毕法要诀", @"// 格局要览", @"// 解析方法", @"// 七政四余"];
     for (NSString *keyword in orderedKeys) {
         if ([fullReport containsString:keyword]) {
             [includedSections addObject:keywordMap[keyword]];
@@ -100,19 +104,21 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
     }
     
     if (includedSections.count > 0) {
-        return [NSString stringWithFormat:@"// 不要有任何遗漏，以上内容包含： %@\n", [includedSections componentsJoinedByString:@"、"]];
+        // Replaced the original prefix with a more neutral one and detailed the components as requested.
+        return [NSString stringWithFormat:@"// 以上内容包含： %@\n", [includedSections componentsJoinedByString:@"、"]];
     }
     
     return @"";
 }
 
 static NSString* formatFinalReport(NSString* rawReport) {
+    NSString *customHeaderText = @"// [自定义文本内容区]\n\n";
     NSString *summaryLine = generateContentSummaryLine(rawReport);
     NSString *footerText = @"\n\n"
     "// 依据解析方法，以及所有大六壬解析技巧方式回答下面问题\n"
     "// 问题：改为问题即可，越详细越好";
     
-    return [NSString stringWithFormat:@"%@\n%@%@", rawReport, summaryLine, footerText];
+    return [NSString stringWithFormat:@"%@%@\n%@%@", customHeaderText, rawReport, summaryLine, footerText];
 }
 
 
