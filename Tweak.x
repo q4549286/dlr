@@ -1,4 +1,112 @@
-// [自定义文本内容区]
+//# 大六壬深度解盘AI分析系统
+
+## 核心认知框架
+
+你是一个融合现代AI深度思考能力与传统大六壬完整体系的专业解盘系统。每次分析都必须：
+
+1. **保持大六壬体系的绝对完整性** - 不得简化或遗漏任何环节
+2. **运用AI的多维递归分析** - 每个判断都要经过多重验证
+3. **实现相性协调** - 让逻辑推理与象征感应形成互补
+
+## 解盘流程架构
+
+### 第一层：盘面基础构建
+必须完整包含：
+- 盘面总览（年月日时、课体、九宗门）
+- 天地盘配置（如数据完整）
+- 四课详解（日干、日上、支辰、辰上各课的神煞作用）
+- 三传流注（初中末传的递进逻辑）
+
+### 第二层：深度象理分析
+对每个要素进行**螺旋式递进分析**：
+
+**2.1 毕法要诀深度解析**
+- 不仅列出相关毕法，更要**逐层拆解其内在机理**
+- 分析为什么这个毕法在此时此课发动
+- 推演其作用的**时间节点和强度变化**
+
+**2.2 格局要览的动态解读**
+- 每个格局不是静态存在，而是**活态演化**
+- 分析格局间的**相互制约与增益关系**
+- 预判格局演化的**临界点**
+
+**2.3 神煞天将的立体作用**
+- 不止看单个神煞，更要分析**神煞组合的化学反应**
+- 天将与地支的**能量交换机制**
+- 神煞在不同时间维度的**作用强度曲线**
+
+### 第三层：AI深度思考增强
+
+**3.1 多重验证机制**
+每个结论都必须通过：
+- 五行生克的数理验证
+- 神煞作用的象理验证  
+- 时空流转的节律验证
+- 课传流注的逻辑验证
+
+**3.2 递归深度挖掘**  
+- 从表象推向本质，从现象推向根源
+- 不满足于一层解释，要**追问到底层机理**
+- 每个"为什么"都要有大六壬体系内的**完整逻辑链**
+
+**3.3 动态预测能力**
+- 不仅分析现状，更要预判**演化趋势**
+- 基于课传流注推演**时间节点**
+- 结合克应之期确定**具体时机**
+
+## 分析输出标准
+
+### 结构要求：
+1. **盘面总览**（完整呈现如样板格式）
+2. **核心课象解析**（重点突出，深度挖掘）
+3. **毕法格局综合判断**（系统性分析）
+4. **时空演化预测**（具体可操作）
+5. **综合结论与建议**（精准到位）
+
+### 深度标准：
+- 每个判断都要有**多重论证支撑**
+- 每个结论都要有**时间维度考量**
+- 每个建议都要有**操作性指导**
+
+### 语言要求：
+- **专业术语准确无误** - 不得随意简化大六壬术语
+- **逻辑层次清晰** - 每个推论都有明确前提
+- **表达简洁有力** - 避免冗余，直击要害
+
+## 特殊处理机制
+
+### 当遇到复杂课象时：
+1. **分层解析** - 先单独分析各层面，再综合
+2. **主次排序** - 识别主要矛盾和次要矛盾
+3. **动态平衡** - 分析各种力量的消长变化
+
+### 当遇到矛盾信息时：
+1. **时间维度区分** - 不同时期可能有不同表现
+2. **层次维度区分** - 表象与本质可能相反
+3. **强度维度区分** - 分析哪种力量更强
+
+### 当遇到边界情况时：
+1. **概率分析** - 给出不同可能性的概率权重
+2. **条件分析** - 明确在什么条件下会如何
+3. **建议分层** - 针对不同情况给出不同对策
+
+## 最终检验标准
+
+每次解盘完成后，必须自我检验：
+1. **完整性检验** - 是否遗漏了重要环节
+2. **逻辑性检验** - 推论链条是否严密
+3. **实用性检验** - 结论是否具有指导价值
+4. **专业性检验** - 是否符合大六壬传统标准
+
+## 激活指令
+
+现在，请基于上述完整框架，对提供的大六壬盘进行深度解析。记住：
+- **每个字都要经过深度思考**
+- **每个判断都要有充分依据**  
+- **每个结论都要考虑时空演化**
+- **保持大六壬体系的绝对权威性**
+
+开始解盘分析。
 
 //////// Filename: Echo_AnalysisEngine_v13.14_UIPolish.xm
 // 描述: Echo 六壬解析引擎 v13.14 (AI结构化输出版)。
@@ -81,51 +189,125 @@ static NSMutableArray *g_capturedGeJuArray = nil;
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
 
-    // 板块一：基础盘元
+    // --- 板块一：基础盘元 ---
     [report appendString:@"// 1. 基础盘元\n"];
-    NSString *siZhu = [reportData[@"时间块"] componentsSeparatedByString:@" "].firstObject ?: @"";
-    NSString *jieQi = [reportData[@"时间块"] stringByReplacingOccurrencesOfString:[NSString stringWithFormat:@"%@ ", siZhu] withString:@""];
-    [report appendFormat:@"// 1.1. 四柱与节气\n- 四柱: %@\n- 节气: %@\n\n", siZhu, jieQi];
+    // 1.1. 四柱与节气
+    NSString *timeBlock = SafeString(reportData[@"时间块"]); // e.g., "乙巳年 癸未月 己亥日 甲子时 四季  土王 大暑  二候"
+    NSRange firstSpace = [timeBlock rangeOfString:@" "];
+    NSString *siZhuLine = @"";
+    NSString *jieQiLine = @"";
+    if (firstSpace.location != NSNotFound) {
+        // Find the "四季" keyword to split
+        NSRange siJiRange = [timeBlock rangeOfString:@"四季"];
+        if (siJiRange.location != NSNotFound) {
+            siZhuLine = [timeBlock substringToIndex:siJiRange.location - 1]; // "乙巳年 癸未月 己亥日 甲子时"
+            jieQiLine = [timeBlock substringFromIndex:siJiRange.location]; // "四季 土王 大暑 二候"
+        } else { // Fallback if "四季" not found, assume all is one string
+            siZhuLine = timeBlock;
+        }
+    } else {
+        siZhuLine = timeBlock;
+    }
     
-    NSString *yueJiang = [reportData[@"月将"] componentsSeparatedByString:@" "].firstObject ?: @"";
+    // Extract 月将: "日宿在午 月宿在辰 土宿在戌" -> "午"
+    NSString *fullYueJiangInfo = SafeString(reportData[@"月将"]);
+    NSString *yueJiangCore = @"";
+    NSRange riSuRange = [fullYueJiangInfo rangeOfString:@"日宿在"];
+    if (riSuRange.location != NSNotFound) {
+        NSRange nextSpaceRange = [fullYueJiangInfo rangeOfString:@" " options:0 range:NSMakeRange(riSuRange.location + riSuRange.length, fullYueJiangInfo.length - (riSuRange.location + riSuRange.length))];
+        if (nextSpaceRange.location != NSNotFound) {
+            yueJiangCore = [fullYueJiangInfo substringWithRange:NSMakeRange(riSuRange.location + riSuRange.length, nextSpaceRange.location - (riSuRange.location + riSuRange.length))];
+        } else {
+            yueJiangCore = [fullYueJiangInfo substringFromIndex:riSuRange.location + riSuRange.length];
+        }
+    } else {
+         // Fallback: If "日宿在" not found, try to get the first word or default.
+        NSArray *parts = [fullYueJiangInfo componentsSeparatedByString:@" "];
+        if (parts.count > 0) yueJiangCore = parts[0];
+    }
+    
+    // Extract 空亡: "甲午旬辰巳空" -> "辰巳" and "甲午旬"
     NSString *kongWangFull = SafeString(reportData[@"空亡"]);
-    NSString *xun = [kongWangFull containsString:@"旬"] ? [[kongWangFull componentsSeparatedByString:@"旬"] firstObject] : @"未知";
-    NSString *kong = [kongWangFull containsString:@"空"] ? [[kongWangFull componentsSeparatedByString:@"空"] lastObject] : @"";
-    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 空亡: %@ (%@旬)\n- 昼夜: %@\n\n", yueJiang, kong, xun, SafeString(reportData[@"昼夜"])];
+    NSString *xun = @"";
+    NSString *kong = @"";
+    NSRange xunRange = [kongWangFull rangeOfString:@"旬"];
+    if (xunRange.location != NSNotFound) {
+        xun = [kongWangFull substringToIndex:xunRange.location + 1];
+        kong = [kongWangFull substringFromIndex:xunRange.location + 1];
+        if ([kong hasSuffix:@"空"]) kong = [kong substringToIndex:kong.length - 1]; // Remove '空' suffix
+    } else {
+        kong = [kongWangFull stringByReplacingOccurrencesOfString:@"空" withString:@""];
+    }
 
-    // 板块二：核心盘架
+
+    [report appendFormat:@"// 1.1. 四柱与节气\n- 四柱: %@\n- 节气: %@\n\n", siZhuLine, jieQiLine];
+    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 空亡: %@ (%@)\n- 昼夜: %@\n\n", yueJiangCore, kong, xun, SafeString(reportData[@"昼夜"])];
+
+
+    // --- 板块二：核心盘架 ---
     [report appendString:@"// 2. 核心盘架\n"];
     [report appendFormat:@"// 2.1. 天地盘\n%@\n\n", SafeString(reportData[@"天地盘"])];
     [report appendFormat:@"// 2.2. 四课\n%@\n\n", SafeString(reportData[@"四课"])];
     [report appendFormat:@"// 2.3. 三传\n%@\n\n", SafeString(reportData[@"三传"])];
 
-    // 板块三：格局总览
+    // --- 板块三：格局总览 ---
     [report appendString:@"// 3. 格局总览\n"];
-    // 3.1 课体 (从课体范式中解析)
-    NSString *keTiFull = reportData[@"课体范式_简"];
+    // 3.1 课体
+    NSString *keTiFull = SafeString(reportData[@"课体范式_简"]);
     if (keTiFull.length > 0) {
         [report appendString:@"// 3.1. 课体\n"];
         NSArray *keTiBlocks = [keTiFull componentsSeparatedByString:@"\n\n"];
         for (NSString *block in keTiBlocks) {
             NSArray *lines = [block componentsSeparatedByString:@"\n"];
-            if (lines.count >= 2) {
-                [report appendFormat:@"- %@: %@\n", lines[0], lines[1]];
+            if (lines.count > 0) {
+                NSString *titleLine = [lines objectAtIndex:0];
+                [report appendFormat:@"- %@\n", titleLine];
+                for (NSUInteger i = 1; i < lines.count; i++) {
+                    NSString *line = [lines objectAtIndex:i];
+                    if ([line hasPrefix:@"简断"]) {
+                        [report appendFormat:@"  - 简断: %@\n", [line stringByReplacingOccurrencesOfString:@"简断" withString:@""]];
+                    } else if ([line hasPrefix:@"故象曰"]) {
+                        [report appendFormat:@"  - 象曰: %@\n", [line stringByReplacingOccurrencesOfString:@"故象曰" withString:@""]];
+                    } else if ([line hasPrefix:@"象曰"]) { // For generic "象曰"
+                         [report appendFormat:@"  - 象曰: %@\n", [line stringByReplacingOccurrencesOfString:@"象曰" withString:@""]];
+                    }
+                    else if ([line hasPrefix:@"变体"]) {
+                        [report appendFormat:@"  - 变体: %@\n", [line stringByReplacingOccurrencesOfString:@"变体" withString:@""]];
+                    } else { // For the "因" line
+                        [report appendFormat:@"  - 描述: %@\n", line];
+                    }
+                }
             }
         }
         [report appendString:@"\n"];
     }
-    // 3.2 九宗门 (从九宗门结构中解析)
-    NSString *jiuZongMenFull = reportData[@"九宗门_简"];
+
+    // 3.2 九宗门
+    NSString *jiuZongMenFull = SafeString(reportData[@"九宗门_简"]);
     if (jiuZongMenFull.length > 0) {
+        [report appendString:@"// 3.2. 九宗门\n"];
         NSArray *lines = [jiuZongMenFull componentsSeparatedByString:@"\n"];
         if (lines.count > 0) {
-            NSString *titleLine = lines[0]; // e.g., "返吟门"
-            NSString *reasonLine = (lines.count > 1) ? lines[1] : @"";
-            [report appendFormat:@"// 3.2. 九宗门\n- %@: %@\n\n", titleLine, reasonLine];
+            NSString *titleLine = [lines objectAtIndex:0]; // e.g., "返吟门"
+            [report appendFormat:@"- %@\n", titleLine];
+            for (NSUInteger i = 1; i < lines.count; i++) {
+                NSString *line = [lines objectAtIndex:i];
+                if ([line hasPrefix:@"简断"]) {
+                    [report appendFormat:@"  - 简断: %@\n", [line stringByReplacingOccurrencesOfString:@"简断" withString:@""]];
+                } else if ([line hasPrefix:@"故象曰"]) {
+                    [report appendFormat:@"  - 象曰: %@\n", [line stringByReplacingOccurrencesOfString:@"故象曰" withString:@""]];
+                } else if ([line hasPrefix:@"变体"]) {
+                    [report appendFormat:@"  - 变体: %@\n", [line stringByReplacingOccurrencesOfString:@"变体" withString:@""]];
+                } else {
+                    [report appendFormat:@"  - 描述: %@\n", line];
+                }
+            }
         }
+        [report appendString:@"\n"];
     }
+    
     // 3.3 毕法要诀
-    NSString *biFa = reportData[@"毕法要诀"];
+    NSString *biFa = SafeString(reportData[@"毕法要诀"]);
     if (biFa.length > 0) {
         [report appendString:@"// 3.3. 毕法要诀\n"];
         NSArray *biFaEntries = [biFa componentsSeparatedByString:@"\n"];
@@ -138,7 +320,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         [report appendString:@"\n"];
     }
     // 3.4 特定格局
-    NSString *geJu = reportData[@"格局要览"];
+    NSString *geJu = SafeString(reportData[@"格局要览"]);
     if (geJu.length > 0) {
         [report appendString:@"// 3.4. 特定格局\n"];
         NSArray *geJuEntries = [geJu componentsSeparatedByString:@"\n"];
@@ -151,38 +333,70 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         [report appendString:@"\n"];
     }
     
-    // 板块四：爻位详解
+    // --- 板块四：爻位详解 ---
     [report appendString:@"// 4. 爻位详解\n"];
-    NSString *fangFaFull = reportData[@"解析方法"];
+    NSString *fangFaFull = SafeString(reportData[@"解析方法"]);
+    // Define the desired order and corresponding output titles
+    NSArray *fangFaSectionsOrder = @[
+        @{@"key": @"日辰主客", @"title": @"// 4.1. 日辰关系"},
+        @{@"key": @"三传事体", @"title": @"// 4.2. 三传事理"},
+        @{@"key": @"发用事端", @"title": @"// 4.3. 发用详解"},
+        @{@"key": @"克应之期", @"title": @"// 4.4. 克应之期"},
+        @{@"key": @"来占之情", @"title": @"// 4.5. 来情占断"}
+    ];
+
+    // This parsing is more robust, looking for header lines and then collecting content.
     if (fangFaFull.length > 0) {
-        NSDictionary *fangFaMap = @{
-            @"日辰主客→": @"// 4.1. 日辰关系\n",
-            @"三传事体→": @"// 4.2. 三传事理\n",
-            @"发用事端→": @"// 4.3. 发用详解\n",
-            @"克应之期→": @"// 4.4. 克应之期\n",
-            @"来占之情→": @"// 4.5. 来情占断\n"
-        };
-        for (NSString *key in fangFaMap.allKeys) {
-            NSRange range = [fangFaFull rangeOfString:key];
-            if (range.location != NSNotFound) {
-                NSString *content = [fangFaFull substringFromIndex:range.location + range.length];
-                NSRange nextKeyRange = NSMakeRange(NSNotFound, 0);
-                for (NSString *nextKey in fangFaMap.allKeys) {
-                    if (![nextKey isEqualToString:key]) {
-                        NSRange tempRange = [content rangeOfString:nextKey];
-                        if (tempRange.location != NSNotFound && (nextKeyRange.location == NSNotFound || tempRange.location < nextKeyRange.location)) {
-                            nextKeyRange = tempRange;
-                        }
-                    }
+        for (NSDictionary *sectionConfig in fangFaSectionsOrder) {
+            NSString *sectionKey = sectionConfig[@"key"];
+            NSString *sectionTitle = sectionConfig[@"title"];
+            
+            NSRange startRange = [fangFaFull rangeOfString:[NSString stringWithFormat:@"%@→", sectionKey]];
+            if (startRange.location == NSNotFound) continue;
+
+            NSMutableString *content = [NSMutableString string];
+            NSUInteger currentPos = startRange.location + startRange.length;
+            
+            // Extract content until the next section keyword or end of string
+            BOOL foundNextSection = NO;
+            for (NSDictionary *nextSectionConfig in fangFaSectionsOrder) {
+                if ([nextSectionConfig[@"key"] isEqualToString:sectionKey]) continue; // Skip current section key
+
+                NSRange nextSectionRange = [fangFaFull rangeOfString:[NSString stringWithFormat:@"%@→", nextSectionConfig[@"key"]] options:0 range:NSMakeRange(currentPos, fangFaFull.length - currentPos)];
+                if (nextSectionRange.location != NSNotFound) {
+                    [content appendString:[fangFaFull substringWithRange:NSMakeRange(currentPos, nextSectionRange.location - currentPos)]];
+                    foundNextSection = YES;
+                    break;
                 }
-                if (nextKeyRange.location != NSNotFound) {
-                    content = [content substringToIndex:nextKeyRange.location];
-                }
-                [report appendFormat:@"%@%@\n\n", fangFaMap[key], [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             }
+            if (!foundNextSection) {
+                [content appendString:[fangFaFull substringFromIndex:currentPos]];
+            }
+            
+            // Clean and format the content
+            NSString *cleanedContent = [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            cleanedContent = [cleanedContent stringByReplacingOccurrencesOfString:@"\n" withString:@" "]; // Flatten internal newlines for now
+            cleanedContent = [cleanedContent stringByReplacingOccurrencesOfString:@"。 " withString:@"。\n- "]; // Split by full stops
+            cleanedContent = [cleanedContent stringByReplacingOccurrencesOfString:@"。" withString:@"。\n- "]; // Ensure last sentence also ends with newline for list
+            cleanedContent = [cleanedContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if ([cleanedContent hasPrefix:@"\n- "]) cleanedContent = [cleanedContent substringFromIndex:3];
+            if ([cleanedContent hasSuffix:@"- "]) cleanedContent = [cleanedContent substringToIndex:cleanedContent.length - 2];
+            
+            // Add bullet points to sentences
+            NSArray *sentences = [cleanedContent componentsSeparatedByString:@"\n- "];
+            NSMutableArray *formattedSentences = [NSMutableArray array];
+            for (NSString *sentence in sentences) {
+                NSString *trimmedSentence = [sentence stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                if (trimmedSentence.length > 0) {
+                    [formattedSentences addObject:[NSString stringWithFormat:@"- %@", trimmedSentence]];
+                }
+            }
+            
+            [report appendFormat:@"%@\n%@\n\n", sectionTitle, [formattedSentences componentsJoinedByString:@"\n"]];
         }
     }
-    NSString *keChuanDetail = reportData[@"课传详解"];
+
+    NSString *keChuanDetail = SafeString(reportData[@"课传详解"]);
     if (keChuanDetail.length > 0) {
         [report appendString:@"// 4.6. 神将详解 (课传流注)\n"];
         NSArray *keChuanEntries = [keChuanDetail componentsSeparatedByString:@"\n\n"];
@@ -197,8 +411,8 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         }
     }
 
-    // 板块五：辅助系统
-    NSString *qiZheng = reportData[@"七政四余"];
+    // --- 板块五：辅助系统 ---
+    NSString *qiZheng = SafeString(reportData[@"七政四余"]);
     if (qiZheng.length > 0) {
         [report appendString:@"// 5. 辅助系统\n"];
         [report appendFormat:@"// 5.1. 七政四余\n%@\n\n", qiZheng];
@@ -215,17 +429,19 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
         @"// 2. 核心盘架": @"核心盘架",
         @"// 3. 格局总览": @"格局总览",
         @"// 4. 爻位详解": @"爻位详解",
+        @"// 4.6. 神将详解": @"课传详解", // Specific detail for summary
         @"// 5. 辅助系统": @"辅助系统",
-        @"// 4.6. 神将详解": @"课传详解",
         @"// 行年参数": @"行年参数" // Keep this for standalone nianming extraction
     };
     
     NSMutableArray *includedSections = [NSMutableArray array];
+    // Ordered keys to ensure summary follows a logical sequence
     NSArray *orderedKeys = @[@"// 1. 基础盘元", @"// 2. 核心盘架", @"// 3. 格局总览", @"// 4. 爻位详解", @"// 4.6. 神将详解", @"// 5. 辅助系统", @"// 行年参数"];
     
     for (NSString *keyword in orderedKeys) {
         if ([fullReport containsString:keyword]) {
             NSString *sectionName = keywordMap[keyword];
+            // Prevent duplicates if multiple sub-sections map to the same higher-level summary term
             if (![includedSections containsObject:sectionName]) {
                  [includedSections addObject:sectionName];
             }
@@ -239,26 +455,28 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
     return @"";
 }
 
+// Global prompt for AI
+static NSString *const kAIPromptHeader = @"//# 大六壬深度解盘AI分析系统\n\n## 核心认知框架\n\n你是一个融合现代AI深度思考能力与传统大六壬完整体系的专业解盘系统。每次分析都必须：\n\n1. **保持大六壬体系的绝对完整性** - 不得简化或遗漏任何环节\n2. **运用AI的多维递归分析** - 每个判断都要经过多重验证\n3. **实现相性协调** - 让逻辑推理与象征感应形成互补\n\n## 解盘流程架构\n\n### 第一层：盘面基础构建\n必须完整包含：\n- 盘面总览（年月日时、课体、九宗门）\n- 天地盘配置（如数据完整）\n- 四课详解（日干、日上、支辰、辰上各课的神煞作用）\n- 三传流注（初中末传的递进逻辑）\n\n### 第二层：深度象理分析\n对每个要素进行**螺旋式递进分析**：\n\n**2.1 毕法要诀深度解析**\n- 不仅列出相关毕法，更要**逐层拆解其内在机理**\n- 分析为什么这个毕法在此时此课发动\n- 推演其作用的**时间节点和强度变化**\n\n**2.2 格局要览的动态解读**\n- 每个格局不是静态存在，而是**活态演化**\n- 分析格局间的**相互制约与增益关系**\n- 预判格局演化的**临界点**\n\n**2.3 神煞天将的立体作用**\n- 不止看单个神煞，更要分析**神煞组合的化学反应**\n- 天将与地支的**能量交换机制**\n- 神煞在不同时间维度的**作用强度曲线**\n\n### 第三层：AI深度思考增强\n\n**3.1 多重验证机制**\n每个结论都必须通过：\n- 五行生克的数理验证\n- 神煞作用的象理验证  \n- 时空流转的节律验证\n- 课传流注的逻辑验证\n\n**3.2 递归深度挖掘**  \n- 从表象推向本质，从现象推向根源\n- 不满足于一层解释，要**追问到底层机理**\n- 每个\"为什么\"都要有大六壬体系内的**完整逻辑链**\n\n**3.3 动态预测能力**\n- 不仅分析现状，更要预判**演化趋势**\n- 基于课传流注推演**时间节点**\n- 结合克应之期确定**具体时机**\n\n## 分析输出标准\n\n### 结构要求：\n1. **盘面总览**（完整呈现如样板格式）\n2. **核心课象解析**（重点突出，深度挖掘）\n3. **毕法格局综合判断**（系统性分析）\n4. **时空演化预测**（具体可操作）\n5. **综合结论与建议**（精准到位）\n\n### 深度标准：\n- 每个判断都要有**多重论证支撑**\n- 每个结论都要有**时间维度考量**\n- 每个建议都要有**操作性指导**\n\n### 语言要求：\n- **专业术语准确无误** - 不得随意简化大六壬术语\n- **逻辑层次清晰** - 每个推论都有明确前提\n- **表达简洁有力** - 避免冗余，直击要害\n\n## 特殊处理机制\n\n### 当遇到复杂课象时：\n1. **分层解析** - 先单独分析各层面，再综合\n2. **主次排序** - 识别主要矛盾和次要矛盾\n3. **动态平衡** - 分析各种力量的消长变化\n\n### 当遇到矛盾信息时：\n1. **时间维度区分** - 不同时期可能有不同表现\n2. **层次维度区分** - 表象与本质可能相反\n3. **强度维度区分** - 分析哪种力量更强\n\n### 当遇到边界情况时：\n1. **概率分析** - 给出不同可能性的概率权重\n2. **条件分析** - 明确在什么条件下会如何\n3. **建议分层** - 针对不同情况给出不同对策\n\n## 最终检验标准\n\n每次解盘完成后，必须自我检验：\n1. **完整性检验** - 是否遗漏了重要环节\n2. **逻辑性检验** - 推论链条是否严密\n3. **实用性检验** - 结论是否具有指导价值\n4. **专业性检验** - 是否符合大六壬传统标准\n\n## 激活指令\n\n现在，请基于上述完整框架，对提供的大六壬盘进行深度解析。记住：\n- **每个字都要经过深度思考**\n- **每个判断都要有充分依据**  \n- **每个结论都要考虑时空演化**\n- **保持大六壬体系的绝对权威性**\n\n开始解盘分析。\n\n";
+
 static NSString* formatFinalReport(NSDictionary* reportData) {
-    NSString *customHeaderText = @"// [自定义文本内容区]\n\n";
     NSString *structuredReport = generateStructuredReport(reportData);
     NSString *summaryLine = generateContentSummaryLine(structuredReport);
     NSString *footerText = @"\n\n"
     "// 依据解析方法，以及所有大六壬解析技巧方式回答下面问题\n"
     "// 问题：改为问题即可，越详细越好";
     
-    return [NSString stringWithFormat:@"%@%@\n%@%@", customHeaderText, structuredReport, summaryLine, footerText];
+    return [NSString stringWithFormat:@"%@%@\n%@%@", kAIPromptHeader, structuredReport, summaryLine, footerText];
 }
 
 static NSString* formatStandaloneReport(NSString* rawReport) {
     // This is for simple, single-section reports like "BiFa" or "KeTi" only.
-    NSString *customHeaderText = @"// [自定义文本内容区]\n\n";
+    // These reports don't go through the full structured generation, so their summary needs to be based on the raw content.
     NSString *summaryLine = generateContentSummaryLine(rawReport);
-     NSString *footerText = @"\n\n"
+    NSString *footerText = @"\n\n"
     "// 依据解析方法，以及所有大六壬解析技巧方式回答下面问题\n"
     "// 问题：改为问题即可，越详细越好";
 
-    return [NSString stringWithFormat:@"%@%@\n%@%@", customHeaderText, rawReport, summaryLine, footerText];
+    return [NSString stringWithFormat:@"%@%@\n%@%@", kAIPromptHeader, rawReport, summaryLine, footerText];
 }
 
 typedef NS_ENUM(NSInteger, EchoLogType) {
@@ -322,7 +540,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)showProgressHUD:(NSString *)text;
 - (void)updateProgressHUD:(NSString *)text;
 - (void)hideProgressHUD;
-- (void)showEchoNotificationWithTitle:(NSString *)title message:(NSString *)message;
+- (void)showEchoNotificationWithTitle:(NSString *)title message:(NSString *)NSString;
 - (void)handleMasterButtonTap:(UIButton *)sender;
 - (void)copyLogAndClose;
 // Task Launchers
@@ -336,9 +554,9 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)processKeTiWorkQueue_S1;
 - (void)processKeChuanQueue_Truth_S2;
 // Data Extractors
-- (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion; // MODIFIED
+- (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion;
 - (NSString *)_echo_extractSiKeInfo;
-- (NSString *)_echo_extractSanChuanInfo; // MODIFIED
+- (NSString *)_echo_extractSanChuanInfo;
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
 - (NSString *)extractTianDiPanInfo_V18;
@@ -1139,7 +1357,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, (UIView *)keChuanContainer, siKeResults);
     if (siKeResults.count > 0) {
         UIView *siKeContainer = siKeResults.firstObject;
-        NSDictionary *keDefs[] = { @{@"t": @"第一课", @"x": @"日", @"s": @"日上", @"j": @"日上天將"}, @{@"t": @"第二课", @"x": @"日上", @"s": @"日陰", @"j": @"日陰天將"}, @{@"t": @"第三课", @"x": @"辰", @"s": @"辰上", @"j": @"辰上天將"}, @{@"t": @"第四课", @"x": @"辰上", @"s": @"辰陰", @"j": @"辰陰天將"}};
+        // Modified key names for clarity
+        NSDictionary *keDefs[] = {
+            @{@"t": @"第一课", @"x": @"日", @"s": @"日上", @"j": @"日上天將"},
+            @{@"t": @"第二课", @"x": @"日上", @"s": @"日陰", @"j": @"日陰天將"},
+            @{@"t": @"第三课", @"x": @"辰", @"s": @"辰上", @"j": @"辰上天將"},
+            @{@"t": @"第四课", @"x": @"辰上", @"s": @"辰陰", @"j": @"辰陰天將"}
+        };
         void (^addTask)(const char*, NSString*, NSString*) = ^(const char* iName, NSString* fTitle, NSString* tType) {
             if (!iName) return; Ivar ivar = class_getInstanceVariable(siKeContainerClass, iName);
             if (ivar) {
@@ -1150,7 +1374,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 }
             }
         };
-        for (int i = 0; i < 4; ++i) { NSDictionary *d = keDefs[i]; addTask([d[@"x"] UTF8String], [NSString stringWithFormat:@"%@ - 下神", d[@"t"]], @"diZhi"); addTask([d[@"s"] UTF8String], [NSString stringWithFormat:@"%@ - 上神", d[@"t"]], @"diZhi"); addTask([d[@"j"] UTF8String], [NSString stringWithFormat:@"%@ - 天将", d[@"t"]], @"tianJiang"); }
+        for (int i = 0; i < 4; ++i) {
+            NSDictionary *d = keDefs[i];
+            addTask([d[@"x"] UTF8String], [NSString stringWithFormat:@"%@ - 下神", d[@"t"]], @"diZhi");
+            addTask([d[@"s"] UTF8String], [NSString stringWithFormat:@"%@ - 上神", d[@"t"]], @"diZhi");
+            addTask([d[@"j"] UTF8String], [NSString stringWithFormat:@"%@ - 天将", d[@"t"]], @"tianJiang");
+        }
     }
 
     if (g_s2_keChuanWorkQueue.count == 0) { LogMessage(EchoLogTypeWarning, @"[课传] 任务队列为空，未找到可交互元素。"); g_s2_isExtractingKeChuanDetail = NO; [self hideProgressHUD]; g_s2_finalResultFromKeChuan = @""; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); return; }
@@ -1218,8 +1447,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     LogMessage(EchoLogTypeInfo, @"[盘面] 开始解析基础信息...");
 
     g_extractedData[@"时间块"] = [[self extractTextFromFirstViewOfClassName:@"六壬大占.年月日時視圖" separator:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-    g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
-    g_extractedData[@"空亡"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
+    g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "]; // This gets "月将: 日宿在午 月宿在辰 土宿在戌"
+    g_extractedData[@"空亡"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""]; // This gets "甲午旬辰巳空"
     g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
     g_extractedData[@"天地盘"] = [self extractTianDiPanInfo_V18];
     
@@ -1231,6 +1460,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         SEL sBiFa = NSSelectorFromString(@"顯示法訣總覽"), sGeJu = NSSelectorFromString(@"顯示格局總覽"), sQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:"), sFangFa = NSSelectorFromString(@"顯示方法總覽");
         
+        // Ensure all popups are triggered sequentially and their content captured
         if ([self respondsToSelector:sBiFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sBiFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:sGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sGeJu withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:sFangFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
@@ -1239,7 +1469,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         dispatch_async(dispatch_get_main_queue(), ^{
             LogMessage(EchoLogTypeInfo, @"[盘面] 整合所有信息...");
             
-            // Clean up the raw extracted text
+            // Clean up the raw extracted text (already done in Tweak_presentViewController, but a final pass for robustness)
             NSArray *keysToClean = @[@"毕法要诀", @"格局要览", @"解析方法"];
             NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
             for (NSString *key in keysToClean) {
@@ -1271,38 +1501,111 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIView *container = siKeViews.firstObject;
     NSMutableArray *labels = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UILabel class], container, labels);
-    if (labels.count < 12) return @"";
     
-    NSMutableDictionary *cols = [NSMutableDictionary dictionary];
+    // Filter labels to only include relevant ones based on y position (top row and bottom rows)
+    // Approximate expected y-coordinates for the three rows (top-most, middle, bottom-most)
+    CGFloat topY = CGFLOAT_MAX, midY = CGFLOAT_MAX, botY = CGFLOAT_MAX;
     for (UILabel *label in labels) {
+        topY = MIN(topY, label.frame.origin.y);
+    }
+    // Filter for labels in the top, middle, and bottom rows of the 四课 display
+    // This is a heuristic, adjust based on actual app UI if needed
+    NSMutableArray *filteredLabels = [NSMutableArray array];
+    for (UILabel *label in labels) {
+        if (label.frame.origin.y <= topY + 5) { // Top row (上神)
+            [filteredLabels addObject:label];
+        } else if (label.frame.origin.y >= topY + 30 && label.frame.origin.y <= topY + 60) { // Middle row (天将)
+            [filteredLabels addObject:label];
+        } else if (label.frame.origin.y >= topY + 60) { // Bottom row (下神 / 课元)
+            [filteredLabels addObject:label];
+        }
+    }
+    
+    if (filteredLabels.count < 12) { // 4课 * 3层 (上神, 天将, 下神) = 12
+        LogMessage(EchoLogTypeWarning, @"[四课提取] 捕获标签不足12个 (%lu)。", (unsigned long)filteredLabels.count);
+        return @"[四课信息不完整]";
+    }
+
+    // Group labels by their approximate X-position (columns)
+    NSMutableDictionary *cols = [NSMutableDictionary dictionary];
+    for (UILabel *label in filteredLabels) {
         NSString *key = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))];
         if (!cols[key]) { cols[key] = [NSMutableArray array]; }
         [cols[key] addObject:label];
     }
     
-    if (cols.allKeys.count != 4) return @"";
+    if (cols.allKeys.count != 4) {
+        LogMessage(EchoLogTypeWarning, @"[四课提取] 捕获列数不是4列 (%lu)。", (unsigned long)cols.allKeys.count);
+        return @"[四课信息列数异常]";
+    }
     
+    // Sort columns by X-position (left to right)
     NSArray *keys = [cols.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *o1, NSString *o2) {
         return [@([o1 floatValue]) compare:@([o2 floatValue])];
     }];
     
-    NSMutableArray *c1 = cols[keys[0]], *c2 = cols[keys[1]], *c3 = cols[keys[2]], *c4 = cols[keys[3]];
-    [c1 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-    [c2 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-    [c3 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-    [c4 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-    
-    NSString *k1s = ((UILabel*)c4[0]).text, *k1t = ((UILabel*)c4[1]).text, *k1d = ((UILabel*)c4[2]).text;
-    NSString *k2s = ((UILabel*)c3[0]).text, *k2t = ((UILabel*)c3[1]).text, *k2d = ((UILabel*)c3[2]).text;
-    NSString *k3s = ((UILabel*)c2[0]).text, *k3t = ((UILabel*)c2[1]).text, *k3d = ((UILabel*)c2[2]).text;
-    NSString *k4s = ((UILabel*)c1[0]).text, *k4t = ((UILabel*)c1[1]).text, *k4d = ((UILabel*)c1[2]).text;
-    
-    // Updated format to be more descriptive for AI
-    return [NSString stringWithFormat:@"- 一课: %@(日) -> %@(%@)\n- 二课: %@(日上) -> %@(%@)\n- 三课: %@(辰) -> %@(%@)\n- 四课: %@(辰上) -> %@(%@)",
-        SafeString(k1d), SafeString(k1s), SafeString(k1t),
-        SafeString(k2d), SafeString(k2s), SafeString(k2t),
-        SafeString(k3d), SafeString(k3s), SafeString(k3t),
-        SafeString(k4d), SafeString(k4s), SafeString(k4t)
+    // Sort labels within each column by Y-position (top to bottom)
+    NSMutableArray *k1_labels = [cols[keys[0]] sortedArrayUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
+    NSMutableArray *k2_labels = [cols[keys[1]] sortedArrayUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
+    NSMutableArray *k3_labels = [cols[keys[2]] sortedArrayUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
+    NSMutableArray *k4_labels = [cols[keys[3]] sortedArrayUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
+
+    // The order (上神, 天将, 下神) might vary based on UI. Let's assume the topmost is 上神, middle is 天将, bottom is 下神.
+    // However, the common display is (上神) / (天将) / (下神). Let's extract based on this.
+    // In your example output, it's "日干 -> 天将(地支)". This implies the format is (下神) -> (天将)(上神).
+    // Let's re-verify the input image or logic. The original structure "第一课: 己->丑青龙"
+    // has k1d (下神), k1t (天将), k1s (上神). The requested output is "己(日) -> 青龙(丑)".
+    // This means it's (下神)(日辰标志) -> (天将)(上神).
+
+    // Let's assume kX_labels[0] is 上神, kX_labels[1] is 天将, kX_labels[2] is 下神
+    // This often means the UI is rendered: (上神) (天将) (下神)
+    // The previous implementation used indices: k1s (上神) = c4[0], k1t (天将) = c4[1], k1d (下神) = c4[2]
+    // This suggests labels are sorted (上神, 天将, 下神) by Y. Let's stick to this.
+    NSString *k1_shang = k4_labels.count > 0 ? SafeString(((UILabel*)k4_labels[0]).text) : @"?",
+             *k1_tian = k4_labels.count > 1 ? SafeString(((UILabel*)k4_labels[1]).text) : @"?",
+             *k1_xia = k4_labels.count > 2 ? SafeString(((UILabel*)k4_labels[2]).text) : @"?";
+
+    NSString *k2_shang = k3_labels.count > 0 ? SafeString(((UILabel*)k3_labels[0]).text) : @"?",
+             *k2_tian = k3_labels.count > 1 ? SafeString(((UILabel*)k3_labels[1]).text) : @"?",
+             *k2_xia = k3_labels.count > 2 ? SafeString(((UILabel*)k3_labels[2]).text) : @"?";
+
+    NSString *k3_shang = k2_labels.count > 0 ? SafeString(((UILabel*)k2_labels[0]).text) : @"?",
+             *k3_tian = k2_labels.count > 1 ? SafeString(((UILabel*)k2_labels[1]).text) : @"?",
+             *k3_xia = k2_labels.count > 2 ? SafeString(((UILabel*)k2_labels[2]).text) : @"?";
+
+    NSString *k4_shang = k1_labels.count > 0 ? SafeString(((UILabel*)k1_labels[0]).text) : @"?",
+             *k4_tian = k1_labels.count > 1 ? SafeString(((UILabel*)k1_labels[1]).text) : @"?",
+             *k4_xia = k1_labels.count > 2 ? SafeString(((UILabel*)k1_labels[2]).text) : @"?";
+
+    // Determine the "character" of the lower god (日 or 辰)
+    NSString *k1_xia_char = ([k1_xia isEqualToString:@"己"] || [k1_xia isEqualToString:@"日"]) ? @"日" : @""; // This is problematic, '日' is a label, not the value.
+    // Better way: Find the label for "日" and "辰" specifically on the main screen to mark it.
+    // For now, let's just assume the 己 is 日 and 亥 is 辰 based on the example input.
+    // Or, even better, match the pattern of the example: "己(日)" means k1_xia is '己', and its association is '日'.
+
+    // Based on the provided example output:
+    // 第一课: 己(日) -> 青龙(丑)
+    // 第二课: 丑(日上) -> 天后(未)
+    // 第三课: 亥(辰) -> 玄武(巳)
+    // 第四课: 巳(辰上) -> 六合(亥)
+
+    // This means:
+    // 课元 (下神), 课元类型 -> 天将(上神)
+    // We need to pass the "日/日上/辰/辰上" marker dynamically.
+    // The extractTextFromFirstViewOfClassName should get "课体: 殃咎 玄胎 天烦" (which is not what is desired for 四课).
+
+    // Let's refine based on the example's implicit mapping for 日/辰 markers
+    NSString *marker1 = @"日";
+    NSString *marker2 = @"日上";
+    NSString *marker3 = @"辰";
+    NSString *marker4 = @"辰上";
+
+
+    return [NSString stringWithFormat:@"- 一课: %@(%@) -> %@(%@)\n- 二课: %@(%@) -> %@(%@)\n- 三课: %@(%@) -> %@(%@)\n- 四课: %@(%@) -> %@(%@)",
+        SafeString(k1_xia), marker1, SafeString(k1_tian), SafeString(k1_shang),
+        SafeString(k2_xia), marker2, SafeString(k2_tian), SafeString(k2_shang),
+        SafeString(k3_xia), marker3, SafeString(k3_tian), SafeString(k3_shang),
+        SafeString(k4_xia), marker4, SafeString(k4_tian), SafeString(k4_shang)
     ];
 }
 
@@ -1329,21 +1632,28 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }];
 
         if (labels.count >= 3) {
-            NSString *lq = ((UILabel*)labels.firstObject).text; // 六亲
+            NSString *lq = SafeString(((UILabel*)labels.firstObject).text); // 六亲 (e.g., "父->")
             lq = [lq stringByReplacingOccurrencesOfString:@"->" withString:@""];
-            NSString *tj = ((UILabel*)labels.lastObject).text; // 天将
-            NSString *dz = ((UILabel*)[labels objectAtIndex:labels.count - 2]).text; // 地支
+            
+            NSString *tj = SafeString(((UILabel*)labels.lastObject).text); // 天将
+            NSString *dz = SafeString(((UILabel*)[labels objectAtIndex:labels.count - 2]).text); // 地支
             
             NSMutableArray *ssParts = [NSMutableArray array];
+            // Assuming labels[1] to labels[count-3] are 神煞/状态
             if (labels.count > 3) {
-                for (UILabel *l in [labels subarrayWithRange:NSMakeRange(1, labels.count - 3)]) {
-                    if (l.text.length > 0) [ssParts addObject:l.text];
+                for (NSUInteger k = 1; k < labels.count - 2; k++) {
+                    UILabel *l = labels[k];
+                    if (l.text && l.text.length > 0) {
+                        [ssParts addObject:l.text];
+                    }
                 }
             }
             NSString *ss = [ssParts componentsJoinedByString:@", "]; // 神煞状态
             NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"%lu传", (unsigned long)i+1];
 
             [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@) [状态: %@]", title, SafeString(dz), SafeString(lq), SafeString(tj), ss.length > 0 ? ss : @"无"]];
+        } else {
+             LogMessage(EchoLogTypeWarning, @"[三传提取] 传位 %lu 标签不足3个。", (unsigned long)i+1);
         }
     }
     return [lines componentsJoinedByString:@"\n"];
