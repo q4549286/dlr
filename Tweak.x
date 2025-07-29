@@ -1,7 +1,8 @@
 //////// Filename: Echo_AnalysisEngine_v13.14_UIPolish.xm
-// 描述: Echo 六壬解析引擎 v13.14 (AI结构化输出版 v1.3)。
-//      - [FIX] 修复了“行年参数”板块中“格局方法”内容被遗漏的严重问题，现在摘要和格局都会被完整输出。
-//      - [PROMPT] 沿用v1.2的固定AI认知框架和所有格式化优化。
+// 描述: Echo 六壬解析引擎 v13.14 (AI结构化输出版 v1.4)。
+//      - [BUILD FIX] 删除了未被使用的函数 formatStandaloneReport，解决了编译错误。
+//      - [REFACTOR] 统一所有专项分析按钮的逻辑，使其全部调用主报告生成器 formatFinalReport，确保输出格式一致。
+//      - [PROMPT] 沿用v1.3的固定AI认知框架和所有格式化优化。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -179,9 +180,9 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
-    [report appendFormat:@"// 2.1. 天地盘\n%@\n\n", SafeString(reportData[@"天地盘"])];
-    [report appendFormat:@"// 2.2. 四课\n%@\n\n", SafeString(reportData[@"四课"])];
-    [report appendFormat:@"// 2.3. 三传\n%@\n\n", SafeString(reportData[@"三传"])];
+    if (reportData[@"天地盘"]) [report appendFormat:@"// 2.1. 天地盘\n%@\n\n", reportData[@"天地盘"]];
+    if (reportData[@"四课"]) [report appendFormat:@"// 2.2. 四课\n%@\n\n", reportData[@"四课"]];
+    if (reportData[@"三传"]) [report appendFormat:@"// 2.3. 三传\n%@\n\n", reportData[@"三传"]];
 
     // 板块三：格局总览
     [report appendString:@"// 3. 格局总览\n"];
@@ -225,9 +226,9 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     }
     
     // 板块四：爻位详解
-    [report appendString:@"// 4. 爻位详解\n"];
     NSString *fangFaFull = reportData[@"解析方法"];
     if (fangFaFull.length > 0) {
+        [report appendString:@"// 4. 爻位详解\n"];
         NSDictionary *fangFaMap = @{ @"日辰主客→": @"// 4.1. 日辰关系\n", @"三传事体→": @"// 4.2. 三传事理\n", @"发用事端→": @"// 4.3. 发用详解\n", @"克应之期→": @"// 4.4. 克应之期\n", @"来占之情→": @"// 4.5. 来情占断\n" };
         for (NSString *key in fangFaMap.allKeys) {
             NSRange range = [fangFaFull rangeOfString:key];
@@ -249,6 +250,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     }
     NSString *keChuanDetail = reportData[@"课传详解"];
     if (keChuanDetail.length > 0) {
+        if (![report containsString:@"// 4. 爻位详解\n"]) [report appendString:@"// 4. 爻位详解\n"];
         [report appendString:@"// 4.6. 神将详解 (课传流注)\n"];
         NSArray *keChuanEntries = [keChuanDetail componentsSeparatedByString:@"\n\n"];
         for (NSString *entry in keChuanEntries) {
@@ -307,16 +309,8 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
     return [NSString stringWithFormat:@"%@%@\n%@%@", headerPrompt, structuredReport, summaryLine, footerText];
 }
 
-static NSString* formatStandaloneReport(NSString* rawReport) {
-    NSString *headerPrompt = getAIPromptHeader();
-    NSString *summaryLine = generateContentSummaryLine(rawReport);
-    NSString *footerText = @"\n\n"
-    "// 依据解析方法，以及所有大六壬解析技巧方式回答下面问题\n"
-    "// 问题：改为问题即可，越详细越好";
-
-    return [NSString stringWithFormat:@"%@%@\n%@%@", headerPrompt, rawReport, summaryLine, footerText];
-}
-
+// ... Rest of the script is identical to v1.3 ...
+// ... [PASTE THE REST OF THE SCRIPT FROM v1.3 HERE, STARTING FROM `typedef NS_ENUM`] ...
 typedef NS_ENUM(NSInteger, EchoLogType) {
     EchoLogTypeInfo,
     EchoLogTypeTask,
@@ -399,9 +393,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 @end
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
-
-// ... [The rest of the script is identical to v1.2, no changes needed below this line]
-// ... [PASTE THE REST OF THE SCRIPT FROM v1.2 HERE, STARTING FROM %hook UILabel] ...
 
 %hook UILabel
 - (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
@@ -1357,7 +1348,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     return [lines componentsJoinedByString:@"\n"];
 }
 
-// MODIFIED: Fixed the final string assembly to include 'geJu'
 %new
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
     LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 行年参数");
@@ -1461,6 +1451,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.14 (AI-Structured Output v1.3) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.14 (AI-Structured Output v1.4 BuildFix) 已加载。");
     }
 }
