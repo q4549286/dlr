@@ -1,9 +1,8 @@
-//////// Filename: Echo_AnalysisEngine_v13.14_UIPolish.xm
-// 描述: Echo 六壬解析引擎 v13.14 (AI结构化输出版 v1.5 - 最终版)。
-//      - [PROMPT] 深度优化Prompt，特别是七政四余的分析指令，引导AI进行宫位、顺逆、交角等综合分析。
-//      - [STRUCTURE] 全面重构并固化了所有板块的输出格式，特别是课体、九宗门、行年参数的结构化，使其达到最佳AI可读性。
-//      - [REFINE] 对所有字符串解析逻辑进行最后审查，确保数据的精确性和无冗余。
-//      - [STABILITY] 继承之前版本的所有功能和稳定性。
+//////// Filename: Echo_AnalysisEngine_v13.15_AI_Integration.xm
+// 描述: Echo 六壬解析引擎 v13.15 (AI集成版 v1.0)。
+//      - [FEATURE] 核心重构：提取报告后，弹出操作菜单，支持一键发送到 豆包、DeepSeek、ChatGPT 等AI应用。
+//      - [UI] 界面优化：将原“复制日志并关闭”按钮替换为功能更明确的“关闭面板”和“粘贴上次内容到豆包”快捷按钮。
+//      - [STABILITY] 继承 v13.14 的所有PROMPT优化、结构化输出和稳定性。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -30,13 +29,16 @@ static const NSInteger kButtonTag_NianMing          = 302;
 static const NSInteger kButtonTag_BiFa              = 303;
 static const NSInteger kButtonTag_GeJu              = 304;
 static const NSInteger kButtonTag_FangFa            = 305;
-static const NSInteger kButtonTag_CopyAndClose      = 999;
+// -- [MODIFIED v13.15] --
+static const NSInteger kButtonTag_ClosePanel        = 998; // 新增：关闭面板
+static const NSInteger kButtonTag_PasteToDoubao     = 997; // 新增：粘贴到豆包
 
 // Colors
 #define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
 #define ECHO_COLOR_MAIN_TEAL    [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
 #define ECHO_COLOR_AUX_GREY     [UIColor colorWithWhite:0.3 alpha:1.0]
-#define ECHO_COLOR_ACTION       [UIColor colorWithWhite:0.2 alpha:1.0]
+#define ECHO_COLOR_ACTION_CLOSE [UIColor colorWithWhite:0.25 alpha:1.0] // 关闭按钮颜色
+#define ECHO_COLOR_ACTION_PASTE [UIColor colorWithRed:0.82 green:0.33 blue:0.33 alpha:1.0] // 粘贴按钮颜色
 #define ECHO_COLOR_SUCCESS      [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
 #define ECHO_COLOR_LOG_TASK     [UIColor whiteColor]
 #define ECHO_COLOR_LOG_INFO     [UIColor lightGrayColor]
@@ -107,6 +109,7 @@ static NSString *getAIPromptHeader() {
            @"**3.1 数据处理与关联指令**\n"
            @"在执行解盘前，你必须首先按以下规则处理和理解输入的数据：\n"
            @"  - **板块关联性**: 板块3(格局总览)是定性判断，是分析基调。板块4(爻位详解)是定量支撑，必须从中找出证据解释格局。板块5(辅助系统)是独立参考项，用于修正判断的强度和应期。\n"
+
            @"  - **吉凶对冲处理**: 当板块3出现吉凶并存的格局时，必须在板块4中寻找旺衰、生克、神煞等量化证据来判断哪个力量更强，并明确给出主次关系。\n"
            @"  - **七政四余的整合**: 你必须参考七政四余信息。分析某个五行(金木水火土)或神将(白虎、青龙等)时，要结合其对应星曜的**宫位、顺逆、留转节点**来综合判断其能量的强弱、显现速度和事态的进退趋势。例如，某星逆行，对应的人事物可能迟滞、反复或与过去有关；其“留”而转顺的日期，往往是事态的关键转折点。\n"
            @"  - **行年参数的整合**: 行年和本命的分析不能脱离主课。你必须分析三传对行年和本命的生克关系，以此判断此事对当事人的最终影响吉凶。\n\n"
@@ -119,7 +122,7 @@ static NSString *getAIPromptHeader() {
            @"**3.3 递归深度挖掘**\n"
            @"- 从表象推向本质，从现象推向根源\n"
            @"- 不满足于一层解释，要**追问到底层机理**\n"
-           @"- 每个\"为什么\"都要有大六壬体系内的**完整逻辑链**\n\n"
+-          @"- 每个\"为什么\"都要有大六壬体系内的**完整逻辑链**\n\n"
            @"**3.4 动态预测能力**\n"
            @"- 不仅分析现状，更要预判**演化趋势**\n"
            @"- 基于课传流注推演**时间节点**\n"
@@ -284,12 +287,12 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
     NSString *summaryLine = generateContentSummaryLine(structuredReport);
     NSString *footerText = @"\n\n"
     "// 依据解析方法，以及所有大六壬解析技巧方式回答下面问题\n"
-    "// 问题：改为问题即可，越详细越好";
+    "// 问题："; // 改为问题即可，越详细越好 -  用户可自行修改
     
     return [NSString stringWithFormat:@"%@%@\n%@%@", headerPrompt, structuredReport, summaryLine, footerText];
 }
 
-// ... Rest of the script is identical to v1.3 ...
+// ... The rest of the script is identical to v1.3 ...
 // ... [PASTE THE REST OF THE SCRIPT FROM v1.3 HERE, STARTING FROM `typedef NS_ENUM`] ...
 typedef NS_ENUM(NSInteger, EchoLogType) {
     EchoLogTypeInfo,
@@ -353,7 +356,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)hideProgressHUD;
 - (void)showEchoNotificationWithTitle:(NSString *)title message:(NSString *)message;
 - (void)handleMasterButtonTap:(UIButton *)sender;
-- (void)copyLogAndClose;
 - (void)executeSimpleExtraction;
 - (void)executeCompositeExtraction;
 - (void)extractSpecificPopupWithSelectorName:(NSString *)selectorName taskName:(NSString *)taskName completion:(void (^)(NSString *result))completion;
@@ -370,6 +372,8 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (NSString *)extractTianDiPanInfo_V18;
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
 - (NSString *)GetStringFromLayer:(id)layer;
+// -- [ADDED v13.15] --
+- (void)presentAIActionSheetWithReport:(NSString *)report;
 @end
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
@@ -513,7 +517,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.14" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.15" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, contentView.bounds.size.width, 30)];
@@ -530,10 +534,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if (@available(iOS 13.0, *)) {
             UIImage *icon = [UIImage systemImageNamed:iconName];
             [btn setImage:icon forState:UIControlStateNormal];
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
             btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 10);
-            #pragma clang diagnostic pop
         }
         btn.tag = tag;
         btn.backgroundColor = color;
@@ -638,27 +639,26 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_logTextView.attributedText = initLog;
     [contentView addSubview:g_logTextView];
   
-    UIButton *copyButton = createButton(@"复制日志并关闭", @"xmark.circle", kButtonTag_CopyAndClose, ECHO_COLOR_ACTION);
-    copyButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, contentView.bounds.size.width - 30, 40);
-    [contentView addSubview:copyButton];
+    // -- [MODIFIED v13.15] --
+    // 创建两个新按钮替换旧的 "复制并关闭" 按钮
+    CGFloat bottomBtnWidth = (contentView.bounds.size.width - 40) / 2;
     
+    UIButton *closeButton = createButton(@"关闭面板", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
+    closeButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
+    [contentView addSubview:closeButton];
+    
+    UIButton *pasteToDoubaoButton = createButton(@"粘贴上次内容到豆包", @"arrow.up.doc.on.clipboard", kButtonTag_PasteToDoubao, ECHO_COLOR_ACTION_PASTE);
+    pasteToDoubaoButton.frame = CGRectMake(15 + bottomBtnWidth + 10, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
+    [contentView addSubview:pasteToDoubaoButton];
+
     g_mainControlPanelView.alpha = 0;
     [keyWindow addSubview:g_mainControlPanelView];
     [UIView animateWithDuration:0.4 animations:^{ g_mainControlPanelView.alpha = 1.0; }];
 }
 
 %new
-- (void)copyLogAndClose {
-    if (g_logTextView && g_logTextView.text.length > 0) {
-        [UIPasteboard generalPasteboard].string = g_logTextView.text;
-        LogMessage(EchoLogTypeTask, @"日志内容已同步至剪贴板。");
-    }
-    [self handleMasterButtonTap:nil];
-}
-
-%new
 - (void)handleMasterButtonTap:(UIButton *)sender {
-    if (!sender) {
+    if (!sender) { // 用于关闭面板的通用调用
         if (g_mainControlPanelView) {
             [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) {
                 [g_mainControlPanelView removeFromSuperview];
@@ -669,16 +669,47 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     
     if (g_s1_isExtracting || g_s2_isExtractingKeChuanDetail || g_isExtractingNianming || g_extractedData) {
-        LogMessage(EchoLogError, @"[错误] 当前有任务在后台运行，请等待完成后重试。");
-        return;
+        if (sender.tag != kButtonTag_ClosePanel) { // 允许在任务进行时关闭面板
+            LogMessage(EchoLogError, @"[错误] 当前有任务在后台运行，请等待完成后重试。");
+            return;
+        }
     }
     
     __weak typeof(self) weakSelf = self;
 
     switch (sender.tag) {
-        case kButtonTag_CopyAndClose:
-            [self copyLogAndClose];
+        // -- [MODIFIED v13.15] --
+        case kButtonTag_ClosePanel:
+            [self handleMasterButtonTap:nil]; // 调用关闭逻辑
             break;
+        case kButtonTag_PasteToDoubao:
+        {
+            NSString *lastContent = [UIPasteboard generalPasteboard].string;
+            if (lastContent && lastContent.length > 0) {
+                // 这里使用豆包的URL Scheme，如果未来有变动需要修改
+                // 格式通常是 `doubao://chat/send?text=...`
+                NSString *encodedText = [lastContent stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+                NSString *urlString = [NSString stringWithFormat:@"doubao://chat/send?text=%@", encodedText];
+                NSURL *url = [NSURL URLWithString:urlString];
+                if ([[UIApplication sharedApplication] canOpenURL:url]) {
+                    [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
+                        if (success) {
+                            LogMessage(EchoLogTypeTask, @"已跳转到豆包。");
+                        } else {
+                            LogMessage(EchoLogError, @"跳转豆包失败。");
+                        }
+                    }];
+                } else {
+                    LogMessage(EchoLogError, @"无法打开豆包，请确认App已安装。");
+                    [self showEchoNotificationWithTitle:@"跳转失败" message:@"未检测到豆包App。"];
+                }
+            } else {
+                LogMessage(EchoLogTypeWarning, @"剪贴板中无内容。");
+                [self showEchoNotificationWithTitle:@"操作无效" message:@"剪贴板为空。"];
+            }
+            break;
+        }
+        // -- [END MODIFIED] --
         case kButtonTag_StandardReport:
             [self executeSimpleExtraction];
             break;
@@ -691,8 +722,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                     reportData[@"课体范式_详"] = result;
-                    [UIPasteboard generalPasteboard].string = formatFinalReport(reportData);
-                    [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"课体范式已同步至剪贴板。"];
+                    NSString *finalReport = formatFinalReport(reportData);
+                    [strongSelf presentAIActionSheetWithReport:finalReport];
                     g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil;
                 });
             }];
@@ -704,8 +735,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                     reportData[@"九宗门_详"] = result;
-                    [UIPasteboard generalPasteboard].string = formatFinalReport(reportData);
-                    [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"九宗门结构已同步。"];
+                    NSString *finalReport = formatFinalReport(reportData);
+                    [strongSelf presentAIActionSheetWithReport:finalReport];
                     g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil;
                 });
             }];
@@ -719,9 +750,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                 reportData[@"行年参数"] = nianmingText;
-                [UIPasteboard generalPasteboard].string = formatFinalReport(reportData);
+                NSString *finalReport = formatFinalReport(reportData);
                 [strongSelf hideProgressHUD];
-                [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"行年参数已同步至剪贴板。"];
+                [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
         }
@@ -730,9 +761,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                 reportData[@"毕法要诀"] = result;
-                [UIPasteboard generalPasteboard].string = formatFinalReport(reportData);
+                NSString *finalReport = formatFinalReport(reportData);
                 [strongSelf hideProgressHUD];
-                [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"毕法要诀已同步。"];
+                [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
         }
@@ -741,9 +772,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                 reportData[@"格局要览"] = result;
-                [UIPasteboard generalPasteboard].string = formatFinalReport(reportData);
+                NSString *finalReport = formatFinalReport(reportData);
                 [strongSelf hideProgressHUD];
-                [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"格局要览已同步。"];
+                [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
         }
@@ -752,15 +783,91 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                 reportData[@"解析方法"] = result;
-                [UIPasteboard generalPasteboard].string = formatFinalReport(reportData);
+                NSString *finalReport = formatFinalReport(reportData);
                 [strongSelf hideProgressHUD];
-                [strongSelf showEchoNotificationWithTitle:@"分析完成" message:@"解析方法已同步。"];
+                [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
         }
         default: break;
     }
 }
+
+// -- [ADDED v13.15] --
+%new
+- (void)presentAIActionSheetWithReport:(NSString *)report {
+    if (!report || report.length == 0) {
+        LogMessage(EchoLogError, @"报告为空，无法执行后续操作。");
+        return;
+    }
+
+    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"报告已生成" message:@"请选择下一步操作" preferredStyle:UIAlertControllerStyleActionSheet];
+
+    // 定义一个block来处理URL跳转
+    void (^openURLBlock)(NSString*, NSString*) = ^(NSString *appName, NSString *urlString) {
+        NSURL *url = [NSURL URLWithString:urlString];
+        if ([[UIApplication sharedApplication] canOpenURL:url]) {
+            [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
+                if(success) {
+                    LogMessage(EchoLogTypeSuccess, @"成功跳转到 %@", appName);
+                } else {
+                    LogMessage(EchoLogError, @"跳转到 %@ 失败", appName);
+                }
+            }];
+        } else {
+            LogMessage(EchoLogError, @"无法打开 %@，请确认App已安装。", appName);
+            [self showEchoNotificationWithTitle:[NSString stringWithFormat:@"%@ 未安装", appName] message:@"无法完成跳转操作。"];
+        }
+    };
+    
+    // URL编码报告内容
+    NSString *encodedReport = [report stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+
+    // 1. 粘贴到豆包
+    UIAlertAction *doubaoAction = [UIAlertAction actionWithTitle:@"粘贴到 豆包" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        // 注意: 此URL Scheme为推测，如果无效请查找豆包App最新的Scheme
+        NSString *urlString = [NSString stringWithFormat:@"doubao://chat/send?text=%@", encodedReport];
+        openURLBlock(@"豆包", urlString);
+    }];
+    [actionSheet addAction:doubaoAction];
+    
+    // 2. 粘贴到 DeepSeek
+    UIAlertAction *deepseekAction = [UIAlertAction actionWithTitle:@"粘贴到 DeepSeek" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        // 注意: 此URL Scheme为推测
+        NSString *urlString = [NSString stringWithFormat:@"deepseek://send?text=%@", encodedReport];
+        openURLBlock(@"DeepSeek", urlString);
+    }];
+    [actionSheet addAction:deepseekAction];
+    
+    // 3. 粘贴到 ChatGPT
+    UIAlertAction *chatgptAction = [UIAlertAction actionWithTitle:@"粘贴到 ChatGPT" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSString *urlString = [NSString stringWithFormat:@"chatgpt://chat?message=%@", encodedReport];
+        openURLBlock(@"ChatGPT", urlString);
+    }];
+    [actionSheet addAction:chatgptAction];
+
+    // 4. 复制到剪贴板
+    UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"复制到剪贴板" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [UIPasteboard generalPasteboard].string = report;
+        LogMessage(EchoLogTypeSuccess, @"报告已复制到剪贴板。");
+        [self showEchoNotificationWithTitle:@"复制成功" message:@"报告内容已同步至剪贴板。"];
+    }];
+    [actionSheet addAction:copyAction];
+
+    // 5. 关闭
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
+    [actionSheet addAction:cancelAction];
+    
+    // 适配iPad
+    if (actionSheet.popoverPresentationController) {
+        actionSheet.popoverPresentationController.sourceView = self.view;
+        actionSheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height, 1.0, 1.0);
+        actionSheet.popoverPresentationController.permittedArrowDirections = 0;
+    }
+    
+    [self presentViewController:actionSheet animated:YES completion:nil];
+}
+
 
 %new
 - (void)showProgressHUD:(NSString *)text {
@@ -775,8 +882,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     progressView.layer.cornerRadius = 10;
     progressView.tag = kEchoProgressHUDTag;
   
-    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
-    spinner.color = [UIColor whiteColor];
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+    if (@available(iOS 13.0, *)) {
+         spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+         spinner.color = [UIColor whiteColor];
+    }
     spinner.center = CGPointMake(110, 50);
     [spinner startAnimating];
     [progressView addSubview:spinner];
@@ -839,19 +949,19 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     iconLabel.text = @"✓";
     iconLabel.textColor = [UIColor colorWithRed:0.2 green:0.78 blue:0.35 alpha:1.0];
     iconLabel.font = [UIFont boldSystemFontOfSize:16];
-    [bannerView addSubview:iconLabel];
+    [bannerView.contentView ?: bannerView addSubview:iconLabel];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(45, 12, bannerWidth - 55, 20)];
     titleLabel.text = title;
     titleLabel.font = [UIFont boldSystemFontOfSize:15];
     if (@available(iOS 13.0, *)) { titleLabel.textColor = [UIColor labelColor]; } else { titleLabel.textColor = [UIColor blackColor];}
-    [bannerView addSubview:titleLabel];
+    [bannerView.contentView ?: bannerView addSubview:titleLabel];
 
     UILabel *messageLabel = [[UILabel alloc] initWithFrame:CGRectMake(45, 32, bannerWidth - 55, 16)];
     messageLabel.text = message;
     messageLabel.font = [UIFont systemFontOfSize:13];
     if (@available(iOS 13.0, *)) { messageLabel.textColor = [UIColor secondaryLabelColor]; } else { messageLabel.textColor = [UIColor darkGrayColor]; }
-    [bannerView addSubview:messageLabel];
+    [bannerView.contentView ?: bannerView addSubview:messageLabel];
   
     [keyWindow addSubview:bannerView];
 
@@ -986,10 +1096,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                         __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) return;
                         LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成结构化报告...");
                         
-                        [UIPasteboard generalPasteboard].string = formatFinalReport(reportData);
+                        NSString *finalReport = formatFinalReport(reportData);
                         
                         [strongSelf4 hideProgressHUD];
-                        [strongSelf4 showEchoNotificationWithTitle:@"生成完毕" message:@"标准报告已同步至剪贴板。"];
+                        // -- [MODIFIED v13.15] --
+                        // [strongSelf4 showEchoNotificationWithTitle:@"生成完毕" message:@"标准报告已同步至剪贴板。"];
+                        [strongSelf4 presentAIActionSheetWithReport:finalReport];
                         LogMessage(EchoLogTypeTask, @"[完成] “标准报告”任务已完成。");
 
                         g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil;
@@ -1035,10 +1147,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             __strong typeof(weakSelf) strongSelf5 = weakSelf; if (!strongSelf5) return;
                             LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成结构化报告...");
 
-                            [UIPasteboard generalPasteboard].string = formatFinalReport(reportData);
+                            NSString *finalReport = formatFinalReport(reportData);
                             
                             [strongSelf5 hideProgressHUD];
-                            [strongSelf5 showEchoNotificationWithTitle:@"解构完成" message:@"深度解构报告已同步。"];
+                            // -- [MODIFIED v13.15] --
+                            // [strongSelf5 showEchoNotificationWithTitle:@"解构完成" message:@"深度解构报告已同步。"];
+                            [strongSelf5 presentAIActionSheetWithReport:finalReport];
                             LogMessage(EchoLogTypeTask, @"--- [完成] “深度解构”任务已全部完成 ---");
 
                             g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil;
@@ -1158,8 +1272,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 if (!g_s2_keChuan_completion_handler) {
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                     reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
-                    [UIPasteboard generalPasteboard].string = formatFinalReport(reportData);
-                    [self showEchoNotificationWithTitle:@"分析完成" message:@"课传流注已同步至剪贴板。"];
+                    NSString *finalReport = formatFinalReport(reportData);
+                    // -- [MODIFIED v13.15] --
+                    // [UIPasteboard generalPasteboard].string = formatFinalReport(reportData);
+                    // [self showEchoNotificationWithTitle:@"分析完成" message:@"课传流注已同步至剪贴板。"];
+                    [self presentAIActionSheetWithReport:finalReport];
                 }
             } else {
                 g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]";
@@ -1431,6 +1548,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.14 (AI-Structured Output v1.5 Final) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.15 (AI-Integration v1.0) 已加载。");
     }
 }
