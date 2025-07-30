@@ -1,10 +1,9 @@
-//////// Filename: Echo_AnalysisEngine_v13.15.2_Compile_Fix.xm
-// 描述: Echo 六壬解析引擎 v13.15.2 (AI集成版 v1.0.2)。
-//      - [FIX] 修复了因使用废弃的 `imageEdgeInsets` API 导致的编译错误。
-//      - [FIX] 修复了因使用废弃API和错误的视图层级调用导致的编译错误。
-//      - [FEATURE] 提取报告后，弹出操作菜单，支持一键发送到 豆包、DeepSeek、ChatGPT 等AI应用。
-//      - [UI] 界面优化：将原“复制日志并关闭”按钮替换为功能更明确的“关闭面板”和“粘贴上次内容到豆包”快捷按钮。
-//      - [STABILITY] 继承 v13.14 的所有PROMPT优化、结构化输出和稳定性。
+//////// Filename: Echo_AnalysisEngine_v13.16_Smart_AI_Menu.xm
+// 描述: Echo 六壬解析引擎 v13.16 (AI集成智能菜单版 v1.0)。
+//      - [FEATURE] AI发送菜单智能化：动态检测用户已安装的AI App (豆包/Kimi/元宝/ChatGPT/DeepSeek)，只显示可用的选项。
+//      - [FEATURE] 新增 Kimi 和 腾讯元宝 到支持列表。
+//      - [UI] 优化了主面板按钮布局和颜色。
+//      - [STABILITY] 继承之前版本的所有功能和稳定性。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -32,14 +31,14 @@ static const NSInteger kButtonTag_BiFa              = 303;
 static const NSInteger kButtonTag_GeJu              = 304;
 static const NSInteger kButtonTag_FangFa            = 305;
 static const NSInteger kButtonTag_ClosePanel        = 998;
-static const NSInteger kButtonTag_PasteToDoubao     = 997;
+static const NSInteger kButtonTag_PasteToAI         = 997; // 改为通用粘贴按钮
 
 // Colors
 #define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
 #define ECHO_COLOR_MAIN_TEAL    [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
 #define ECHO_COLOR_AUX_GREY     [UIColor colorWithWhite:0.3 alpha:1.0]
 #define ECHO_COLOR_ACTION_CLOSE [UIColor colorWithWhite:0.25 alpha:1.0]
-#define ECHO_COLOR_ACTION_PASTE [UIColor colorWithRed:0.82 green:0.33 blue:0.33 alpha:1.0]
+#define ECHO_COLOR_ACTION_AI    [UIColor colorWithRed:0.22 green:0.59 blue:0.85 alpha:1.0] // AI 快捷键颜色
 #define ECHO_COLOR_SUCCESS      [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
 #define ECHO_COLOR_LOG_TASK     [UIColor whiteColor]
 #define ECHO_COLOR_LOG_INFO     [UIColor lightGrayColor]
@@ -514,7 +513,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.15.2" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.16" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, contentView.bounds.size.width, 30)];
@@ -532,7 +531,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             UIImage *icon = [UIImage systemImageNamed:iconName];
             [btn setImage:icon forState:UIControlStateNormal];
             
-            // -- [FIXED v13.15.2] -- Suppress deprecation warning for imageEdgeInsets
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Wdeprecated-declarations"
             btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 10);
@@ -647,9 +645,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     closeButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
     [contentView addSubview:closeButton];
     
-    UIButton *pasteToDoubaoButton = createButton(@"粘贴上次内容到豆包", @"arrow.up.doc.on.clipboard", kButtonTag_PasteToDoubao, ECHO_COLOR_ACTION_PASTE);
-    pasteToDoubaoButton.frame = CGRectMake(15 + bottomBtnWidth + 10, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
-    [contentView addSubview:pasteToDoubaoButton];
+    UIButton *pasteToAIButton = createButton(@"粘贴上次内容到AI", @"arrow.up.doc.on.clipboard", kButtonTag_PasteToAI, ECHO_COLOR_ACTION_AI);
+    pasteToAIButton.frame = CGRectMake(15 + bottomBtnWidth + 10, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
+    [contentView addSubview:pasteToAIButton];
 
     g_mainControlPanelView.alpha = 0;
     [keyWindow addSubview:g_mainControlPanelView];
@@ -681,25 +679,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         case kButtonTag_ClosePanel:
             [self handleMasterButtonTap:nil];
             break;
-        case kButtonTag_PasteToDoubao:
+        case kButtonTag_PasteToAI:
         {
             NSString *lastContent = [UIPasteboard generalPasteboard].string;
             if (lastContent && lastContent.length > 0) {
-                NSString *encodedText = [lastContent stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-                NSString *urlString = [NSString stringWithFormat:@"doubao://chat/send?text=%@", encodedText];
-                NSURL *url = [NSURL URLWithString:urlString];
-                if ([[UIApplication sharedApplication] canOpenURL:url]) {
-                    [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
-                        if (success) {
-                            LogMessage(EchoLogTypeTask, @"已跳转到豆包。");
-                        } else {
-                            LogMessage(EchoLogError, @"跳转豆包失败。");
-                        }
-                    }];
-                } else {
-                    LogMessage(EchoLogError, @"无法打开豆包，请确认App已安装。");
-                    [self showEchoNotificationWithTitle:@"跳转失败" message:@"未检测到豆包App。"];
-                }
+                [self presentAIActionSheetWithReport:lastContent];
             } else {
                 LogMessage(EchoLogTypeWarning, @"剪贴板中无内容。");
                 [self showEchoNotificationWithTitle:@"操作无效" message:@"剪贴板为空。"];
@@ -796,46 +780,47 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
 
-    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"报告已生成" message:@"请选择下一步操作" preferredStyle:UIAlertControllerStyleActionSheet];
+    [UIPasteboard generalPasteboard].string = report; // 无论如何都先复制到剪贴板
 
-    void (^openURLBlock)(NSString*, NSString*) = ^(NSString *appName, NSString *urlString) {
-        NSURL *url = [NSURL URLWithString:urlString];
-        if ([[UIApplication sharedApplication] canOpenURL:url]) {
-            [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
-                if(success) {
-                    LogMessage(EchoLogTypeSuccess, @"成功跳转到 %@", appName);
-                } else {
-                    LogMessage(EchoLogError, @"跳转到 %@ 失败", appName);
-                }
-            }];
-        } else {
-            LogMessage(EchoLogError, @"无法打开 %@，请确认App已安装。", appName);
-            [self showEchoNotificationWithTitle:[NSString stringWithFormat:@"%@ 未安装", appName] message:@"无法完成跳转操作。"];
-        }
-    };
-    
+    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"发送到AI助手" message:@"将从剪贴板粘贴内容" preferredStyle:UIAlertControllerStyleActionSheet];
+
     NSString *encodedReport = [report stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
 
-    UIAlertAction *doubaoAction = [UIAlertAction actionWithTitle:@"粘贴到 豆包" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        NSString *urlString = [NSString stringWithFormat:@"doubao://chat/send?text=%@", encodedReport];
-        openURLBlock(@"豆包", urlString);
-    }];
-    [actionSheet addAction:doubaoAction];
-    
-    UIAlertAction *deepseekAction = [UIAlertAction actionWithTitle:@"粘贴到 DeepSeek" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        NSString *urlString = [NSString stringWithFormat:@"deepseek://send?text=%@", encodedReport];
-        openURLBlock(@"DeepSeek", urlString);
-    }];
-    [actionSheet addAction:deepseekAction];
-    
-    UIAlertAction *chatgptAction = [UIAlertAction actionWithTitle:@"粘贴到 ChatGPT" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        NSString *urlString = [NSString stringWithFormat:@"chatgpt://chat?message=%@", encodedReport];
-        openURLBlock(@"ChatGPT", urlString);
-    }];
-    [actionSheet addAction:chatgptAction];
+    // 预置的AI App列表
+    NSArray *aiApps = @[
+        @{@"name": @"Kimi", @"scheme": @"kimi://", @"format": @"kimi://chat?q=%@"},
+        @{@"name": @"豆包", @"scheme": @"doubao://", @"format": @"doubao://chat/send?text=%@"},
+        @{@"name": @"腾讯元宝", @"scheme": @"yuanbao://", @"format": @"yuanbao://send?text=%@"}, // 假设的Scheme
+        @{@"name": @"ChatGPT", @"scheme": @"chatgpt://", @"format": @"chatgpt://chat?message=%@"},
+        @{@"name": @"DeepSeek", @"scheme": @"deepseek://", @"format": @"deepseek://send?text=%@"} // 假设的Scheme
+    ];
 
-    UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"复制到剪贴板" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [UIPasteboard generalPasteboard].string = report;
+    int availableApps = 0;
+    for (NSDictionary *appInfo in aiApps) {
+        NSString *checkScheme = appInfo[@"scheme"];
+        if ([[UIApplication sharedApplication] canOpenURL:[NSURL URLWithString:checkScheme]]) {
+            UIAlertAction *action = [UIAlertAction actionWithTitle:[NSString stringWithFormat:@"发送到 %@", appInfo[@"name"]] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                NSString *urlString = [NSString stringWithFormat:appInfo[@"format"], encodedReport];
+                NSURL *url = [NSURL URLWithString:urlString];
+                [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
+                    if(success) {
+                        LogMessage(EchoLogTypeSuccess, @"成功跳转到 %@", appInfo[@"name"]);
+                    } else {
+                        LogMessage(EchoLogError, @"跳转到 %@ 失败", appInfo[@"name"]);
+                    }
+                }];
+            }];
+            [actionSheet addAction:action];
+            availableApps++;
+        }
+    }
+    
+    // 如果一个安装的都没有，给个提示
+    if (availableApps == 0) {
+        actionSheet.message = @"未检测到受支持的AI App。\n内容已复制到剪贴板。";
+    }
+
+    UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"仅复制到剪贴板" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         LogMessage(EchoLogTypeSuccess, @"报告已复制到剪贴板。");
         [self showEchoNotificationWithTitle:@"复制成功" message:@"报告内容已同步至剪贴板。"];
     }];
@@ -1535,6 +1520,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.15.2 (Compile Fix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.16 (Smart AI Menu) 已加载。");
     }
 }
