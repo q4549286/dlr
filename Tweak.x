@@ -1,10 +1,10 @@
-//////// Filename: Echo_AnalysisEngine_v13.18_Final_Structure.xm
-// 描述: Echo 六壬解析引擎 v13.18 (最终结构优化版 v1.0)。
-//      - [PROMPT] 根据专家建议优化Prompt，强调客观推断，调整输出结构。
-//      - [STRUCTURE] 脚本动态计算并注入“六亲”关系到四课。
-//      - [STRUCTURE] 脚本根据内置知识库对“课体”进行吉、凶、中性分类排序。
-//      - [STRUCTURE] 脚本动态生成“关键星曜提示”，将七政与盘面核心元素关联。
-//      - [LOGIC FIX] 保留神将详解的原始上下文结构，修复快捷发送按钮逻辑。
+//////// Filename: Echo_AnalysisEngine_v13.19_Format_Fix.xm
+// 描述: Echo 六壬解析引擎 v13.19 (格式修正版 v1.0)。
+//      - [CRITICAL FIX] 废弃错误的课体分类逻辑，恢复为原始、准确的文本块输出，解决了结构混乱问题。
+//      - [CRITICAL FIX] 修正了四课输出格式错误的问题，确保地支、六亲、天将位置正确。
+//      - [CRITICAL FIX] 修正了旬空地支的提取逻辑，确保数据准确性。
+//      - [PROMPT] 优化Prompt，强调客观推断。
+//      - [STRUCTURE] 保留动态计算六亲、动态生成关键星曜提示等正确的功能。
 //      - [STABILITY] 继承之前版本的所有功能和稳定性。
 
 #import <UIKit/UIKit.h>
@@ -176,21 +176,20 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *yueJiangFull = SafeString(reportData[@"月将"]);
     NSString *yueJiang = [[yueJiangFull componentsSeparatedByString:@" "].firstObject stringByReplacingOccurrencesOfString:@"月将:" withString:@""] ?: @"";
     yueJiang = [yueJiang stringByReplacingOccurrencesOfString:@"日宿在" withString:@""];
-    NSString *kongWangFull = SafeString(reportData[@"空亡"]);
-    NSString *xun = [[kongWangFull componentsSeparatedByString:@"旬"] firstObject] ?: @"未知";
-    NSString *kong = @"";
-    if (xun.length > 0) {
-        NSArray *gan = @[@"甲",@"乙",@"丙",@"丁",@"戊",@"己",@"庚",@"辛",@"壬",@"癸"];
-        NSArray *zhi = @[@"子",@"丑",@"寅",@"卯",@"辰",@"巳",@"午",@"未",@"申",@"酉",@"戌",@"亥"];
-        NSInteger startIndex = [gan indexOfObject:[xun substringToIndex:1]];
-        if (startIndex != NSNotFound) {
-            NSInteger kong1Index = (startIndex + 10) % 12;
-            NSInteger kong2Index = (startIndex + 11) % 12;
-            kong = [NSString stringWithFormat:@"%@%@", zhi[kong1Index], zhi[kong2Index]];
-        }
-    }
     
-    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@旬)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, SafeString(reportData[@"昼夜"])];
+    NSString *kongWangFull = SafeString(reportData[@"空亡"]);
+    NSString *xun = @"";
+    NSString *kong = @"";
+    NSRange bracketStart = [kongWangFull rangeOfString:@"("];
+    NSRange bracketEnd = [kongWangFull rangeOfString:@")"];
+    if (bracketStart.location != NSNotFound && bracketEnd.location != NSNotFound) {
+        xun = [kongWangFull substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
+        kong = [[kongWangFull substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    } else {
+        xun = [[kongWangFull componentsSeparatedByString:@"旬"] firstObject] ?: @"未知";
+    }
+
+    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, SafeString(reportData[@"昼夜"])];
 
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
@@ -202,39 +201,21 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     [report appendString:@"// 3. 格局总览\n"];
     NSString *keTiFull = reportData[@"课体范式_简"] ?: reportData[@"课体范式_详"];
     if (keTiFull.length > 0) {
-        NSDictionary *keTiClassification = @{
-            @"六仪课": @"吉", @"励德课": @"吉", @"六阳课": @"吉",
-            @"地烦课": @"凶", @"斩关课": @"凶", @"鬼墓课": @"凶", @"寡宿课": @"凶", @"灾厄课": @"凶",
-            @"间传课": @"中性"
-        };
-
-        NSMutableString *jiKe = [NSMutableString stringWithString:@"// 吉课\n"];
-        NSMutableString *xiongKe = [NSMutableString stringWithString:@"// 凶课\n"];
-        NSMutableString *zhongXingKe = [NSMutableString stringWithString:@"// 中性/条件课\n"];
-        
+        [report appendString:@"// 3.1. 课体范式\n"];
         NSArray *keTiBlocks = [keTiFull componentsSeparatedByString:@"\n\n"];
         for (NSString *block in keTiBlocks) {
-            NSString *title = [block componentsSeparatedByString:@"\t"].firstObject;
-            title = [[title componentsSeparatedByString:@" "].firstObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            
-            NSString *type = keTiClassification[title] ?: @"中性";
-            NSString *formattedBlock = [NSString stringWithFormat:@"- [%@]%@\n", title, [[block substringFromIndex:title.length] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]];
-
-            if ([type isEqualToString:@"吉"]) [jiKe appendString:formattedBlock];
-            else if ([type isEqualToString:@"凶"]) [xiongKe appendString:formattedBlock];
-            else [zhongXingKe appendString:formattedBlock];
+            if (block.length > 0) {
+                [report appendFormat:@"- %@\n\n", block];
+            }
         }
-
-        [report appendString:@"// 3.1. 课体范式\n"];
-        if (jiKe.length > 8) [report appendFormat:@"%@\n", jiKe];
-        if (xiongKe.length > 8) [report appendFormat:@"%@\n", xiongKe];
-        if (zhongXingKe.length > 13) [report appendFormat:@"%@\n", zhongXingKe];
     }
-
+    
     NSString *jiuZongMenFull = reportData[@"九宗门_详"] ?: reportData[@"九宗门_简"];
     if (jiuZongMenFull.length > 0) {
+        jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"];
+        jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "];
         [report appendString:@"// 3.2. 九宗门\n"];
-        [report appendFormat:@"- %@\n\n", [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]];
+        [report appendFormat:@"- %@\n\n", jiuZongMenFull];
     }
     NSString *biFa = reportData[@"毕法要诀"];
     if (biFa.length > 0) {
@@ -308,13 +289,15 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                     NSScanner *scanner = [NSScanner scannerWithString:line];
                     NSString *palace;
                     [scanner scanUpToString:@"宫" intoString:NULL];
-                    [scanner setScanLocation:scanner.scanLocation - 1];
-                    [scanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:@" "] intoString:&palace];
+                    if(scanner.scanLocation > 0) {
+                        [scanner setScanLocation:scanner.scanLocation - 1];
+                        [scanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:@" "] intoString:&palace];
 
-                    if (palace.length > 0) {
-                        NSString *fullReportText = [report copy];
-                        if ([fullReportText containsString:palace]) {
-                             [keyPlanetTips appendFormat:@"- %@(%@): 正在%@宫%@。对应神将`%@`。请关注%@宫相关事宜。\n", planet, ([line containsString:@"逆行"]?@"逆":@"顺"), palace, ([line containsString:@"逆行"]?@"逆行":@"顺行"), planetToDeity[planet], palace];
+                        if (palace.length > 0) {
+                            NSString *fullReportText = [report copy];
+                            if ([fullReportText containsString:palace]) {
+                                 [keyPlanetTips appendFormat:@"- %@(%@): 正在%@宫%@。对应神将`%@`。请关注%@宫相关事宜。\n", planet, ([line containsString:@"逆行"]?@"逆":@"顺"), palace, ([line containsString:@"逆行"]?@"逆行":@"顺行"), planetToDeity[planet], palace];
+                            }
                         }
                     }
                     break;
@@ -589,7 +572,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.18" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.19" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, contentView.bounds.size.width, 30)];
@@ -1597,7 +1580,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 // =========================================================================
 // 4. S1 提取函数定义
 // =========================================================================
-static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) { if (!rootView) return @"[错误: 根视图为空]"; NSMutableString *finalResult = [NSMutableString string]; NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews); if (stackViews.count > 0) { UIStackView *mainStackView = stackViews.firstObject; NSMutableArray *blocks = [NSMutableArray array]; NSMutableDictionary *currentBlock = nil; for (UIView *subview in mainStackView.arrangedSubviews) { if (![subview isKindOfClass:[UILabel class]]) continue; UILabel *label = (UILabel *)subview; NSString *text = label.text; if (!text || text.length == 0) continue; BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0; if (isTitle) { if (currentBlock) [blocks addObject:currentBlock]; currentBlock = [NSMutableDictionary dictionaryWithDictionary:@{@"title": text, @"content": [NSMutableString string]}]; } else { if (currentBlock) { NSMutableString *content = currentBlock[@"content"]; if (content.length > 0) [content appendString:@" "]; [content appendString:text]; } } } if (currentBlock) [blocks addObject:currentBlock]; for (NSDictionary *block in blocks) { NSString *title = block[@"title"]; NSString *content = [block[@"content"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; if (content.length > 0) { [finalResult appendFormat:@"%@\n%@\n\n", title, content]; } else { [finalResult appendFormat:@"%@\n\n", title]; } } } if (includeXiangJie) { Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView"); if (tableViewClass) { NSMutableArray *tableViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(tableViewClass, rootView, tableViews); if (tableViews.count > 0) { NSMutableArray *xiangJieLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], tableViews.firstObject, xiangJieLabels); if (xiangJieLabels.count > 0) { [finalResult appendString:@"// 详解内容\n\n"]; for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) { UILabel *titleLabel = xiangJieLabels[i]; if (i + 1 >= xiangJieLabels.count && [titleLabel.text isEqualToString:@"详解"]) continue; if (i + 1 < xiangJieLabels.count) { [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, ((UILabel*)xiangJieLabels[i+1]).text]; } else { [finalResult appendFormat:@"%@→\n\n", titleLabel.text]; } } } } } } return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; }
+static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) { if (!rootView) return @"[错误: 根视图为空]"; NSMutableString *finalResult = [NSMutableString string]; NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews); if (stackViews.count > 0) { UIStackView *mainStackView = stackViews.firstObject; NSMutableArray *blocks = [NSMutableArray array]; NSMutableDictionary *currentBlock = nil; for (UIView *subview in mainStackView.arrangedSubviews) { if (![subview isKindOfClass:[UILabel class]]) continue; UILabel *label = (UILabel *)subview; NSString *text = label.text; if (!text || text.length == 0) continue; BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0; if (isTitle) { if (currentBlock) [blocks addObject:currentBlock]; currentBlock = [NSMutableDictionary dictionaryWithDictionary:@{@"title": text, @"content": [NSMutableString string]}]; } else { if (currentBlock) { NSMutableString *content = currentBlock[@"content"]; if (content.length > 0) [content appendString:@"\n"]; [content appendString:text]; } } } if (currentBlock) [blocks addObject:currentBlock]; for (NSDictionary *block in blocks) { NSString *title = block[@"title"]; NSString *content = [block[@"content"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; if (content.length > 0) { [finalResult appendFormat:@"%@\n%@\n\n", title, content]; } else { [finalResult appendFormat:@"%@\n\n", title]; } } } if (includeXiangJie) { Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView"); if (tableViewClass) { NSMutableArray *tableViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(tableViewClass, rootView, tableViews); if (tableViews.count > 0) { NSMutableArray *xiangJieLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], tableViews.firstObject, xiangJieLabels); if (xiangJieLabels.count > 0) { [finalResult appendString:@"// 详解内容\n\n"]; for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) { UILabel *titleLabel = xiangJieLabels[i]; if (i + 1 >= xiangJieLabels.count && [titleLabel.text isEqualToString:@"详解"]) continue; if (i + 1 < xiangJieLabels.count) { [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, ((UILabel*)xiangJieLabels[i+1]).text]; } else { [finalResult appendFormat:@"%@→\n\n", titleLabel.text]; } } } } } } return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; }
 
 // =========================================================================
 // 5. 构造函数
@@ -1605,6 +1588,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.18 (Final Structure) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.19 (Format Fix) 已加载。");
     }
 }
