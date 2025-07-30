@@ -1,5 +1,6 @@
-//////// Filename: Echo_AnalysisEngine_v13.15.1_AI_Integration_Fix.xm
-// 描述: Echo 六壬解析引擎 v13.15.1 (AI集成版 v1.0.1)。
+//////// Filename: Echo_AnalysisEngine_v13.15.2_Compile_Fix.xm
+// 描述: Echo 六壬解析引擎 v13.15.2 (AI集成版 v1.0.2)。
+//      - [FIX] 修复了因使用废弃的 `imageEdgeInsets` API 导致的编译错误。
 //      - [FIX] 修复了因使用废弃API和错误的视图层级调用导致的编译错误。
 //      - [FEATURE] 提取报告后，弹出操作菜单，支持一键发送到 豆包、DeepSeek、ChatGPT 等AI应用。
 //      - [UI] 界面优化：将原“复制日志并关闭”按钮替换为功能更明确的“关闭面板”和“粘贴上次内容到豆包”快捷按钮。
@@ -513,7 +514,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.15.1" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.15.2" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, contentView.bounds.size.width, 30)];
@@ -530,7 +531,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if (@available(iOS 13.0, *)) {
             UIImage *icon = [UIImage systemImageNamed:iconName];
             [btn setImage:icon forState:UIControlStateNormal];
+            
+            // -- [FIXED v13.15.2] -- Suppress deprecation warning for imageEdgeInsets
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
             btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 10);
+            #pragma clang diagnostic pop
         }
         btn.tag = tag;
         btn.backgroundColor = color;
@@ -861,7 +867,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     progressView.layer.cornerRadius = 10;
     progressView.tag = kEchoProgressHUDTag;
   
-    // -- [FIXED v13.15.1] -- Correctly handle deprecated spinner style
     UIActivityIndicatorView *spinner;
     if (@available(iOS 13.0, *)) {
          spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
@@ -872,7 +877,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
         #pragma clang diagnostic pop
     }
-    // -- [END FIXED] --
     
     spinner.center = CGPointMake(110, 50);
     [spinner startAnimating];
@@ -924,7 +928,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     bannerView.layer.cornerRadius = 12;
     bannerView.clipsToBounds = YES;
   
-    // -- [FIXED v13.15.1] -- Correctly handle adding subviews to blur view's contentView
     UIVisualEffectView *blurEffectView = nil;
     if (@available(iOS 8.0, *)) {
         blurEffectView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleProminent]];
@@ -935,7 +938,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 
     UIView *containerForLabels = blurEffectView ? blurEffectView.contentView : bannerView;
-    // -- [END FIXED] --
 
     UILabel *iconLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 20, 20, 20)];
     iconLabel.text = @"✓";
@@ -1533,6 +1535,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.15.1 (AI-Integration Fix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.15.2 (Compile Fix) 已加载。");
     }
 }
