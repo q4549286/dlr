@@ -1,10 +1,8 @@
-//////// Filename: Echo_AnalysisEngine_v13.22_Final_Stable.xm
-// 描述: Echo 六壬解析引擎 v13.22 (终极稳定版)。
-//      - [CRITICAL FIX] 移除了在三传中重复计算六亲的危险逻辑，彻底解决了闪退问题。
-//      - [FINAL] 四课格式最终确定为“下神 上 上神，上神乘天将”，并移除六亲。
-//      - [FINAL] 三传格式重构为层级结构，使用App原始六亲数据，信息更清晰。
-//      - [FINAL] 恢复“日辰关系”中的“辰”字，保持原文原意。
-//      - [STABILITY] 继承之前所有稳定性和功能。
+//////// Filename: Echo_AnalysisEngine_v13.21_Terminology_Fix.xm
+// 描述: Echo 六壬解析引擎 v13.21 (术语精校版 v1.0)。
+//      - [CRITICAL FIX] 根据专家最终指示，精校四课的输出格式为“下神 上 上神，上神乘天将”，并移除画蛇添足的六亲关系。
+//      - [REVERT] 撤销对“日辰关系”说明文字中“辰”到“支”的替换，保持原文。
+//      - [STABILITY] 继承之前版本所有已修复的稳定性改进和功能。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -77,7 +75,6 @@ static NSString *g_lastGeneratedReport = nil;
     _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
     code; \
     _Pragma("clang diagnostic pop")
-
 
 #pragma mark - AI Report Generation
 static NSString *getAIPromptHeader() {
@@ -230,6 +227,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                     }
                 }
                 if (nextKeyRange.location != NSNotFound) { [content deleteCharactersInRange:NSMakeRange(nextKeyRange.location, content.length - nextKeyRange.location)]; }
+                
                 [report appendFormat:@"%@%@\n\n", fangFaMap[key], [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             }
         }
@@ -539,7 +537,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.21" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.20" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, contentView.bounds.size.width, 30)];
@@ -1077,6 +1075,138 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 %new
+- (void)executeSimpleExtraction {
+    __weak typeof(self) weakSelf = self;
+    LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 标准报告 (AI结构化)");
+    [self showProgressHUD:@"1/4: 解析基础盘面..."];
+
+    NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
+
+    [self extractKePanInfoWithCompletion:^(NSMutableDictionary *baseReportData) {
+        [reportData addEntriesFromDictionary:baseReportData];
+        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
+        [strongSelf updateProgressHUD:@"2/4: 分析行年参数..."];
+
+        [strongSelf extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
+            reportData[@"行年参数"] = nianmingText;
+            __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) return;
+            [strongSelf2 updateProgressHUD:@"3/4: 解析课体范式..."];
+
+            [strongSelf2 startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:NO completion:^(NSString *keTiResult) {
+                reportData[@"课体范式_简"] = keTiResult;
+                __strong typeof(weakSelf) strongSelf3 = weakSelf; if (!strongSelf3) return;
+                [strongSelf3 updateProgressHUD:@"4/4: 解析九宗门..."];
+
+                [strongSelf3 startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:NO completion:^(NSString *jiuZongMenResult) {
+                    reportData[@"九宗门_简"] = jiuZongMenResult;
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) return;
+                        LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成结构化报告...");
+                        
+                        NSString *finalReport = formatFinalReport(reportData);
+                        g_lastGeneratedReport = [finalReport copy];
+                        
+                        [strongSelf4 hideProgressHUD];
+                        [strongSelf4 presentAIActionSheetWithReport:finalReport];
+                        LogMessage(EchoLogTypeTask, @"[完成] “标准报告”任务已完成。");
+
+                        g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil;
+                        LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
+                    });
+                }];
+            }];
+        }];
+    }];
+}
+
+%new
+- (void)executeCompositeExtraction {
+    __weak typeof(self) weakSelf = self;
+    LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 深度解构 (AI结构化)");
+    [self showProgressHUD:@"1/5: 解析基础盘面..."];
+
+    NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
+
+    [self extractKePanInfoWithCompletion:^(NSMutableDictionary *baseReportData) {
+        [reportData addEntriesFromDictionary:baseReportData];
+        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
+        [strongSelf updateProgressHUD:@"2/5: 推演课传流注..."];
+
+        [strongSelf startExtraction_Truth_S2_WithCompletion:^{
+            reportData[@"课传详解"] = SafeString(g_s2_finalResultFromKeChuan);
+            __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) return;
+            [strongSelf2 updateProgressHUD:@"3/5: 分析行年参数..."];
+
+            [strongSelf2 extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
+                reportData[@"行年参数"] = nianmingText;
+                __strong typeof(weakSelf) strongSelf3 = weakSelf; if (!strongSelf3) return;
+                [strongSelf3 updateProgressHUD:@"4/5: 解析课体范式..."];
+
+                [strongSelf3 startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:NO completion:^(NSString *keTiResult) {
+                    reportData[@"课体范式_简"] = keTiResult;
+                    __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) return;
+                    [strongSelf4 updateProgressHUD:@"5/5: 解析九宗门..."];
+
+                    [strongSelf4 startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:NO completion:^(NSString *jiuZongMenResult) {
+                        reportData[@"九宗门_简"] = jiuZongMenResult;
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            __strong typeof(weakSelf) strongSelf5 = weakSelf; if (!strongSelf5) return;
+                            LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成结构化报告...");
+
+                            NSString *finalReport = formatFinalReport(reportData);
+                            g_lastGeneratedReport = [finalReport copy];
+                            
+                            [strongSelf5 hideProgressHUD];
+                            [strongSelf5 presentAIActionSheetWithReport:finalReport];
+                            LogMessage(EchoLogTypeTask, @"--- [完成] “深度解构”任务已全部完成 ---");
+
+                            g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil;
+                            g_s2_finalResultFromKeChuan = nil;
+                            LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
+                        });
+                    }];
+                }];
+            }];
+        }];
+    }];
+}
+%new
+- (void)extractSpecificPopupWithSelectorName:(NSString *)selectorName taskName:(NSString *)taskName completion:(void (^)(NSString *result))completion {
+    LogMessage(EchoLogTypeTask, @"[精准分析] 任务启动: %@", taskName);
+    [self showProgressHUD:[NSString stringWithFormat:@"正在分析: %@", taskName]];
+    
+    g_extractedData = [NSMutableDictionary dictionary];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        SEL selector = NSSelectorFromString(selectorName);
+        if ([self respondsToSelector:selector]) {
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]);
+            });
+            [NSThread sleepForTimeInterval:0.5];
+        } else {
+            LogMessage(EchoLogError, @"[错误] 无法响应选择器 '%@'", selectorName);
+        }
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *result = g_extractedData[taskName];
+            if (result.length > 0) {
+                NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
+                for (NSString *t in trash) { result = [result stringByReplacingOccurrencesOfString:t withString:@""]; }
+            } else {
+                LogMessage(EchoLogTypeWarning, @"[警告] %@ 分析失败或无内容。", taskName);
+                result = @"";
+            }
+            
+            if (completion) {
+                completion(result);
+            }
+            
+            g_extractedData = nil;
+        });
+    });
+}
+%new
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion {
     if (g_s2_isExtractingKeChuanDetail) { LogMessage(EchoLogError, @"[错误] 课传推演任务已在进行中。"); return; }
     LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“课传流注”...");
@@ -1231,7 +1361,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     });
 }
 
-
 %new
 - (NSString *)_echo_extractSiKeInfo {
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
@@ -1270,6 +1399,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     NSString *k3_shang = ((UILabel*)c2[0]).text, *k3_jiang = ((UILabel*)c2[1]).text, *k3_xia = ((UILabel*)c2[2]).text;
     NSString *k4_shang = ((UILabel*)c1[0]).text, *k4_jiang = ((UILabel*)c1[1]).text, *k4_xia = ((UILabel*)c1[2]).text;
     
+    NSString *riGan = k1_xia; 
+
     return [NSString stringWithFormat:@"- 第一课(日干): %@ 上 %@，%@乘%@\n- 第二课(日上): %@ 上 %@，%@乘%@\n- 第三课(支辰): %@ 上 %@，%@乘%@\n- 第四课(辰上): %@ 上 %@，%@乘%@",
         SafeString(k1_xia), SafeString(k1_shang), SafeString(k1_shang), SafeString(k1_jiang),
         SafeString(k2_xia), SafeString(k2_shang), SafeString(k2_shang), SafeString(k2_jiang),
@@ -1300,26 +1431,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }];
 
         if (labels.count >= 3) {
-            NSString *rawLq = [[(UILabel*)labels.firstObject text] stringByReplacingOccurrencesOfString:@"->" withString:@""];
+            NSString *lq = [[(UILabel*)labels.firstObject text] stringByReplacingOccurrencesOfString:@"->" withString:@""];
             NSString *tj = [(UILabel*)labels.lastObject text];
             NSString *dz = [(UILabel*)[labels objectAtIndex:labels.count - 2] text];
             
             NSMutableArray *ssParts = [NSMutableArray array];
             if (labels.count > 3) {
-                for (NSUInteger j = 1; j < labels.count - 2; j++) {
-                     UILabel *l = labels[j];
+                for (UILabel *l in [labels subarrayWithRange:NSMakeRange(1, labels.count - 3)]) {
                     if (l.text.length > 0) [ssParts addObject:l.text];
                 }
             }
             NSString *ss = [ssParts componentsJoinedByString:@", "];
             NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"%lu传", (unsigned long)i+1];
 
-            [lines addObject:[NSString stringWithFormat:@"- %@: %@", title, SafeString(dz)]];
-            [lines addObject:[NSString stringWithFormat:@"  - 六亲: %@", SafeString(rawLq)]];
-            [lines addObject:[NSString stringWithFormat:@"  - 天将: %@", SafeString(tj)]];
-            if (ss.length > 0) {
-                 [lines addObject:[NSString stringWithFormat:@"  - 神煞: %@", ss]];
-            }
+            [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@) [状态: %@]", title, SafeString(dz), SafeString(lq), SafeString(tj), ss.length > 0 ? ss : @"无"]];
         }
     }
     return [lines componentsJoinedByString:@"\n"];
@@ -1327,7 +1452,81 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 %new
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
-    // ... This function remains unchanged ...
+    LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 行年参数");
+    g_isExtractingNianming = YES;
+    g_capturedZhaiYaoArray = [NSMutableArray array];
+    g_capturedGeJuArray = [NSMutableArray array];
+    
+    UICollectionView *targetCV = nil;
+    Class unitClass = NSClassFromString(@"六壬大占.行年單元");
+    NSMutableArray *cvs = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UICollectionView class], self.view, cvs);
+    for (UICollectionView *cv in cvs) { if ([cv.visibleCells.firstObject isKindOfClass:unitClass]) { targetCV = cv; break; } }
+  
+    if (!targetCV) {
+        LogMessage(EchoLogTypeWarning, @"[行年] 未找到行年单元，跳过分析。");
+        g_isExtractingNianming = NO;
+        if (completion) { completion(@""); }
+        return;
+    }
+  
+    NSMutableArray *allUnitCells = [NSMutableArray array];
+    for (UIView *cell in targetCV.visibleCells) { if([cell isKindOfClass:unitClass]){ [allUnitCells addObject:cell]; } }
+    [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
+  
+    if (allUnitCells.count == 0) {
+        LogMessage(EchoLogTypeWarning, @"[行年] 行年单元数量为0，跳过分析。");
+        g_isExtractingNianming = NO;
+        if (completion) { completion(@""); }
+        return;
+    }
+  
+    LogMessage(EchoLogTypeInfo, @"[行年] 发现 %lu 个参数，开始构建任务队列...", (unsigned long)allUnitCells.count);
+    NSMutableArray *workQueue = [NSMutableArray array];
+    for (NSUInteger i = 0; i < allUnitCells.count; i++) {
+        UICollectionViewCell *cell = allUnitCells[i];
+        [workQueue addObject:@{@"type": @"年命摘要", @"cell": cell, @"index": @(i)}];
+        [workQueue addObject:@{@"type": @"格局方法", @"cell": cell, @"index": @(i)}];
+    }
+  
+    __weak typeof(self) weakSelf = self;
+    __block void (^processQueue)(void);
+    processQueue = [^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || workQueue.count == 0) {
+            LogMessage(EchoLogTypeTask, @"[行年] 所有参数分析完毕。");
+            NSMutableString *resultStr = [NSMutableString string];
+            NSUInteger personCount = allUnitCells.count;
+            for (NSUInteger i = 0; i < personCount; i++) {
+                NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[摘要未获取]";
+                NSString *geJu = (i < g_capturedGeJuArray.count) ? g_capturedGeJuArray[i] : @"[格局未获取]";
+                
+                [resultStr appendFormat:@"- 参数 %lu\n  摘要: %@\n  格局: %@", (unsigned long)i+1, zhaiYao, geJu];
+                
+                if (i < personCount - 1) { [resultStr appendString:@"\n\n"]; }
+            }
+            g_isExtractingNianming = NO;
+            g_currentItemToExtract = nil;
+            if (completion) { completion([resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
+            processQueue = nil;
+            return;
+        }
+        NSDictionary *item = workQueue.firstObject; [workQueue removeObjectAtIndex:0];
+        NSString *type = item[@"type"];
+        UICollectionViewCell *cell = item[@"cell"];
+        NSInteger index = [item[@"index"] integerValue];
+        LogMessage(EchoLogTypeInfo, @"[行年] 正在处理参数 %ld 的 [%@]", (long)index + 1, type);
+        g_currentItemToExtract = type;
+        id delegate = targetCV.delegate;
+        NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
+        if (delegate && indexPath && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
+            [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            processQueue();
+        });
+    } copy];
+    processQueue();
 }
 
 // MARK: - Helper Methods & Data Formatters
@@ -1354,6 +1553,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.21 (Final Stable) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.20 (Expert Fix) 已加载。");
     }
 }
