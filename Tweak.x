@@ -1,7 +1,8 @@
-//////// Filename: Echo_AnalysisEngine_v13.21_Final.xm
-// 描述: Echo 六壬解析引擎 v13.21 (终极版)。
+//////// Filename: Echo_AnalysisEngine_v13.21_Final_Stable.xm
+// 描述: Echo 六壬解析引擎 v13.21 (终极稳定版)。
+//      - [CRITICAL FIX] 移除了在三传中重复计算六亲的危险逻辑，彻底解决了闪退问题。
 //      - [FINAL] 四课格式最终确定为“下神 上 上神，上神乘天将”，并移除六亲。
-//      - [FINAL] 三传格式重构为层级结构，信息更清晰。
+//      - [FINAL] 三传格式重构为层级结构，使用App原始六亲数据，信息更清晰。
 //      - [FINAL] 恢复“日辰关系”中的“辰”字，保持原文原意。
 //      - [STABILITY] 继承之前所有稳定性和功能。
 
@@ -76,46 +77,6 @@ static NSString *g_lastGeneratedReport = nil;
     _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
     code; \
     _Pragma("clang diagnostic pop")
-
-#pragma mark - Data Logic Helpers
-// Helper to get WuXing (Five Elements)
-static NSString* getWuXing(NSString *ganOrZhi) {
-    if (!ganOrZhi || ganOrZhi.length == 0) return @"";
-    NSDictionary *map = @{
-        @"甲":@"木", @"乙":@"木", @"寅":@"木", @"卯":@"木",
-        @"丙":@"火", @"丁":@"火", @"巳":@"火", @"午":@"火",
-        @"戊":@"土", @"己":@"土", @"辰":@"土", @"戌":@"土", @"丑":@"土", @"未":@"土",
-        @"庚":@"金", @"辛":@"金", @"申":@"金", @"酉":@"金",
-        @"壬":@"水", @"癸":@"水", @"亥":@"水", @"子":@"水"
-    };
-    return map[ganOrZhi] ?: @"";
-}
-
-// Helper to get LiuQin (Six Relatives) relationship
-static NSString* getLiuQinRelation(NSString *riGan, NSString *diZhi) {
-    if (!riGan || !diZhi) return @"";
-    NSString *riGanWuXing = getWuXing(riGan);
-    NSString *diZhiWuXing = getWuXing(diZhi);
-    if (riGanWuXing.length == 0 || diZhiWuXing.length == 0) return @"";
-
-    if ([riGanWuXing isEqualToString:diZhiWuXing]) return @"兄弟";
-
-    NSDictionary *shengKeMap = @{
-        @"木": @{@"sheng": @"火", @"ke": @"土"},
-        @"火": @{@"sheng": @"土", @"ke": @"金"},
-        @"土": @{@"sheng": @"金", @"ke": @"水"},
-        @"金": @{@"sheng": @"水", @"ke": @"木"},
-        @"水": @{@"sheng": @"木", @"ke": @"火"}
-    };
-
-    if ([shengKeMap[riGanWuXing][@"sheng"] isEqualToString:diZhiWuXing]) return @"子孙";
-    if ([shengKeMap[riGanWuXing][@"ke"] isEqualToString:diZhiWuXing]) return @"妻财";
-    if ([shengKeMap[diZhiWuXing][@"sheng"] isEqualToString:riGanWuXing]) return @"父母";
-    if ([shengKeMap[diZhiWuXing][@"ke"] isEqualToString:riGanWuXing]) return @"官鬼";
-
-    return @"";
-}
-
 
 #pragma mark - AI Report Generation
 static NSString *getAIPromptHeader() {
@@ -268,6 +229,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                     }
                 }
                 if (nextKeyRange.location != NSNotFound) { [content deleteCharactersInRange:NSMakeRange(nextKeyRange.location, content.length - nextKeyRange.location)]; }
+                
                 [report appendFormat:@"%@%@\n\n", fangFaMap[key], [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             }
         }
@@ -1325,25 +1287,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [scViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) {
         return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
     }];
-    
-    // Find RiGan from SiKe view to calculate LiuQin for SanChuan
-    NSString *riGan = @"";
-    Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
-    if(siKeViewClass) {
-        NSMutableArray *siKeViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
-        if (siKeViews.count > 0) {
-            UIView *container = siKeViews.firstObject;
-            Ivar riGanIvar = class_getInstanceVariable(siKeViewClass, "日");
-            if (riGanIvar) {
-                UILabel *riGanLabel = object_getIvar(container, riGanIvar);
-                if (riGanLabel && [riGanLabel isKindOfClass:[UILabel class]]) {
-                    riGan = riGanLabel.text;
-                }
-            }
-        }
-    }
-
 
     NSArray *titles = @[@"初传", @"中传", @"末传"];
     NSMutableArray *lines = [NSMutableArray array];
@@ -1356,22 +1299,22 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }];
 
         if (labels.count >= 3) {
+            NSString *rawLq = [[(UILabel*)labels.firstObject text] stringByReplacingOccurrencesOfString:@"->" withString:@""];
             NSString *tj = [(UILabel*)labels.lastObject text];
             NSString *dz = [(UILabel*)[labels objectAtIndex:labels.count - 2] text];
             
             NSMutableArray *ssParts = [NSMutableArray array];
             if (labels.count > 3) {
-                for (UILabel *l in [labels subarrayWithRange:NSMakeRange(0, labels.count - 2)]) {
-                    if (l.text.length > 0 && ![l.text containsString:@"->"]) [ssParts addObject:l.text];
+                for (NSUInteger j = 1; j < labels.count - 2; j++) {
+                     UILabel *l = labels[j];
+                    if (l.text.length > 0) [ssParts addObject:l.text];
                 }
             }
             NSString *ss = [ssParts componentsJoinedByString:@", "];
             NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"%lu传", (unsigned long)i+1];
 
             [lines addObject:[NSString stringWithFormat:@"- %@: %@", title, SafeString(dz)]];
-            if (riGan.length > 0) {
-                 [lines addObject:[NSString stringWithFormat:@"  - 六亲: %@", getLiuQinRelation(riGan, dz)]];
-            }
+            [lines addObject:[NSString stringWithFormat:@"  - 六亲: %@", SafeString(rawLq)]];
             [lines addObject:[NSString stringWithFormat:@"  - 天将: %@", SafeString(tj)]];
             if (ss.length > 0) {
                  [lines addObject:[NSString stringWithFormat:@"  - 神煞: %@", ss]];
