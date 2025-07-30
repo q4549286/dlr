@@ -1,10 +1,9 @@
-//////// Filename: Echo_AnalysisEngine_v13.20_Expert_Fix.xm
-// 描述: Echo 六壬解析引擎 v13.20 (专家修正版 v1.0)。
-//      - [CRITICAL FIX] 彻底修正并加固了旬空、日辰关系等部分的字符串解析逻辑，解决了闪退问题。
-//      - [CRITICAL FIX] 根据专家反馈，重写四课的输出格式与术语，确保其专业性和准确性，并重新注入六亲关系。
-//      - [FIX] 废弃课体分类，恢复原始准确的文本块输出。
-//      - [PROMPT] 保留已优化的AI指令，强调客观推断。
-//      - [STABILITY] 继承之前版本的所有功能和稳定性。
+//////// Filename: Echo_AnalysisEngine_v13.21_Final.xm
+// 描述: Echo 六壬解析引擎 v13.21 (终极版)。
+//      - [FINAL] 四课格式最终确定为“下神 上 上神，上神乘天将”，并移除六亲。
+//      - [FINAL] 三传格式重构为层级结构，信息更清晰。
+//      - [FINAL] 恢复“日辰关系”中的“辰”字，保持原文原意。
+//      - [STABILITY] 继承之前所有稳定性和功能。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -269,25 +268,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                     }
                 }
                 if (nextKeyRange.location != NSNotFound) { [content deleteCharactersInRange:NSMakeRange(nextKeyRange.location, content.length - nextKeyRange.location)]; }
-                
-                if ([key isEqualToString:@"日辰主客→"]) {
-                    // More targeted and safer replacements
-                    [content replaceOccurrencesOfString:@"日辰对较" withString:@"日支对较" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"辰为彼" withString:@"支为彼" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"辰为宅" withString:@"支为宅" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"辰为卑" withString:@"支为卑" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"辰为幼" withString:@"支为幼" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"辰为妻" withString:@"支为妻" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"辰为民" withString:@"支为民" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"辰则为水为舟" withString:@"支则为水为舟" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"辰则为入" withString:@"支则为入" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"以辰为病" withString:@"以支为病" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"以辰为母" withString:@"以支为母" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"以辰为谷物" withString:@"以支为谷物" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"以辰为鸟兽" withString:@"以支为鸟兽" options:0 range:NSMakeRange(0, content.length)];
-                    [content replaceOccurrencesOfString:@"日辰之位" withString:@"日支之位" options:0 range:NSMakeRange(0, content.length)];
-                }
-
                 [report appendFormat:@"%@%@\n\n", fangFaMap[key], [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             }
         }
@@ -1135,138 +1115,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 %new
-- (void)executeSimpleExtraction {
-    __weak typeof(self) weakSelf = self;
-    LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 标准报告 (AI结构化)");
-    [self showProgressHUD:@"1/4: 解析基础盘面..."];
-
-    NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
-
-    [self extractKePanInfoWithCompletion:^(NSMutableDictionary *baseReportData) {
-        [reportData addEntriesFromDictionary:baseReportData];
-        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
-        [strongSelf updateProgressHUD:@"2/4: 分析行年参数..."];
-
-        [strongSelf extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
-            reportData[@"行年参数"] = nianmingText;
-            __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) return;
-            [strongSelf2 updateProgressHUD:@"3/4: 解析课体范式..."];
-
-            [strongSelf2 startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:NO completion:^(NSString *keTiResult) {
-                reportData[@"课体范式_简"] = keTiResult;
-                __strong typeof(weakSelf) strongSelf3 = weakSelf; if (!strongSelf3) return;
-                [strongSelf3 updateProgressHUD:@"4/4: 解析九宗门..."];
-
-                [strongSelf3 startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:NO completion:^(NSString *jiuZongMenResult) {
-                    reportData[@"九宗门_简"] = jiuZongMenResult;
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) return;
-                        LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成结构化报告...");
-                        
-                        NSString *finalReport = formatFinalReport(reportData);
-                        g_lastGeneratedReport = [finalReport copy];
-                        
-                        [strongSelf4 hideProgressHUD];
-                        [strongSelf4 presentAIActionSheetWithReport:finalReport];
-                        LogMessage(EchoLogTypeTask, @"[完成] “标准报告”任务已完成。");
-
-                        g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil;
-                        LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
-                    });
-                }];
-            }];
-        }];
-    }];
-}
-
-%new
-- (void)executeCompositeExtraction {
-    __weak typeof(self) weakSelf = self;
-    LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 深度解构 (AI结构化)");
-    [self showProgressHUD:@"1/5: 解析基础盘面..."];
-
-    NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
-
-    [self extractKePanInfoWithCompletion:^(NSMutableDictionary *baseReportData) {
-        [reportData addEntriesFromDictionary:baseReportData];
-        __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
-        [strongSelf updateProgressHUD:@"2/5: 推演课传流注..."];
-
-        [strongSelf startExtraction_Truth_S2_WithCompletion:^{
-            reportData[@"课传详解"] = SafeString(g_s2_finalResultFromKeChuan);
-            __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) return;
-            [strongSelf2 updateProgressHUD:@"3/5: 分析行年参数..."];
-
-            [strongSelf2 extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
-                reportData[@"行年参数"] = nianmingText;
-                __strong typeof(weakSelf) strongSelf3 = weakSelf; if (!strongSelf3) return;
-                [strongSelf3 updateProgressHUD:@"4/5: 解析课体范式..."];
-
-                [strongSelf3 startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:NO completion:^(NSString *keTiResult) {
-                    reportData[@"课体范式_简"] = keTiResult;
-                    __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) return;
-                    [strongSelf4 updateProgressHUD:@"5/5: 解析九宗门..."];
-
-                    [strongSelf4 startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:NO completion:^(NSString *jiuZongMenResult) {
-                        reportData[@"九宗门_简"] = jiuZongMenResult;
-                        dispatch_async(dispatch_get_main_queue(), ^{
-                            __strong typeof(weakSelf) strongSelf5 = weakSelf; if (!strongSelf5) return;
-                            LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成结构化报告...");
-
-                            NSString *finalReport = formatFinalReport(reportData);
-                            g_lastGeneratedReport = [finalReport copy];
-                            
-                            [strongSelf5 hideProgressHUD];
-                            [strongSelf5 presentAIActionSheetWithReport:finalReport];
-                            LogMessage(EchoLogTypeTask, @"--- [完成] “深度解构”任务已全部完成 ---");
-
-                            g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil;
-                            g_s2_finalResultFromKeChuan = nil;
-                            LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
-                        });
-                    }];
-                }];
-            }];
-        }];
-    }];
-}
-%new
-- (void)extractSpecificPopupWithSelectorName:(NSString *)selectorName taskName:(NSString *)taskName completion:(void (^)(NSString *result))completion {
-    LogMessage(EchoLogTypeTask, @"[精准分析] 任务启动: %@", taskName);
-    [self showProgressHUD:[NSString stringWithFormat:@"正在分析: %@", taskName]];
-    
-    g_extractedData = [NSMutableDictionary dictionary];
-    
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        SEL selector = NSSelectorFromString(selectorName);
-        if ([self respondsToSelector:selector]) {
-            dispatch_sync(dispatch_get_main_queue(), ^{
-                SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]);
-            });
-            [NSThread sleepForTimeInterval:0.5];
-        } else {
-            LogMessage(EchoLogError, @"[错误] 无法响应选择器 '%@'", selectorName);
-        }
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            NSString *result = g_extractedData[taskName];
-            if (result.length > 0) {
-                NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
-                for (NSString *t in trash) { result = [result stringByReplacingOccurrencesOfString:t withString:@""]; }
-            } else {
-                LogMessage(EchoLogTypeWarning, @"[警告] %@ 分析失败或无内容。", taskName);
-                result = @"";
-            }
-            
-            if (completion) {
-                completion(result);
-            }
-            
-            g_extractedData = nil;
-        });
-    });
-}
-%new
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion {
     if (g_s2_isExtractingKeChuanDetail) { LogMessage(EchoLogError, @"[错误] 课传推演任务已在进行中。"); return; }
     LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“课传流注”...");
@@ -1459,13 +1307,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     NSString *k3_shang = ((UILabel*)c2[0]).text, *k3_jiang = ((UILabel*)c2[1]).text, *k3_xia = ((UILabel*)c2[2]).text;
     NSString *k4_shang = ((UILabel*)c1[0]).text, *k4_jiang = ((UILabel*)c1[1]).text, *k4_xia = ((UILabel*)c1[2]).text;
     
-    NSString *riGan = k1_xia; 
-
-    return [NSString stringWithFormat:@"- 第一课(日干): %@ 上 %@(%@)，%@乘%@\n- 第二课(日上): %@ 上 %@(%@)，%@乘%@\n- 第三课(支辰): %@ 上 %@(%@)，%@乘%@\n- 第四课(辰上): %@ 上 %@(%@)，%@乘%@",
-        SafeString(k1_xia), SafeString(k1_shang), getLiuQinRelation(riGan, k1_shang), SafeString(k1_shang), SafeString(k1_jiang),
-        SafeString(k2_xia), SafeString(k2_shang), getLiuQinRelation(riGan, k2_shang), SafeString(k2_shang), SafeString(k2_jiang),
-        SafeString(k3_xia), SafeString(k3_shang), getLiuQinRelation(riGan, k3_shang), SafeString(k3_shang), SafeString(k3_jiang),
-        SafeString(k4_xia), SafeString(k4_shang), getLiuQinRelation(riGan, k4_shang), SafeString(k4_shang), SafeString(k4_jiang)
+    return [NSString stringWithFormat:@"- 第一课(日干): %@ 上 %@，%@乘%@\n- 第二课(日上): %@ 上 %@，%@乘%@\n- 第三课(支辰): %@ 上 %@，%@乘%@\n- 第四课(辰上): %@ 上 %@，%@乘%@",
+        SafeString(k1_xia), SafeString(k1_shang), SafeString(k1_shang), SafeString(k1_jiang),
+        SafeString(k2_xia), SafeString(k2_shang), SafeString(k2_shang), SafeString(k2_jiang),
+        SafeString(k3_xia), SafeString(k3_shang), SafeString(k3_shang), SafeString(k3_jiang),
+        SafeString(k4_xia), SafeString(k4_shang), SafeString(k4_shang), SafeString(k4_jiang)
     ];
 }
 
@@ -1479,6 +1325,25 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [scViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) {
         return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
     }];
+    
+    // Find RiGan from SiKe view to calculate LiuQin for SanChuan
+    NSString *riGan = @"";
+    Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
+    if(siKeViewClass) {
+        NSMutableArray *siKeViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
+        if (siKeViews.count > 0) {
+            UIView *container = siKeViews.firstObject;
+            Ivar riGanIvar = class_getInstanceVariable(siKeViewClass, "日");
+            if (riGanIvar) {
+                UILabel *riGanLabel = object_getIvar(container, riGanIvar);
+                if (riGanLabel && [riGanLabel isKindOfClass:[UILabel class]]) {
+                    riGan = riGanLabel.text;
+                }
+            }
+        }
+    }
+
 
     NSArray *titles = @[@"初传", @"中传", @"末传"];
     NSMutableArray *lines = [NSMutableArray array];
@@ -1491,20 +1356,26 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }];
 
         if (labels.count >= 3) {
-            NSString *lq = [[(UILabel*)labels.firstObject text] stringByReplacingOccurrencesOfString:@"->" withString:@""];
             NSString *tj = [(UILabel*)labels.lastObject text];
             NSString *dz = [(UILabel*)[labels objectAtIndex:labels.count - 2] text];
             
             NSMutableArray *ssParts = [NSMutableArray array];
             if (labels.count > 3) {
-                for (UILabel *l in [labels subarrayWithRange:NSMakeRange(1, labels.count - 3)]) {
-                    if (l.text.length > 0) [ssParts addObject:l.text];
+                for (UILabel *l in [labels subarrayWithRange:NSMakeRange(0, labels.count - 2)]) {
+                    if (l.text.length > 0 && ![l.text containsString:@"->"]) [ssParts addObject:l.text];
                 }
             }
             NSString *ss = [ssParts componentsJoinedByString:@", "];
             NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"%lu传", (unsigned long)i+1];
 
-            [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@) [状态: %@]", title, SafeString(dz), SafeString(lq), SafeString(tj), ss.length > 0 ? ss : @"无"]];
+            [lines addObject:[NSString stringWithFormat:@"- %@: %@", title, SafeString(dz)]];
+            if (riGan.length > 0) {
+                 [lines addObject:[NSString stringWithFormat:@"  - 六亲: %@", getLiuQinRelation(riGan, dz)]];
+            }
+            [lines addObject:[NSString stringWithFormat:@"  - 天将: %@", SafeString(tj)]];
+            if (ss.length > 0) {
+                 [lines addObject:[NSString stringWithFormat:@"  - 神煞: %@", ss]];
+            }
         }
     }
     return [lines componentsJoinedByString:@"\n"];
