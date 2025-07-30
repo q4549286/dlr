@@ -1,8 +1,8 @@
-//////// Filename: Echo_AnalysisEngine_v13.16_Smart_AI_Menu.xm
-// 描述: Echo 六壬解析引擎 v13.16 (AI集成智能菜单版 v1.0)。
-//      - [FEATURE] AI发送菜单智能化：动态检测用户已安装的AI App (豆包/Kimi/元宝/ChatGPT/DeepSeek)，只显示可用的选项。
-//      - [FEATURE] 新增 Kimi 和 腾讯元宝 到支持列表。
-//      - [UI] 优化了主面板按钮布局和颜色。
+//////// Filename: Echo_AnalysisEngine_v13.17_Cache_Fix.xm
+// 描述: Echo 六壬解析引擎 v13.17 (内部报告缓存版 v1.0)。
+//      - [LOGIC FIX] 核心功能修复：快捷发送按钮不再依赖系统剪贴板，而是使用内部缓存保存的上一份报告，解决了剪贴板被覆盖导致功能失效的问题。
+//      - [UI] 快捷按钮重命名为“发送上次报告到AI”，功能更清晰，并更换了图标。
+//      - [FEATURE] AI发送菜单智能化：动态检测用户已安装的AI App，只显示可用的选项。
 //      - [STABILITY] 继承之前版本的所有功能和稳定性。
 
 #import <UIKit/UIKit.h>
@@ -31,7 +31,7 @@ static const NSInteger kButtonTag_BiFa              = 303;
 static const NSInteger kButtonTag_GeJu              = 304;
 static const NSInteger kButtonTag_FangFa            = 305;
 static const NSInteger kButtonTag_ClosePanel        = 998;
-static const NSInteger kButtonTag_PasteToAI         = 997; // 改为通用粘贴按钮
+static const NSInteger kButtonTag_SendLastReportToAI = 997; // 明确功能
 
 // Colors
 #define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
@@ -67,6 +67,8 @@ static BOOL g_isExtractingNianming = NO;
 static NSString *g_currentItemToExtract = nil;
 static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
+// -- [ADDED v13.17] -- 内部缓存，独立于系统剪贴板
+static NSString *g_lastGeneratedReport = nil;
 
 #define SafeString(str) (str ?: @"")
 
@@ -513,7 +515,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.16" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.17" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, contentView.bounds.size.width, 30)];
@@ -645,9 +647,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     closeButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
     [contentView addSubview:closeButton];
     
-    UIButton *pasteToAIButton = createButton(@"粘贴上次内容到AI", @"arrow.up.doc.on.clipboard", kButtonTag_PasteToAI, ECHO_COLOR_ACTION_AI);
-    pasteToAIButton.frame = CGRectMake(15 + bottomBtnWidth + 10, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
-    [contentView addSubview:pasteToAIButton];
+    // -- [MODIFIED v13.17] --
+    UIButton *sendLastReportButton = createButton(@"发送上次报告到AI", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
+    sendLastReportButton.frame = CGRectMake(15 + bottomBtnWidth + 10, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
+    [contentView addSubview:sendLastReportButton];
 
     g_mainControlPanelView.alpha = 0;
     [keyWindow addSubview:g_mainControlPanelView];
@@ -679,14 +682,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         case kButtonTag_ClosePanel:
             [self handleMasterButtonTap:nil];
             break;
-        case kButtonTag_PasteToAI:
+        // -- [MODIFIED v13.17] --
+        case kButtonTag_SendLastReportToAI:
         {
-            NSString *lastContent = [UIPasteboard generalPasteboard].string;
-            if (lastContent && lastContent.length > 0) {
-                [self presentAIActionSheetWithReport:lastContent];
+            NSString *lastReport = g_lastGeneratedReport;
+            if (lastReport && lastReport.length > 0) {
+                [self presentAIActionSheetWithReport:lastReport];
             } else {
-                LogMessage(EchoLogTypeWarning, @"剪贴板中无内容。");
-                [self showEchoNotificationWithTitle:@"操作无效" message:@"剪贴板为空。"];
+                LogMessage(EchoLogTypeWarning, @"内部报告缓存为空。");
+                [self showEchoNotificationWithTitle:@"操作无效" message:@"尚未生成任何报告。"];
             }
             break;
         }
@@ -703,6 +707,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                     reportData[@"课体范式_详"] = result;
                     NSString *finalReport = formatFinalReport(reportData);
+                    g_lastGeneratedReport = [finalReport copy]; // 更新缓存
                     [strongSelf presentAIActionSheetWithReport:finalReport];
                     g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil;
                 });
@@ -716,6 +721,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                     reportData[@"九宗门_详"] = result;
                     NSString *finalReport = formatFinalReport(reportData);
+                    g_lastGeneratedReport = [finalReport copy]; // 更新缓存
                     [strongSelf presentAIActionSheetWithReport:finalReport];
                     g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil;
                 });
@@ -731,6 +737,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                 reportData[@"行年参数"] = nianmingText;
                 NSString *finalReport = formatFinalReport(reportData);
+                g_lastGeneratedReport = [finalReport copy]; // 更新缓存
                 [strongSelf hideProgressHUD];
                 [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
@@ -742,6 +749,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                 reportData[@"毕法要诀"] = result;
                 NSString *finalReport = formatFinalReport(reportData);
+                g_lastGeneratedReport = [finalReport copy]; // 更新缓存
                 [strongSelf hideProgressHUD];
                 [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
@@ -753,6 +761,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                 reportData[@"格局要览"] = result;
                 NSString *finalReport = formatFinalReport(reportData);
+                g_lastGeneratedReport = [finalReport copy]; // 更新缓存
                 [strongSelf hideProgressHUD];
                 [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
@@ -764,6 +773,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                 reportData[@"解析方法"] = result;
                 NSString *finalReport = formatFinalReport(reportData);
+                g_lastGeneratedReport = [finalReport copy]; // 更新缓存
                 [strongSelf hideProgressHUD];
                 [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
@@ -780,19 +790,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
 
-    [UIPasteboard generalPasteboard].string = report; // 无论如何都先复制到剪贴板
+    [UIPasteboard generalPasteboard].string = report; 
 
-    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"发送到AI助手" message:@"将从剪贴板粘贴内容" preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"发送到AI助手" message:@"将使用内部缓存的报告内容" preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSString *encodedReport = [report stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
 
-    // 预置的AI App列表
     NSArray *aiApps = @[
         @{@"name": @"Kimi", @"scheme": @"kimi://", @"format": @"kimi://chat?q=%@"},
         @{@"name": @"豆包", @"scheme": @"doubao://", @"format": @"doubao://chat/send?text=%@"},
-        @{@"name": @"腾讯元宝", @"scheme": @"yuanbao://", @"format": @"yuanbao://send?text=%@"}, // 假设的Scheme
+        @{@"name": @"腾讯元宝", @"scheme": @"yuanbao://", @"format": @"yuanbao://send?text=%@"}, 
         @{@"name": @"ChatGPT", @"scheme": @"chatgpt://", @"format": @"chatgpt://chat?message=%@"},
-        @{@"name": @"DeepSeek", @"scheme": @"deepseek://", @"format": @"deepseek://send?text=%@"} // 假设的Scheme
+        @{@"name": @"DeepSeek", @"scheme": @"deepseek://", @"format": @"deepseek://send?text=%@"} 
     ];
 
     int availableApps = 0;
@@ -815,7 +824,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
     }
     
-    // 如果一个安装的都没有，给个提示
     if (availableApps == 0) {
         actionSheet.message = @"未检测到受支持的AI App。\n内容已复制到剪贴板。";
     }
@@ -1076,6 +1084,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                         LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成结构化报告...");
                         
                         NSString *finalReport = formatFinalReport(reportData);
+                        g_lastGeneratedReport = [finalReport copy]; // 更新缓存
                         
                         [strongSelf4 hideProgressHUD];
                         [strongSelf4 presentAIActionSheetWithReport:finalReport];
@@ -1125,6 +1134,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成结构化报告...");
 
                             NSString *finalReport = formatFinalReport(reportData);
+                            g_lastGeneratedReport = [finalReport copy]; // 更新缓存
                             
                             [strongSelf5 hideProgressHUD];
                             [strongSelf5 presentAIActionSheetWithReport:finalReport];
@@ -1248,6 +1258,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                     reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
                     NSString *finalReport = formatFinalReport(reportData);
+                    g_lastGeneratedReport = [finalReport copy]; // 更新缓存
                     [self presentAIActionSheetWithReport:finalReport];
                 }
             } else {
@@ -1520,6 +1531,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.16 (Smart AI Menu) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.17 (Cache Fix) 已加载。");
     }
 }
