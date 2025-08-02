@@ -503,7 +503,7 @@ return @"# 大六壬AI策略顾问系统 v9.0 完整终极版\n\n"
        @"#### 过程细节推演\n"
        @"- **起始阶段**：XX情况，因为XX，表现为XX\n"
        @"- **发展过程**：经历XX变化，关键点XX，转折因XX\n"
--      @"- **结果阶段**：达成XX状态，特点XX，持续XX\n\n"
+       @"- **结果阶段**：达成XX状态，特点XX，持续XX\n\n"
        @"#### 情感心理层次\n"
        @"- **求测者感受**：体验XX情感，变化轨迹XX，基于XX生克\n"
        @"- **对方心理**：呈现XX态度，变化XX，原因XX\n"
@@ -2067,6 +2067,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.20 (Expert Fix) 已加载。");
     }
 }
+
 
 
 
