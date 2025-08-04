@@ -762,9 +762,15 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
             [auxiliaryContent appendString:@"\n"];
         }
     }
+    NSString *sanGong = reportData[@"三宫时信息"];
+    if (sanGong.length > 0) {
+        [auxiliaryContent appendFormat:@"// 5.2. 三宫时信息\n%@\n\n", sanGong];
+    }
+
     NSString *nianMing = reportData[@"行年参数"];
     if (nianMing.length > 0) {
-        [auxiliaryContent appendFormat:@"// 5.2. 行年参数\n%@\n\n", nianMing];
+        // --- 注意：将 5.2 改为 5.3 ---
+        [auxiliaryContent appendFormat:@"// 5.3. 行年参数\n%@\n\n", nianMing];
     }
     if (auxiliaryContent.length > 0) {
         [report appendString:@"// 5. 辅助系统\n"];
@@ -956,6 +962,21 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 for (UILabel *label in allLabels) { if (label.text.length > 0) [textParts addObject:label.text]; }
                 g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
                 LogMessage(EchoLogTypeSuccess, @"[捕获] 成功解析弹窗 [%@]", title);
+            } else if ([NSStringFromClass([vcToPresent class]) containsString:@"三宮時信息視圖"]) {
+                NSMutableArray *allLabels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
+                // 按垂直位置排序
+                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                    return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
+                }];
+                NSMutableArray *textParts = [NSMutableArray array];
+                for (UILabel *label in allLabels) {
+                    if (label.text.length > 0) {
+                        [textParts addObject:label.text];
+                    }
+                }
+                g_extractedData[@"三宫时信息"] = [textParts componentsJoinedByString:@"\n"];
+                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功解析弹窗 [三宫时信息]");
             } else { LogMessage(EchoLogTypeInfo, @"[捕获] 发现未知弹窗 [%@]，内容已忽略。", title); }
             [vcToPresent dismissViewControllerAnimated:NO completion:nil];
         });
@@ -1827,6 +1848,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if ([self respondsToSelector:sGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sGeJu withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:sFangFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         if ([self respondsToSelector:sQiZheng]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
+        if ([self respondsToSelector:sSanGong]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sSanGong withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
         
         dispatch_async(dispatch_get_main_queue(), ^{
             LogMessage(EchoLogTypeInfo, @"[盘面] 整合所有信息...");
@@ -2041,6 +2063,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.20 (Expert Fix) 已加载。");
     }
 }
+
 
 
 
