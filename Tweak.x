@@ -1340,7 +1340,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         @{@"name": @"豆包", @"scheme": @"doubao://", @"format": @"doubao://chat/send?text=%@"},
         @{@"name": @"腾讯元宝", @"scheme": @"yuanbao://", @"format": @"yuanbao://send?text=%@"}, 
         @{@"name": @"ChatGPT", @"scheme": @"chatgpt://", @"format": @"chatgpt://chat?message=%@"},
-        @{@"name": @"DeepSeek", @"scheme": @"deepseek://", @"format": @"deepseek://send?text=%@"} 
+        @{@"name": @"DeepSeek", @"scheme": @"deepseek://", @"format": @"deepseek://send?text=%@"},
         @{@"name": @"BotGem", @"scheme": @"botgem://", @"format": @"botgem://send?text=%@"} 
     ];
 
@@ -2076,6 +2076,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.20 (Expert Fix) 已加载。");
     }
 }
+
 
 
 
