@@ -222,7 +222,7 @@ return @"# 大六壬AI策略顾问系统 v20.1 洞玄归元版\n"
        @"发用神分析：\n"
        @"- 与日干关系→六亲性质→基础吉凶\n"
        @"- 所乘天将→神将性质→吉凶程度与表现方式\n"
--      @"- 临位状态→得地失地→力量强弱\n"
+       @"- 临位状态→得地失地→力量强弱\n"
        @"- 旺衰空实→时令状态→【力量虚实】的关键\n"
        @"```\n"
        @"### D. 三传系统深度关联\n"
@@ -2060,6 +2060,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.20 (Expert Fix) 已加载。");
     }
 }
+
 
 
 
