@@ -620,9 +620,9 @@ return               @"### 【大六壬AI策略顾问系统 v20.2 洞玄归元 �
               @"**终极要求**：\n"
               @"你的分析，必须体现出【大师心法】的灵魂。**优先确保逻辑的严谨与结论的精准，其次才是语言的凝练。** 你的分析不仅要准确，更要让人感到震撼和启发。\n"
               @"**质量标准**：让人信服的不是你罗列了多少规则，而是你展现出的深刻洞察力和无懈可击的内在逻辑。真正体现"同盘同问得同论"的一致性和"断事如神"的震撼效果。\n"
-              @"请准备接收标准化课盘信息并进行专业深度分析！\n"
-              @"```\n"
-             ;}
+              @"请准备接收标准化课盘信息并进行专业深度分析！\n";
+              
+             }
 
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
@@ -2083,6 +2083,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.20 (Expert Fix) 已加载。");
     }
 }
+
 
 
 
