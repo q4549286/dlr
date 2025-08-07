@@ -1,4 +1,4 @@
-//////// Filename: Echo_AnalysisEngine_v13.21_Terminology_Fix.xm
+////// Filename: Echo_AnalysisEngine_v13.21_Terminology_Fix.xm
 // 描述: Echo 六壬解析引擎 v13.21 (术语精校版 v1.0)。
 //      - [CRITICAL FIX] 根据专家最终指示，精校四课的输出格式为“下神 上 上神，上神乘天将”，并移除画蛇添足的六亲关系。
 //      - [REVERT] 撤销对“日辰关系”说明文字中“辰”到“支”的替换，保持原文。
@@ -68,6 +68,9 @@ static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 static NSString *g_lastGeneratedReport = nil;
 
+// [MODIFIED] 增加一个全局变量来控制AI Prompt的输出，默认为开启
+static BOOL g_shouldIncludeAIPromptHeader = YES; 
+
 #define SafeString(str) (str ?: @"")
 
 #define SUPPRESS_LEAK_WARNING(code) \
@@ -108,7 +111,8 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"观其象（直觉与感知力）: 凭直觉扫描全盘，捕捉那些最“扎眼”、最“不寻常”的颠覆性信号（如全局空亡、返吟伏吟、特殊组合等），此为解盘之“题眼”。\n"
         @"审其数（力量与置信度感知）: 动态感知力量的【真实作用力】与【置信度】。你深知，一个关键的【状态】（旺相休囚、空亡、刑冲合害）可以彻底改变【生克】的性质。你对力量的感知不是模糊的强弱，而是基于【多维证据链】得出的精准判断。证据链越完整、越多维（如课传、神将、星曜、格局共同指向），其结论的【置信度】越高。\n"
         @"觅其枢（枢纽与全局整合）: 在纷繁的矛盾中，你必须主动进行【多维探索与自我辩证】，寻找那个能够【一以贯之】、整合所有对立信息的【核心枢纽】。此探索之始，在于强制启动【人我同观】视角，运用【现实第一法则】洞察【全局之实】：你必须将日干（我方）与日支/关键类神（他方）置于同等地位，用完全相同的标准，客观审视双方当下的【现实处境】（四课状态）与【隐秘动机】（阴神/遁干）。严禁先入为主地判定任何一方为“受害者”或“加害者”。你的职责是报告你所见的【完整关系现实】，而非仅仅回答求测者的单方面问题。\n"
-        @"断其占（整合、决断与【强制辩证】力）: 你从不模棱可。在众多纷繁的象意中，你总能依据【核心枢纽】和【证据链强度】，进行果断取舍。**在此决断过程中，你必须明确列出所有被你【评估、但最终以压倒性证据驳回】的【反面假设】或【次要矛盾】，并清晰阐述你【用以驳斥它们的、更高级别的证据】。这既是你的决策透明度，也是你洞察力的体现，并将此【辩证与审判过程】在【决策反思与反证审判台（心镜台）】中完整呈现。**最终，将所有信息整合成一个复杂的、符合现实的统一论断，直击事体本质。你的断语，是结论，而非表演。\n"
+
+        @"断其占（整合、决断与【强制辩证】力）: 你从不模棱可。在众多纷繁的象意中，你总能依据【核心枢纽】和【证据链强度】进行果断取舍。**在此决断过程中，你必须明确列出所有被你【评估、但最终以压倒性证据驳回】的【反面假设】或【次要矛盾】，并清晰阐述你【用以驳斥它们的、更高级别的证据】。这既是你的决策透明度，也是你洞察力的体现，并将此【辩证与审判过程】在【决策反思与反证审判台（心镜台）】中完整呈现。**最终，将所有信息整合成一个复杂的、符合现实的统一论断，直击事体本质。你的断语，是结论，而非表演。\n"
         @"【多象定一象原则系统（核心心法）】: 此为解盘的灵魂。你不能再孤立地、线性地解读信号。你必须强制自己将所有高强度信号（如伏吟与冲、生与克、空亡与旺相）置于同一画布上，然后质问自己：“什么【单一的、具体的现实场景】能够同时、且无矛盾地容纳所有这些看似对立的信号？” 你的最终结论，必须是这个问题的唯一答案。你必须能够清晰地解释，一个“静”的象和一个“动”的象是如何在一个场景里共存的。\n"
         @"【模式切换元指令】\n"
         @"核心指令: 在分析开始前，你必须首先判断问题类型。\n"
@@ -125,6 +129,7 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"核心心法: 让证据说话，而非让流程引导。 你的分析，必须由你发现的【最强证据】来主导和展开，而不是僵化地走完任何固定流程。\n"
         @"【证据信号】智能捕捉与解读指令:\n"
         @"指令: 你的第一步，是【直觉扫描】。你必须问自己：“这个盘里，关于过去，什么信息最扎眼？”是日干下的地盘天空？是支上神白虎克身？还是类神陷入了绝地？\n"
+
         @"指令: 锁定【1-3个最强信号】后，你必须将它们作为【叙事的支点】，用【现实显影法则】将其翻译成具体的【历史事实】。\n"
         @"指令: 然后，你要主动去寻找【次级证据】来支撑和丰富你的核心判断，最终形成一个【多点共振、逻辑自洽】的完整故事。\n"
         @"【现实显影法则】化虚为实之术: 此非一时一地之技巧，而是贯穿于【解盘全过程】的灵魂技术。其唯一目的，就是将盘中一切抽象的符号——无论是单个的神将、地支，还是复杂的课传、格局——强制转化为求测者在现实中能够理解、感知、并验证的【具体情景】、【人物行为】或【内心感受】。无此术，则断语为空谈；善用此术，则字字句句皆为现实之写照。\n"
@@ -246,6 +251,7 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"发用源头性质：\n"
         @"干课发用→我方主导→主动权在我\n"
         @"支课发用→对方主导→被动适应\n"
+
         @"混合发用→双方互动→复杂博弈\n"
         @"发用神分析：\n"
         @"与日干关系→六亲性质→基础吉凶\n"
@@ -504,6 +510,7 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"【基础信息快速定位】\n"
         @"-四柱节气：{{四柱}} {{节气}}，{{特殊状态}}\n"
         @"-核心参数：月将{{月将}}，旬空{{旬空}}，{{昼夜}}贵人{{贵人}}\n"
+
         @"-时空背景：{{三宫时信息核心断语}}，{{对全局的核心影响}}\n"
         @"-发用机制：{{发用神}}发用，{{发用条件}}，{{发用源头}}主导\n"
         @"-格局象意参考：{{主要格局}}，{{格局特征}} (注意：仅为象意参考，其解释权服从于法则优先级)\n"
@@ -520,6 +527,7 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"{{根据【前事追溯系统】得出的完整判词}}\n"
         @"\n"
         @"【核心枢纽深度解析与未来推演（升级版）】\n"
+
         @"【多路径推演与可能性博弈（强制）】:\n"
         @"路径A（常规路径）: “如果仅遵循【第四序位】的常规逻辑，【{{常规信号，如末传空亡}}】将主导事态，其发展将是【{{描述常规发展路径}}】，最终结局为【{{常规结局}}】。”\n"
         @"路径B（特殊路径）: “然而，由于【{{更高序位的法则，如第一序位的天命法则‘贵登天门’}}】的强力干预，此事极有可能突破常规。其发展将是【{{描述特殊发展路径}}】，最终结局为【{{特殊结局，如逆转成事}}】。”\n"
@@ -562,6 +570,7 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"顺逆之策: 若关键星曜【逆行】，核心策略应转向【内部审查、修复旧好、了结宿怨】，而非开疆拓土。此时是“温故”而非“知新”的最佳时机。\n"
         @"留转之机: 若关键星曜即将【留转】，则其停滞前后数日是事态的【关键引爆点或转折点】。必须在此期间高度戒备，或采取关键行动。\n"
         @"吉凶之用: 若有吉星（如木星、金星）照临我方关键宫位，应【主动出击】，借天时之东风。若有凶星（如土星、火星）肆虐，则应【避其锋芒，以柔克刚】，切不可逆天行事。\n"
+..
         @"【最终判断结论】\n"
         @"【全局现实报告原则】: 你的最终结论，必须是你洞察到的【完整现实切片】，而不仅仅是针对用户问题的答案。如果盘中存在与问题看似无关，但信号强度极高、足以影响事体本质的信息（如人数、隐藏动机、第三方介入等），你必须【主动报告】，并明确指出它与所问之事的关系。你的结论，必须以“你问的是A，但我看到的完整现实是A+B+C……”的模式呈现。\n"
         @"\n"
@@ -652,6 +661,7 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"【辩证·象意取舍与反证（心镜台）】: 我最终断定为【{{最终答案}}】，是整合了【{{关键信息A、B、C}}】的结果。在此过程中，我已排除了【{{备选答案X}}】的可能性，因为【{{列出反证，如：它与盘中的‘动/静’、‘冷/热’等核心属性相悖}}】。\n"
         @"【伴生现实强制扫描】:\n"
         @"指令: 在锁定核心答案后，你必须强制重新扫描全盘，专门寻找与【人事关系】、【数量】、【环境特殊性】等相关的【高强度伴生信号】。\n"
+
         @"人事信号: 盘中是否存在明确的【兄弟】（同伴）、【父母】（长辈）、【官鬼】（上级/异性）、【妻财】（伴侣/下属）等六亲信号？它们的状态如何？\n"
         @"数量信号: 盘中是否存在明确指向数量的结构？（如四课伏吟=4，三合局=3，对冲=2等）\n"
         @"环境信号: 盘中是否存在揭示环境特殊性的信号？（如伏吟=静止/聚集，返吟=奔波/变动，空亡=虚假/缺失等）\n"
@@ -842,9 +852,9 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
 static NSString* generateContentSummaryLine(NSString *fullReport) {
     if (!fullReport || fullReport.length == 0) return @"";
-    NSDictionary *keywordMap = @{ @"// 1. 基础盘元": @"基础盘元", @"// 2. 核心盘架": @"核心盘架", @"// 3. 格局总览": @"格局总览", @"// 4. 爻位详解": @"爻位详解", @"// 4.6. 神将详解": @"课传详解", @"// 5. 辅助系统": @"辅助系统", @"// 5.2. 行年参数": @"行年参数"};
+    NSDictionary *keywordMap = @{ @"// 1. 基础盘元": @"基础盘元", @"// 2. 核心盘架": @"核心盘架", @"// 3. 格局总览": @"格局总览", @"// 4. 爻位详解": @"爻位详解", @"// 4.6. 神将详解": @"课传详解", @"// 5. 辅助系统": @"辅助系统", @"// 5.3. 行年参数": @"行年参数"}; // 使用 5.3
     NSMutableArray *includedSections = [NSMutableArray array];
-    NSArray *orderedKeys = @[@"// 1. 基础盘元", @"// 2. 核心盘架", @"// 3. 格局总览", @"// 4. 爻位详解", @"// 4.6. 神将详解", @"// 5. 辅助系统", @"// 5.2. 行年参数"];
+    NSArray *orderedKeys = @[@"// 1. 基础盘元", @"// 2. 核心盘架", @"// 3. 格局总览", @"// 4. 爻位详解", @"// 4.6. 神将详解", @"// 5. 辅助系统", @"// 5.3. 行年参数"]; // 使用 5.3
     for (NSString *keyword in orderedKeys) {
         if ([fullReport containsString:keyword]) {
             NSString *sectionName = keywordMap[keyword];
@@ -858,13 +868,15 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
 }
 
 static NSString* formatFinalReport(NSDictionary* reportData) {
-    NSString *headerPrompt = getAIPromptHeader();
+    // [MODIFIED] 根据全局开关状态决定是否包含Prompt头
+    NSString *headerPrompt = g_shouldIncludeAIPromptHeader ? getAIPromptHeader() : @"";
     NSString *structuredReport = generateStructuredReport(reportData);
     NSString *summaryLine = generateContentSummaryLine(structuredReport);
     NSString *footerText = @"\n\n"
     "// 依据解析方法，以及所有大六壬解析技巧方式回答下面问题\n"
     "// 问题：";
     
+    // 如果header是空字符串，结果会自动处理前面的换行符
     return [NSString stringWithFormat:@"%@%@\n%@%@", headerPrompt, structuredReport, summaryLine, footerText];
 }
 
@@ -930,6 +942,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)hideProgressHUD;
 - (void)showEchoNotificationWithTitle:(NSString *)title message:(NSString *)message;
 - (void)handleMasterButtonTap:(UIButton *)sender;
+- (void)handlePromptSwitchChanged:(UISwitch *)sender; // [MODIFIED] 增加开关响应方法
 - (void)executeSimpleExtraction;
 - (void)executeCompositeExtraction;
 - (void)extractSpecificPopupWithSelectorName:(NSString *)selectorName taskName:(NSString *)taskName completion:(void (^)(NSString *result))completion;
@@ -1105,16 +1118,41 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.20" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.21" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString;
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [contentView addSubview:titleLabel];
+    
+    // [MODIFIED] 增加开关和布局调整
+    CGFloat currentY = 50; // 标题下方开始
 
-    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 50, contentView.bounds.size.width, contentView.bounds.size.height - 110)];
+    // 开关容器
+    UIView *switchContainer = [[UIView alloc] initWithFrame:CGRectMake(0, currentY, contentView.bounds.size.width, 40)];
+    [contentView addSubview:switchContainer];
+    
+    // 开关标签
+    UILabel *switchLabel = [[UILabel alloc] initWithFrame:CGRectMake(switchContainer.bounds.size.width / 2 - 100, 5, 120, 30)];
+    switchLabel.text = @"附加AI分析指令:";
+    switchLabel.textColor = [UIColor whiteColor];
+    switchLabel.font = [UIFont systemFontOfSize:14];
+    switchLabel.textAlignment = NSTextAlignmentRight;
+    [switchContainer addSubview:switchLabel];
+
+    // 开关本身
+    UISwitch *promptSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(switchContainer.bounds.size.width / 2 + 25, 5, 51, 31)];
+    [promptSwitch setOn:g_shouldIncludeAIPromptHeader];
+    [promptSwitch addTarget:self action:@selector(handlePromptSwitchChanged:) forControlEvents:UIControlEventValueChanged];
+    [switchContainer addSubview:promptSwitch];
+
+    currentY += 45; // 增加 Y 坐标，为下面的滚动视图留出空间
+    
+    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, currentY, contentView.bounds.size.width, contentView.bounds.size.height - currentY - 60 - 230)]; // 调整 scrollView 的 Y 坐标和高度
     [contentView addSubview:scrollView];
+    
+    CGFloat scrollContentY = 20;
 
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -1154,13 +1192,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return separator;
     };
   
-    CGFloat currentY = 20;
     CGFloat btnWidth = (scrollView.bounds.size.width - 45) / 2.0;
 
     UILabel *sec1Title = createSectionTitle(@"核心解析");
-    sec1Title.frame = CGRectMake(15, currentY, scrollView.bounds.size.width - 30, 22);
+    sec1Title.frame = CGRectMake(15, scrollContentY, scrollView.bounds.size.width - 30, 22);
     [scrollView addSubview:sec1Title];
-    currentY += 35;
+    scrollContentY += 35;
 
     NSArray *mainButtons = @[
         @{@"title": @"标准报告", @"icon": @"doc.text", @"tag": @(kButtonTag_StandardReport), @"color": ECHO_COLOR_MAIN_TEAL},
@@ -1169,18 +1206,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     for (int i = 0; i < mainButtons.count; i++) {
         NSDictionary *config = mainButtons[i];
         UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], config[@"color"]);
-        btn.frame = CGRectMake(15 + (i % 2) * (btnWidth + 15), currentY, btnWidth, 48);
+        btn.frame = CGRectMake(15 + (i % 2) * (btnWidth + 15), scrollContentY, btnWidth, 48);
         [scrollView addSubview:btn];
     }
-    currentY += 48 + 20;
+    scrollContentY += 48 + 20;
     
-    [scrollView addSubview:createSeparator(currentY)];
-    currentY += 20;
+    [scrollView addSubview:createSeparator(scrollContentY)];
+    scrollContentY += 20;
   
     UILabel *sec2Title = createSectionTitle(@"专项分析");
-    sec2Title.frame = CGRectMake(15, currentY, scrollView.bounds.size.width - 30, 22);
+    sec2Title.frame = CGRectMake(15, scrollContentY, scrollView.bounds.size.width - 30, 22);
     [scrollView addSubview:sec2Title];
-    currentY += 35;
+    scrollContentY += 35;
     
     NSArray *coreButtons = @[
         @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)},
@@ -1191,18 +1228,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     for (int i=0; i<coreButtons.count; i++) {
         NSDictionary *config = coreButtons[i];
         UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
-        btn.frame = CGRectMake(15 + (i % 2) * (btnWidth + 15), currentY + (i / 2) * 58, btnWidth, 46);
+        btn.frame = CGRectMake(15 + (i % 2) * (btnWidth + 15), scrollContentY + (i / 2) * 58, btnWidth, 46);
         [scrollView addSubview:btn];
     }
-    currentY += ((coreButtons.count + 1) / 2) * 58 + 20;
+    scrollContentY += ((coreButtons.count + 1) / 2) * 58 + 20;
 
-    [scrollView addSubview:createSeparator(currentY)];
-    currentY += 20;
+    [scrollView addSubview:createSeparator(scrollContentY)];
+    scrollContentY += 20;
 
     UILabel *sec3Title = createSectionTitle(@"格局资料库");
-    sec3Title.frame = CGRectMake(15, currentY, scrollView.bounds.size.width - 30, 22);
+    sec3Title.frame = CGRectMake(15, scrollContentY, scrollView.bounds.size.width - 30, 22);
     [scrollView addSubview:sec3Title];
-    currentY += 35;
+    scrollContentY += 35;
     
     NSArray *auxButtons = @[
         @{@"title": @"毕法要诀", @"icon": @"book.closed", @"tag": @(kButtonTag_BiFa)},
@@ -1213,12 +1250,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     for (int i=0; i<auxButtons.count; i++) {
         NSDictionary *config = auxButtons[i];
         UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
-        btn.frame = CGRectMake(15 + i * (smallBtnWidth + 10), currentY, smallBtnWidth, 46);
+        btn.frame = CGRectMake(15 + i * (smallBtnWidth + 10), scrollContentY, smallBtnWidth, 46);
         [scrollView addSubview:btn];
     }
-    currentY += 56;
+    scrollContentY += 56;
     
-    scrollView.contentSize = CGSizeMake(scrollView.bounds.size.width, currentY);
+    scrollView.contentSize = CGSizeMake(scrollView.bounds.size.width, scrollContentY);
   
     g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, contentView.bounds.size.height - 230, contentView.bounds.size.width, 170)];
     g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
@@ -1244,6 +1281,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_mainControlPanelView.alpha = 0;
     [keyWindow addSubview:g_mainControlPanelView];
     [UIView animateWithDuration:0.4 animations:^{ g_mainControlPanelView.alpha = 1.0; }];
+}
+
+%new
+- (void)handlePromptSwitchChanged:(UISwitch *)sender {
+    g_shouldIncludeAIPromptHeader = sender.isOn;
+    LogMessage(EchoLogTypeInfo, @"[设置] AI分析指令已 %@。", sender.isOn ? @"开启" : @"关闭");
 }
 
 %new
@@ -2122,66 +2165,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.20 (Expert Fix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.21 (Expert Fix, Prompt-Switch) 已加载。");
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
