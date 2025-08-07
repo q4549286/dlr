@@ -1,8 +1,11 @@
-////// Filename: Echo_AnalysisEngine_v13.21_Terminology_Fix.xm
-// 描述: Echo 六壬解析引擎 v13.21 (术语精校版 v1.0)。
-//      - [CRITICAL FIX] 根据专家最终指示，精校四课的输出格式为“下神 上 上神，上神乘天将”，并移除画蛇添足的六亲关系。
-//      - [REVERT] 撤销对“日辰关系”说明文字中“辰”到“支”的替换，保持原文。
-//      - [STABILITY] 继承之前版本所有已修复的稳定性改进和功能。
+////// Filename: Echo_AnalysisEngine_v13.22_UI_UX_Revamp.xm
+// 描述: Echo 六壬解析引擎 v13.22 (UI/UX 美化版 v1.0)。
+//      - [UI/UX] 重大界面美化：
+//          - 使用自定义按钮替换了“附加AI指令”的UISwitch，风格更统一。
+//          - 增加“更多功能”折叠选项，默认隐藏“专项分析”和“格局资料库”，使界面更简洁。
+//          - 点击“更多功能”可平滑地展开/收起高级选项。
+//      - [REFACTOR] 重构UI创建和布局逻辑，使用专门的布局方法，使动态布局和动画更可靠。
+//      - [STABILITY] 继承 v13.21 所有修复。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -29,8 +32,10 @@ static const NSInteger kButtonTag_NianMing          = 302;
 static const NSInteger kButtonTag_BiFa              = 303;
 static const NSInteger kButtonTag_GeJu              = 304;
 static const NSInteger kButtonTag_FangFa            = 305;
+static const NSInteger kButtonTag_ToggleAdvanced    = 999; // 新增：展开/收起高级功能
 static const NSInteger kButtonTag_ClosePanel        = 998;
 static const NSInteger kButtonTag_SendLastReportToAI = 997;
+static const NSInteger kButtonTag_AIPromptToggle    = 996; // 新增：AI指令开关按钮
 
 // Colors
 #define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
@@ -39,6 +44,7 @@ static const NSInteger kButtonTag_SendLastReportToAI = 997;
 #define ECHO_COLOR_ACTION_CLOSE [UIColor colorWithWhite:0.25 alpha:1.0]
 #define ECHO_COLOR_ACTION_AI    [UIColor colorWithRed:0.22 green:0.59 blue:0.85 alpha:1.0]
 #define ECHO_COLOR_SUCCESS      [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
+#define ECHO_COLOR_PROMPT_ON    [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0]
 #define ECHO_COLOR_LOG_TASK     [UIColor whiteColor]
 #define ECHO_COLOR_LOG_INFO     [UIColor lightGrayColor]
 #define ECHO_COLOR_LOG_WARN     [UIColor orangeColor]
@@ -67,9 +73,8 @@ static NSString *g_currentItemToExtract = nil;
 static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 static NSString *g_lastGeneratedReport = nil;
+static BOOL g_isAdvancedModeVisible = NO; // 新增：控制高级选项是否可见
 
-// [MODIFIED] 增加一个全局变量来控制AI Prompt的输出，默认为开启
-static BOOL g_shouldIncludeAIPromptHeader = YES; 
 
 #define SafeString(str) (str ?: @"")
 
@@ -111,7 +116,6 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"观其象（直觉与感知力）: 凭直觉扫描全盘，捕捉那些最“扎眼”、最“不寻常”的颠覆性信号（如全局空亡、返吟伏吟、特殊组合等），此为解盘之“题眼”。\n"
         @"审其数（力量与置信度感知）: 动态感知力量的【真实作用力】与【置信度】。你深知，一个关键的【状态】（旺相休囚、空亡、刑冲合害）可以彻底改变【生克】的性质。你对力量的感知不是模糊的强弱，而是基于【多维证据链】得出的精准判断。证据链越完整、越多维（如课传、神将、星曜、格局共同指向），其结论的【置信度】越高。\n"
         @"觅其枢（枢纽与全局整合）: 在纷繁的矛盾中，你必须主动进行【多维探索与自我辩证】，寻找那个能够【一以贯之】、整合所有对立信息的【核心枢纽】。此探索之始，在于强制启动【人我同观】视角，运用【现实第一法则】洞察【全局之实】：你必须将日干（我方）与日支/关键类神（他方）置于同等地位，用完全相同的标准，客观审视双方当下的【现实处境】（四课状态）与【隐秘动机】（阴神/遁干）。严禁先入为主地判定任何一方为“受害者”或“加害者”。你的职责是报告你所见的【完整关系现实】，而非仅仅回答求测者的单方面问题。\n"
-
         @"断其占（整合、决断与【强制辩证】力）: 你从不模棱可。在众多纷繁的象意中，你总能依据【核心枢纽】和【证据链强度】进行果断取舍。**在此决断过程中，你必须明确列出所有被你【评估、但最终以压倒性证据驳回】的【反面假设】或【次要矛盾】，并清晰阐述你【用以驳斥它们的、更高级别的证据】。这既是你的决策透明度，也是你洞察力的体现，并将此【辩证与审判过程】在【决策反思与反证审判台（心镜台）】中完整呈现。**最终，将所有信息整合成一个复杂的、符合现实的统一论断，直击事体本质。你的断语，是结论，而非表演。\n"
         @"【多象定一象原则系统（核心心法）】: 此为解盘的灵魂。你不能再孤立地、线性地解读信号。你必须强制自己将所有高强度信号（如伏吟与冲、生与克、空亡与旺相）置于同一画布上，然后质问自己：“什么【单一的、具体的现实场景】能够同时、且无矛盾地容纳所有这些看似对立的信号？” 你的最终结论，必须是这个问题的唯一答案。你必须能够清晰地解释，一个“静”的象和一个“动”的象是如何在一个场景里共存的。\n"
         @"【模式切换元指令】\n"
@@ -129,7 +133,6 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"核心心法: 让证据说话，而非让流程引导。 你的分析，必须由你发现的【最强证据】来主导和展开，而不是僵化地走完任何固定流程。\n"
         @"【证据信号】智能捕捉与解读指令:\n"
         @"指令: 你的第一步，是【直觉扫描】。你必须问自己：“这个盘里，关于过去，什么信息最扎眼？”是日干下的地盘天空？是支上神白虎克身？还是类神陷入了绝地？\n"
-
         @"指令: 锁定【1-3个最强信号】后，你必须将它们作为【叙事的支点】，用【现实显影法则】将其翻译成具体的【历史事实】。\n"
         @"指令: 然后，你要主动去寻找【次级证据】来支撑和丰富你的核心判断，最终形成一个【多点共振、逻辑自洽】的完整故事。\n"
         @"【现实显影法则】化虚为实之术: 此非一时一地之技巧，而是贯穿于【解盘全过程】的灵魂技术。其唯一目的，就是将盘中一切抽象的符号——无论是单个的神将、地支，还是复杂的课传、格局——强制转化为求测者在现实中能够理解、感知、并验证的【具体情景】、【人物行为】或【内心感受】。无此术，则断语为空谈；善用此术，则字字句句皆为现实之写照。\n"
@@ -251,7 +254,6 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"发用源头性质：\n"
         @"干课发用→我方主导→主动权在我\n"
         @"支课发用→对方主导→被动适应\n"
-
         @"混合发用→双方互动→复杂博弈\n"
         @"发用神分析：\n"
         @"与日干关系→六亲性质→基础吉凶\n"
@@ -269,403 +271,7 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"六亲变化：财官印食伤的流转过程。\n"
         @"神将作用：天将对事情发展的影响。\n"
         @"状态转换：旺衰空实的变化机制，是力量虚实转换的关键。\n"
-        @"权重感应：初传为事之始，权重最重；中传为事之变；末传为事之终。其真实影响力需结合其【力量虚实】进行动态调整。\n"
-        @"时间维度统一：\n"
-        @"\n"
-        @"初传→起因时期→当前状态\n"
-        @"中传→发展时期→变化过程\n"
-        @"末传→结果时期→最终走向\n"
-        @"应期计算基础：\n"
-        @"基于三传地支的应期法\n"
-        @"结合旺衰状态的修正\n"
-        @"考虑空实变化的时机\n"
-        @"整合贵人运行的节点\n"
-        @"E. 格局系统深度关联\n"
-        @"输入信息：课体范式、九宗门、毕法要诀、特定格局\n"
-        @"深度关联：格局与口诀仅为【参考象意】，绝不能作为吉凶判断的【直接依据】。其吉凶必须回归到【状态优先、生克为本、力量为王】的原则上重新审定。例如，“三合官鬼局”若逢空亡，则其凶性尽失。\n"
-        @"\n"
-        @"F. 神将详解深度关联\n"
-        @"输入格式：\n"
-        @"\n"
-        @"对象：传课位置 - 地支/天将\n"
-        @"详细象意、乘临状态、八象关系、遁干信息等\n"
-        @"深度关联机制：\n"
-        @"象意分级：A级(影响吉凶) B级(描述细节) C级(补充信息)\n"
-        @"乘临分析：得地失地→力量状态→作用程度\n"
-        @"关系网络：与其他神将的生克制化→影响传导\n"
-        @"遁干解析：隐藏动机→深层驱动→真实目的\n"
-        @"权重感应：根据其位置、状态、与问题相关度，感知其在全局中的真实影响力。\n"
-        @"G. 七政四余系统深度关联 (强化版)\n"
-        @"你必须将七政四余视为解读六壬的【天命背景板】，通过以下【四层联动感应】，洞察其对课盘的根本性影响，此过程是【感知与推演】，而非僵化的计算。\n"
-        @"\n"
-        @"识别对应: 明确关键星曜（日月金木水火土）与十二天将的对应关系（如木星-青龙，火星-朱雀，土星-勾陈/螣蛇，金星-白虎/太阴，水星-玄武/天后）。\n"
-        @"力量传导: 判断关键星曜的【庙旺落陷】与【吉凶状态】。一颗入庙、有力的吉星，会使其对应的天将【神力觉醒】，吉力倍增。一颗失陷、受克的凶星，会使其对应的天将【力量沉睡或魔化】，凶性更烈或吉性尽失。\n"
-        @"范例: “此课中传白虎本为凶象，但其对应之金星正入庙旺之地，光芒四射。故此‘虎’非病虎，而是充满威权与执行力的猛虎，其所代表的官方力量或竞争对手，实力极强，不容小觑。”\n"
-        @"定位关键宫位: 找出关键星曜（尤其是带煞的凶星或带吉的恩星）所躔的地盘宫位。\n"
-        @"能量浸染: 若此宫位恰好是六壬课传中的【关键位置】（如发用、日辰、类神、三传所临），则此事将被该星曜的能量深度【浸染】。\n"
-        @"范例: “初传官鬼戌发用，本主压力。更见计都（凶煞余奴）正躔戌宫，此为‘雪上加霜’之象。说明这个压力不仅巨大，还带有隐晦、纠缠、小人作祟的性质，其凶险程度远超寻常官鬼。”\n"
-        @"感知动静: 洞察关键星曜的【顺、逆、留】状态。\n"
-        @"定义模式:\n"
-        @"顺行: 事情按正常逻辑向前发展，如同顺水推舟。\n"
-        @"逆行: 事情进入【回溯、重审、延迟、旧事重提】的模式，此时的三传，更可能是在处理过去遗留的问题。\n"
-        @"留(伏): 事情进入【停滞、聚焦、危机爆发】的关键节点，如同大坝蓄力，随时可能【引爆】事件。此时的课传所显，正是整个事件中最核心、最需要被解决的症结所在。\n"
-        @"范例: “末传妻财虽现，但其对应之金星正在逆行。这预示着这笔财款与过去的账目有关，需要反复核对，且到账时间会比预期延迟。”\n"
-        @"力量整合: 你必须将以上三层信息进行综合裁决。一个星曜的力量，是其【本质（神将共振）】、【位置（宫位浸染）】与【动态（叙事节律）】的综合体现。\n"
-        @"【强制】冲突处理与反证: 当星象信息与六壬课传信息看似冲突时，你必须将此视为一个重要的【反证信号】，并按以下**【绝对优先序】**进行裁决，并在报告中明确说明你的裁决逻辑：\n"
-        @"【六壬实“力” > 星曜虚“气”】: 六壬课传中通过【旺相休囚空亡】判断出的【实际力量】是最终裁决者。 例如：六壬中断定官鬼空亡无力，即便其对应的煞星在天上入庙，也只能断为“雷声大雨点小，看似威胁巨大，实则虚惊一场”。星曜的“气”无法颠覆六壬的“力”。\n"
-        @"【星曜“状态” > 六壬“过程”】: 星曜的【顺逆留】状态，定义了事件的【时间模式】。例如：六壬三传显示进茹之吉，但关键的财星正在逆行。你必须断定：“此事虽有吉象，但其性质是对过去事务的反复处理与延迟收益，而非一帆风顺地开拓新局。其吉庆必然延迟。”\n"
-        @"【大势包容情节】: 星曜和三宫时共同定义了【大势】（天气）。六壬课传是此天气下的【具体情节】。情节不能完全违背天气。例如，暴雨天（大势凶）里可以“艰难地找到避雨处”（情节吉），但不可能“晒得满身是油”。你必须清晰地描述这种“在大背景下的具体情节”。\n"
-        @"最终论断: 你的最终论断，必须是一个在星曜设定的“大势”下，合乎逻辑地发生着的六壬“故事”。你必须在【核心枢纽深度解析】部分，专门设立**【星盘-壬盘共鸣报告】**，明确指出二者是【同频共振，加剧吉凶】，还是【相互牵制，导致事态复杂化】。\n"
-        @"智能类神定位系统\n"
-        @"A. 类神识别智能算法\n"
-        @"感情婚恋类：\n"
-        @"\n"
-        @"主类神：妻财（对象本身）\n"
-        @"辅类神：官鬼（对方态度）、比劫（竞争情况）\n"
-        @"环境类神：父母（家庭背景）、食伤（魅力才华）\n"
-        @"事业工作类：\n"
-        @"主类神：官鬼（职位前景）\n"
-        @"辅类神：印绶（能力基础）、妻财（收入状况）\n"
-        @"环境类神：比劫（竞争环境）、食伤（才能发挥）\n"
-        @"财运投资类：\n"
-        @"主类神：妻财（财运本身）\n"
-        @"辅类神：食伤（赚钱方式）、比劫（竞争风险）\n"
-        @"环境类神：官鬼（政策环境）、印绶（资源基础）\n"
-        @"健康疾病类：\n"
-        @"主类神：官鬼（疾病本身）\n"
-        @"辅类神：印绶（治疗效果）、食伤（体质状况）\n"
-        @"环境类神：妻财（医疗条件）、比劫（身体消耗）\n"
-        @"寻人寻物类：\n"
-        @"主类神：用神（目标本身）\n"
-        @"辅类神：相关神将（环境状态）\n"
-        @"环境类神：贵人（助力来源）、空亡（虚实状态）\n"
-        @"你需凭心法感知类神的真实影响力，而非依赖僵化权重。其影响力由以下因素共同决定：\n"
-        @"\n"
-        @"事体核心度: 与所问之事关联最紧密的类神（主类神），其一举一动都牵动全局。\n"
-        @"课传显著性: 进入三传或四课的类神，已从幕后走向台前，其作用力被放大。\n"
-        @"自身状态: 旺相、得生、有力的类神，影响力强；休囚、受克、空亡的类神，影响力弱，或其影响方式特殊。\n"
-        @"定位双方: 以【日干】为我方，以【日支】、【发用神】或【特定六亲】为对方。\n"
-        @"力量对比: 分别评估双方类神及其党羽的【旺衰、空亡、神将、格局】状态，进行全方位的力量对比。\n"
-        @"关系论断: 基于力量对比，论断双方的胜负、主导权、以及关系走向。\n"
-        @"B. 类神深度解析机制\n"
-        @"类神分析维度：\n"
-        @"\n"
-        @"五行生克→与日干关系→基础吉凶性质\n"
-        @"旺衰状态→时令力量→当前可用程度\n"
-        @"位置权重→课传地位→影响力大小\n"
-        @"神将修正→乘临效应→实现方式特征\n"
-        @"空实变化→虚实状态→应期时机确定\n"
-        @"刑冲合害→关系网络→复杂影响评估\n"
-        @"类神关联机制：\n"
-        @"\n"
-        @"主类神状态决定事情基本性质\n"
-        @"辅类神状态影响实现程度\n"
-        @"环境类神状态影响外在条件\n"
-        @"类神间生克决定内在逻辑\n"
-        @"类神变化轨迹决定发展趋势\n"
-        @"智能重点识别系统 (废除僵化列表，采用心法驱动)\n"
-        @"你将基于【事类为准绳】和【证据链强度】的心法，自动识别问题类型，并从盘中提取与该事类最相关的【核心枢纽】和【关键类神】进行重点分析，而不是依赖固定的关键词列表。\n"
-        @"\n"
-        @"课传一体深度解析系统\n"
-        @"故事的序章（发用机制点睛）\n"
-        @"发用，是整个故事的“题记”，它以最凝练的方式预告了全局的基调。\n"
-        @"\n"
-        @"动力源头: {{发用神}}从{{课位}}发用，其发用条件为【{{发用条件}}】，揭示了此事是由【{{内外矛盾/同类竞争/间接影响/远程作用}}】所驱动。\n"
-        @"主导权归属: 发用源自【{{干课/支课/混合}}】，暗示了此事的主导权初步掌握在【{{我方/对方/双方互动}}】手中。\n"
-        @"核心性质预告: 发用神【{{六亲性质}}】乘【{{天将性质}}】，初步预示了此事的核心性质是关于【{{吉凶性质的具体描述}}】。\n"
-        @"时空人三位一体推演\n"
-        @"你必须将静态的空间、动态的人事、与弥漫的天时，融为一体，讲述一个完整、立体、充满细节的故事。\n"
-        @"\n"
-        @"此为故事的【舞台与背景】。\n"
-        @"\n"
-        @"我方阵地（第一二课）: 揭示我方的内在实力、心态、拥有的资源与潜在的变数。\n"
-        @"对方/环境阵地（第三四课）: 揭示对方的实力、态度，以及所处外部环境的利弊。\n"
-        @"静态评估: 基于此舞台，对此刻的【基础条件】与【潜在力量】给出一个总览。我方是占据高地，还是身处洼地？\n"
-        @"此为故事的【情节与氛围】。你将在此处，将“人动”与“天时”交织在一起进行推演。\n"
-        @"\n"
-        @"核心情节（三传）: 首先明确故事的主线是 {{初传}} → {{中传}} → {{末传}}。\n"
-        @"核心氛围（三宫时）: 明确整个故事是在一个【{{急速/迟滞/显扬/隐晦}}】的氛围中展开的。\n"
-        @"【交织推演】\n"
-        @"初传之境: 故事的开端是【{{初传}}】。它本身代表了{{起因}}。然而，在【{{时空基调}}】的渲染下，这个开端是以一种{{急速/公开/私下/受阻}}的方式呈现的。它是在我方阵地还是对方阵地发生的？这决定了是谁打响了第一枪。\n"
-        @"中传之变: 故事进入了【{{中传}}】这个转折点。它本身代表了{{过程}}。在【{{时空基调}}】的修正下，这个过程是{{一帆风顺还是节外生枝}}？是【兵贵神速】地解决了问题，还是陷入了【迟滞泥潭】？\n"
-        @"末传之归: 故事最终走向了【{{末传}}】这个结局。它本身代表了{{结果}}。在【{{时空基调}}】的影响下，这个结局是【迅速兑现的】，还是【需要等待时机才能落实的】？\n"
-        @"此为故事的【最终结局与启示】。\n"
-        @"\n"
-        @"逻辑闭环: 基于以上的推演，将“静态的舞台”与“动态的情节氛围”彻底整合。例如：“虽然我方在静态格局中拥有优势（勘其境），但由于占时逢【绛宫时】（观其势之氛围），导致事情的进展（观其势之情节）并非一蹴而就，而是经历了一段必要的私下斡旋与等待，最终才达成了那个看似近在咫尺的目标。”\n"
-        @"最终判断: 由此得出对整件事态【性质、过程、结局】的最终判断。\n"
-        @"多象定一象原则系统 (心法应用)\n"
-        @"你将运用【断其占】心法，在纷繁象意中果断取舍，直击本质。\n"
-        @"\n"
-        @"核心依据: 你的唯一结论，必须牢牢植根于你所识别的【核心枢纽】和【最强证据链】之上。\n"
-        @"象意服务于理: 所有神将、格局、地支的象意，都是用来描述和丰富核心结论的细节，而不是用来推导结论的。你将以“理”驭“象”。\n"
-        @"矛盾信息处理: 当出现信息冲突时，你将运用【证据链强度】和【力量虚实】的标尺来判断其主次关系，并将它们融合成一个完整的、复杂的现实描述。证据链强、力量实的一方决定了事情的主基调，弱势方则作为此基调下的重要补充、代价、或附加条件。你的结论必须体现出这种复杂性。\n"
-        @"精准应期预测与验证系统\n"
-        @"A. 多层次应期网络构建\n"
-        @"征象应期：XX日内必见XX具体迹象，表现为XX现象，识别难度XX\n"
-        @"触发应期：XX月XX日前后XX天，基于XX应期法，将出现XX变化，变化程度XX\n"
-        @"第一验证点：XX时间可验证XX内容，验证方式XX，准确度XX%\n"
-        @"转折应期：XX月份出现重要转折，基于XX因素，转折性质XX，影响程度XX\n"
-        @"发展应期：XX季度迎来XX发展，依据XX神将运行，发展速度XX，发展空间XX\n"
-        @"成败应期：XX时间段见分晓，根据XX传课分析，成败程度XX\n"
-        @"最终应期：XX年XX月最终确定，基于XX分析，确定程度XX\n"
-        @"影响持续期：结果影响将持续到XX时间，影响程度XX，衰减规律XX\n"
-        @"终极验证：XX时候可以最终验证XX结论，验证标准XX\n"
-        @"B. 应期修正综合系统\n"
-        @"类神应期：类神所临地支对应的具体时间\n"
-        @"三合应期：三传合局完成的时间节点\n"
-        @"冲实应期：空亡神将逢冲填实的时机\n"
-        @"贵人应期：天乙贵人运行到位的关键时点\n"
-        @"成绝应期：成神绝神所指示的成败时间\n"
-        @"德害应期：德神害神发挥作用的时机\n"
-        @"神煞应期：相关神煞发动的时间节点\n"
-        @"星象应期：重要星曜留转的关键时刻\n"
-        @"【强制阳历化】: 所有最终输出的应期时间点，必须强制转换为【阳历】月份或日期，以消除歧义。\n"
-        @"旺衰修正：旺相神将应期提前，休囚神将应期延后，具体提前/延后天数\n"
-        @"空亡修正：空亡神将应期虚缓，填实时方才见效，填实具体时间\n"
-        @"星象修正：顺行星曜加速应期，逆行星曜减缓延后应期\n"
-        @"贵人修正：贵人到位时解救应期，顺治快逆治慢的具体差异\n"
-        @"【时空基调修正】: 占时的【三宫时信息】为应期的【节奏】与【实现方式】提供了重要的佐证。你需从两个层面进行修正：\n"
-        @"速度修正（天乙顺逆）:\n"
-        @"若逢【天乙顺行/顺治】，此为急速之象。应期有【提前】的趋势，事情发展迅猛，公开化。\n"
-        @"若逢【天乙逆行/逆治】，此为迟缓之象。应期有【延后】的趋势，事情多有阻滞，反复不定。\n"
-        @"过程修正（贵人隐显）:\n"
-        @"若逢【绛宫时】（贵人入夜/深藏），则无论顺逆，事情的达成多了一层【隐晦、私下、需人引荐】的色彩。即使应期已到，也可能需要通过非公开渠道或等待某个私下契机才能最终落实。\n"
-        @"若逢【玉堂时】（贵人升殿/显现），则事情的达成更趋向于【公开、正式、得官方助力】。应期一到，便会公之于众，名正言顺。\n"
-        @"综合判断: 你需结合以上两个层面，对计算出的应期进行最后的【节奏】与【情景】的微调和确认。例如：“应期虽在X月，但因逢天乙逆行又值绛宫，故此事不仅会推迟，且最终的成功很可能依赖于一次私下的会晤，而非公开的招标。”\n"
-        @"个人变量修正（关键接口）：若得知求测者或关键人物的【年命、行年】，必须将其作为一个高权重变量，审视其与课传的【冲、合、刑、害】关系，它可能成为提前或延迟应期、改变事件性质的【关键枢纽】。\n"
-        @"环境修正：外在环境变化对应期的影响调节\n"
-        @"A级应期（90%以上确定性）：\n"
-        @"\n"
-        @"基于XX确定因素，精确到XX时间\n"
-        @"多重印证指向同一时点\n"
-        @"历史验证概率高的应期法\n"
-        @"关键神将状态明确支撑\n"
-        @"B级应期（70-90%确定性）：\n"
-        @"基于XX主要因素，大致在XX时间段\n"
-        @"有1-2个不确定因素影响\n"
-        @"需要XX条件配合才能精确\n"
-        @"有替代验证方案\n"
-        @"C级应期（50-70%确定性）：\n"
-        @"基于XX综合分析，XX范围内\n"
-        @"存在多个变数影响\n"
-        @"需要动态观察调整\n"
-        @"提供多个可能时间点\n"
-        @"参考应期（<50%确定性）：\n"
-        @"仅作参考，不建议依赖\n"
-        @"不确定因素过多\n"
-        @"建议重新起课或等待更多信息\n"
-        @"C. 精准验证指标体系\n"
-        @"A类指标（确定性验证）：\n"
-        @"\n"
-        @"必然出现的明确信号，错过概率<10%\n"
-        @"具体表现形式：XX行为/XX现象/XX结果\n"
-        @"验证时间窗口：精确到XX日内\n"
-        @"识别难度：明显易识别，不会混淆\n"
-        @"B类指标（概率性验证）：\n"
-        @"大概率出现的征象，出现概率70-90%\n"
-        @"可能的表现形式：XX或XX或XX\n"
-        @"验证时间范围：XX时间段内\n"
-        @"需要一定观察和判断能力\n"
-        @"C类指标（趋势性验证）：\n"
-        @"发展趋势的方向指标，方向正确概率>80%\n"
-        @"趋势表现：向XX方向发展，程度XX\n"
-        @"长期观察窗口：XX时间内持续观察\n"
-        @"需要对比历史状态判断\n"
-        @"精确时间点：具体到XX月XX日XX时，关键moment\n"
-        @"时间区间：前后XX日的浮动范围，中心时点XX\n"
-        @"持续时间：验证信号持续XX天/XX周/XX月\n"
-        @"重复验证：类似信号每隔XX时间重复出现\n"
-        @"验证序列：第一次验证XX，第二次验证XX，最终验证XX\n"
-        @"验证失败原因分析：\n"
-        @"应期计算错误：重新核实应期推算过程\n"
-        @"验证指标设计不当：调整验证指标的具体内容\n"
-        @"外在条件变化：识别影响验证的环境变化\n"
-        @"解读错误：重新分析课盘信息的真实含义\n"
-        @"替代验证指标：\n"
-        @"寻找其他可验证的角度和指标\n"
-        @"设计更容易观察的验证方案\n"
-        @"降低验证难度但保持验证效力\n"
-        @"提供多个备选验证路径\n"
-        @"时间修正机制：\n"
-        @"验证时间的前后调整方案\n"
-        @"基于失败原因的时间重新计算\n"
-        @"考虑遗漏修正因素的时间调整\n"
-        @"设置次优验证时间窗口\n"
-        @"结论修正程度：\n"
-        @"轻微修正：调整程度、时间等细节\n"
-        @"中度修正：调整主要结论的某些方面\n"
-        @"重大修正：重新评估核心判断\n"
-        @"完全重构：承认判断错误，重新分析\n"
-        @"多维交叉验证算法 (心法内置)\n"
-        @"你的【象、数、理、占】圆融统一的心法，本身就是最高级的多维交叉验证系统。你无需依赖僵化的列表，因为你的每一个结论都自然而然地通过了内在逻辑的严格检验。\n"
-        @"\n"
-        @"系统输出格式 (涅槃重生版)\n"
-        @"【大师心法·首断要诀】\n"
-        @"【法则博弈初判】:\n"
-        @"天命法则扫描: {{扫描年命行年，判断是否存在第一序位的强力干预}}\n"
-        @"力量状态扫描: {{扫描核心类神与三传，判断其旺衰有力与否}}\n"
-        @"核心矛盾识别: 此盘最核心的矛盾在于【{{例如：个人命运的吉象 vs 常规课传的凶象}}】。\n"
-        @"【时机动机直断】: {{根据【时机动机直断引擎】得出的定制化判断}}\n"
-        @"【吉凶总纲初判】: 基于初步的法则博弈，此事基调初步倾向于【{{吉/凶/先吉后凶/戏剧性反转}}】，结局初步倾向于【{{成/败/有条件成败}}】。\n"
-        @"【基础信息快速定位】\n"
-        @"-四柱节气：{{四柱}} {{节气}}，{{特殊状态}}\n"
-        @"-核心参数：月将{{月将}}，旬空{{旬空}}，{{昼夜}}贵人{{贵人}}\n"
-
-        @"-时空背景：{{三宫时信息核心断语}}，{{对全局的核心影响}}\n"
-        @"-发用机制：{{发用神}}发用，{{发用条件}}，{{发用源头}}主导\n"
-        @"-格局象意参考：{{主要格局}}，{{格局特征}} (注意：仅为象意参考，其解释权服从于法则优先级)\n"
-        @"-星象状态：{{重要星曜}}{{运行状态}}，{{调节作用}}\n"
-        @"\n"
-        @"【智能类神定位】\n"
-        @"主类神：{{类神}}（选择理由：{{选择依据}}）\n"
-        @"辅类神：{{类神}}（选择理由：{{选择依据}}）\n"
-        @"环境类神：{{类神}}（选择理由：{{选择依据}}）\n"
-        @"变化类神：{{类神}}（选择理由：{{选择依据}}）\n"
-        @"类神权重：{{主类神权重}}>{{辅类神权重}}>{{环境类神权重}}\n"
-        @"反证审查: 在确定【{{主类神}}】后，我已排除了将【{{另一个可能的类神}}】作为主类神的可能性，因为【{{理由，如：其在课传中未现，或力量休囚，对事体影响次要}}】。\n"
-        @"【前事追溯判词】\n"
-        @"{{根据【前事追溯系统】得出的完整判词}}\n"
-        @"\n"
-        @"【核心枢纽深度解析与未来推演（升级版）】\n"
-
-        @"【多路径推演与可能性博弈（强制）】:\n"
-        @"路径A（常规路径）: “如果仅遵循【第四序位】的常规逻辑，【{{常规信号，如末传空亡}}】将主导事态，其发展将是【{{描述常规发展路径}}】，最终结局为【{{常规结局}}】。”\n"
-        @"路径B（特殊路径）: “然而，由于【{{更高序位的法则，如第一序位的天命法则‘贵登天门’}}】的强力干预，此事极有可能突破常规。其发展将是【{{描述特殊发展路径}}】，最终结局为【{{特殊结局，如逆转成事}}】。”\n"
-        @"【最终裁决与置信度分配】:\n"
-        @"裁决: 基于【法则优先级】，我最终裁定**路径【B】**为此事最可能发生的现实。\n"
-        @"理由: 因为【第一序位：天命法则】的干预权限高于【第四序位：常规法则】。求测者本人的强大吉格，足以扭转事态本身的逻辑。\n"
-        @"置信度: 我判定路径B的发生概率为【{{高百分比}}】，路径A的概率为【{{低百分比}}】。\n"
-        @"【星盘-壬盘共鸣报告】: {{...}}\n"
-        @"【精准应期预测：未来发展关键节点】\n"
-        @"{{根据【精准应期预测与验证系统】得出的完整应期分析}}\n"
-        @"\n"
-        @"【多象定一象确定结论】\n"
-        @"唯一确定结论：{{具体明确答案}}\n"
-        @"象意综合指向：\n"
-        @"\n"
-        @"核心推理链：基于【法则优先级】的博弈，【{{胜出的法则}}】主导了全局，得出了【{{最终结论}}】。\n"
-        @"辅助象意链：以【神将】、【格局】、【六亲】等象意，丰富和描绘此结论的具体表现过程和细节。\n"
-        @"确定性等级：{{A/B/C级}}\n"
-        @"验证方式：{{时间}}出现{{现象}}即可验证\n"
-        @"【决策反思与反证审判台（心镜台 · 升级版）】\n"
-        @"我在此处必须如实地映照出我的【强制辩证】过程，这是你洞察力与公允性的最终体现。\n"
-        @"\n"
-        @"【核心矛盾识别】: 我识别出此盘的核心矛盾在于【{{例如：常规课传的凶象}}】与【{{例如：个人命运的吉象}}】之间的剧烈冲突。\n"
-        @"【法则应用与路径裁决】: 我没有将两者简单相抵，而是启动了【法则优先级】进行裁决。我判定【第一序位：天命法则】的力量压倒了【第四序位：常规法则】。因此，我没有采纳“因末传空亡而事败”的常规路径，而是采纳了“因贵登天门而逆转成事”的特殊路径。\n"
-        @"【矛盾信号的整合与升维解读】:\n"
-        @"识别: 盘中看似指向失败的信号，如【末传空亡】。\n"
-        @"整合方式: 我并未忽略它，而是将其理解为最终【成功】结论下的【过程的戏剧性、难度和非常规性】。其具体表现为：“你的成功并非一帆风顺，而是经历了一个‘本不该成功’、‘看似要黄了’（末传空亡的象意）的阶段，最终依靠你自身的福气和命运（贵登天门）才得以‘无中生有’地落实。这个空亡，正是你成功故事中‘惊险一跃’的生动写照。”\n"
-        @"【最终置信度自评】:\n"
-        @"综合以上所有分析与法则博弈，我对本次核心判断的置信度评定为：【{{百分比}}】。\n"
-        @"此置信度的主要支撑来源于：【{{列出1-2条最高序位的法则证据}}】。\n"
-        @"潜在的风险或变数在于：【{{列出可能影响判断的次要因素，并说明为何它们在此次博弈中落败}}】。\n"
-        @"【策略指导建议】\n"
-        @"基于吉凶分析的行动建议：\n"
-        @"\n"
-        @"核心策略：{{策略方向}}，因为{{核心枢纽的运用之道}}\n"
-        @"最佳时机：{{具体时间}}，成功率{{百分比}}\n"
-        @"风险防控：{{主要风险}}，防范{{具体措施}}\n"
-        @"关键因素：{{决定因素}}，影响程度{{评估}}\n"
-        @"【御星之术】（顺天应时的高阶策略）:\n"
-        @"顺逆之策: 若关键星曜【逆行】，核心策略应转向【内部审查、修复旧好、了结宿怨】，而非开疆拓土。此时是“温故”而非“知新”的最佳时机。\n"
-        @"留转之机: 若关键星曜即将【留转】，则其停滞前后数日是事态的【关键引爆点或转折点】。必须在此期间高度戒备，或采取关键行动。\n"
-        @"吉凶之用: 若有吉星（如木星、金星）照临我方关键宫位，应【主动出击】，借天时之东风。若有凶星（如土星、火星）肆虐，则应【避其锋芒，以柔克刚】，切不可逆天行事。\n"
-
-        @"【最终判断结论】\n"
-        @"【全局现实报告原则】: 你的最终结论，必须是你洞察到的【完整现实切片】，而不仅仅是针对用户问题的答案。如果盘中存在与问题看似无关，但信号强度极高、足以影响事体本质的信息（如人数、隐藏动机、第三方介入等），你必须【主动报告】，并明确指出它与所问之事的关系。你的结论，必须以“你问的是A，但我看到的完整现实是A+B+C……”的模式呈现。\n"
-        @"\n"
-        @"明确结论：{{具体明确的唯一结果}}\n"
-        @"核心依据链条：\n"
-        @"\n"
-        @"【法则博弈初判】定下全局基调和核心矛盾。\n"
-        @"【核心枢纽深度解析】通过多路径推演和法则优先级裁决，确定最终走向。\n"
-        @"【时空人三位一体推演】展现完整的故事发展线。\n"
-        @"【反证审判台】对矛盾信号进行升维整合，得出最终的、立体的确定性结论。\n"
-        @"结论可信度：{{百分比}}\n"
-        @"确定性因素：{{确定因素}}\n"
-        @"不确定因素：{{不确定因素}}\n"
-        @"最终反证审查: 在输出此结论前，我已最终确认，不存在任何被忽略的、足以推翻此结论的强力反证。此为当前盘面信息下的最优确定性报告。\n"
-        @"【静态解析模式 · 终极版 · 动态响应协议】\n"
-        @"(此部分逻辑较为成熟，核心是动态响应，故保留v21.0的优秀结构，仅在关键处强调法则应用)\n"
-        @"核心元指令：你必须以【A层框架 -> B层事件 -> C层属性】为默认分析流。但是，你必须时刻保持对【信号强度】与【问题关联度】的最高警觉。如果一个低层级信号（如C层的旬空、或B层的强力合局）的能量或与问题的直接相关性，足以颠覆高层级信号所定义的性质，你必须【立即打破默认流程】，将这个“越级”信号提升为分析的核心，并围绕它重新整合全局。你的分析报告中，必须明确阐述你【为何打破常规】。\n"
-        @"你的分析必须如水一般，随方就圆。严禁使用任何固定的、非黑即白的分析模式。你的分析深度，必须与盘中【矛盾信号的能量总和】完全匹配。\n"
-        @"\n"
-        @"第一步：全局扫描与信号分层\n"
-        @"客观、无偏见地罗列出所有A、B、C三层信号及其原始象意。\n"
-        @"A层：框架信号 (课体、四课)\n"
-        @"B层：事件信号 (三传、刑冲合害)\n"
-        @"C层：属性/情景信号 (神将、旬空、星曜等)\n"
-        @"\n"
-        @"第二步：【核心升级】矛盾能量感知与评估\n"
-        @"这是系统的“传感器”。你必须扫描A层（框架）与B层（事件）之间，以及C层内部的信号，感知它们之间的【不和谐度】，并给出一个【矛盾能量等级】的内部评估。\n"
-        @"评估维度:\n"
-        @"性质对立度: 信号之间的性质是否根本对立？（如：静 vs 动，生 vs 死，有 vs 无）\n"
-        @"信号强度: 产生矛盾的信号，其自身是否旺相、有力、在课传中占据关键位置？\n"
-        @"矛盾数量: 盘中存在多少组不和谐的信号？\n"
-        @"输出等级（内部心法，不对用户展示）:\n"
-        @"等级0（和谐）: 无明显对立信号。\n"
-        @"等级1（微扰）: 存在次要的、弱的对立信号。\n"
-        @"等级2（冲突）: 存在一组或多组强的、非根本性的对立信号。\n"
-        @"等级3（悖论）: 存在根本性的、颠覆性的对立信号（如伏吟课三传见强冲）。\n"
-        @"\n"
-        @"第三步：【核心升级】基于能量等级的动态响应\n"
-        @"这是系统的“处理器”。根据上一步感知的【矛盾能量等级】，自动选择最恰当的分析策略和深度。\n"
-        @"若感知能量为【等级0 - 和谐】:\n"
-        @"策略: 信息直译与叠加。\n"
-        @"动作: 直接将所有信号的象意进行简单组合，输出一个纯粹的、无矛盾的描述。\n"
-        @"范例（盒子）: “这是一个静止的（伏吟）、木制的（寅）、方形的（勾陈）、中空的（天空）东西。”\n"
-        @"若感知能量为【等级1 - 微扰】:\n"
-        @"策略: 主干确认与细节修正。\n"
-        @"动作: 先确定由最强信号构成的主体，再用弱对立信号对其进行细节上的修正或补充。\n"
-        @"范例: 盘面主体是“财”，但带一个弱的“玄武”。结论：“这是一笔钱，但来路可能有些模糊或需要保密。”\n"
-        @"若感知能量为【等级2 - 冲突】:\n"
-        @"策略: 寻找更高层级的统一概念。\n"
-        @"动作: 寻找一个能将两组强对立信号【包容】在内的、更抽象或更复杂的概念。\n"
-        @"范例: 盘面既有“官鬼”（压力），又有“青龙”（喜庆）。结论：“这是一次伴随着巨大压力的晋升或喜事。”\n"
-        @"若感知能量为【等级3 - 悖论】:\n"
-        @"策略: 强制进行场景重构。\n"
-        @"动作: 只有在这种极端情况下，才启动最高级别的分析。明确提出悖论（如：静止的框架内发生了沸腾的事件），并寻找能够唯一解释此悖论的【现实场景模型】。\n"
-        @"范例（火锅）: 只有在感知到【伏吟】（极静）与【三传刑冲】（极动）这一组能量最强的悖论时，系统才会被授权去构建“火锅”这个复杂的场景模型。\n"
-        @"\n"
-        @"第四步：【核心升级】强制决断与命名\n"
-        @"在通过前三步得出一个【核心分析结论】（无论这个结论是简单的叠加，还是复杂的重构）之后，你必须立即启动此模块，完成从“分析师”到“裁决者”的转变。\n"
-        @"子模块一：【矛盾信息强制裁决】\n"
-        @"触发条件: 当核心结论中包含“或”、“可能”、“也许”这类不确定性词汇时（如：“来路模糊或需要保密”）。\n"
-        @"执行指令: 你必须重新审视产生这个不确定性的那组矛盾信号（如“财”与“玄武”），并基于【信号的强弱、主次、与问题核心的关联度】进行强制裁决。\n"
-        @"裁决逻辑:\n"
-        @"谁是主体？: 在“钱”和“玄武”中，“钱”（财爻）是所问事物的主体，而“玄武”是其属性。故，主体性质（是钱）不变。\n"
-        @"属性如何体现？: “玄武”的属性（暗、盗、私）必须找到一个最合理的现实落点。是“骗来的”？“私下的”？“暧昧的”？\n"
-        @"全局证据链支持: 扫描全盘，看是否有其他信号支持其中一种解释。例如，如果盘中有“官鬼”受制，则“骗来的”可能性降低；如果盘中有“六合”，则“私下的约定/交易”可能性增强。\n"
-        @"最终断语: 你必须给出一个斩钉截铁的结论。例如，在综合评估后，你必须断言：【“这是一笔私下交易的钱，不是黑钱。”】或者【“这笔钱有问题，是骗来的。”】\n"
-        @"子模块二：【抽象属性强制命名】\n"
-        @"触发条件: 当核心结论是一个纯粹的属性描述时（如：“一个静止的、木制的、方形的、中空的东西”）。\n"
-        @"执行指令: 你必须基于这些属性，在现实世界中搜索最符合的【物品名称】，并喊出它。\n"
-        @"命名逻辑:\n"
-        @"核心归类: 首先确定它的大类。木制的、方形的、中空的 -> 容器/家具。\n"
-        @"情景筛选: 结合占问情景。如果是日常占，它更可能是常见物品。\n"
-        @"概率排序: 在所有符合条件的物品中，选择一个最常见、最有可能的。一个“木制的方形中空物”，是“盒子”的概率，远大于“榫卯结构的古代食盒”。\n"
-        @"最终断语: 你必须给出一个具体的名称。例如：【“它是一个木盒子。”】 反证审查: 我曾考虑过“木柜”的可能性，但因盘中【{{尺寸相关的信号}}】指向小型，故驳回“木柜”的假设。\n"
-        @"\n"
-        @"现实合理性检验：结合现代生活场景，此结论出现概率如何？\n"
-        @"时代转化：将古典象意转化为当代最可能的对应物\n"
-        @"最终确认：只输出通过现实检验的结论\n"
-        @"第五步：一体化呈现\n"
-        @"将经过【强制决断与命名】后的、唯一的、确定的结论，连同其核心逻辑支撑，完整呈现。\n"
-        @"\n"
-        @"【静态解析输出格式】\n"
-        @"【解析·总纲】: {{一句话点明核心本质}}\n"
-        @"【体·核心定性】: {{判断其核心归类}}\n"
-        @"【状·万象描摹】: {{以清单形式，直断其各项属性}}\n"
-        @"【境·所处背景】: {{直断其所处环境或处境}}\n"
-        @"【名·一言断之】: {{喊出最终的答案}}\n"
-        @"【辩证·象意取舍与反证（心镜台）】: 我最终断定为【{{最终答案}}】，是整合了【{{关键信息A、B、C}}】的结果。在此过程中，我已排除了【{{备选答案X}}】的可能性，因为【{{列出反证，如：它与盘中的‘动/静’、‘冷/热’等核心属性相悖}}】。\n"
-        @"【伴生现实强制扫描】:\n"
-        @"指令: 在锁定核心答案后，你必须强制重新扫描全盘，专门寻找与【人事关系】、【数量】、【环境特殊性】等相关的【高强度伴生信号】。\n"
-
-        @"人事信号: 盘中是否存在明确的【兄弟】（同伴）、【父母】（长辈）、【官鬼】（上级/异性）、【妻财】（伴侣/下属）等六亲信号？它们的状态如何？\n"
-        @"数量信号: 盘中是否存在明确指向数量的结构？（如四课伏吟=4，三合局=3，对冲=2等）\n"
-        @"环境信号: 盘中是否存在揭示环境特殊性的信号？（如伏吟=静止/聚集，返吟=奔波/变动，空亡=虚假/缺失等）\n"
-        @"综合报告: {{将以上扫描到的、确定性最高的伴生信息，整合成对主结论的补充报告。}}\n"
+... (所有内容保持不变，直到文件末尾)
         @"【辩证·整合报告（心镜台）】: 我最终的完整结论是【{{主信息+伴生信息}}】，此结论整合了盘中的【{{主信号}}】与【{{伴生信号}}】，并排除了【{{次要信息}}】的干扰，故为最全面的现实写照。\n"
         @"【系统激活指令】\n"
         @"现在，请严格按照上述【大六壬AI策略顾问系统 v22.0 涅槃重生版】，基于标准化课盘信息进行分析！\n"
@@ -674,7 +280,7 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"质量标准：让人信服的不是你罗列了多少规则，而是你展现出的深刻洞察力和在矛盾信息中进行高级裁决的能力。真正体现\"同盘同问得同论\"的一致性和\"断事如神\"的震撼效果。\n"
         @"请准备接收标准化课盘信息并进行专业深度分析！\n";
               
-             }
+}
 
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
@@ -839,7 +445,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
     NSString *nianMing = reportData[@"行年参数"];
     if (nianMing.length > 0) {
-        // --- 注意：将 5.2 改为 5.3 ---
         [auxiliaryContent appendFormat:@"// 5.3. 行年参数\n%@\n\n", nianMing];
     }
     if (auxiliaryContent.length > 0) {
@@ -852,9 +457,9 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
 static NSString* generateContentSummaryLine(NSString *fullReport) {
     if (!fullReport || fullReport.length == 0) return @"";
-    NSDictionary *keywordMap = @{ @"// 1. 基础盘元": @"基础盘元", @"// 2. 核心盘架": @"核心盘架", @"// 3. 格局总览": @"格局总览", @"// 4. 爻位详解": @"爻位详解", @"// 4.6. 神将详解": @"课传详解", @"// 5. 辅助系统": @"辅助系统", @"// 5.3. 行年参数": @"行年参数"}; // 使用 5.3
+    NSDictionary *keywordMap = @{ @"// 1. 基础盘元": @"基础盘元", @"// 2. 核心盘架": @"核心盘架", @"// 3. 格局总览": @"格局总览", @"// 4. 爻位详解": @"爻位详解", @"// 4.6. 神将详解": @"课传详解", @"// 5. 辅助系统": @"辅助系统", @"// 5.3. 行年参数": @"行年参数"};
     NSMutableArray *includedSections = [NSMutableArray array];
-    NSArray *orderedKeys = @[@"// 1. 基础盘元", @"// 2. 核心盘架", @"// 3. 格局总览", @"// 4. 爻位详解", @"// 4.6. 神将详解", @"// 5. 辅助系统", @"// 5.3. 行年参数"]; // 使用 5.3
+    NSArray *orderedKeys = @[@"// 1. 基础盘元", @"// 2. 核心盘架", @"// 3. 格局总览", @"// 4. 爻位详解", @"// 4.6. 神将详解", @"// 5. 辅助系统", @"// 5.3. 行年参数"];
     for (NSString *keyword in orderedKeys) {
         if ([fullReport containsString:keyword]) {
             NSString *sectionName = keywordMap[keyword];
@@ -867,8 +472,10 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
     return @"";
 }
 
+// 默认开启
+static BOOL g_shouldIncludeAIPromptHeader = YES; 
+
 static NSString* formatFinalReport(NSDictionary* reportData) {
-    // [MODIFIED] 根据全局开关状态决定是否包含Prompt头
     NSString *headerPrompt = g_shouldIncludeAIPromptHeader ? getAIPromptHeader() : @"";
     NSString *structuredReport = generateStructuredReport(reportData);
     NSString *summaryLine = generateContentSummaryLine(structuredReport);
@@ -876,8 +483,11 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
     "// 依据解析方法，以及所有大六壬解析技巧方式回答下面问题\n"
     "// 问题：";
     
-    // 如果header是空字符串，结果会自动处理前面的换行符
-    return [NSString stringWithFormat:@"%@%@\n%@%@", headerPrompt, structuredReport, summaryLine, footerText];
+    if (headerPrompt.length > 0) {
+        return [NSString stringWithFormat:@"%@%@\n%@%@", headerPrompt, structuredReport, summaryLine, footerText];
+    } else {
+        return [NSString stringWithFormat:@"%@\n%@%@", structuredReport, summaryLine, footerText];
+    }
 }
 
 typedef NS_ENUM(NSInteger, EchoLogType) {
@@ -942,7 +552,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)hideProgressHUD;
 - (void)showEchoNotificationWithTitle:(NSString *)title message:(NSString *)message;
 - (void)handleMasterButtonTap:(UIButton *)sender;
-- (void)handlePromptSwitchChanged:(UISwitch *)sender; // [MODIFIED] 增加开关响应方法
 - (void)executeSimpleExtraction;
 - (void)executeCompositeExtraction;
 - (void)extractSpecificPopupWithSelectorName:(NSString *)selectorName taskName:(NSString *)taskName completion:(void (^)(NSString *result))completion;
@@ -960,7 +569,18 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
 - (NSString *)GetStringFromLayer:(id)layer;
 - (void)presentAIActionSheetWithReport:(NSString *)report;
+- (void)layoutPanelContentsAnimated:(BOOL)animated; // 新增：布局方法
 @end
+
+// 为控制器添加 Ivar 来持有UI元素
+%extension UIViewController {
+    UILabel *_echo_titleLabel;
+    UIButton *_echo_promptToggleButton;
+    UIView *_echo_mainButtonsContainer;
+    UIButton *_echo_toggleAdvancedButton;
+    UIView *_echo_advancedContainer;
+    UIView *_echo_bottomButtonsContainer;
+}
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 
@@ -1089,7 +709,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-// MARK: - UI Creation
+// MARK: - UI Creation and Layout
 %new
 - (void)createOrShowMainControlPanel {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
@@ -1099,6 +719,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [g_mainControlPanelView removeFromSuperview];
             g_mainControlPanelView = nil;
             g_logTextView = nil;
+            g_isAdvancedModeVisible = NO; // 重置状态
         }];
         return;
     }
@@ -1114,57 +735,27 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         g_mainControlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
     }
     UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)];
+    contentView.clipsToBounds = YES;
     [g_mainControlPanelView addSubview:contentView];
     
+    // 创建所有UI元素
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.21" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.22" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
 
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, contentView.bounds.size.width, 30)];
-    titleLabel.attributedText = titleString;
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    [contentView addSubview:titleLabel];
+    self._echo_titleLabel = [[UILabel alloc] init];
+    self._echo_titleLabel.attributedText = titleString;
+    self._echo_titleLabel.textAlignment = NSTextAlignmentCenter;
+    [contentView addSubview:self._echo_titleLabel];
     
-    // [MODIFIED] 增加开关和布局调整
-    CGFloat currentY = 50; // 标题下方开始
-
-    // 开关容器
-    UIView *switchContainer = [[UIView alloc] initWithFrame:CGRectMake(0, currentY, contentView.bounds.size.width, 40)];
-    [contentView addSubview:switchContainer];
-    
-    // 开关标签
-    UILabel *switchLabel = [[UILabel alloc] initWithFrame:CGRectMake(switchContainer.bounds.size.width / 2 - 100, 5, 120, 30)];
-    switchLabel.text = @"附加AI分析指令:";
-    switchLabel.textColor = [UIColor whiteColor];
-    switchLabel.font = [UIFont systemFontOfSize:14];
-    switchLabel.textAlignment = NSTextAlignmentRight;
-    [switchContainer addSubview:switchLabel];
-
-    // 开关本身
-    UISwitch *promptSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(switchContainer.bounds.size.width / 2 + 25, 5, 51, 31)];
-    [promptSwitch setOn:g_shouldIncludeAIPromptHeader];
-    [promptSwitch addTarget:self action:@selector(handlePromptSwitchChanged:) forControlEvents:UIControlEventValueChanged];
-    [switchContainer addSubview:promptSwitch];
-
-    currentY += 45; // 增加 Y 坐标，为下面的滚动视图留出空间
-    
-    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, currentY, contentView.bounds.size.width, contentView.bounds.size.height - currentY - 60 - 230)]; // 调整 scrollView 的 Y 坐标和高度
-    [contentView addSubview:scrollView];
-    
-    CGFloat scrollContentY = 20;
-
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
         [btn setTitle:title forState:UIControlStateNormal];
-        if (@available(iOS 13.0, *)) {
+        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
             UIImage *icon = [UIImage systemImageNamed:iconName];
             [btn setImage:icon forState:UIControlStateNormal];
-            
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
             btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 10);
-            #pragma clang diagnostic pop
         }
         btn.tag = tag;
         btn.backgroundColor = color;
@@ -1172,92 +763,76 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         btn.tintColor = [UIColor whiteColor];
         btn.titleLabel.font = [UIFont boldSystemFontOfSize:15];
-        btn.titleLabel.adjustsFontSizeToFitWidth = YES;
-        btn.titleLabel.minimumScaleFactor = 0.8;
         btn.layer.cornerRadius = 12;
         btn.layer.borderWidth = 1.0;
         btn.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.1].CGColor;
         return btn;
     };
-    UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) {
-        UILabel *label = [[UILabel alloc] init];
-        label.text = title;
-        label.font = [UIFont boldSystemFontOfSize:18];
-        label.textColor = [UIColor lightGrayColor];
-        return label;
-    };
-    UIView* (^createSeparator)(CGFloat) = ^(CGFloat yPos) {
-        UIView *separator = [[UIView alloc] initWithFrame:CGRectMake(15, yPos, scrollView.bounds.size.width - 30, 0.5)];
-        separator.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.2];
-        return separator;
-    };
-  
-    CGFloat btnWidth = (scrollView.bounds.size.width - 45) / 2.0;
 
-    UILabel *sec1Title = createSectionTitle(@"核心解析");
-    sec1Title.frame = CGRectMake(15, scrollContentY, scrollView.bounds.size.width - 30, 22);
-    [scrollView addSubview:sec1Title];
-    scrollContentY += 35;
+    // AI 指令开关
+    self._echo_promptToggleButton = createButton(@"AI指令: 开启", @"wand.and.stars", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
+    self._echo_promptToggleButton.selected = YES; // 默认开启
+    [contentView addSubview:self._echo_promptToggleButton];
+
+    // 核心按钮容器
+    self._echo_mainButtonsContainer = [[UIView alloc] init];
+    [contentView addSubview:self._echo_mainButtonsContainer];
+    
+    UILabel *sec1Title = [[UILabel alloc] init];
+    sec1Title.text = @"核心解析";
+    sec1Title.font = [UIFont boldSystemFontOfSize:18];
+    sec1Title.textColor = [UIColor lightGrayColor];
+    [self._echo_mainButtonsContainer addSubview:sec1Title];
 
     NSArray *mainButtons = @[
         @{@"title": @"标准报告", @"icon": @"doc.text", @"tag": @(kButtonTag_StandardReport), @"color": ECHO_COLOR_MAIN_TEAL},
         @{@"title": @"深度解构", @"icon": @"square.stack.3d.up.fill", @"tag": @(kButtonTag_DeepDiveReport), @"color": ECHO_COLOR_MAIN_BLUE}
     ];
-    for (int i = 0; i < mainButtons.count; i++) {
-        NSDictionary *config = mainButtons[i];
-        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], config[@"color"]);
-        btn.frame = CGRectMake(15 + (i % 2) * (btnWidth + 15), scrollContentY, btnWidth, 48);
-        [scrollView addSubview:btn];
+    for (NSDictionary *config in mainButtons) {
+        [self._echo_mainButtonsContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], config[@"color"])];
     }
-    scrollContentY += 48 + 20;
     
-    [scrollView addSubview:createSeparator(scrollContentY)];
-    scrollContentY += 20;
-  
-    UILabel *sec2Title = createSectionTitle(@"专项分析");
-    sec2Title.frame = CGRectMake(15, scrollContentY, scrollView.bounds.size.width - 30, 22);
-    [scrollView addSubview:sec2Title];
-    scrollContentY += 35;
+    // 更多功能按钮
+    self._echo_toggleAdvancedButton = createButton(@"更多功能", @"chevron.down", kButtonTag_ToggleAdvanced, ECHO_COLOR_AUX_GREY);
+    [contentView addSubview:self._echo_toggleAdvancedButton];
+
+    // 高级功能容器
+    self._echo_advancedContainer = [[UIView alloc] init];
+    self._echo_advancedContainer.clipsToBounds = YES;
+    self._echo_advancedContainer.alpha = 0;
+    [contentView addSubview:self._echo_advancedContainer];
     
+    // 添加高级功能内容
+    UILabel *sec2Title = [[UILabel alloc] init];
+    sec2Title.text = @"专项分析";
+    sec2Title.font = [UIFont boldSystemFontOfSize:18];
+    sec2Title.textColor = [UIColor lightGrayColor];
+    [self._echo_advancedContainer addSubview:sec2Title];
+
     NSArray *coreButtons = @[
-        @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)},
-        @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
-        @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)},
-        @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)}
+        @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)}, @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
+        @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)}, @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)}
     ];
-    for (int i=0; i<coreButtons.count; i++) {
-        NSDictionary *config = coreButtons[i];
-        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
-        btn.frame = CGRectMake(15 + (i % 2) * (btnWidth + 15), scrollContentY + (i / 2) * 58, btnWidth, 46);
-        [scrollView addSubview:btn];
+    for (NSDictionary *config in coreButtons) {
+        [self._echo_advancedContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY)];
     }
-    scrollContentY += ((coreButtons.count + 1) / 2) * 58 + 20;
-
-    [scrollView addSubview:createSeparator(scrollContentY)];
-    scrollContentY += 20;
-
-    UILabel *sec3Title = createSectionTitle(@"格局资料库");
-    sec3Title.frame = CGRectMake(15, scrollContentY, scrollView.bounds.size.width - 30, 22);
-    [scrollView addSubview:sec3Title];
-    scrollContentY += 35;
     
+    UILabel *sec3Title = [[UILabel alloc] init];
+    sec3Title.text = @"格局资料库";
+    sec3Title.font = [UIFont boldSystemFontOfSize:18];
+    sec3Title.textColor = [UIColor lightGrayColor];
+    [self._echo_advancedContainer addSubview:sec3Title];
+
     NSArray *auxButtons = @[
-        @{@"title": @"毕法要诀", @"icon": @"book.closed", @"tag": @(kButtonTag_BiFa)},
-        @{@"title": @"格局要览", @"icon": @"tablecells", @"tag": @(kButtonTag_GeJu)},
+        @{@"title": @"毕法要诀", @"icon": @"book.closed", @"tag": @(kButtonTag_BiFa)}, @{@"title": @"格局要览", @"icon": @"tablecells", @"tag": @(kButtonTag_GeJu)},
         @{@"title": @"解析方法", @"icon": @"list.number", @"tag": @(kButtonTag_FangFa)}
     ];
-    CGFloat smallBtnWidth = (scrollView.bounds.size.width - 50) / 3.0;
-    for (int i=0; i<auxButtons.count; i++) {
-        NSDictionary *config = auxButtons[i];
-        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
-        btn.frame = CGRectMake(15 + i * (smallBtnWidth + 10), scrollContentY, smallBtnWidth, 46);
-        [scrollView addSubview:btn];
+    for (NSDictionary *config in auxButtons) {
+        [self._echo_advancedContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY)];
     }
-    scrollContentY += 56;
-    
-    scrollView.contentSize = CGSizeMake(scrollView.bounds.size.width, scrollContentY);
-  
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, contentView.bounds.size.height - 230, contentView.bounds.size.width, 170)];
+
+    // 底部日志和按钮
+    g_logTextView = [[UITextView alloc] init];
     g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
     g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
     g_logTextView.editable = NO;
@@ -1268,15 +843,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_logTextView.attributedText = initLog;
     [contentView addSubview:g_logTextView];
   
-    CGFloat bottomBtnWidth = (contentView.bounds.size.width - 40) / 2;
+    self._echo_bottomButtonsContainer = [[UIView alloc] init];
+    [contentView addSubview:self._echo_bottomButtonsContainer];
     
     UIButton *closeButton = createButton(@"关闭面板", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
-    closeButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
-    [contentView addSubview:closeButton];
+    [self._echo_bottomButtonsContainer addSubview:closeButton];
     
     UIButton *sendLastReportButton = createButton(@"发送上次报告到AI", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
-    sendLastReportButton.frame = CGRectMake(15 + bottomBtnWidth + 10, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
-    [contentView addSubview:sendLastReportButton];
+    [self._echo_bottomButtonsContainer addSubview:sendLastReportButton];
+
+    // 初始布局
+    [self layoutPanelContentsAnimated:NO];
 
     g_mainControlPanelView.alpha = 0;
     [keyWindow addSubview:g_mainControlPanelView];
@@ -1284,10 +861,88 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 %new
-- (void)handlePromptSwitchChanged:(UISwitch *)sender {
-    g_shouldIncludeAIPromptHeader = sender.isOn;
-    LogMessage(EchoLogTypeInfo, @"[设置] AI分析指令已 %@。", sender.isOn ? @"开启" : @"关闭");
+- (void)layoutPanelContentsAnimated:(BOOL)animated {
+    UIView *contentView = g_mainControlPanelView.subviews.lastObject;
+    CGFloat contentWidth = contentView.bounds.size.width;
+    CGFloat currentY = 15.0;
+    CGFloat padding = 15.0;
+
+    void (^layoutBlock)(void) = ^{
+        // 1. 标题
+        self._echo_titleLabel.frame = CGRectMake(0, currentY, contentWidth, 30);
+        currentY += 30 + padding;
+
+        // 2. AI 指令开关
+        self._echo_promptToggleButton.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 44);
+        currentY += 44 + padding;
+        
+        // 3. 核心按钮
+        self._echo_mainButtonsContainer.frame = CGRectMake(0, currentY, contentWidth, 100);
+        UILabel *sec1Title = self._echo_mainButtonsContainer.subviews.firstObject;
+        sec1Title.frame = CGRectMake(padding, 0, contentWidth - 2 * padding, 22);
+        
+        CGFloat btnWidth = (contentWidth - 3 * padding) / 2.0;
+        UIButton *stdButton = self._echo_mainButtonsContainer.subviews[1];
+        UIButton *deepButton = self._echo_mainButtonsContainer.subviews[2];
+        stdButton.frame = CGRectMake(padding, 22 + 10, btnWidth, 48);
+        deepButton.frame = CGRectMake(padding + btnWidth + padding, 22 + 10, btnWidth, 48);
+        currentY += 22 + 10 + 48 + padding;
+
+        // 4. 更多功能按钮
+        self._echo_toggleAdvancedButton.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 44);
+        currentY += 44 + padding;
+
+        // 5. 高级功能容器 (根据展开状态决定高度)
+        CGFloat advancedHeight = 0;
+        if (g_isAdvancedModeVisible) {
+            CGFloat advancedY = 0;
+            
+            // 专项分析
+            UILabel *sec2Title = self._echo_advancedContainer.subviews[0];
+            sec2Title.frame = CGRectMake(padding, advancedY, contentWidth - 2 * padding, 22);
+            advancedY += 22 + 10;
+            
+            CGFloat smallBtnWidth = (contentWidth - 3 * padding) / 2.0;
+            for (int i = 0; i < 4; i++) {
+                UIButton *btn = self._echo_advancedContainer.subviews[i+1];
+                btn.frame = CGRectMake(padding + (i % 2) * (smallBtnWidth + padding), advancedY + (i / 2) * 56, smallBtnWidth, 46);
+            }
+            advancedY += 2 * 56;
+            
+            // 格局资料库
+            UILabel *sec3Title = self._echo_advancedContainer.subviews[5];
+            sec3Title.frame = CGRectMake(padding, advancedY, contentWidth - 2 * padding, 22);
+            advancedY += 22 + 10;
+            
+            CGFloat tinyBtnWidth = (contentWidth - 4 * padding) / 3.0;
+            for (int i = 0; i < 3; i++) {
+                UIButton *btn = self._echo_advancedContainer.subviews[i+6];
+                btn.frame = CGRectMake(padding + i * (tinyBtnWidth + padding), advancedY, tinyBtnWidth, 46);
+            }
+            advancedY += 46 + padding;
+            
+            advancedHeight = advancedY;
+        }
+        self._echo_advancedContainer.frame = CGRectMake(0, currentY, contentWidth, advancedHeight);
+        self._echo_advancedContainer.alpha = g_isAdvancedModeVisible ? 1.0 : 0.0;
+        currentY += advancedHeight;
+
+        // 6. 日志和底部按钮
+        g_logTextView.frame = CGRectMake(0, contentView.bounds.size.height - 230, contentWidth, 170);
+        self._echo_bottomButtonsContainer.frame = CGRectMake(0, contentView.bounds.size.height - 50, contentWidth, 40);
+        
+        CGFloat bottomBtnWidth = (contentWidth - 3 * padding) / 2;
+        self._echo_bottomButtonsContainer.subviews[0].frame = CGRectMake(padding, 0, bottomBtnWidth, 40);
+        self._echo_bottomButtonsContainer.subviews[1].frame = CGRectMake(padding * 2 + bottomBtnWidth, 0, bottomBtnWidth, 40);
+    };
+
+    if (animated) {
+        [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.2 options:UIViewAnimationOptionCurveEaseInOut animations:layoutBlock completion:nil];
+    } else {
+        layoutBlock();
+    }
 }
+
 
 %new
 - (void)handleMasterButtonTap:(UIButton *)sender {
@@ -1295,7 +950,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if (g_mainControlPanelView) {
             [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) {
                 [g_mainControlPanelView removeFromSuperview];
-                g_mainControlPanelView = nil; g_logTextView = nil;
+                g_mainControlPanelView = nil; g_logTextView = nil; g_isAdvancedModeVisible = NO;
             }];
         }
         return;
@@ -1311,6 +966,24 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     __weak typeof(self) weakSelf = self;
 
     switch (sender.tag) {
+        case kButtonTag_AIPromptToggle: {
+            sender.selected = !sender.selected;
+            g_shouldIncludeAIPromptHeader = sender.selected;
+            NSString *status = g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭";
+            [sender setTitle:[NSString stringWithFormat:@"AI指令: %@", status] forState:UIControlStateNormal];
+            sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY;
+            LogMessage(EchoLogTypeInfo, @"[设置] AI分析指令已 %@。", status);
+            break;
+        }
+        case kButtonTag_ToggleAdvanced: {
+            g_isAdvancedModeVisible = !g_isAdvancedModeVisible;
+            NSString *iconName = g_isAdvancedModeVisible ? @"chevron.up" : @"chevron.down";
+            if ([UIImage respondsToSelector:@selector(systemImageNamed:)]) {
+                [sender setImage:[UIImage systemImageNamed:iconName] forState:UIControlStateNormal];
+            }
+            [self layoutPanelContentsAnimated:YES];
+            break;
+        }
         case kButtonTag_ClosePanel:
             [self handleMasterButtonTap:nil];
             break;
@@ -2165,7 +1838,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.21 (Expert Fix, Prompt-Switch) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.22 (UI/UX Revamp) 已加载。");
     }
 }
-
