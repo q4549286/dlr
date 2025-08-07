@@ -1458,7 +1458,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             }
             break;
         }
-        // ... (其他 case 保持不变) ...
         case kButtonTag_StandardReport:
             [self executeSimpleExtraction];
             break;
@@ -2302,5 +2301,3 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.22 (UI/UX Revamp) 已加载。");
     }
 }
-
-
