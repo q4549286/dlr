@@ -1135,8 +1135,45 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_echo_titleLabel.textAlignment = NSTextAlignmentCenter;
     [contentView addSubview:g_echo_titleLabel];
     
+%new
+- (void)createOrShowMainControlPanel {
+    UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
+    
+    if (g_mainControlPanelView && g_mainControlPanelView.superview) {
+        [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) {
+            [g_mainControlPanelView removeFromSuperview];
+            g_mainControlPanelView = nil;
+            g_logTextView = nil;
+            g_isAdvancedModeVisible = NO;
+        }];
+        return;
+    }
+
+    g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds];
+    g_mainControlPanelView.tag = kEchoMainPanelTag;
+    g_mainControlPanelView.backgroundColor = [UIColor clearColor];
+    if (@available(iOS 8.0, *)) {
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+        blurView.frame = g_mainControlPanelView.bounds;
+        [g_mainControlPanelView addSubview:blurView];
+    } else {
+        g_mainControlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
+    }
+    UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)];
+    contentView.clipsToBounds = YES;
+    [g_mainControlPanelView addSubview:contentView];
+    
+    NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
+    [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.22" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    [titleString appendAttributedString:versionString];
+
+    g_echo_titleLabel = [[UILabel alloc] init];
+    g_echo_titleLabel.attributedText = titleString;
+    g_echo_titleLabel.textAlignment = NSTextAlignmentCenter;
+    [contentView addSubview:g_echo_titleLabel];
+    
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
-        // [FIXED] 改为 Custom 类型以避免白色背景
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; 
         [btn setTitle:title forState:UIControlStateNormal];
         if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
@@ -1155,7 +1192,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         btn.titleLabel.font = [UIFont boldSystemFontOfSize:15];
         btn.layer.cornerRadius = 12;
         return btn;
-    };
+    }; // [FIXED] 补上这个至关重要的 };
 
     g_echo_promptToggleButton = createButton(@"解析引擎指令: 开启", @"wand.and.stars", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
     g_echo_promptToggleButton.selected = YES;
@@ -2301,4 +2338,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.22 (UI/UX Revamp) 已加载。");
     }
 }
+
 
