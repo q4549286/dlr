@@ -1544,8 +1544,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             break;
         }
         default: break;
-    }
-}
+    } // [FIXED] 补上 switch 的结束括号
+} // [FIXED] 补上方法的结束括号
 
 %new
 - (void)presentAIActionSheetWithReport:(NSString *)report {
@@ -2301,3 +2301,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.22 (UI/UX Revamp) 已加载。");
     }
 }
+
