@@ -1048,7 +1048,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
         return;
     }
-    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
+    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);}
 } // [FIXED] Added missing closing brace
 
 %hook UIViewController
@@ -2158,6 +2158,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI) 已加载。");
     }
 }
+
 
 
 
