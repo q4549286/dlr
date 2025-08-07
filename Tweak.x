@@ -1125,7 +1125,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     contentView.clipsToBounds = YES;
     [g_mainControlPanelView addSubview:contentView];
     
-    // 创建所有UI元素
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
     NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.22" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
@@ -1137,12 +1136,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [contentView addSubview:g_echo_titleLabel];
     
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+        // [FIXED] 改为 Custom 类型以避免白色背景
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; 
         [btn setTitle:title forState:UIControlStateNormal];
         if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
             UIImage *icon = [UIImage systemImageNamed:iconName];
             [btn setImage:icon forState:UIControlStateNormal];
-            // [FIXED] API Deprecation Warning
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Wdeprecated-declarations"
             btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 10);
@@ -1155,10 +1154,92 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         btn.tintColor = [UIColor whiteColor];
         btn.titleLabel.font = [UIFont boldSystemFontOfSize:15];
         btn.layer.cornerRadius = 12;
-        btn.layer.borderWidth = 1.0;
-        btn.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.1].CGColor;
         return btn;
     };
+
+    g_echo_promptToggleButton = createButton(@"解析引擎指令: 开启", @"wand.and.stars", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
+    g_echo_promptToggleButton.selected = YES;
+    [contentView addSubview:g_echo_promptToggleButton];
+
+    g_echo_mainButtonsContainer = [[UIView alloc] init];
+    [contentView addSubview:g_echo_mainButtonsContainer];
+    
+    UILabel *sec1Title = [[UILabel alloc] init];
+    sec1Title.text = @"核心解析";
+    sec1Title.font = [UIFont boldSystemFontOfSize:18];
+    sec1Title.textColor = [UIColor lightGrayColor];
+    [g_echo_mainButtonsContainer addSubview:sec1Title];
+
+    NSArray *mainButtons = @[
+        @{@"title": @"标准报告", @"icon": @"doc.text", @"tag": @(kButtonTag_StandardReport), @"color": ECHO_COLOR_MAIN_TEAL},
+        @{@"title": @"深度解构", @"icon": @"square.stack.3d.up.fill", @"tag": @(kButtonTag_DeepDiveReport), @"color": ECHO_COLOR_MAIN_BLUE}
+    ];
+    for (NSDictionary *config in mainButtons) {
+        [g_echo_mainButtonsContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], config[@"color"])];
+    }
+    
+    g_echo_toggleAdvancedButton = createButton(@"更多功能", @"chevron.down", kButtonTag_ToggleAdvanced, ECHO_COLOR_AUX_GREY);
+    [contentView addSubview:g_echo_toggleAdvancedButton];
+
+    g_echo_advancedContainer = [[UIView alloc] init];
+    g_echo_advancedContainer.clipsToBounds = YES;
+    g_echo_advancedContainer.alpha = 0;
+    [contentView addSubview:g_echo_advancedContainer];
+    
+    UILabel *sec2Title = [[UILabel alloc] init];
+    sec2Title.text = @"专项分析";
+    sec2Title.font = [UIFont boldSystemFontOfSize:18];
+    sec2Title.textColor = [UIColor lightGrayColor];
+    [g_echo_advancedContainer addSubview:sec2Title];
+
+    NSArray *coreButtons = @[
+        @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)}, @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
+        @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)}, @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)}
+    ];
+    for (NSDictionary *config in coreButtons) {
+        [g_echo_advancedContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY)];
+    }
+    
+    UILabel *sec3Title = [[UILabel alloc] init];
+    sec3Title.text = @"格局资料库";
+    sec3Title.font = [UIFont boldSystemFontOfSize:18];
+    sec3Title.textColor = [UIColor lightGrayColor];
+    [g_echo_advancedContainer addSubview:sec3Title];
+
+    NSArray *auxButtons = @[
+        @{@"title": @"毕法要诀", @"icon": @"book.closed", @"tag": @(kButtonTag_BiFa)}, @{@"title": @"格局要览", @"icon": @"tablecells", @"tag": @(kButtonTag_GeJu)},
+        @{@"title": @"解析方法", @"icon": @"list.number", @"tag": @(kButtonTag_FangFa)}
+    ];
+    for (NSDictionary *config in auxButtons) {
+        [g_echo_advancedContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY)];
+    }
+
+    g_logTextView = [[UITextView alloc] init];
+    g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
+    g_logTextView.editable = NO;
+    g_logTextView.layer.cornerRadius = 8;
+    NSMutableAttributedString *initLog = [[NSMutableAttributedString alloc] initWithString:@"[Echo引擎]：就绪。\n"];
+    [initLog addAttribute:NSForegroundColorAttributeName value:[UIColor whiteColor] range:NSMakeRange(0, initLog.length)];
+    [initLog addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, initLog.length)];
+    g_logTextView.attributedText = initLog;
+    [contentView addSubview:g_logTextView];
+  
+    g_echo_bottomButtonsContainer = [[UIView alloc] init];
+    [contentView addSubview:g_echo_bottomButtonsContainer];
+    
+    UIButton *closeButton = createButton(@"关闭面板", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
+    [g_echo_bottomButtonsContainer addSubview:closeButton];
+    
+    UIButton *sendLastReportButton = createButton(@"发送上次报告到AI", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
+    [g_echo_bottomButtonsContainer addSubview:sendLastReportButton];
+
+    [self layoutPanelContentsAnimated:NO];
+
+    g_mainControlPanelView.alpha = 0;
+    [keyWindow addSubview:g_mainControlPanelView];
+    [UIView animateWithDuration:0.4 animations:^{ g_mainControlPanelView.alpha = 1.0; }];
+}
 
     // AI 指令开关
     g_echo_promptToggleButton = createButton(@"AI指令: 开启", @"wand.and.stars", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
@@ -1349,9 +1430,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             sender.selected = !sender.selected;
             g_shouldIncludeAIPromptHeader = sender.selected;
             NSString *status = g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭";
-            [sender setTitle:[NSString stringWithFormat:@"AI指令: %@", status] forState:UIControlStateNormal];
+            [sender setTitle:[NSString stringWithFormat:@"解析引擎指令: %@", status] forState:UIControlStateNormal];
             sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY;
-            LogMessage(EchoLogTypeInfo, @"[设置] AI分析指令已 %@。", status);
+            LogMessage(EchoLogTypeInfo, @"[设置] 解析引擎指令已 %@。", status);
             break;
         }
         case kButtonTag_ToggleAdvanced: {
@@ -1377,6 +1458,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             }
             break;
         }
+        // ... (其他 case 保持不变) ...
         case kButtonTag_StandardReport:
             [self executeSimpleExtraction];
             break;
@@ -2220,4 +2302,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.22 (UI/UX Revamp) 已加载。");
     }
 }
+
 
