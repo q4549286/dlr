@@ -939,6 +939,8 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)hideProgressHUD;
 - (void)showEchoNotificationWithTitle:(NSString *)title message:(NSString *)message;
 - (void)handleMasterButtonTap:(UIButton *)sender;
+- (void)buttonTouchDown:(UIButton *)sender;
+- (void)buttonTouchUp:(UIButton *)sender;
 - (void)executeSimpleExtraction;
 - (void)executeCompositeExtraction;
 - (void)extractSpecificPopupWithSelectorName:(NSString *)selectorName taskName:(NSString *)taskName completion:(void (^)(NSString *result))completion;
@@ -959,11 +961,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 @end
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
-
-%hook UILabel
-- (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSString *newString = nil; if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { newString = @"定制"; } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { %orig(newString); return; } NSMutableString *simplifiedText = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); %orig(simplifiedText); }
-- (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
-%end
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
@@ -1052,7 +1049,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
-}
+} // [FIXED] Added missing closing brace
 
 %hook UIViewController
 
@@ -1128,7 +1125,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     // Button Creation Helper
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; // Use Custom for full control
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
         [btn setTitle:title forState:UIControlStateNormal];
         [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         
@@ -1146,7 +1143,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         btn.backgroundColor = color;
         [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
         
-        // Touch feedback
         [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
         [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
 
@@ -1167,7 +1163,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return label;
     };
     
-    CGFloat currentY = 10;
+    __block CGFloat currentY = 10;
     CGFloat padding = 15.0;
     CGFloat contentWidth = scrollView.bounds.size.width;
 
@@ -1251,8 +1247,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     closeButton.frame = CGRectMake(padding, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
     [contentView addSubview:closeButton];
     
-    UIButton *sendLastReportButton = createButton(@"发送上次报告", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
-    [sendLastReportButton setTitle:@"发送报告" forState:UIControlStateNormal];
+    UIButton *sendLastReportButton = createButton(@"发送报告", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
     sendLastReportButton.frame = CGRectMake(padding * 2 + bottomBtnWidth, contentView.bounds.size.height - 50, bottomBtnWidth, 40);
     [contentView addSubview:sendLastReportButton];
 
@@ -2164,5 +2159,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     }
 }
 }
+
 
 
