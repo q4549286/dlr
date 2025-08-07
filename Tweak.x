@@ -671,7 +671,7 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"终极要求：\n"
         @"你的分析，必须体现出【大师心法】的灵魂，并以【法则优先级与裁决铁律】为最高指导。你的核心任务是呈现一场精彩、严谨的“法则博弈”，而不是给出一个简单的答案。 你的分析不仅要准确，更要让人感到震撼和启发，因为你展现的不仅是结论，更是得出结论的、无懈可击的、适应一切复杂情况的思辨过程。\n"
         @"质量标准：让人信服的不是你罗列了多少规则，而是你展现出的深刻洞察力和在矛盾信息中进行高级裁决的能力。真正体现\"同盘同问得同论\"的一致性和\"断事如神\"的震撼效果。\n"
-        @"请准备接收标准化课盘信息并进行专业深度分析！\n";
+        @"请准备接收标准化课盘信息并进行专业深度分析！\n";}
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
 
@@ -2158,6 +2158,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI) 已加载。");
     }
 }
+
 
 
 
