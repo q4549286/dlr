@@ -1252,7 +1252,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)layoutPanelContentsAnimated:(BOOL)animated {
     UIView *contentView = g_mainControlPanelView.subviews.lastObject;
     CGFloat contentWidth = contentView.bounds.size.width;
-    CGFloat currentY = 15.0;
+    __block CGFloat currentY = 15.0;
     CGFloat padding = 15.0;
 
     void (^layoutBlock)(void) = ^{
@@ -2220,3 +2220,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.22 (UI/UX Revamp) 已加载。");
     }
 }
+
