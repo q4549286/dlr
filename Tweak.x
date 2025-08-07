@@ -1194,7 +1194,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return btn;
     }; // [FIXED] 补上这个至关重要的 };
 
-    g_echo_promptToggleButton = createButton(@"解析引擎指令: 开启", @"wand.and.stars", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
+     g_echo_promptToggleButton = createButton(@"解析引擎指令: 开启", @"wand.and.stars", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
     g_echo_promptToggleButton.selected = YES;
     [contentView addSubview:g_echo_promptToggleButton];
 
@@ -2338,5 +2338,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.22 (UI/UX Revamp) 已加载。");
     }
 }
+
 
 
