@@ -1048,8 +1048,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
         return;
     }
-    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);}
-} // [FIXED] Added missing closing brace
+    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
+}
 
 %hook UIViewController
 
@@ -1125,7 +1125,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     // Button Creation Helper
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; // Use Custom for full control
         [btn setTitle:title forState:UIControlStateNormal];
         [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         
@@ -1143,6 +1143,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         btn.backgroundColor = color;
         [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
         
+        // Touch feedback
         [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
         [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
 
@@ -1163,7 +1164,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return label;
     };
     
-    __block CGFloat currentY = 10;
+    CGFloat currentY = 10;
     CGFloat padding = 15.0;
     CGFloat contentWidth = scrollView.bounds.size.width;
 
@@ -2158,6 +2159,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI) 已加载。");
     }
 }
+
 
 
 
