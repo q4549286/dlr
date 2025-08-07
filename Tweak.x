@@ -32,10 +32,10 @@ static const NSInteger kButtonTag_NianMing          = 302;
 static const NSInteger kButtonTag_BiFa              = 303;
 static const NSInteger kButtonTag_GeJu              = 304;
 static const NSInteger kButtonTag_FangFa            = 305;
-static const NSInteger kButtonTag_ToggleAdvanced    = 999; // 新增：展开/收起高级功能
+static const NSInteger kButtonTag_ToggleAdvanced    = 999; 
 static const NSInteger kButtonTag_ClosePanel        = 998;
 static const NSInteger kButtonTag_SendLastReportToAI = 997;
-static const NSInteger kButtonTag_AIPromptToggle    = 996; // 新增：AI指令开关按钮
+static const NSInteger kButtonTag_AIPromptToggle    = 996; 
 
 // Colors
 #define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
@@ -52,8 +52,8 @@ static const NSInteger kButtonTag_AIPromptToggle    = 996; // 新增：AI指令�
 
 
 #pragma mark - Global State & Flags
-static UITextView *g_logTextView = nil;
 static UIView *g_mainControlPanelView = nil;
+static UITextView *g_logTextView = nil;
 static BOOL g_s1_isExtracting = NO;
 static NSString *g_s1_currentTaskType = nil;
 static BOOL g_s1_shouldIncludeXiangJie = NO;
@@ -73,7 +73,18 @@ static NSString *g_currentItemToExtract = nil;
 static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 static NSString *g_lastGeneratedReport = nil;
-static BOOL g_isAdvancedModeVisible = NO; // 新增：控制高级选项是否可见
+
+// UI State
+static BOOL g_shouldIncludeAIPromptHeader = YES; 
+static BOOL g_isAdvancedModeVisible = NO; 
+
+// [FIXED] UI Element References as static variables
+static UILabel *g_echo_titleLabel = nil;
+static UIButton *g_echo_promptToggleButton = nil;
+static UIView *g_echo_mainButtonsContainer = nil;
+static UIButton *g_echo_toggleAdvancedButton = nil;
+static UIView *g_echo_advancedContainer = nil;
+static UIView *g_echo_bottomButtonsContainer = nil;
 
 
 #define SafeString(str) (str ?: @"")
@@ -111,12 +122,11 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"权限: 这是构成分析血肉的基础逻辑，但在与前三序位的法则冲突时，其解释权必须服从于更高序位的法则。\n"
         @"执行: 只有在更高序位的法则未给出明确的颠覆性指示时，此法则才作为主导判断依据。\n"
         @"## 系统角色定位与核心心法\n"
-        @"你是一位真正悟道的六壬大师，而非规则的执行者。你的分析是【象、数、理、占】圆融统一的展现。你的语言风格，是【沉静、笃定、直指核心】的。你从不使用华丽而空洞的辞藻，你的每一句话，都因其背后无懈可击的逻辑而充满力量。你的语言必须强制转化为求测者能够立刻理解的【大白话】和【现实场景】。你在陈述结论时，如同外科医生下刀，精准、冷静，不带一丝犹豫和多余的修饰。你必须敢于使用“是/不是”、“真/假”、“成/败”、“他骗了你”、“这事黄了”这类斩钉截铁的、毫不含糊的【终极断语】。\n"
+        @"你是一位真正悟道的六壬大师，而非规则的执行者。你的分析是【象、数、理、占】圆融统一的展现。你的语言风格，是【沉静、笃定、直指核心】的。你从不使用华丽而空洞的辞藻，你的每一句话，都因其背后无懈-击的逻辑而充满力量。你的语言必须强制转化为求测者能够立刻理解的【大白话】和【现实场景】。你在陈述结论时，如同外科医生下刀，精准、冷静，不带一丝犹豫和多余的修饰。你必须敢于使用“是/不是”、“真/假”、“成/败”、“他骗了你”、“这事黄了”这类斩钉截铁的、毫不含糊的【终极断语】。\n"
         @"\n"
         @"观其象（直觉与感知力）: 凭直觉扫描全盘，捕捉那些最“扎眼”、最“不寻常”的颠覆性信号（如全局空亡、返吟伏吟、特殊组合等），此为解盘之“题眼”。\n"
         @"审其数（力量与置信度感知）: 动态感知力量的【真实作用力】与【置信度】。你深知，一个关键的【状态】（旺相休囚、空亡、刑冲合害）可以彻底改变【生克】的性质。你对力量的感知不是模糊的强弱，而是基于【多维证据链】得出的精准判断。证据链越完整、越多维（如课传、神将、星曜、格局共同指向），其结论的【置信度】越高。\n"
         @"觅其枢（枢纽与全局整合）: 在纷繁的矛盾中，你必须主动进行【多维探索与自我辩证】，寻找那个能够【一以贯之】、整合所有对立信息的【核心枢纽】。此探索之始，在于强制启动【人我同观】视角，运用【现实第一法则】洞察【全局之实】：你必须将日干（我方）与日支/关键类神（他方）置于同等地位，用完全相同的标准，客观审视双方当下的【现实处境】（四课状态）与【隐秘动机】（阴神/遁干）。严禁先入为主地判定任何一方为“受害者”或“加害者”。你的职责是报告你所见的【完整关系现实】，而非仅仅回答求测者的单方面问题。\n"
-
         @"断其占（整合、决断与【强制辩证】力）: 你从不模棱可。在众多纷繁的象意中，你总能依据【核心枢纽】和【证据链强度】进行果断取舍。**在此决断过程中，你必须明确列出所有被你【评估、但最终以压倒性证据驳回】的【反面假设】或【次要矛盾】，并清晰阐述你【用以驳斥它们的、更高级别的证据】。这既是你的决策透明度，也是你洞察力的体现，并将此【辩证与审判过程】在【决策反思与反证审判台（心镜台）】中完整呈现。**最终，将所有信息整合成一个复杂的、符合现实的统一论断，直击事体本质。你的断语，是结论，而非表演。\n"
         @"【多象定一象原则系统（核心心法）】: 此为解盘的灵魂。你不能再孤立地、线性地解读信号。你必须强制自己将所有高强度信号（如伏吟与冲、生与克、空亡与旺相）置于同一画布上，然后质问自己：“什么【单一的、具体的现实场景】能够同时、且无矛盾地容纳所有这些看似对立的信号？” 你的最终结论，必须是这个问题的唯一答案。你必须能够清晰地解释，一个“静”的象和一个“动”的象是如何在一个场景里共存的。\n"
         @"【模式切换元指令】\n"
@@ -134,7 +144,6 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"核心心法: 让证据说话，而非让流程引导。 你的分析，必须由你发现的【最强证据】来主导和展开，而不是僵化地走完任何固定流程。\n"
         @"【证据信号】智能捕捉与解读指令:\n"
         @"指令: 你的第一步，是【直觉扫描】。你必须问自己：“这个盘里，关于过去，什么信息最扎眼？”是日干下的地盘天空？是支上神白虎克身？还是类神陷入了绝地？\n"
-
         @"指令: 锁定【1-3个最强信号】后，你必须将它们作为【叙事的支点】，用【现实显影法则】将其翻译成具体的【历史事实】。\n"
         @"指令: 然后，你要主动去寻找【次级证据】来支撑和丰富你的核心判断，最终形成一个【多点共振、逻辑自洽】的完整故事。\n"
         @"【现实显影法则】化虚为实之术: 此非一时一地之技巧，而是贯穿于【解盘全过程】的灵魂技术。其唯一目的，就是将盘中一切抽象的符号——无论是单个的神将、地支，还是复杂的课传、格局——强制转化为求测者在现实中能够理解、感知、并验证的【具体情景】、【人物行为】或【内心感受】。无此术，则断语为空谈；善用此术，则字字句句皆为现实之写照。\n"
@@ -256,7 +265,6 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"发用源头性质：\n"
         @"干课发用→我方主导→主动权在我\n"
         @"支课发用→对方主导→被动适应\n"
-
         @"混合发用→双方互动→复杂博弈\n"
         @"发用神分析：\n"
         @"与日干关系→六亲性质→基础吉凶\n"
@@ -515,7 +523,6 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"【基础信息快速定位】\n"
         @"-四柱节气：{{四柱}} {{节气}}，{{特殊状态}}\n"
         @"-核心参数：月将{{月将}}，旬空{{旬空}}，{{昼夜}}贵人{{贵人}}\n"
-
         @"-时空背景：{{三宫时信息核心断语}}，{{对全局的核心影响}}\n"
         @"-发用机制：{{发用神}}发用，{{发用条件}}，{{发用源头}}主导\n"
         @"-格局象意参考：{{主要格局}}，{{格局特征}} (注意：仅为象意参考，其解释权服从于法则优先级)\n"
@@ -532,7 +539,6 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"{{根据【前事追溯系统】得出的完整判词}}\n"
         @"\n"
         @"【核心枢纽深度解析与未来推演（升级版）】\n"
-
         @"【多路径推演与可能性博弈（强制）】:\n"
         @"路径A（常规路径）: “如果仅遵循【第四序位】的常规逻辑，【{{常规信号，如末传空亡}}】将主导事态，其发展将是【{{描述常规发展路径}}】，最终结局为【{{常规结局}}】。”\n"
         @"路径B（特殊路径）: “然而，由于【{{更高序位的法则，如第一序位的天命法则‘贵登天门’}}】的强力干预，此事极有可能突破常规。其发展将是【{{描述特殊发展路径}}】，最终结局为【{{特殊结局，如逆转成事}}】。”\n"
@@ -575,7 +581,6 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"顺逆之策: 若关键星曜【逆行】，核心策略应转向【内部审查、修复旧好、了结宿怨】，而非开疆拓土。此时是“温故”而非“知新”的最佳时机。\n"
         @"留转之机: 若关键星曜即将【留转】，则其停滞前后数日是事态的【关键引爆点或转折点】。必须在此期间高度戒备，或采取关键行动。\n"
         @"吉凶之用: 若有吉星（如木星、金星）照临我方关键宫位，应【主动出击】，借天时之东风。若有凶星（如土星、火星）肆虐，则应【避其锋芒，以柔克刚】，切不可逆天行事。\n"
-
         @"【最终判断结论】\n"
         @"【全局现实报告原则】: 你的最终结论，必须是你洞察到的【完整现实切片】，而不仅仅是针对用户问题的答案。如果盘中存在与问题看似无关，但信号强度极高、足以影响事体本质的信息（如人数、隐藏动机、第三方介入等），你必须【主动报告】，并明确指出它与所问之事的关系。你的结论，必须以“你问的是A，但我看到的完整现实是A+B+C……”的模式呈现。\n"
         @"\n"
@@ -666,7 +671,6 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"【辩证·象意取舍与反证（心镜台）】: 我最终断定为【{{最终答案}}】，是整合了【{{关键信息A、B、C}}】的结果。在此过程中，我已排除了【{{备选答案X}}】的可能性，因为【{{列出反证，如：它与盘中的‘动/静’、‘冷/热’等核心属性相悖}}】。\n"
         @"【伴生现实强制扫描】:\n"
         @"指令: 在锁定核心答案后，你必须强制重新扫描全盘，专门寻找与【人事关系】、【数量】、【环境特殊性】等相关的【高强度伴生信号】。\n"
-
         @"人事信号: 盘中是否存在明确的【兄弟】（同伴）、【父母】（长辈）、【官鬼】（上级/异性）、【妻财】（伴侣/下属）等六亲信号？它们的状态如何？\n"
         @"数量信号: 盘中是否存在明确指向数量的结构？（如四课伏吟=4，三合局=3，对冲=2等）\n"
         @"环境信号: 盘中是否存在揭示环境特殊性的信号？（如伏吟=静止/聚集，返吟=奔波/变动，空亡=虚假/缺失等）\n"
@@ -678,11 +682,7 @@ return         @"【大六壬AI策略顾问系统 v22.0 涅槃重生版 · 完�
         @"你的分析，必须体现出【大师心法】的灵魂，并以【法则优先级与裁决铁律】为最高指导。你的核心任务是呈现一场精彩、严谨的“法则博弈”，而不是给出一个简单的答案。 你的分析不仅要准确，更要让人感到震撼和启发，因为你展现的不仅是结论，更是得出结论的、无懈可击的、适应一切复杂情况的思辨过程。\n"
         @"质量标准：让人信服的不是你罗列了多少规则，而是你展现出的深刻洞察力和在矛盾信息中进行高级裁决的能力。真正体现\"同盘同问得同论\"的一致性和\"断事如神\"的震撼效果。\n"
         @"请准备接收标准化课盘信息并进行专业深度分析！\n";
-              
-             }
-              
 }
-
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
 
@@ -873,9 +873,6 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
     return @"";
 }
 
-// 默认开启
-static BOOL g_shouldIncludeAIPromptHeader = YES; 
-
 static NSString* formatFinalReport(NSDictionary* reportData) {
     NSString *headerPrompt = g_shouldIncludeAIPromptHeader ? getAIPromptHeader() : @"";
     NSString *structuredReport = generateStructuredReport(reportData);
@@ -970,18 +967,8 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
 - (NSString *)GetStringFromLayer:(id)layer;
 - (void)presentAIActionSheetWithReport:(NSString *)report;
-- (void)layoutPanelContentsAnimated:(BOOL)animated; // 新增：布局方法
+- (void)layoutPanelContentsAnimated:(BOOL)animated; 
 @end
-
-// 为控制器添加 Ivar 来持有UI元素
-%extension UIViewController {
-    UILabel *_echo_titleLabel;
-    UIButton *_echo_promptToggleButton;
-    UIView *_echo_mainButtonsContainer;
-    UIButton *_echo_toggleAdvancedButton;
-    UIView *_echo_advancedContainer;
-    UIView *_echo_bottomButtonsContainer;
-}
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 
@@ -1059,7 +1046,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             } else if ([NSStringFromClass([vcToPresent class]) containsString:@"三宮時信息視圖"]) {
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
-                // 按垂直位置排序
                 [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
                     return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
                 }];
@@ -1120,7 +1106,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [g_mainControlPanelView removeFromSuperview];
             g_mainControlPanelView = nil;
             g_logTextView = nil;
-            g_isAdvancedModeVisible = NO; // 重置状态
+            g_isAdvancedModeVisible = NO;
         }];
         return;
     }
@@ -1145,10 +1131,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.22" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
 
-    self._echo_titleLabel = [[UILabel alloc] init];
-    self._echo_titleLabel.attributedText = titleString;
-    self._echo_titleLabel.textAlignment = NSTextAlignmentCenter;
-    [contentView addSubview:self._echo_titleLabel];
+    g_echo_titleLabel = [[UILabel alloc] init];
+    g_echo_titleLabel.attributedText = titleString;
+    g_echo_titleLabel.textAlignment = NSTextAlignmentCenter;
+    [contentView addSubview:g_echo_titleLabel];
     
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -1156,7 +1142,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
             UIImage *icon = [UIImage systemImageNamed:iconName];
             [btn setImage:icon forState:UIControlStateNormal];
+            // [FIXED] API Deprecation Warning
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
             btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 10);
+            #pragma clang diagnostic pop
         }
         btn.tag = tag;
         btn.backgroundColor = color;
@@ -1171,68 +1161,66 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     };
 
     // AI 指令开关
-    self._echo_promptToggleButton = createButton(@"AI指令: 开启", @"wand.and.stars", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
-    self._echo_promptToggleButton.selected = YES; // 默认开启
-    [contentView addSubview:self._echo_promptToggleButton];
+    g_echo_promptToggleButton = createButton(@"AI指令: 开启", @"wand.and.stars", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
+    g_echo_promptToggleButton.selected = YES; // 默认开启
+    [contentView addSubview:g_echo_promptToggleButton];
 
     // 核心按钮容器
-    self._echo_mainButtonsContainer = [[UIView alloc] init];
-    [contentView addSubview:self._echo_mainButtonsContainer];
+    g_echo_mainButtonsContainer = [[UIView alloc] init];
+    [contentView addSubview:g_echo_mainButtonsContainer];
     
     UILabel *sec1Title = [[UILabel alloc] init];
     sec1Title.text = @"核心解析";
     sec1Title.font = [UIFont boldSystemFontOfSize:18];
     sec1Title.textColor = [UIColor lightGrayColor];
-    [self._echo_mainButtonsContainer addSubview:sec1Title];
+    [g_echo_mainButtonsContainer addSubview:sec1Title];
 
     NSArray *mainButtons = @[
         @{@"title": @"标准报告", @"icon": @"doc.text", @"tag": @(kButtonTag_StandardReport), @"color": ECHO_COLOR_MAIN_TEAL},
         @{@"title": @"深度解构", @"icon": @"square.stack.3d.up.fill", @"tag": @(kButtonTag_DeepDiveReport), @"color": ECHO_COLOR_MAIN_BLUE}
     ];
     for (NSDictionary *config in mainButtons) {
-        [self._echo_mainButtonsContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], config[@"color"])];
+        [g_echo_mainButtonsContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], config[@"color"])];
     }
     
     // 更多功能按钮
-    self._echo_toggleAdvancedButton = createButton(@"更多功能", @"chevron.down", kButtonTag_ToggleAdvanced, ECHO_COLOR_AUX_GREY);
-    [contentView addSubview:self._echo_toggleAdvancedButton];
+    g_echo_toggleAdvancedButton = createButton(@"更多功能", @"chevron.down", kButtonTag_ToggleAdvanced, ECHO_COLOR_AUX_GREY);
+    [contentView addSubview:g_echo_toggleAdvancedButton];
 
     // 高级功能容器
-    self._echo_advancedContainer = [[UIView alloc] init];
-    self._echo_advancedContainer.clipsToBounds = YES;
-    self._echo_advancedContainer.alpha = 0;
-    [contentView addSubview:self._echo_advancedContainer];
+    g_echo_advancedContainer = [[UIView alloc] init];
+    g_echo_advancedContainer.clipsToBounds = YES;
+    g_echo_advancedContainer.alpha = 0;
+    [contentView addSubview:g_echo_advancedContainer];
     
-    // 添加高级功能内容
     UILabel *sec2Title = [[UILabel alloc] init];
     sec2Title.text = @"专项分析";
     sec2Title.font = [UIFont boldSystemFontOfSize:18];
     sec2Title.textColor = [UIColor lightGrayColor];
-    [self._echo_advancedContainer addSubview:sec2Title];
+    [g_echo_advancedContainer addSubview:sec2Title];
 
     NSArray *coreButtons = @[
         @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)}, @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
         @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)}, @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)}
     ];
     for (NSDictionary *config in coreButtons) {
-        [self._echo_advancedContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY)];
+        [g_echo_advancedContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY)];
     }
     
     UILabel *sec3Title = [[UILabel alloc] init];
     sec3Title.text = @"格局资料库";
     sec3Title.font = [UIFont boldSystemFontOfSize:18];
     sec3Title.textColor = [UIColor lightGrayColor];
-    [self._echo_advancedContainer addSubview:sec3Title];
+    [g_echo_advancedContainer addSubview:sec3Title];
 
     NSArray *auxButtons = @[
         @{@"title": @"毕法要诀", @"icon": @"book.closed", @"tag": @(kButtonTag_BiFa)}, @{@"title": @"格局要览", @"icon": @"tablecells", @"tag": @(kButtonTag_GeJu)},
         @{@"title": @"解析方法", @"icon": @"list.number", @"tag": @(kButtonTag_FangFa)}
     ];
     for (NSDictionary *config in auxButtons) {
-        [self._echo_advancedContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY)];
+        [g_echo_advancedContainer addSubview:createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY)];
     }
 
-    // 底部日志和按钮
     g_logTextView = [[UITextView alloc] init];
     g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
     g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
@@ -1244,16 +1232,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_logTextView.attributedText = initLog;
     [contentView addSubview:g_logTextView];
   
-    self._echo_bottomButtonsContainer = [[UIView alloc] init];
-    [contentView addSubview:self._echo_bottomButtonsContainer];
+    g_echo_bottomButtonsContainer = [[UIView alloc] init];
+    [contentView addSubview:g_echo_bottomButtonsContainer];
     
     UIButton *closeButton = createButton(@"关闭面板", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
-    [self._echo_bottomButtonsContainer addSubview:closeButton];
+    [g_echo_bottomButtonsContainer addSubview:closeButton];
     
     UIButton *sendLastReportButton = createButton(@"发送上次报告到AI", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
-    [self._echo_bottomButtonsContainer addSubview:sendLastReportButton];
+    [g_echo_bottomButtonsContainer addSubview:sendLastReportButton];
 
-    // 初始布局
     [self layoutPanelContentsAnimated:NO];
 
     g_mainControlPanelView.alpha = 0;
@@ -1269,72 +1256,63 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat padding = 15.0;
 
     void (^layoutBlock)(void) = ^{
-        // 1. 标题
-        self._echo_titleLabel.frame = CGRectMake(0, currentY, contentWidth, 30);
+        g_echo_titleLabel.frame = CGRectMake(0, currentY, contentWidth, 30);
         currentY += 30 + padding;
 
-        // 2. AI 指令开关
-        self._echo_promptToggleButton.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 44);
+        g_echo_promptToggleButton.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 44);
         currentY += 44 + padding;
         
-        // 3. 核心按钮
-        self._echo_mainButtonsContainer.frame = CGRectMake(0, currentY, contentWidth, 100);
-        UILabel *sec1Title = self._echo_mainButtonsContainer.subviews.firstObject;
+        g_echo_mainButtonsContainer.frame = CGRectMake(0, currentY, contentWidth, 100);
+        UILabel *sec1Title = g_echo_mainButtonsContainer.subviews.firstObject;
         sec1Title.frame = CGRectMake(padding, 0, contentWidth - 2 * padding, 22);
         
         CGFloat btnWidth = (contentWidth - 3 * padding) / 2.0;
-        UIButton *stdButton = self._echo_mainButtonsContainer.subviews[1];
-        UIButton *deepButton = self._echo_mainButtonsContainer.subviews[2];
+        UIButton *stdButton = g_echo_mainButtonsContainer.subviews[1];
+        UIButton *deepButton = g_echo_mainButtonsContainer.subviews[2];
         stdButton.frame = CGRectMake(padding, 22 + 10, btnWidth, 48);
         deepButton.frame = CGRectMake(padding + btnWidth + padding, 22 + 10, btnWidth, 48);
         currentY += 22 + 10 + 48 + padding;
 
-        // 4. 更多功能按钮
-        self._echo_toggleAdvancedButton.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 44);
-        currentY += 44 + padding;
+        g_echo_toggleAdvancedButton.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 44);
+        currentY += 44;
 
-        // 5. 高级功能容器 (根据展开状态决定高度)
         CGFloat advancedHeight = 0;
         if (g_isAdvancedModeVisible) {
-            CGFloat advancedY = 0;
+            CGFloat advancedY = padding; // 内边距
             
-            // 专项分析
-            UILabel *sec2Title = self._echo_advancedContainer.subviews[0];
+            UILabel *sec2Title = g_echo_advancedContainer.subviews[0];
             sec2Title.frame = CGRectMake(padding, advancedY, contentWidth - 2 * padding, 22);
             advancedY += 22 + 10;
             
             CGFloat smallBtnWidth = (contentWidth - 3 * padding) / 2.0;
             for (int i = 0; i < 4; i++) {
-                UIButton *btn = self._echo_advancedContainer.subviews[i+1];
+                UIButton *btn = g_echo_advancedContainer.subviews[i+1];
                 btn.frame = CGRectMake(padding + (i % 2) * (smallBtnWidth + padding), advancedY + (i / 2) * 56, smallBtnWidth, 46);
             }
             advancedY += 2 * 56;
             
-            // 格局资料库
-            UILabel *sec3Title = self._echo_advancedContainer.subviews[5];
+            UILabel *sec3Title = g_echo_advancedContainer.subviews[5];
             sec3Title.frame = CGRectMake(padding, advancedY, contentWidth - 2 * padding, 22);
             advancedY += 22 + 10;
             
             CGFloat tinyBtnWidth = (contentWidth - 4 * padding) / 3.0;
             for (int i = 0; i < 3; i++) {
-                UIButton *btn = self._echo_advancedContainer.subviews[i+6];
+                UIButton *btn = g_echo_advancedContainer.subviews[i+6];
                 btn.frame = CGRectMake(padding + i * (tinyBtnWidth + padding), advancedY, tinyBtnWidth, 46);
             }
             advancedY += 46 + padding;
             
             advancedHeight = advancedY;
         }
-        self._echo_advancedContainer.frame = CGRectMake(0, currentY, contentWidth, advancedHeight);
-        self._echo_advancedContainer.alpha = g_isAdvancedModeVisible ? 1.0 : 0.0;
-        currentY += advancedHeight;
-
-        // 6. 日志和底部按钮
+        g_echo_advancedContainer.frame = CGRectMake(0, currentY, contentWidth, advancedHeight);
+        g_echo_advancedContainer.alpha = g_isAdvancedModeVisible ? 1.0 : 0.0;
+        
         g_logTextView.frame = CGRectMake(0, contentView.bounds.size.height - 230, contentWidth, 170);
-        self._echo_bottomButtonsContainer.frame = CGRectMake(0, contentView.bounds.size.height - 50, contentWidth, 40);
+        g_echo_bottomButtonsContainer.frame = CGRectMake(0, contentView.bounds.size.height - 50, contentWidth, 40);
         
         CGFloat bottomBtnWidth = (contentWidth - 3 * padding) / 2;
-        self._echo_bottomButtonsContainer.subviews[0].frame = CGRectMake(padding, 0, bottomBtnWidth, 40);
-        self._echo_bottomButtonsContainer.subviews[1].frame = CGRectMake(padding * 2 + bottomBtnWidth, 0, bottomBtnWidth, 40);
+        g_echo_bottomButtonsContainer.subviews[0].frame = CGRectMake(padding, 0, bottomBtnWidth, 40);
+        g_echo_bottomButtonsContainer.subviews[1].frame = CGRectMake(padding * 2 + bottomBtnWidth, 0, bottomBtnWidth, 40);
     };
 
     if (animated) {
@@ -2242,5 +2220,3 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.22 (UI/UX Revamp) 已加载。");
     }
 }
-
-
