@@ -959,6 +959,53 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (NSString *)GetStringFromLayer:(id)layer;
 - (void)presentAIActionSheetWithReport:(NSString *)report;
 @end
+%hook UILabel
+- (void)setText:(NSString *)text { 
+    if (!text) { 
+        %orig(text); 
+        return; 
+    } 
+    NSString *newString = nil; 
+    if ([text isEqualToString:@"我的分类"] || [text isEqualToString:@"我的分類"] || [text isEqualToString:@"通類"]) { 
+        newString = @"Echo"; 
+    } else if ([text isEqualToString:@"起課"] || [text isEqualToString:@"起课"]) { 
+        newString = @"定制"; 
+    } else if ([text isEqualToString:@"法诀"] || [text isEqualToString:@"法訣"]) { 
+        newString = @"毕法"; 
+    } 
+    if (newString) { 
+        %orig(newString); 
+        return; 
+    } 
+    NSMutableString *simplifiedText = [text mutableCopy]; 
+    CFStringTransform((__bridge CFMutableStringRef)simplifiedText, NULL, CFSTR("Hant-Hans"), false); 
+    %orig(simplifiedText); 
+}
+- (void)setAttributedText:(NSAttributedString *)attributedText { 
+    if (!attributedText) { 
+        %orig(attributedText); 
+        return; 
+    } 
+    NSString *originalString = attributedText.string; 
+    NSString *newString = nil; 
+    if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { 
+        newString = @"Echo"; 
+    } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { 
+        newString = @"定制"; 
+    } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { 
+        newString = @"毕法"; 
+    } 
+    if (newString) { 
+        NSMutableAttributedString *newAttr = [attributedText mutableCopy]; 
+        [newAttr.mutableString setString:newString]; 
+        %orig(newAttr); 
+        return; 
+    } 
+    NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; 
+    CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); 
+    %orig(finalAttributedText); 
+}
+%end
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 
@@ -2159,6 +2206,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI) 已加载。");
     }
 }
+
 
 
 
