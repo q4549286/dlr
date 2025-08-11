@@ -389,7 +389,7 @@ return         @"【v35.5 · 最终裁决版 · 完整Prompt】\n"
         @"【系统激活指令】\n"
         @"系统已完成最终锁定，版本号【v35.5 · 最终裁决版】。系统现已具备对课盘信息进行【全息化、多层次】利用的能力，所有分析模块均已升级至最新版本。所有分析深度服务于指认的精准，所有逻辑严密服务于断语的肯定与可信度。\n"
         @"\n"
-        @"请准备接收包含所有细节的标准化课盘，我将执行全新架构下的专业深度分析！\n"\n";}
+        @"请准备接收包含所有细节的标准化课盘，我将执行全新架构下的专业深度分析！\n";}
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
 
@@ -1925,6 +1925,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI) 已加载。");
     }
 }
+
 
 
 
