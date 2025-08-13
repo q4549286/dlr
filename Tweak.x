@@ -1338,6 +1338,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
 - (NSString *)GetStringFromLayer:(id)layer;
 - (void)presentAIActionSheetWithReport:(NSString *)report;
+- (void)extractTimeSelectionInfo; 
 @end
 %hook UILabel
 - (void)setText:(NSString *)text { 
@@ -2644,6 +2645,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI) 已加载。");
     }
 }
+
 
 
 
