@@ -1200,7 +1200,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         
         if (!didTrigger) {
              LogMessage(EchoLogTypeWarning, @"[自动任务] 目标视图无直接手势，尝试调用通用显示方法...");
-             SEL fallbackSelector = NSSelectorFromString(@"顯示時間選擇WithSender:");
+             SEL fallbackSelector = NSSelectorFromString(@"顯示時間選擇");
              if ([self respondsToSelector:fallbackSelector]) {
                  SUPPRESS_LEAK_WARNING([self performSelector:fallbackSelector withObject:targetView]);
                  didTrigger = YES;
@@ -1796,4 +1796,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI + Time) 已加载。");
     }
 }
+
 
