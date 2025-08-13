@@ -594,7 +594,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         });
     }
 }
-
+%end
 // MARK: - UI Creation and Layout
 %new
 - (void)createOrShowMainControlPanel {
@@ -1378,3 +1378,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
     NSMutableArr
+
