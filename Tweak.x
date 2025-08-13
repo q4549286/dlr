@@ -436,7 +436,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    // 新增逻辑块，用于拦截时间信息弹窗
     if (g_isExtractingTimeInfo) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
         if ([vcClassName containsString:@"時間選擇視圖"]) {
@@ -446,7 +445,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             void (^extractionCompletion)(void) = ^{
                 if (completion) { completion(); }
 
-                // 提取文本
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
                 [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
@@ -462,21 +460,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 }
                 NSString *fullText = [textParts componentsJoinedByString:@"\n"];
 
-                // 调用回调并传递结果
                 if (g_timeInfoCompletionHandler) {
                     g_timeInfoCompletionHandler(fullText);
                 }
 
-                // 清理状态
                 g_isExtractingTimeInfo = NO;
                 g_timeInfoCompletionHandler = nil;
                 
-                // 自动关闭弹窗
                 [vcToPresent dismissViewControllerAnimated:NO completion:nil];
             };
 
             Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion);
-            return; // 拦截成功，直接返回
+            return;
         }
     }
 
@@ -529,7 +524,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 for (UIStackView *stackView in stackViews) {
                     NSArray *arrangedSubviews = stackView.arrangedSubviews;
                     if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                        UILabel *titleLabel = arrangedSubviews[0]; NSString *rawTitle = titleLabel.text ?: @""; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
+                        UILabel *titleLabel = arrangedSubviews[0]; NSString *rawTitle = titleLabel.text ?: @""; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""]; rawTitle = [rawTitle stringbyReplacingOccurrencesOfString:@" 格局" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
                         NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                         NSMutableArray *descParts = [NSMutableArray array]; if (arrangedSubviews.count > 1) { for (NSUInteger i = 1; i < arrangedSubviews.count; i++) { if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) { [descParts addObject:((UILabel *)arrangedSubviews[i]).text]; } } }
                         NSString *fullDesc = [[descParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
@@ -918,7 +913,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             }];
             break;
         }
-        // 新增 case
         case kButtonTag_ExtractTimeInfo: {
             [self showProgressHUD:@"正在自动提取..."];
             [self extractTimeSelectionInfoWithCompletion:^(NSString *fullText) {
@@ -1150,17 +1144,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 // MARK: - Task Launchers & Processors
-
-// 新增方法实现
 %new
 - (void)extractTimeSelectionInfoWithCompletion:(void (^)(NSString *result))completion {
     LogMessage(EchoLogTypeTask, @"[自动任务] 启动时间信息提取...");
 
-    // 1. 设置全局状态，以便hook可以拦截
     g_isExtractingTimeInfo = YES;
     g_timeInfoCompletionHandler = [completion copy];
 
-    // 2. 找到并触发“四柱”视图来弹出时间选择界面
     NSString *targetClassName = @"六壬大占.年月日時視圖";
     Class targetViewClass = NSClassFromString(targetClassName);
 
@@ -1175,30 +1165,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     
     NSMutableArray *targetViews = [NSMutableArray array];
-%new
-- (void)extractTimeSelectionInfoWithCompletion:(void (^)(NSString *result))completion {
-    LogMessage(EchoLogTypeTask, @"[自动任务] 启动时间信息提取...");
-
-    // 1. 设置全局状态，以便hook可以拦截
-    g_isExtractingTimeInfo = YES;
-    g_timeInfoCompletionHandler = [completion copy];
-
-    // 2. 找到并触发“四柱”视图来弹出时间选择界面
-    NSString *targetClassName = @"六壬大占.年月日時視圖";
-    Class targetViewClass = NSClassFromString(targetClassName);
-
-    if (!targetViewClass) {
-        LogMessage(EchoLogError, @"[自动任务失败] 找不到目标视图类 '%@'。", targetClassName);
-        if (g_timeInfoCompletionHandler) {
-            g_timeInfoCompletionHandler([NSString stringWithFormat:@"[错误: 找不到类 %@]", targetClassName]);
-        }
-        g_isExtractingTimeInfo = NO;
-        g_timeInfoCompletionHandler = nil;
-        return;
-    }
-    
-    NSMutableArray *targetViews = [NSMutableArray array];
-    // 在主视图控制器上寻找这个视图
     FindSubviewsOfClassRecursive(targetViewClass, self.view, targetViews);
 
     if (targetViews.count > 0) {
@@ -1214,14 +1180,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                          id targetWrapper = [targets firstObject];
                          id realTarget = [targetWrapper valueForKey:@"target"];
                          
-                         // 修正了编译器报错的地方
                          id actionValue = [targetWrapper valueForKey:@"action"];
                          SEL action = NULL;
                          if ([actionValue isKindOfClass:[NSValue class]]) {
-                            // SEL 常常被包装在 NSValue 中
                             action = [actionValue pointerValue];
                          } else if ([actionValue isKindOfClass:[NSString class]]) {
-                            // 有时也可能是字符串形式
                             action = NSSelectorFromString(actionValue);
                          }
 
@@ -1237,7 +1200,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         
         if (!didTrigger) {
              LogMessage(EchoLogTypeWarning, @"[自动任务] 目标视图无直接手势，尝试调用通用显示方法...");
-             SEL fallbackSelector = NSSelectorFromString(@"顯示時間選擇");
+             SEL fallbackSelector = NSSelectorFromString(@"顯示時間選擇WithSender:");
              if ([self respondsToSelector:fallbackSelector]) {
                  SUPPRESS_LEAK_WARNING([self performSelector:fallbackSelector withObject:targetView]);
                  didTrigger = YES;
@@ -1833,4 +1796,3 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI + Time) 已加载。");
     }
 }
-
