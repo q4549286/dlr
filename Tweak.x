@@ -1093,7 +1093,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)processKePanWorkQueue {
     if (g_kePan_workQueue.count == 0) {
         // 所有任务完成
-        g_isPollingForView = NO;
         if (g_kePan_completion_handler) {
             g_kePan_completion_handler();
             g_kePan_completion_handler = nil;
@@ -1673,3 +1672,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.32 (SmartInterceptFix) 已加载。");
     }
 }
+
