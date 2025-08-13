@@ -956,16 +956,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
         case kButtonTag_ExtractTimeInfo: {
             [self showProgressHUD:@"正在自动提取..."];
+            // 使用新的、模仿“毕法要诀”的提取流程
             [self extractTimeSelectionInfoWithCompletion:^(NSString *fullText) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 [strongSelf hideProgressHUD];
-
-                if ([fullText hasPrefix:@"[错误"]) {
+                
+                if (!fullText || fullText.length == 0 || [fullText hasPrefix:@"[错误"]) {
                     LogMessage(EchoLogError, @"提取失败: %@", fullText);
-                    [strongSelf showEchoNotificationWithTitle:@"提取失败" message:@"无法自动完成操作。"];
+                    [strongSelf showEchoNotificationWithTitle:@"提取失败" message:@"请确保已生成课盘。"];
                     return;
                 }
-
+                
+                // 解析逻辑不变
                 NSString *startMarker = @"四时五行";
                 NSString *endMarker = @"* 干支若以本地真太阳时为准";
                 NSRange startRange = [fullText rangeOfString:startMarker];
@@ -985,9 +987,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 } else {
                     finalBlock = remainingText;
                 }
-                finalBlock = [finalBlock stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                finalBlock = [finalBlock stringbyTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-                LogMessage(EchoLogTypeSuccess, @"[自动任务成功] 已获取“四时五行”信息。");
+                LogMessage(EchoLogTypeSuccess, @"[新策略成功] 已获取“四时五行”信息。");
                 LogMessage(EchoLogTypeInfo, @"内容:\n---\n%@\n---", finalBlock);
                 
                 [UIPasteboard generalPasteboard].string = finalBlock;
@@ -1187,23 +1189,48 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 // MARK: - Task Launchers & Processors
 %new
 - (void)extractTimeSelectionInfoWithCompletion:(void (^)(NSString *result))completion {
-    LogMessage(EchoLogTypeTask, @"[自动任务] 启动时间信息提取...");
-
-    g_isExtractingTimeInfo = YES;
-    g_timeInfoCompletionHandler = [completion copy];
-
+    LogMessage(EchoLogTypeTask, @"[新策略] 启动时间信息提取...");
+    
+    // 1. 初始化全局捕获字典，激活通用拦截模式
+    g_extractedData = [NSMutableDictionary dictionary];
+    
+    // 2. 触发点击事件 (这部分逻辑不变且正确)
     NSString *targetClassName = @"六壬大占.年月日時視圖";
     Class targetViewClass = NSClassFromString(targetClassName);
+    if (!targetViewClass) { LogMessage(EchoLogError, @"[错误] 找不到类 %@", targetClassName); if (completion) completion(@"[错误]"); return; }
+    
+    NSMutableArray *targetViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(targetViewClass, self.view, targetViews);
 
-    if (!targetViewClass) {
-        LogMessage(EchoLogError, @"[自动任务失败] 找不到目标视图类 '%@'。", targetClassName);
-        if (g_timeInfoCompletionHandler) {
-            g_timeInfoCompletionHandler([NSString stringWithFormat:@"[错误: 找不到类 %@]", targetClassName]);
+    if (targetViews.count > 0) {
+        UIView *targetView = targetViews.firstObject;
+        // 触发手势
+        if (targetView.gestureRecognizers.count > 0) {
+            UITapGestureRecognizer *tap = (UITapGestureRecognizer*)targetView.gestureRecognizers.firstObject;
+            id targets = [self GetIvarValueSafely:tap ivarNameSuffix:@"_targets"];
+            if(targets && [targets count] > 0) {
+                id targetWrapper = [targets firstObject];
+                id realTarget = [targetWrapper valueForKey:@"target"];
+                SEL action = NSSelectorFromString([targetWrapper valueForKey:@"action"]);
+                if(realTarget && action) { SUPPRESS_LEAK_WARNING([realTarget performSelector:action withObject:tap]); }
+            }
         }
-        g_isExtractingTimeInfo = NO;
-        g_timeInfoCompletionHandler = nil;
-        return;
+        
+        // 3. 异步等待数据并返回
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            NSString *result = g_extractedData[@"四时五行"];
+            if (completion) {
+                completion(result ?: @"");
+            }
+            g_extractedData = nil; // 清理
+        });
+        
+    } else {
+        LogMessage(EchoLogError, @"[错误] 找不到视图实例 %@", targetClassName);
+        if (completion) completion(@"[错误]");
+        g_extractedData = nil; // 清理
     }
+}
     
     NSMutableArray *targetViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(targetViewClass, self.view, targetViews);
@@ -1837,6 +1864,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI + Time) 已加载。");
     }
 }
+
 
 
 
