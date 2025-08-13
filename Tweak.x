@@ -33,6 +33,7 @@ static const NSInteger kButtonTag_NianMing          = 302;
 static const NSInteger kButtonTag_BiFa              = 303;
 static const NSInteger kButtonTag_GeJu              = 304;
 static const NSInteger kButtonTag_FangFa            = 305;
+static const NSInteger kButtonTag_ExtractTimeInfo   = 401; // <--- 新增
 static const NSInteger kButtonTag_ClosePanel        = 998;
 static const NSInteger kButtonTag_SendLastReportToAI = 997;
 static const NSInteger kButtonTag_AIPromptToggle    = 996; 
@@ -1625,7 +1626,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSArray *coreButtons = @[
         @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)}, @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
-        @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)}, @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)}
+        @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)}, @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)},
+       @{@"title": @"提取时间", @"icon": @"clock", @"tag": @(kButtonTag_ExtractTimeInfo)} 
     ];
     for (int i = 0; i < coreButtons.count; i++) {
         NSDictionary *config = coreButtons[i];
@@ -1688,6 +1690,58 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [UIView animateWithDuration:0.1 animations:^{
         sender.alpha = 0.7;
     }];
+}
+%new
+- (void)extractTimeSelectionInfo {
+    LogMessage(EchoLogTypeTask, @"[新功能] 开始提取时间选择视图信息...");
+
+    // 使用您已有的强大辅助函数，目标类名是“六壬大占.時間選擇視圖”
+    NSString *className = @"六壬大占.時間選擇視圖";
+    // 用换行符\n来分隔，以保留原始格式
+    NSString *fullText = [self extractTextFromFirstViewOfClassName:className separator:@"\n"];
+
+    if (!fullText || fullText.length == 0) {
+        LogMessage(EchoLogError, @"[提取失败] 未找到 '%@' 视图或其内容为空。", className);
+        LogMessage(EchoLogTypeWarning, @"请确保您停留在图1所示的‘确定’时间界面。");
+        [self showEchoNotificationWithTitle:@"提取失败" message:@"请先进入时间设置界面。"];
+        return;
+    }
+    
+    // 从完整文本中精确定位“四时五行”部分
+    // 文本会被自动转为简体，所以我们用简体中文搜索
+    NSString *startMarker = @"四时五行";
+    NSString *endMarker = @"* 干支若以本地真太阳时为准";
+    
+    NSRange startRange = [fullText rangeOfString:startMarker];
+    
+    if (startRange.location == NSNotFound) {
+        LogMessage(EchoLogError, @"[提取失败] 在视图内容中未找到起始标记“%@”。", startMarker);
+        [self showEchoNotificationWithTitle:@"提取失败" message:@"无法定位关键信息。"];
+        return;
+    }
+
+    // 截取从“四时五行”开始的全部内容
+    NSString *remainingText = [fullText substringFromIndex:startRange.location];
+    NSRange endRange = [remainingText rangeOfString:endMarker];
+    
+    NSString *finalBlock;
+    if (endRange.location != NSNotFound) {
+        // 如果找到了结束标记，就精确截取
+        finalBlock = [remainingText substringToIndex:endRange.location];
+    } else {
+        // 如果没找到，就取到结尾
+        finalBlock = remainingText;
+    }
+
+    // 清理首尾的空白和换行
+    finalBlock = [finalBlock stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+    LogMessage(EchoLogTypeSuccess, @"[提取成功] 已获取“四时五行”信息。");
+    LogMessage(EchoLogTypeInfo, @"内容:\n---\n%@\n---", finalBlock);
+    
+    // 将结果复制到剪贴板并提示用户
+    [UIPasteboard generalPasteboard].string = finalBlock;
+    [self showEchoNotificationWithTitle:@"提取成功" message:@"时间信息已复制到剪贴板。"];
 }
 
 %new
@@ -1825,6 +1879,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 [strongSelf hideProgressHUD];
                 [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
+            break;
+        }
+      case kButtonTag_ExtractTimeInfo: {
+            [self extractTimeSelectionInfo];
             break;
         }
         default: break;
@@ -2586,6 +2644,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI) 已加载。");
     }
 }
+
 
 
 
