@@ -77,8 +77,6 @@ static NSMutableArray *g_capturedGeJuArray = nil;
 static NSString *g_lastGeneratedReport = nil;
 
 // 新增全局变量
-static BOOL g_isExtractingTimeInfo = NO;
-static void (^g_timeInfoCompletionHandler)(NSString *result) = nil;
 
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES; 
@@ -527,6 +525,37 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         vcToPresent.view.alpha = 0.0f; animated = NO;
+        
+        // --- 在这里添加新的逻辑来识别时间选择视图 ---
+        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+        if ([vcClassName containsString:@"時間選擇視圖"]) {
+            LogMessage(EchoLogTypeInfo, @"[通用捕获] 侦测到 '時間選擇視圖'。");
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                NSMutableArray *allLabels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
+                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                    if (roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
+                    if (roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+                    return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+                }];
+                
+                NSMutableArray<NSString *> *textParts = [NSMutableArray array];
+                for (UILabel *label in allLabels) {
+                    if (label.text && label.text.length > 0) {
+                        [textParts addObject:label.text];
+                    }
+                }
+                NSString *fullText = [textParts componentsJoinedByString:@"\n"];
+                
+                g_extractedData[@"四时五行"] = fullText; // 使用特定键名存储
+                LogMessage(EchoLogTypeSuccess, @"[通用捕获] 成功解析 '時間選擇視圖' 内容。");
+                
+                [vcToPresent dismissViewControllerAnimated:NO completion:nil];
+            });
+            Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
+            return; // 处理完毕，返回
+        }
+
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             NSString *title = vcToPresent.title ?: @"";
             if (title.length == 0) { NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, labels); if (labels.count > 0) { [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending; if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending; return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; UILabel *firstLabel = labels.firstObject; if (firstLabel && firstLabel.frame.origin.y < 100) { title = firstLabel.text; } } }
@@ -1808,6 +1837,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI + Time) 已加载。");
     }
 }
+
 
 
 
