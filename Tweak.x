@@ -1175,6 +1175,29 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     
     NSMutableArray *targetViews = [NSMutableArray array];
+%new
+- (void)extractTimeSelectionInfoWithCompletion:(void (^)(NSString *result))completion {
+    LogMessage(EchoLogTypeTask, @"[自动任务] 启动时间信息提取...");
+
+    // 1. 设置全局状态，以便hook可以拦截
+    g_isExtractingTimeInfo = YES;
+    g_timeInfoCompletionHandler = [completion copy];
+
+    // 2. 找到并触发“四柱”视图来弹出时间选择界面
+    NSString *targetClassName = @"六壬大占.年月日時視圖";
+    Class targetViewClass = NSClassFromString(targetClassName);
+
+    if (!targetViewClass) {
+        LogMessage(EchoLogError, @"[自动任务失败] 找不到目标视图类 '%@'。", targetClassName);
+        if (g_timeInfoCompletionHandler) {
+            g_timeInfoCompletionHandler([NSString stringWithFormat:@"[错误: 找不到类 %@]", targetClassName]);
+        }
+        g_isExtractingTimeInfo = NO;
+        g_timeInfoCompletionHandler = nil;
+        return;
+    }
+    
+    NSMutableArray *targetViews = [NSMutableArray array];
     // 在主视图控制器上寻找这个视图
     FindSubviewsOfClassRecursive(targetViewClass, self.view, targetViews);
 
@@ -1190,7 +1213,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     if(targets && [targets count] > 0) {
                          id targetWrapper = [targets firstObject];
                          id realTarget = [targetWrapper valueForKey:@"target"];
-                         SEL action = (SEL)[targetWrapper valueForKey:@"action"];
+                         
+                         // 修正了编译器报错的地方
+                         id actionValue = [targetWrapper valueForKey:@"action"];
+                         SEL action = NULL;
+                         if ([actionValue isKindOfClass:[NSValue class]]) {
+                            // SEL 常常被包装在 NSValue 中
+                            action = [actionValue pointerValue];
+                         } else if ([actionValue isKindOfClass:[NSString class]]) {
+                            // 有时也可能是字符串形式
+                            action = NSSelectorFromString(actionValue);
+                         }
+
                          if(realTarget && action && [realTarget respondsToSelector:action]) {
                              SUPPRESS_LEAK_WARNING([realTarget performSelector:action withObject:gesture]);
                              didTrigger = YES;
@@ -1203,7 +1237,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         
         if (!didTrigger) {
              LogMessage(EchoLogTypeWarning, @"[自动任务] 目标视图无直接手势，尝试调用通用显示方法...");
-             SEL fallbackSelector = NSSelectorFromString(@"顯示時間選擇WithSender:");
+             SEL fallbackSelector = NSSelectorFromString(@"顯示時間選擇");
              if ([self respondsToSelector:fallbackSelector]) {
                  SUPPRESS_LEAK_WARNING([self performSelector:fallbackSelector withObject:targetView]);
                  didTrigger = YES;
@@ -1799,3 +1833,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI + Time) 已加载。");
     }
 }
+
