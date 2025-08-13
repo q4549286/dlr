@@ -436,15 +436,21 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    if (g_isExtractingTimeInfo) {
-        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        if ([vcClassName containsString:@"時間選擇視圖"]) {
-            vcToPresent.view.alpha = 0.0f;
-            animated = NO;
+    if (g_isExtractingTimeInfo && [NSStringFromClass([vcToPresent class]) containsString:@"時間選擇視圖"]) {
+        LogMessage(EchoLogTypeInfo, @"[Hook] 成功拦截 '時間選擇視圖'。");
+        vcToPresent.view.alpha = 0.0f;
+        animated = NO;
 
-            void (^extractionCompletion)(void) = ^{
-                if (completion) { completion(); }
-
+        // 创建一个新的完成回调，嵌入我们的提取逻辑
+        void (^newCompletion)(void) = ^{
+            // 原始的 completion block (如果有的话)
+            if (completion) {
+                completion();
+            }
+            
+            // 异步提取，确保视图已经完全加载
+            dispatch_async(dispatch_get_main_queue(), ^{
+                LogMessage(EchoLogTypeInfo, @"[Hook] 开始从已拦截的视图中提取文本...");
                 NSMutableArray *allLabels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
                 [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
@@ -452,6 +458,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     if (roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
                     return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
                 }];
+                
                 NSMutableArray<NSString *> *textParts = [NSMutableArray array];
                 for (UILabel *label in allLabels) {
                     if (label.text && label.text.length > 0) {
@@ -460,19 +467,24 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 }
                 NSString *fullText = [textParts componentsJoinedByString:@"\n"];
 
+                // 调用我们的主回调
                 if (g_timeInfoCompletionHandler) {
                     g_timeInfoCompletionHandler(fullText);
                 }
 
+                // 清理状态
                 g_isExtractingTimeInfo = NO;
                 g_timeInfoCompletionHandler = nil;
                 
+                // 确保在所有操作完成后关闭弹窗
+                LogMessage(EchoLogTypeInfo, @"[Hook] 提取完成，正在关闭视图...");
                 [vcToPresent dismissViewControllerAnimated:NO completion:nil];
-            };
+            });
+        };
 
-            Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion);
-            return;
-        }
+        // 使用我们自己的回调来调用原始的 presentViewController
+        Original_presentViewController(self, _cmd, vcToPresent, animated, newCompletion);
+        return; // 拦截并处理完毕，直接返回
     }
 
     if (g_s1_isExtracting) {
@@ -1796,5 +1808,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI + Time) 已加载。");
     }
 }
+
 
 
