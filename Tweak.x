@@ -1,11 +1,11 @@
-////// Filename: Echo_AnalysisEngine_v13.31_FinalSmartIntercept.xm
-// 描述: Echo 六壬解析引擎 v13.31 (智能拦截修复版)。
-//      - [FIX] 彻底解决时间提取的所有问题。回归并增强v13.27的拦截逻辑，废弃轮询。
-//          - `Tweak_presentViewController`中的通用拦截逻辑现在被增强，可以识别时间选择器VC。
+////// Filename: Echo_AnalysisEngine_v13.31_SmartIntercept.xm
+// 描述: Echo 六壬解析引擎 v13.31 (智能拦截最终修复版)。
+//      - [FIX] 彻底解决时间提取的所有问题。回归并增强拦截逻辑，废弃所有复杂的轮询方案。
+//          - `Tweak_presentViewController`中的通用拦截逻辑被大幅增强，现在可以优先通过类名识别`六壬大占.時間選擇視圖`。
 //          - 当识别到时间选择器VC后，会采用特殊的提取逻辑：直接从其内部的UITextView读取文本。
-//          - 读取后，像处理其他弹窗一样将其dismiss，这解释了为何v13.27能关闭窗口。
+//          - 读取后，像处理其他弹窗一样将其dismiss，这解释了为何之前版本能关闭窗口但无法提取数据。
 //          - 此方案统一了所有弹窗的处理方式，代码更简洁，逻辑更清晰。
-//      - [STABILITY] 继承之前版本所有功能和修复。
+//      - [REFACTOR] 恢复`extractKePanInfoWithCompletion`为简单的顺序触发模式。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -1657,6 +1657,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.27 (PollingFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.31 (SmartIntercept) 已加载。");
     }
 }
