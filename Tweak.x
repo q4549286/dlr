@@ -1,10 +1,10 @@
-////// Filename: Echo_AnalysisEngine_v13.27_PollingFix.xm
-// 描述: Echo 六壬解析引擎 v13.27 (最终轮询修复版)。
-//      - [FIX] 彻底解决时间提取卡死问题。经分析，时间选择器是一个被Push的VC，而非Present。
-//          - 废弃了在`Tweak_presentViewController`中的拦截逻辑。
-//          - 全面重写`extractDetailedTimeInfoWithCompletion`函数，采用“主动轮询检测”策略。
-//          - 脚本现在会轮询检测`六壬大占.時間選擇視圖`的出现，从中提取UITextView的文本，然后调用其`确认时间`方法以官方方式关闭界面，确保流程的稳定与安全。
-//      - [STABILITY] 继承v13.26所有功能和修复。
+////// Filename: Echo_AnalysisEngine_v13.28_PollingPriorityFix.xm
+// 描述: Echo 六壬解析引擎 v13.28 (轮询优先级修复版)。
+//      - [FIX] 解决轮询超时与“未知弹窗”日志冲突的问题。原因是时间轮询期间，旧的通用弹窗拦截逻辑错误地捕获并关闭了时间选择VC。
+//          - 引入新的全局状态`g_isPollingForView`。
+//          - 在轮询期间设置此状态为`true`，让`Tweak_presentViewController`中的通用拦截逻辑暂时失效。
+//          - 轮询结束后恢复状态，确保不同任务间互不干扰。
+//      - [STABILITY] 继承v13.27所有功能和修复。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -74,6 +74,7 @@ static NSString *g_lastGeneratedReport = nil;
 
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES; 
+static BOOL g_isPollingForView = NO; // 新增状态：防止轮询时被其他逻辑干扰
 
 #define SafeString(str) (str ?: @"")
 
@@ -468,7 +469,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
     }
-    else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
+    // 修改后的通用弹窗拦截逻辑，增加了g_isPollingForView的判断
+    else if (g_extractedData && !g_isPollingForView && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         vcToPresent.view.alpha = 0.0f; animated = NO;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             NSString *title = vcToPresent.title ?: @"";
@@ -578,7 +580,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // Title
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.27" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.28" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString;
@@ -1060,13 +1062,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)extractDetailedTimeInfoWithCompletion:(void (^)(NSString *result))completion {
     LogMessage(EchoLogTypeInfo, @"[时间] 启动详细时间信息提取(轮询模式)...");
-    
+    g_isPollingForView = YES; // 设置“请勿打扰”标志
+
     // 1. 触发界面
     SEL triggerSelector = NSSelectorFromString(@"顯示時間選擇");
     if ([self respondsToSelector:triggerSelector]) {
         SUPPRESS_LEAK_WARNING([self performSelector:triggerSelector withObject:nil]);
     } else {
         LogMessage(EchoLogError, @"[时间] 错误：无法响应 '顯示時間選擇' 方法。");
+        g_isPollingForView = NO;
         if (completion) completion(@"[错误: 无法调用时间选择器]");
         return;
     }
@@ -1075,6 +1079,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     __block NSTimer *pollingTimer = nil;
     __block int attempt = 0;
     
+    void (^cleanupAndCallback)(NSString *) = ^(NSString *result) {
+        [pollingTimer invalidate];
+        g_isPollingForView = NO; // 清除“请勿打扰”标志
+        if (completion) {
+            completion(result);
+        }
+    };
+
     pollingTimer = [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer * _Nonnull timer) {
         attempt++;
         UIWindow *keyWindow = GetFrontmostWindow();
@@ -1083,49 +1095,48 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         Class timeVCClass = NSClassFromString(@"六壬大占.時間選擇視圖");
         if (!timeVCClass) {
             LogMessage(EchoLogError, @"[时间] 错误：找不到 '六壬大占.時間選擇視圖' 类。");
-            [pollingTimer invalidate];
-            if (completion) completion(@"[错误: 找不到时间VC类]");
+            cleanupAndCallback(@"[错误: 找不到时间VC类]");
             return;
         }
+        
+        // 由于它是一个VC，我们直接检查VC层级可能更稳定
+        UIViewController *topVC = keyWindow.rootViewController;
+        while(topVC.presentedViewController) {
+             topVC = topVC.presentedViewController;
+        }
+        if ([topVC isKindOfClass:[UINavigationController class]]) {
+            topVC = ((UINavigationController*)topVC).topViewController;
+        }
 
-        NSMutableArray *timeVCs = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(timeVCClass, keyWindow, timeVCs);
-
-        if (timeVCs.count > 0) {
+        if ([topVC isKindOfClass:timeVCClass]) {
             // 找到了！
-            [pollingTimer invalidate];
-            
-            UIViewController *timeVC = timeVCs.firstObject;
+            UIViewController *timeVC = topVC;
             
             NSMutableArray<UITextView *> *textViews = [NSMutableArray array];
             FindSubviewsOfClassRecursive([UITextView class], timeVC.view, textViews);
 
             NSString *detailedTimeInfo = @"";
-            if (textViews.count > 0) {
+            if (textViews.count > 0 && textViews.firstObject.text.length > 0) {
                 detailedTimeInfo = textViews.firstObject.text;
                 LogMessage(EchoLogTypeSuccess, @"[时间] 成功提取信息。");
-            } else {
-                LogMessage(EchoLogTypeWarning, @"[时间] 找到时间VC，但未找到UITextView。");
-                detailedTimeInfo = @"[警告: 未找到时间文本框]";
+                
+                // 以官方方式关闭
+                SEL closeSelector = NSSelectorFromString(@"确认时间");
+                if ([timeVC respondsToSelector:closeSelector]) {
+                    SUPPRESS_LEAK_WARNING([timeVC performSelector:closeSelector]);
+                    LogMessage(EchoLogTypeInfo, @"[时间] 已调用'确认时间'方法关闭界面。");
+                } else {
+                    LogMessage(EchoLogTypeWarning, @"[时间] 未找到'确认时间'方法，界面可能不会自动关闭。");
+                }
+                
+                cleanupAndCallback([detailedTimeInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
+            } else if (attempt > 10) { // 如果找到了VC但一直没内容，也设置个超时
+                 LogMessage(EchoLogTypeWarning, @"[时间] 找到时间VC，但内容为空或未加载。");
+                 cleanupAndCallback(@"[警告: 时间内容为空]");
             }
-
-            // 以官方方式关闭
-            SEL closeSelector = NSSelectorFromString(@"确认时间");
-            if ([timeVC respondsToSelector:closeSelector]) {
-                SUPPRESS_LEAK_WARNING([timeVC performSelector:closeSelector]);
-                LogMessage(EchoLogTypeInfo, @"[时间] 已调用'确认时间'方法关闭界面。");
-            } else {
-                LogMessage(EchoLogTypeWarning, @"[时间] 未找到'确认时间'方法，界面可能不会自动关闭。");
-            }
-            
-            if (completion) {
-                completion([detailedTimeInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
-            }
-
         } else if (attempt > 25) { // 超时处理 (5秒)
-            [pollingTimer invalidate];
             LogMessage(EchoLogError, @"[时间] 错误：轮询超时，未找到时间选择视图。");
-            if (completion) completion(@"[错误: 轮询超时]");
+            cleanupAndCallback(@"[错误: 轮询超时]");
         }
     }];
 }
@@ -1709,6 +1720,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.27 (PollingFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.28 (PollingPriorityFix) 已加载。");
     }
 }
