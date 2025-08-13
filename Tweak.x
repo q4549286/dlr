@@ -1,13 +1,9 @@
-////// Filename: Echo_AnalysisEngine_v13.24_TimeDetail.xm
-// 描述: Echo 六壬解析引擎 v13.24 (时间详情提取版)。
+////// Filename: Echo_AnalysisEngine_v13.25_CompileFix.xm
+// 描述: Echo 六壬解析引擎 v13.25 (编译修复版)。
+//      - [FIX] 修复了因 `%hook UIViewController` 缺少 `%end` 导致的编译失败问题。
 //      - [NEW] 增强时间提取功能，通过调用`顯示時間選擇`弹窗，获取更详细的公历、农历、干支、节气等完整时间信息。
 //      - [REFACTOR] 重构了`extractKePanInfoWithCompletion`函数，以支持新的异步时间提取流程，确保所有数据提取按正确顺序执行。
-//      - [FIX] 修复因 Tweak_presentViewController 函数缺少闭合大括号导致的编译错误。
-//      - [UI/UX] 最终界面重构：
-//          - 移除了“更多功能”折叠，所有功能按钮直接展示在滚动视图中，布局更饱满。
-//          - 按钮文本“AI 指令”改为“Prompt”，并彻底修复了按钮文字背景色问题。
-//          - 重新组织按钮布局，分为“核心解析”、“专项分析”、“格局资料库”三大板块，逻辑清晰。
-//          - 整体视觉和间距微调，提升美观度和专业感。
+//      - [UI/UX] 继承最终界面重构。
 //      - [STABILITY] 继承之前版本所有修复和功能。
 
 #import <UIKit/UIKit.h>
@@ -608,7 +604,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }];
         return;
     }
-%end
+
     g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds];
     g_mainControlPanelView.tag = kEchoMainPanelTag;
     g_mainControlPanelView.backgroundColor = [UIColor clearColor];
@@ -626,7 +622,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // Title
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.24" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.25" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString;
@@ -1377,6 +1373,331 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     
     Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
-    NSMutableArr
+    NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, (UIView *)keChuanContainer, siKeResults);
+    if (siKeResults.count > 0) {
+        UIView *siKeContainer = siKeResults.firstObject;
+        NSDictionary *keDefs[] = { @{@"t": @"第一课", @"x": @"日", @"s": @"日上", @"j": @"日上天將"}, @{@"t": @"第二课", @"x": @"日上", @"s": @"日陰", @"j": @"日陰天將"}, @{@"t": @"第三课", @"x": @"辰", @"s": @"辰上", @"j": @"辰上天將"}, @{@"t": @"第四课", @"x": @"辰上", @"s": @"辰陰", @"j": @"辰陰天將"}};
+        void (^addTask)(const char*, NSString*, NSString*) = ^(const char* iName, NSString* fTitle, NSString* tType) {
+            if (!iName) return; Ivar ivar = class_getInstanceVariable(siKeContainerClass, iName);
+            if (ivar) {
+                UILabel *label = (UILabel *)object_getIvar(siKeContainer, ivar);
+                if (label.gestureRecognizers.count > 0) {
+                    [g_s2_keChuanWorkQueue addObject:[@{@"gesture": label.gestureRecognizers.firstObject, @"taskType": tType} mutableCopy]];
+                    [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ (%@)", fTitle, label.text]];
+                }
+            }
+        };
+        for (int i = 0; i < 4; ++i) { NSDictionary *d = keDefs[i]; addTask([d[@"x"] UTF8String], [NSString stringWithFormat:@"%@ - 下神", d[@"t"]], @"diZhi"); addTask([d[@"s"] UTF8String], [NSString stringWithFormat:@"%@ - 上神", d[@"t"]], @"diZhi"); addTask([d[@"j"] UTF8String], [NSString stringWithFormat:@"%@ - 天将", d[@"t"]], @"tianJiang"); }
+    }
+
+    if (g_s2_keChuanWorkQueue.count == 0) { LogMessage(EchoLogTypeWarning, @"[课传] 任务队列为空，未找到可交互元素。"); g_s2_isExtractingKeChuanDetail = NO; [self hideProgressHUD]; g_s2_finalResultFromKeChuan = @""; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); return; }
+    LogMessage(EchoLogTypeInfo, @"[课传] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_s2_keChuanWorkQueue.count);
+    [self processKeChuanQueue_Truth_S2];
+}
+%new
+- (void)processKeChuanQueue_Truth_S2 {
+    if (!g_s2_isExtractingKeChuanDetail || g_s2_keChuanWorkQueue.count == 0) {
+        if (g_s2_isExtractingKeChuanDetail) {
+            LogMessage(EchoLogTypeTask, @"[完成] “课传流注”全部处理完毕。");
+            NSMutableString *resultStr = [NSMutableString string];
+            if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) {
+                for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) {
+                    [resultStr appendFormat:@"- 对象: %@\n  %@\n\n", g_s2_keChuanTitleQueue[i], [g_s2_capturedKeChuanDetailArray[i] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]];
+                }
+                g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                
+                if (!g_s2_keChuan_completion_handler) {
+                    NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
+                    reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
+                    NSString *finalReport = formatFinalReport(reportData);
+                    g_lastGeneratedReport = [finalReport copy];
+                    [self presentAIActionSheetWithReport:finalReport];
+                }
+            } else {
+                g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]";
+                LogMessage(EchoLogError, @"%@", g_s2_finalResultFromKeChuan);
+            }
+        }
+        g_s2_isExtractingKeChuanDetail = NO;
+        g_s2_capturedKeChuanDetailArray = nil;
+        g_s2_keChuanWorkQueue = nil;
+        g_s2_keChuanTitleQueue = nil;
+        
+        [self hideProgressHUD];
+        if (g_s2_keChuan_completion_handler) {
+            g_s2_keChuan_completion_handler();
+            g_s2_keChuan_completion_handler = nil;
+        }
+        return;
+    }
+
+    NSMutableDictionary *task = g_s2_keChuanWorkQueue.firstObject; [g_s2_keChuanWorkQueue removeObjectAtIndex:0];
+    NSString *title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
+    LogMessage(EchoLogTypeInfo, @"[课传] 正在处理: %@", title);
+    [self updateProgressHUD:[NSString stringWithFormat:@"推演课传: %lu/%lu", (unsigned long)g_s2_capturedKeChuanDetailArray.count + 1, (unsigned long)g_s2_keChuanTitleQueue.count]];
+    
+    SEL action = [task[@"taskType"] isEqualToString:@"tianJiang"] ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳摘要WithSender:");
+    if ([self respondsToSelector:action]) {
+        SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]);
+    } else {
+        LogMessage(EchoLogError, @"[错误] 方法 %@ 不存在。", NSStringFromSelector(action));
+        [g_s2_capturedKeChuanDetailArray addObject:@"[解析失败: 方法不存在]"];
+        [self processKeChuanQueue_Truth_S2];
+    }
+}
 
 
+// MARK: - Data Extraction Logic
+
+%new
+- (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion {
+    g_extractedData = [NSMutableDictionary dictionary];
+    LogMessage(EchoLogTypeInfo, @"[盘面] 开始解析基础信息...");
+
+    __weak typeof(self) weakSelf = self;
+
+    // 1. 首先，异步获取详细时间信息
+    [self extractDetailedTimeInfoWithCompletion:^(NSString *timeResult) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        // 将获取到的时间信息存入
+        g_extractedData[@"时间块"] = timeResult;
+        
+        // 2. 然后，继续提取其他同步信息
+        LogMessage(EchoLogTypeInfo, @"[盘面] 继续解析月将、空亡等...");
+        g_extractedData[@"月将"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
+        g_extractedData[@"空亡"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
+        g_extractedData[@"昼夜"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
+        g_extractedData[@"天地盘"] = [strongSelf extractTianDiPanInfo_V18];
+        
+        LogMessage(EchoLogTypeInfo, @"[盘面] 开始解析四课三传...");
+        g_extractedData[@"四课"] = [strongSelf _echo_extractSiKeInfo];
+        g_extractedData[@"三传"] = [strongSelf _echo_extractSanChuanInfo];
+
+        // 3. 最后，像原来一样，异步提取所有弹窗类信息
+        LogMessage(EchoLogTypeInfo, @"[盘面] 开始解析弹窗类信息 (毕法/格局等)...");
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            SEL sBiFa = NSSelectorFromString(@"顯示法訣總覽"), sGeJu = NSSelectorFromString(@"顯示格局總覽"), sQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:"), sFangFa = NSSelectorFromString(@"顯示方法總覽");
+            SEL sSanGong = NSSelectorFromString(@"顯示三宮時信息WithSender:");
+            
+            if ([strongSelf respondsToSelector:sBiFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([strongSelf performSelector:sBiFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
+            if ([strongSelf respondsToSelector:sGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([strongSelf performSelector:sGeJu withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
+            if ([strongSelf respondsToSelector:sFangFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([strongSelf performSelector:sFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
+            if ([strongSelf respondsToSelector:sQiZheng]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([strongSelf performSelector:sQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
+            if ([strongSelf respondsToSelector:sSanGong]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([strongSelf performSelector:sSanGong withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                LogMessage(EchoLogTypeInfo, @"[盘面] 整合所有信息...");
+                
+                NSArray *keysToClean = @[@"毕法要诀", @"格局要览", @"解析方法"];
+                NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
+                for (NSString *key in keysToClean) {
+                    NSString *value = g_extractedData[key];
+                    if (value) {
+                        for (NSString *t in trash) { value = [value stringByReplacingOccurrencesOfString:t withString:@""]; }
+                        g_extractedData[key] = value;
+                    }
+                }
+                
+                if (completion) {
+                    completion(g_extractedData);
+                }
+            });
+        });
+    }];
+}
+
+%new
+- (NSString *)_echo_extractSiKeInfo {
+    Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖");
+    if (!siKeViewClass) return @"";
+    
+    NSMutableArray *siKeViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews);
+    if (siKeViews.count == 0) return @"";
+
+    UIView *container = siKeViews.firstObject;
+    NSMutableArray *labels = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], container, labels);
+    if (labels.count < 12) return @"";
+    
+    NSMutableDictionary *cols = [NSMutableDictionary dictionary];
+    for (UILabel *label in labels) {
+        NSString *key = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))];
+        if (!cols[key]) { cols[key] = [NSMutableArray array]; }
+        [cols[key] addObject:label];
+    }
+    
+    if (cols.allKeys.count != 4) return @"";
+    
+    NSArray *keys = [cols.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *o1, NSString *o2) {
+        return [@([o1 floatValue]) compare:@([o2 floatValue])];
+    }];
+    
+    NSMutableArray *c1 = cols[keys[0]], *c2 = cols[keys[1]], *c3 = cols[keys[2]], *c4 = cols[keys[3]];
+    [c1 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+    [c2 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+    [c3 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+    [c4 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+    
+    NSString *k1_shang = ((UILabel*)c4[0]).text, *k1_jiang = ((UILabel*)c4[1]).text, *k1_xia = ((UILabel*)c4[2]).text;
+    NSString *k2_shang = ((UILabel*)c3[0]).text, *k2_jiang = ((UILabel*)c3[1]).text, *k2_xia = ((UILabel*)c3[2]).text;
+    NSString *k3_shang = ((UILabel*)c2[0]).text, *k3_jiang = ((UILabel*)c2[1]).text, *k3_xia = ((UILabel*)c2[2]).text;
+    NSString *k4_shang = ((UILabel*)c1[0]).text, *k4_jiang = ((UILabel*)c1[1]).text, *k4_xia = ((UILabel*)c1[2]).text;
+
+    return [NSString stringWithFormat:@"- 第一课(日干): %@ 上 %@，%@乘%@\n- 第二课(日上): %@ 上 %@，%@乘%@\n- 第三课(支辰): %@ 上 %@，%@乘%@\n- 第四课(辰上): %@ 上 %@，%@乘%@",
+        SafeString(k1_xia), SafeString(k1_shang), SafeString(k1_shang), SafeString(k1_jiang),
+        SafeString(k2_xia), SafeString(k2_shang), SafeString(k2_shang), SafeString(k2_jiang),
+        SafeString(k3_xia), SafeString(k3_shang), SafeString(k3_shang), SafeString(k3_jiang),
+        SafeString(k4_xia), SafeString(k4_shang), SafeString(k4_shang), SafeString(k4_jiang)
+    ];
+}
+
+%new
+- (NSString *)_echo_extractSanChuanInfo {
+    Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖");
+    if (!sanChuanViewClass) return @"";
+
+    NSMutableArray *scViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, scViews);
+    [scViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) {
+        return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
+    }];
+
+    NSArray *titles = @[@"初传", @"中传", @"末传"];
+    NSMutableArray *lines = [NSMutableArray array];
+    for (NSUInteger i = 0; i < scViews.count; i++) {
+        UIView *v = scViews[i];
+        NSMutableArray *labels = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UILabel class], v, labels);
+        [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+            return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+        }];
+
+        if (labels.count >= 3) {
+            NSString *lq = [[(UILabel*)labels.firstObject text] stringByReplacingOccurrencesOfString:@"->" withString:@""];
+            NSString *tj = [(UILabel*)labels.lastObject text];
+            NSString *dz = [(UILabel*)[labels objectAtIndex:labels.count - 2] text];
+            
+            NSMutableArray *ssParts = [NSMutableArray array];
+            if (labels.count > 3) {
+                for (UILabel *l in [labels subarrayWithRange:NSMakeRange(1, labels.count - 3)]) {
+                    if (l.text.length > 0) [ssParts addObject:l.text];
+                }
+            }
+            NSString *ss = [ssParts componentsJoinedByString:@", "];
+            NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"%lu传", (unsigned long)i+1];
+
+            [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@) [状态: %@]", title, SafeString(dz), SafeString(lq), SafeString(tj), ss.length > 0 ? ss : @"无"]];
+        }
+    }
+    return [lines componentsJoinedByString:@"\n"];
+}
+
+%new
+- (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
+    LogMessage(EchoLogTypeTask, @"[任务启动] 模式: 行年参数");
+    g_isExtractingNianming = YES;
+    g_capturedZhaiYaoArray = [NSMutableArray array];
+    g_capturedGeJuArray = [NSMutableArray array];
+    
+    UICollectionView *targetCV = nil;
+    Class unitClass = NSClassFromString(@"六壬大占.行年單元");
+    NSMutableArray *cvs = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UICollectionView class], self.view, cvs);
+    for (UICollectionView *cv in cvs) { if ([cv.visibleCells.firstObject isKindOfClass:unitClass]) { targetCV = cv; break; } }
+  
+    if (!targetCV) {
+        LogMessage(EchoLogTypeWarning, @"[行年] 未找到行年单元，跳过分析。");
+        g_isExtractingNianming = NO;
+        if (completion) { completion(@""); }
+        return;
+    }
+  
+    NSMutableArray *allUnitCells = [NSMutableArray array];
+    for (UIView *cell in targetCV.visibleCells) { if([cell isKindOfClass:unitClass]){ [allUnitCells addObject:cell]; } }
+    [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
+  
+    if (allUnitCells.count == 0) {
+        LogMessage(EchoLogTypeWarning, @"[行年] 行年单元数量为0，跳过分析。");
+        g_isExtractingNianming = NO;
+        if (completion) { completion(@""); }
+        return;
+    }
+  
+    LogMessage(EchoLogTypeInfo, @"[行年] 发现 %lu 个参数，开始构建任务队列...", (unsigned long)allUnitCells.count);
+    NSMutableArray *workQueue = [NSMutableArray array];
+    for (NSUInteger i = 0; i < allUnitCells.count; i++) {
+        UICollectionViewCell *cell = allUnitCells[i];
+        [workQueue addObject:@{@"type": @"年命摘要", @"cell": cell, @"index": @(i)}];
+        [workQueue addObject:@{@"type": @"格局方法", @"cell": cell, @"index": @(i)}];
+    }
+  
+    __weak typeof(self) weakSelf = self;
+    __block void (^processQueue)(void);
+    processQueue = [^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || workQueue.count == 0) {
+            LogMessage(EchoLogTypeTask, @"[行年] 所有参数分析完毕。");
+            NSMutableString *resultStr = [NSMutableString string];
+            NSUInteger personCount = allUnitCells.count;
+            for (NSUInteger i = 0; i < personCount; i++) {
+                NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[摘要未获取]";
+                NSString *geJu = (i < g_capturedGeJuArray.count) ? g_capturedGeJuArray[i] : @"[格局未获取]";
+                
+                [resultStr appendFormat:@"- 参数 %lu\n  摘要: %@\n  格局: %@", (unsigned long)i+1, zhaiYao, geJu];
+                
+                if (i < personCount - 1) { [resultStr appendString:@"\n\n"]; }
+            }
+            g_isExtractingNianming = NO;
+            g_currentItemToExtract = nil;
+            if (completion) { completion([resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
+            processQueue = nil;
+            return;
+        }
+        NSDictionary *item = workQueue.firstObject; [workQueue removeObjectAtIndex:0];
+        NSString *type = item[@"type"];
+        UICollectionViewCell *cell = item[@"cell"];
+        NSInteger index = [item[@"index"] integerValue];
+        LogMessage(EchoLogTypeInfo, @"[行年] 正在处理参数 %ld 的 [%@]", (long)index + 1, type);
+        g_currentItemToExtract = type;
+        id delegate = targetCV.delegate;
+        NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
+        if (delegate && indexPath && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
+            [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            processQueue();
+        });
+    } copy];
+    processQueue();
+}
+
+// MARK: - Helper Methods & Data Formatters
+%new
+- (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix { if (!object || !ivarNameSuffix) return nil; unsigned int ivarCount; Ivar *ivars = class_copyIvarList([object class], &ivarCount); if (!ivars) { free(ivars); return nil; } id value = nil; for (unsigned int i = 0; i < ivarCount; i++) { Ivar ivar = ivars[i]; const char *name = ivar_getName(ivar); if (name) { NSString *ivarName = [NSString stringWithUTF8String:name]; if ([ivarName hasSuffix:ivarNameSuffix]) { value = object_getIvar(object, ivar); break; } } } free(ivars); return value; }
+%new
+- (NSString *)GetStringFromLayer:(id)layer { if (layer && [layer respondsToSelector:@selector(string)]) { id stringValue = [layer valueForKey:@"string"]; if ([stringValue isKindOfClass:[NSString class]]) return stringValue; if ([stringValue isKindOfClass:[NSAttributedString class]]) return ((NSAttributedString *)stringValue).string; } return @"?"; }
+%new
+- (NSString *)formatNianmingGejuFromView:(UIView *)contentView { Class cellClass = NSClassFromString(@"六壬大占.格局單元"); if (!cellClass) return @""; NSMutableArray *cells = [NSMutableArray array]; FindSubviewsOfClassRecursive(cellClass, contentView, cells); [cells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }]; NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array]; for (UIView *cell in cells) { NSMutableArray *labelsInCell = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], cell, labelsInCell); if (labelsInCell.count > 0) { UILabel *titleLabel = labelsInCell[0]; NSString *title = [[titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] stringByReplacingOccurrencesOfString:@"\n" withString:@" "]; NSMutableString *contentString = [NSMutableString string]; if (labelsInCell.count > 1) { for (NSUInteger i = 1; i < labelsInCell.count; i++) { [contentString appendString:((UILabel *)labelsInCell[i]).text]; } } NSString *content = [[contentString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] stringByReplacingOccurrencesOfString:@"\n" withString:@" "]; NSString *pair = [NSString stringWithFormat:@"%@→%@", title, content]; if (![formattedPairs containsObject:pair]) { [formattedPairs addObject:pair]; } } } return [formattedPairs componentsJoinedByString:@" | "]; }
+%new
+- (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator { Class targetViewClass = NSClassFromString(className); if (!targetViewClass) { LogMessage(EchoLogError, @"[错误] 类名 '%@' 未找到。", className); return @""; } NSMutableArray *targetViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(targetViewClass, self.view, targetViews); if (targetViews.count == 0) return @""; UIView *containerView = targetViews.firstObject; NSMutableArray *labelsInView = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], containerView, labelsInView); [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending; if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending; return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in labelsInView) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } } return [textParts componentsJoinedByString:separator]; }
+%new
+- (NSString *)extractTianDiPanInfo_V18 { @try { Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類"); if (!plateViewClass) return @"天地盘提取失败: 找不到视图类"; UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return @"天地盘提取失败: 找不到keyWindow"; NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews); if (plateViews.count == 0) return @"天地盘提取失败: 找不到视图实例"; UIView *plateView = plateViews.firstObject; id diGongDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"地宮宮名列"], tianShenDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天神宮名列"], tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"]; if (!diGongDict || !tianShenDict || !tianJiangDict) return @"天地盘提取失败: 未能获取核心数据字典"; NSArray *diGongLayers=[diGongDict allValues], *tianShenLayers=[tianShenDict allValues], *tianJiangLayers=[tianJiangDict allValues]; if (diGongLayers.count!=12||tianShenLayers.count!=12||tianJiangLayers.count!=12) return @"天地盘提取失败: 数据长度不匹配"; NSMutableArray *allLayerInfos = [NSMutableArray array]; CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil]; void (^processLayers)(NSArray *, NSString *) = ^(NSArray *layers, NSString *type) { for (id layer in layers) { if (![layer isKindOfClass:[CALayer class]]) continue; CALayer *pLayer = [layer presentationLayer] ?: layer; CGPoint pos = [pLayer.superlayer convertPoint:pLayer.position toLayer:nil]; CGFloat dx = pos.x - center.x; CGFloat dy = pos.y - center.y; [allLayerInfos addObject:@{ @"type": type, @"text": [self GetStringFromLayer:layer], @"angle": @(atan2(dy, dx)), @"radius": @(sqrt(dx*dx + dy*dy)) }]; } }; processLayers(diGongLayers, @"diPan"); processLayers(tianShenLayers, @"tianPan"); processLayers(tianJiangLayers, @"tianJiang"); NSMutableDictionary *palaceGroups = [NSMutableDictionary dictionary]; for (NSDictionary *info in allLayerInfos) { BOOL foundGroup = NO; for (NSNumber *angleKey in [palaceGroups allKeys]) { CGFloat diff = fabsf([info[@"angle"] floatValue] - [angleKey floatValue]); if (diff > M_PI) diff = 2*M_PI-diff; if (diff < 0.15) { [palaceGroups[angleKey] addObject:info]; foundGroup=YES; break; } } if (!foundGroup) { palaceGroups[info[@"angle"]] = [NSMutableArray arrayWithObject:info];} } NSMutableArray *palaceData = [NSMutableArray array]; for (NSNumber *groupAngle in palaceGroups) { NSMutableArray *group = palaceGroups[groupAngle]; if (group.count < 3) continue; [group sortUsingComparator:^NSComparisonResult(id o1, id o2) { return [o2[@"radius"] compare:o1[@"radius"]]; }]; NSString *diPan=@"?", *tianPan=@"?", *tianJiang=@"?"; for(NSDictionary* li in group){ if([li[@"type"] isEqualToString:@"diPan"]) diPan=li[@"text"]; else if([li[@"type"] isEqualToString:@"tianPan"]) tianPan=li[@"text"]; else if([li[@"type"] isEqualToString:@"tianJiang"]) tianJiang=li[@"text"]; } [palaceData addObject:@{ @"diPan": diPan, @"tianPan": tianPan, @"tianJiang": tianJiang }]; } if (palaceData.count != 12) return @"天地盘提取失败: 宫位数据不完整"; NSArray *order = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"]; [palaceData sortUsingComparator:^NSComparisonResult(NSDictionary *o1, NSDictionary *o2) { return [@([order indexOfObject:o1[@"diPan"]]) compare:@([order indexOfObject:o2[@"diPan"]])]; }]; NSMutableString *result = [NSMutableString string]; for (NSDictionary *entry in palaceData) { [result appendFormat:@"- %@宫: %@(%@)\n", entry[@"diPan"], entry[@"tianPan"], entry[@"tianJiang"]]; } return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; } @catch (NSException *exception) { return [NSString stringWithFormat:@"天地盘提取异常: %@", exception.reason]; } }
+%end
+
+// =========================================================================
+// 4. S1 提取函数定义
+// =========================================================================
+static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) { if (!rootView) return @"[错误: 根视图为空]"; NSMutableString *finalResult = [NSMutableString string]; NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews); if (stackViews.count > 0) { UIStackView *mainStackView = stackViews.firstObject; NSMutableArray *blocks = [NSMutableArray array]; NSMutableDictionary *currentBlock = nil; for (UIView *subview in mainStackView.arrangedSubviews) { if (![subview isKindOfClass:[UILabel class]]) continue; UILabel *label = (UILabel *)subview; NSString *text = label.text; if (!text || text.length == 0) continue; BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0; if (isTitle) { if (currentBlock) [blocks addObject:currentBlock]; currentBlock = [NSMutableDictionary dictionaryWithDictionary:@{@"title": text, @"content": [NSMutableString string]}]; } else { if (currentBlock) { NSMutableString *content = currentBlock[@"content"]; if (content.length > 0) [content appendString:@"\n"]; [content appendString:text]; } } } if (currentBlock) [blocks addObject:currentBlock]; for (NSDictionary *block in blocks) { NSString *title = block[@"title"]; NSString *content = [block[@"content"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; if (content.length > 0) { [finalResult appendFormat:@"%@\n%@\n\n", title, content]; } else { [finalResult appendFormat:@"%@\n\n", title]; } } } if (includeXiangJie) { Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView"); if (tableViewClass) { NSMutableArray *tableViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(tableViewClass, rootView, tableViews); if (tableViews.count > 0) { NSMutableArray *xiangJieLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], tableViews.firstObject, xiangJieLabels); if (xiangJieLabels.count > 0) { [finalResult appendString:@"// 详解内容\n\n"]; for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) { UILabel *titleLabel = xiangJieLabels[i]; if (i + 1 >= xiangJieLabels.count && [titleLabel.text isEqualToString:@"详解"]) continue; if (i + 1 < xiangJieLabels.count) { [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, ((UILabel*)xiangJieLabels[i+1]).text]; } else { [finalResult appendFormat:@"%@→\n\n", titleLabel.text]; } } } } } } return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; }
+
+// =========================================================================
+// 5. 构造函数
+// =========================================================================
+%ctor {
+    @autoreleasepool {
+        MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
+        NSLog(@"[Echo解析引擎] v13.25 (CompileFix) 已加载。");
+    }
+}
