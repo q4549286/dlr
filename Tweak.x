@@ -1,10 +1,7 @@
-////// Filename: Echo_AnalysisEngine_v13.25_CompileFix.xm
-// 描述: Echo 六壬解析引擎 v13.25 (编译修复版)。
-//      - [FIX] 修复了因 `%hook UIViewController` 缺少 `%end` 导致的编译失败问题。
-//      - [NEW] 增强时间提取功能，通过调用`顯示時間選擇`弹窗，获取更详细的公历、农历、干支、节气等完整时间信息。
-//      - [REFACTOR] 重构了`extractKePanInfoWithCompletion`函数，以支持新的异步时间提取流程，确保所有数据提取按正确顺序执行。
-//      - [UI/UX] 继承最终界面重构。
-//      - [STABILITY] 继承之前版本所有修复和功能。
+////// Filename: Echo_AnalysisEngine_v13.26_TextViewFix.xm
+// 描述: Echo 六壬解析引擎 v13.26 (时间提取卡死修复版)。
+//      - [FIX] 根据FLEX视图层级分析，修复了时间提取功能卡死的问题。原因在于时间信息位于一个UITextView中，而非多个UILabel。已将提取逻辑从搜索UILabel改为直接定位并读取UITextView的text属性。
+//      - [STABILITY] 继承v13.25所有功能和修复。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -463,25 +460,21 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             void (^extractionCompletion)(void) = ^{
                 if (completion) { completion(); }
 
-                NSMutableArray *allLabels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
+                // --- 修正后的抓取逻辑 ---
+                NSMutableArray<UITextView *> *textViews = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UITextView class], vcToPresent.view, textViews);
                 
-                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                    return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
-                }];
-
-                NSMutableString *detailedTimeInfo = [NSMutableString string];
-                for (UILabel *label in allLabels) {
-                    NSString *text = label.text;
-                    if (text && text.length > 0 && ![text containsString:@"选择"] && ![text containsString:@"确定"] && ![text containsString:@"现在"] && ![text containsString:@"*"]) {
-                        text = [text stringByReplacingOccurrencesOfString:@"：" withString:@": "];
-                        text = [text stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-                        [detailedTimeInfo appendFormat:@"%@\n", [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-                    }
+                NSString *detailedTimeInfo = @"";
+                if (textViews.count > 0) {
+                    // 假设第一个找到的UITextView就是目标
+                    detailedTimeInfo = textViews.firstObject.text;
+                    LogMessage(EchoLogTypeSuccess, @"[时间] 详细时间信息提取完毕。");
+                } else {
+                    LogMessage(EchoLogError, @"[时间] 错误：在'時間選擇視圖'中未找到UITextView。");
+                    detailedTimeInfo = @"[错误：未找到时间信息源]";
                 }
                 
-                LogMessage(EchoLogTypeSuccess, @"[时间] 详细时间信息提取完毕。");
-                
+                // 无论成功与否，都必须关闭弹窗并继续流程
                 [vcToPresent dismissViewControllerAnimated:NO completion:^{
                     if (g_timeDetailCompletionHandler) {
                         g_timeDetailCompletionHandler([detailedTimeInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
@@ -622,7 +615,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // Title
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.25" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.26" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString;
@@ -1698,6 +1691,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.25 (CompileFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.26 (TextViewFix) 已加载。");
     }
 }
