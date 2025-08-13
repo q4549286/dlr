@@ -1,11 +1,11 @@
-////// Filename: Echo_AnalysisEngine_v13.31_SmartIntercept.xm
-// 描述: Echo 六壬解析引擎 v13.31 (智能拦截最终修复版)。
+////// Filename: Echo_AnalysisEngine_v13.32_SmartInterceptFix.xm
+// 描述: Echo 六壬解析引擎 v13.32 (精准拦截最终修复版)。
 //      - [FIX] 彻底解决时间提取的所有问题。回归并增强拦截逻辑，废弃所有复杂的轮询方案。
 //          - `Tweak_presentViewController`中的通用拦截逻辑被大幅增强，现在可以优先通过类名识别`六壬大占.時間選擇視圖`。
-//          - 当识别到时间选择器VC后，会采用特殊的提取逻辑：直接从其内部的UITextView读取文本。
+//          - 当识别到时间选择器VC后，会采用特殊的提取逻辑：直接从其内部的UITextView读取文本，并存入`g_extractedData[@"时间块"]`。
 //          - 读取后，像处理其他弹窗一样将其dismiss，这解释了为何之前版本能关闭窗口但无法提取数据。
 //          - 此方案统一了所有弹窗的处理方式，代码更简洁，逻辑更清晰。
-//      - [REFACTOR] 恢复`extractKePanInfoWithCompletion`为简单的顺序触发模式。
+//      - [REFACTOR] 恢复`extractKePanInfoWithCompletion`为简单的顺序触发模式，所有提取工作交由拦截器完成。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -95,7 +95,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // 板块一：基础盘元
     [report appendString:@"// 1. 基础盘元\n"];
     NSString *siZhuFull = SafeString(reportData[@"时间块"]);
-    // 修改时间块处理，以适应新的多行详细格式
     if (siZhuFull.length > 0) {
         [report appendString:@"// 1.1. 详细时间\n"];
         [report appendString:siZhuFull];
@@ -601,7 +600,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // Title
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.31" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.32" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString;
