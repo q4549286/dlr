@@ -96,10 +96,6 @@ return          @"v46.0 · 终局版 · 完整Prompt\n"
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
 
-// [MODIFIED] 完整替换 generateStructuredReport 函数
-static NSString* generateStructuredReport(NSDictionary *reportData) {
-    NSMutableString *report = [NSMutableString string];
-
     // 板块一：基础盘元
     [report appendString:@"// 1. 基础盘元\n"];
     
@@ -1733,4 +1729,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI + TimeExtract) 已加载。");
     }
 }
+
 
