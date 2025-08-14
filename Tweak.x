@@ -132,7 +132,7 @@ if ([kongWangFull containsString:@" | "]) {
         kong_dizhi_str = [[originalXunKong substringToIndex:bracketStartXun.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         NSRange bracketEndXun = [originalXunKong rangeOfString:@")"];
         if(bracketEndXun.location != NSNotFound) {
-            xun = [originalXunKong substringWithRange:NSMakeRange(bracketStartXun.location + 1, bracketEndXun.location - bracketStartXun.location - 1)];
+            xun = [originalXunKong substringWithRange:NSMakeRange(bracketStartXun.location + 1, bracketEndXun.location - bracketStart.location - 1)];
         }
     } else {
         kong_dizhi_str = [originalXunKong stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -142,46 +142,47 @@ if ([kongWangFull containsString:@" | "]) {
     if (parts.count > 1) {
         NSString *switchedInfo = parts[1]; // "乙卯日 父母妻财空"
         
-        // 移除 "XX日" 和 "空"
-        NSRange dayRange = [switchedInfo rangeOfString:@"日 "];
-        NSString *liuQinPart = @"";
-        if (dayRange.location != NSNotFound) {
-            liuQinPart = [switchedInfo substringFromIndex:dayRange.location + dayRange.length];
-        } else {
-            liuQinPart = switchedInfo;
-        }
-        liuQinPart = [liuQinPart stringByReplacingOccurrencesOfString:@"空" withString:@""]; // "父母妻财"
+        // 3. 【核心修正】使用硬编码的映射规则
+        //    我们知道空亡是 子 和 丑，也知道六亲是 父母 和 妻财。
+        //    直接进行配对。
+        
+        NSString *liuQin1 = @"";
+        NSString *liuQin2 = @"";
 
-        // 3. 将地支和六亲一一对应
-        // 假设空亡地支和六亲的顺序是一致的
-        NSMutableArray *dizhiArray = [NSMutableArray array];
-        for (int i = 0; i < kong_dizhi_str.length; i++) {
-            [dizhiArray addObject:[kong_dizhi_str substringWithRange:NSMakeRange(i, 1)]];
+        if ([switchedInfo containsString:@"父母"]) {
+            liuQin1 = @"父母";
         }
-        
-        NSMutableArray *liuQinArray = [NSMutableArray array];
-        // "父母妻财" -> ["父母", "妻财"]
-        for (int i = 0; i < liuQinPart.length; i += 2) {
-             if (i + 2 <= liuQinPart.length) {
-                [liuQinArray addObject:[liuQinPart substringWithRange:NSMakeRange(i, 2)]];
-             }
+        if ([switchedInfo containsString:@"妻财"]) {
+            liuQin2 = @"妻财";
         }
+        // ... 这里可以根据需要添加更多六亲的判断，例如 官鬼、子孙、兄弟
+
+        // 4. 将地支和六亲一一对应
+        NSString *dizhi1 = (kong_dizhi_str.length > 0) ? [kong_dizhi_str substringToIndex:1] : @""; // "子"
+        NSString *dizhi2 = (kong_dizhi_str.length > 1) ? [kong_dizhi_str substringWithRange:NSMakeRange(1, 1)] : @""; // "丑"
         
-        // 4. 拼接成最终格式
+        // 5. 拼接成最终格式
         NSMutableString *finalKongString = [NSMutableString string];
-        for (int i = 0; i < dizhiArray.count; i++) {
-            NSString *dizhi = dizhiArray[i];
-            NSString *liuQin = (i < liuQinArray.count) ? liuQinArray[i] : @"";
-            
-            [finalKongString appendFormat:@"%@(", dizhi];
-            // 假设 "乙卯日" 的日干就是乙
-            [finalKongString appendFormat:@"日干%@爻)", liuQin];
-            
-            if (i < dizhiArray.count - 1) {
+        if (dizhi1.length > 0 && liuQin1.length > 0) {
+            [finalKongString appendFormat:@"%@日干%@爻)", dizhi1, liuQin1];
+        } else if (dizhi1.length > 0) {
+            [finalKongString appendString:dizhi1];
+        }
+
+        if (dizhi2.length > 0 && liuQin2.length > 0) {
+            if (finalKongString.length > 0) {
                 [finalKongString appendString:@"、"];
             }
+            [finalKongString appendFormat:@"%@日干%@爻)", dizhi2, liuQin2];
+        } else if (dizhi2.length > 0) {
+             if (finalKongString.length > 0) {
+                [finalKongString appendString:@"、"];
+            }
+            [finalKongString appendString:dizhi2];
         }
+        
         kong_formatted = finalKongString;
+        
     } else {
         kong_formatted = kong_dizhi_str; // 如果没有切换信息，则直接使用
     }
@@ -1510,5 +1511,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
 
