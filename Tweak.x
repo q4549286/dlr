@@ -132,7 +132,8 @@ if ([kongWangFull containsString:@" | "]) {
         kong_dizhi_str = [[originalXunKong substringToIndex:bracketStartXun.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         NSRange bracketEndXun = [originalXunKong rangeOfString:@")"];
         if(bracketEndXun.location != NSNotFound) {
-            xun = [originalXunKong substringWithRange:NSMakeRange(bracketStartXun.location + 1, bracketEndXun.location - bracketStart.location - 1)];
+            //  !!!!!!!!!!!!!! 这里是修正后的代码 !!!!!!!!!!!!!!
+            xun = [originalXunKong substringWithRange:NSMakeRange(bracketStartXun.location + 1, bracketEndXun.location - bracketStartXun.location - 1)];
         }
     } else {
         kong_dizhi_str = [originalXunKong stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -143,9 +144,6 @@ if ([kongWangFull containsString:@" | "]) {
         NSString *switchedInfo = parts[1]; // "乙卯日 父母妻财空"
         
         // 3. 【核心修正】使用硬编码的映射规则
-        //    我们知道空亡是 子 和 丑，也知道六亲是 父母 和 妻财。
-        //    直接进行配对。
-        
         NSString *liuQin1 = @"";
         NSString *liuQin2 = @"";
 
@@ -153,10 +151,15 @@ if ([kongWangFull containsString:@" | "]) {
             liuQin1 = @"父母";
         }
         if ([switchedInfo containsString:@"妻财"]) {
-            liuQin2 = @"妻财";
+            // 注意：要确保先找到“父母”再找“妻财”的顺序
+            if ([liuQin1 isEqualToString:@""]) {
+                liuQin1 = @"妻财";
+            } else {
+                liuQin2 = @"妻财";
+            }
         }
-        // ... 这里可以根据需要添加更多六亲的判断，例如 官鬼、子孙、兄弟
-
+        // ... 这里可以根据需要添加更多六亲的判断
+        
         // 4. 将地支和六亲一一对应
         NSString *dizhi1 = (kong_dizhi_str.length > 0) ? [kong_dizhi_str substringToIndex:1] : @""; // "子"
         NSString *dizhi2 = (kong_dizhi_str.length > 1) ? [kong_dizhi_str substringWithRange:NSMakeRange(1, 1)] : @""; // "丑"
@@ -189,11 +192,11 @@ if ([kongWangFull containsString:@" | "]) {
 
 } else {
     // 如果没有拼接信息，走原始解析逻辑
-    NSRange bracketStart = [kongWangFull rangeOfString:@"("];
-    NSRange bracketEnd = [kongWangFull rangeOfString:@")"];
-    if (bracketStart.location != NSNotFound && bracketEnd.location != NSNotFound && bracketStart.location < bracketEnd.location) {
-        xun = [kongWangFull substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
-        kong_formatted = [[kongWangFull substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSRange bracketStartOriginal = [kongWangFull rangeOfString:@"("];
+    NSRange bracketEndOriginal = [kongWangFull rangeOfString:@")"];
+    if (bracketStartOriginal.location != NSNotFound && bracketEndOriginal.location != NSNotFound && bracketStartOriginal.location < bracketEndOriginal.location) {
+        xun = [kongWangFull substringWithRange:NSMakeRange(bracketStartOriginal.location + 1, bracketEndOriginal.location - bracketStartOriginal.location - 1)];
+        kong_formatted = [[kongWangFull substringToIndex:bracketStartOriginal.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     } else {
         kong_formatted = [kongWangFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     }
@@ -1511,6 +1514,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
 
 
