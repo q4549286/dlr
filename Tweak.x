@@ -922,25 +922,55 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
+// [MODIFIED] 完整替换 extractSwitchedXunKongInfo 函数，采用手动恢复UI状态的策略
 %new
 - (NSString *)extractSwitchedXunKongInfo {
-    // 关键修正：直接在 self (ViewController) 上调用
-    SEL switchSelector = NSSelectorFromString(@"切換旬日");
+    // 目标是在 ViewController (self) 上调用方法
+    SEL switchSelector = NSSelectorFromString(@"切換旬日"); // 使用繁体
     if ([self respondsToSelector:switchSelector]) {
         LogMessage(EchoLogTypeInfo, @"[旬空] 在 ViewController 上找到切换方法，正在模拟点击...");
         
-        // 调用方法，模拟点击
+        // 步骤1: 找到旬空视图，并保存其初始文本
+        Class xunKongViewClass = NSClassFromString(@"六壬大占.旬空視圖");
+        if (!xunKongViewClass) return @"";
+        
+        NSMutableArray *xunKongViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(xunKongViewClass, self.view, xunKongViews);
+        if (xunKongViews.count == 0) return @"";
+        
+        UIView *xunKongView = xunKongViews.firstObject;
+        
+        // 遍历所有 UILabel，保存初始状态
+        NSMutableArray *initialLabels = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UILabel class], xunKongView, initialLabels);
+        NSMutableArray *initialTexts = [NSMutableArray array];
+        for (UILabel *label in initialLabels) {
+            [initialTexts addObject:label.text ?: @""];
+        }
+
+        // 步骤2: 调用方法，切换UI
         SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
+        [NSThread sleepForTimeInterval:0.1]; // 等待UI更新
         
-        // UI更新可能需要一个运行循环周期，所以我们延迟一小下
-        [NSThread sleepForTimeInterval:0.1];
-        
-        // 再次从旬空视图中提取文本
+        // 步骤3: 提取切换后的文本
         NSString *switchedText = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
         LogMessage(EchoLogTypeSuccess, @"[旬空] 成功提取切换后信息: %@", switchedText);
         
-        // 再次调用，把它切换回去，避免影响App的正常状态
-        SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
+        // 步骤4: 【关键】手动将UILabel的文本恢复到初始状态
+        NSMutableArray *currentLabels = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UILabel class], xunKongView, currentLabels);
+        if (currentLabels.count == initialTexts.count) {
+            for (NSUInteger i = 0; i < currentLabels.count; i++) {
+                UILabel *label = currentLabels[i];
+                NSString *initialText = initialTexts[i];
+                label.text = initialText;
+            }
+            LogMessage(EchoLogTypeInfo, @"[旬空] 已手动恢复UI至初始状态。");
+        } else {
+            // 如果标签数量变了（不太可能），作为备用方案，我们还是调用一下切换方法
+            LogMessage(EchoLogTypeWarning, @"[旬空] 标签数量发生变化，尝试通过再次调用方法来恢复UI。");
+            SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
+        }
 
         return switchedText;
         
@@ -1449,4 +1479,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
