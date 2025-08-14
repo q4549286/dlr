@@ -96,25 +96,34 @@ return          @"v46.0 · 终局版 · 完整Prompt\n"
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
 
+// [MODIFIED] 完整替换 generateStructuredReport 函数
+static NSString* generateStructuredReport(NSDictionary *reportData) {
+    NSMutableString *report = [NSMutableString string];
+
     // 板块一：基础盘元
     [report appendString:@"// 1. 基础盘元\n"];
-    NSString *siZhuFull = SafeString(reportData[@"时间块"]);
-    // [MODIFIED] 时间块处理逻辑，以适应从TextView提取的带换行符的文本
-    NSString *siZhu = @"";
-    NSString *jieQi = @"";
-    NSArray *timeLines = [siZhuFull componentsSeparatedByString:@"\n"];
-    for (NSString *line in timeLines) {
-        if ([line hasPrefix:@"干支："]) {
-            siZhu = [line stringByReplacingOccurrencesOfString:@"干支：" withString:@""];
-        } else if ([line hasPrefix:@"节候："] || [line hasPrefix:@"节气："]) { // 兼容两种可能的标签
-            jieQi = [line stringByReplacingOccurrencesOfString:@"节候：" withString:@""];
-            jieQi = [jieQi stringByReplacingOccurrencesOfString:@"节气：" withString:@""];
-        }
-    }
-    siZhu = [siZhu stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    jieQi = [jieQi stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     
-    [report appendFormat:@"// 1.1. 四柱与节气\n- 四柱: %@\n- 节气: %@\n\n", siZhu, jieQi];
+    // -- 新的时间块处理逻辑 --
+    NSString *timeBlockFull = SafeString(reportData[@"时间块"]);
+    if (timeBlockFull.length > 0) {
+        [report appendString:@"// 1.1. 时间参数\n"];
+        // 将多行文本格式化为列表项
+        NSArray *timeLines = [timeBlockFull componentsSeparatedByString:@"\n"];
+        for (NSString *line in timeLines) {
+            NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (trimmedLine.length > 0) {
+                [report appendFormat:@"- %@\n", trimmedLine];
+            }
+        }
+        [report appendString:@"\n"];
+    } else {
+        // -- 保留旧的、逐项解析的逻辑作为备用方案 --
+        NSString *siZhuFull = SafeString(reportData[@"时间块_备用"]); // 假设有一个备用字段
+        NSArray *siZhuParts = [siZhuFull componentsSeparatedByString:@" "];
+        NSString *siZhu = (siZhuParts.count >= 4) ? [NSString stringWithFormat:@"%@ %@ %@ %@", siZhuParts[0], siZhuParts[1], siZhuParts[2], siZhuParts[3]] : siZhuFull;
+        NSString *jieQi = (siZhuParts.count > 4) ? [[siZhuParts subarrayWithRange:NSMakeRange(4, siZhuParts.count - 4)] componentsJoinedByString:@" "] : @"";
+        [report appendFormat:@"// 1.1. 四柱与节气\n- 四柱: %@\n- 节气: %@\n\n", siZhu, jieQi];
+    }
     
     NSString *yueJiangFull = SafeString(reportData[@"月将"]);
     NSString *yueJiang = [[yueJiangFull componentsSeparatedByString:@" "].firstObject stringByReplacingOccurrencesOfString:@"月将:" withString:@""] ?: @"";
@@ -147,6 +156,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     if (reportData[@"四课"]) [report appendFormat:@"// 2.2. 四课\n%@\n\n", reportData[@"四课"]];
     if (reportData[@"三传"]) [report appendFormat:@"// 2.3. 三传\n%@\n\n", reportData[@"三传"]];
 
+    // ... 函数的其余部分保持不变 ...
     // 板块三：格局总览
     [report appendString:@"// 3. 格局总览\n"];
     NSString *keTiFull = reportData[@"课体范式_简"] ?: reportData[@"课体范式_详"];
@@ -1723,3 +1733,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI + TimeExtract) 已加载。");
     }
 }
+
