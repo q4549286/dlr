@@ -1128,23 +1128,31 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     }
 
     // 2. 准备空亡详解的括号，将地支和六亲一一对应
+    // 2. 准备空亡详解的括号，组装成无歧义的陈述句 (v13.29)
     NSString *formattedDetail = @"";
     if (liuQinArray && liuQinArray.count > 0 && kong.length == liuQinArray.count) {
-        NSMutableString *detailBuilder = [NSMutableString string];
+        
+        NSMutableString *statements = [NSMutableString string];
         for (int i = 0; i < kong.length; i++) {
             NSString *diZhi = [kong substringWithRange:NSMakeRange(i, 1)];
             NSString *liuQin = liuQinArray[i];
-            [detailBuilder appendFormat:@"%@(%@)", diZhi, liuQin];
+            
+            // 构建陈述句，例如 "子为空亡官鬼"
+            [statements appendFormat:@"%@为空亡%@", diZhi, liuQin];
+            
             if (i < kong.length - 1) {
-                [detailBuilder appendString:@", "];
+                [statements appendString:@", "];
             }
         }
+        
+        // 组装最终的注解字符串
         if (riGan.length > 0) {
-             formattedDetail = [NSString stringWithFormat:@" [空亡详解: %@ (以日干'%@'论)]", detailBuilder, riGan];
+             formattedDetail = [NSString stringWithFormat:@" [空亡详解: 以日干'%@'论, %@]", riGan, statements];
         } else {
-             formattedDetail = [NSString stringWithFormat:@" [空亡详解: %@]", detailBuilder];
+             formattedDetail = [NSString stringWithFormat:@" [空亡详解: %@]", statements];
         }
-    } else if (reportData[@"旬空_六亲"]) { // Fallback to less precise format if array matching fails
+        
+    } else if (reportData[@"旬空_六亲"]) { // 兜底方案
         NSString *liuQinStr = reportData[@"旬空_六亲"];
         if(riGan.length > 0) {
             formattedDetail = [NSString stringWithFormat:@" [空亡详解: %@ (以日干'%@'论)]", liuQinStr, riGan];
@@ -2520,5 +2528,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.26 (Semantic XunKong Fix) 已加载。");
     }
 }
+
 
 
