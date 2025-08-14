@@ -109,41 +109,61 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *yueJiang = [[yueJiangFull componentsSeparatedByString:@" "].firstObject stringByReplacingOccurrencesOfString:@"月将:" withString:@""] ?: @"";
     yueJiang = [yueJiang stringByReplacingOccurrencesOfString:@"日宿在" withString:@""];
     
-    NSString *kongWangFull = SafeString(reportData[@"空亡"]);
-    NSString *originalXunKong = kongWangFull;
-    NSString *switchedXunKongInfo = @"";
+    // =================================================================
+    // vvvvvvvvvvvvv  旬空格式化终极修复逻辑 (v13.26)  vvvvvvvvvvvvvvvv
+    // =================================================================
+    // 接收两个独立的、已识别好的信息
+    NSString *xunInfo = SafeString(reportData[@"旬空_旬信息"]); // e.g., "子丑 (甲寅旬)"
+    NSString *riKongInfo = SafeString(reportData[@"旬空_日空信息"]); // e.g., "丙辰日 官鬼子孙空"
 
-    if ([kongWangFull containsString:@" | "]) {
-        NSArray *parts = [kongWangFull componentsSeparatedByString:@" | "];
-        originalXunKong = [parts.firstObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (parts.count > 1 && [[parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] length] > 0) {
-            switchedXunKongInfo = [NSString stringWithFormat:@" (%@)", [parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-        }
-    }
-
-    NSString *xun = @"";
     NSString *kong = @"";
-    NSRange bracketStart = [originalXunKong rangeOfString:@"("];
-    NSRange bracketEnd = [originalXunKong rangeOfString:@")"];
-    if (bracketStart.location != NSNotFound && bracketEnd.location != NSNotFound && bracketStart.location < bracketEnd.location) {
-        xun = [originalXunKong substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
-        kong = [[originalXunKong substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    } else {
-        NSDictionary *xunKongMap = @{ @"甲子":@"戌亥", @"甲戌":@"申酉", @"甲申":@"午未", @"甲午":@"辰巳", @"甲辰":@"寅卯", @"甲寅":@"子丑" };
-        for (NSString* xunKey in xunKongMap.allKeys) {
-            if ([originalXunKong containsString:xunKey]) {
-                xun = [xunKey stringByAppendingString:@"旬"];
-                kong = xunKongMap[xunKey];
-                break;
+    NSString *xun = @"";
+
+    // 1. 从“旬信息”中精确拆解出“空亡地支”和“旬”
+    if (xunInfo.length > 0) {
+        // 先尝试用括号拆分
+        NSRange bracketStart = [xunInfo rangeOfString:@"("];
+        NSRange bracketEnd = [xunInfo rangeOfString:@")"];
+        if (bracketStart.location != NSNotFound && bracketEnd.location != NSNotFound && bracketStart.location < bracketEnd.location) {
+            xun = [xunInfo substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
+            kong = [[xunInfo substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        } else {
+            // 如果没有括号，再尝试用关键字拆分 (e.g., "甲子旬戌亥空")
+            NSDictionary *xunKongMap = @{ @"甲子":@"戌亥", @"甲戌":@"申酉", @"甲申":@"午未", @"甲午":@"辰巳", @"甲辰":@"寅卯", @"甲寅":@"子丑" };
+            BOOL found = NO;
+            for (NSString* xunKey in xunKongMap.allKeys) {
+                if ([xunInfo containsString:xunKey]) {
+                    xun = [xunKey stringByAppendingString:@"旬"];
+                    kong = xunKongMap[xunKey];
+                    // 处理 "甲寅旬子丑空" 这种格式，把"旬"和"空"去掉
+                    NSString *tempKong = [[xunInfo stringByReplacingOccurrencesOfString:xun withString:@""] stringByReplacingOccurrencesOfString:@"空" withString:@""];
+                    if(tempKong.length > 0) kong = tempKong;
+                    found = YES;
+                    break;
+                }
+            }
+            if (!found) { // 如果都失败，就把整个字符串当做空亡地支
+                kong = xunInfo;
             }
         }
-        // If kong is still empty but originalXunKong has content, use it directly.
-        if (kong.length == 0 && originalXunKong.length > 0) {
-            kong = originalXunKong;
-        }
     }
 
-    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)%@\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, switchedXunKongInfo, SafeString(reportData[@"昼夜"])];
+    // 2. 准备补充信息（日空）的括号
+    NSString *formattedRiKong = @"";
+    if (riKongInfo.length > 0) {
+        formattedRiKong = [NSString stringWithFormat:@" (%@)", riKongInfo];
+    }
+
+    // 3. 严格按格式重建
+    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)%@\n- 昼夜贵人: %@\n\n",
+        [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]],
+        kong,
+        xun,
+        formattedRiKong,
+        SafeString(reportData[@"昼夜"])];
+    // =================================================================
+    // ^^^^^^^^^^^^^^^^         旬空逻辑结束         ^^^^^^^^^^^^^^^^
+    // =================================================================
 
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
@@ -640,7 +660,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [g_mainControlPanelView addSubview:contentView];
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.24" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}]; // Version updated for fix
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.26" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}]; // Version updated for fix
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString;
@@ -930,14 +950,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (NSString *)extractSwitchedXunKongInfo {
     SEL switchSelector = NSSelectorFromString(@"切換旬日");
     if ([self respondsToSelector:switchSelector]) {
-        LogMessage(EchoLogTypeInfo, @"[旬空] 在 ViewController 上找到切换方法，正在模拟点击...");
+        LogMessage(EchoLogTypeInfo, @"[旬空] 正在模拟点击以获取另一状态...");
         
         SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
         [NSThread sleepForTimeInterval:0.1];
         
         NSString *switchedText = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
-        LogMessage(EchoLogTypeSuccess, @"[旬空] 成功提取切换后信息: %@", switchedText);
         
+        // IMPORTANT: Switch it back to leave the UI in its original state.
         SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
 
         return switchedText;
@@ -957,25 +977,36 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         LogMessage(EchoLogTypeInfo, @"[盘面] 时间提取完成，开始解析其他基础信息...");
 
         // =================================================================
-        // vvvvvvvvvvvvvvvvv   关键修正区域开始   vvvvvvvvvvvvvvvvvv
+        // vvvvvvvvvv  旬空语义识别与重建逻辑 (v13.26)  vvvvvvvvvv
         // =================================================================
-        // 根据用户反馈，主要旬空信息是在“切换”动作后才显示的。
-        // 因此，我们先获取切换后的文本作为“主要信息”，再获取初始文本作为“次要信息”。
-        
-        NSString *primaryXunKong = [self extractSwitchedXunKongInfo];
-        NSString *secondaryInfo = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
+        // 1. 数据采集
+        NSString *textA = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
+        NSString *textB = [self extractSwitchedXunKongInfo];
 
-        if (primaryXunKong.length > 0) {
-            // 将主要信息和次要信息用“|”拼接，主要信息在前。
-            g_extractedData[@"空亡"] = [NSString stringWithFormat:@"%@ | %@", primaryXunKong, secondaryInfo];
-            LogMessage(EchoLogTypeInfo, @"[旬空] 提取到主/次信息: %@ | %@", primaryXunKong, secondaryInfo);
+        NSString *xunInfo = nil;
+        NSString *riKongInfo = nil;
+
+        // 2. 语义识别：包含“旬”字的是旬信息，不包含的是日空信息。
+        if ([textA containsString:@"旬"]) {
+            xunInfo = textA;
+            riKongInfo = textB;
+        } else if ([textB containsString:@"旬"]) {
+            xunInfo = textB;
+            riKongInfo = textA;
         } else {
-            // 如果切换失败或无返回，则退回，仅使用初始文本。
-            g_extractedData[@"空亡"] = secondaryInfo;
-            LogMessage(EchoLogTypeWarning, @"[旬空] 未能提取到切换后信息，使用初始信息: %@", secondaryInfo);
+            // 兜底策略：如果两个都不含“旬”，或都含“旬”，则按旧逻辑处理，以防万一
+            xunInfo = textA;
+            riKongInfo = textB;
+            LogMessage(EchoLogTypeWarning, @"[旬空] 无法通过'旬'字识别，采用默认顺序。");
         }
+        
+        // 3. 将识别好的、独立的信息存入字典，交给格式化函数处理
+        g_extractedData[@"旬空_旬信息"] = [xunInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        g_extractedData[@"旬空_日空信息"] = [riKongInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        
+        LogMessage(EchoLogTypeSuccess, @"[旬空] 识别结果 -> 旬信息: [%@], 日空信息: [%@]", g_extractedData[@"旬空_旬信息"], g_extractedData[@"旬空_日空信息"]);
         // =================================================================
-        // ^^^^^^^^^^^^^^^^    关键修正区域结束    ^^^^^^^^^^^^^^^^
+        // ^^^^^^^^^^^^^^^^      旬空逻辑结束      ^^^^^^^^^^^^^^^^
         // =================================================================
 
         g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
@@ -1457,6 +1488,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.24 (XunKong Fix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.26 (Semantic XunKong Fix) 已加载。");
     }
 }
