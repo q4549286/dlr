@@ -1,6 +1,6 @@
 ////// Filename: Echo_AnalysisEngine_v13.23_Final_Corrected_v2.xm
 // 描述: Echo 六壬解析引擎 v13.23
-//      - [CRITICAL FIX] 最终修正版。根据用户提示，将“切换旬日”方法的调用目标修正为 ViewController (self)，与其他功能调用方式保持一致。
+//      - [CRITICAL FIX] 最终修正版。根据用户提示，将“切換旬日”方法的调用目标修正为 ViewController (self)，与其他功能调用方式保持一致。
 //      - 修复了异步流程问题。
 //      - 包含了所有常量定义。
 
@@ -931,7 +931,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (NSString *)extractSwitchedXunKongInfo {
     // 关键修正：直接在 self (ViewController) 上调用
-    SEL switchSelector = NSSelectorFromString(@"切换旬日");
+    SEL switchSelector = NSSelectorFromString(@"切換旬日");
     if ([self respondsToSelector:switchSelector]) {
         LogMessage(EchoLogTypeInfo, @"[旬空] 在 ViewController 上找到切换方法，正在模拟点击...");
         
@@ -951,7 +951,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return switchedText;
         
     } else {
-        LogMessage(EchoLogTypeWarning, @"[旬空] 在 ViewController 上未找到 '切换旬日' 方法。");
+        LogMessage(EchoLogTypeWarning, @"[旬空] 在 ViewController 上未找到 '切換旬日' 方法。");
         return @"";
     }
 }
@@ -1455,3 +1455,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
