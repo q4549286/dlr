@@ -306,9 +306,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     
     return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-    
-    return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-}
+
 
 
 static NSString* generateContentSummaryLine(NSString *fullReport) {
@@ -1497,6 +1495,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
 
 
