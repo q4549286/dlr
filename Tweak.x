@@ -93,32 +93,30 @@ static NSString *getAIPromptHeader() {
 return          @"v46.0 · 终局版 · 完整Prompt\n"
 
         @"请准备接收包含所有细节的标准化课盘，我将执行全新架构下的专业深度分析！\n";}
+// [MODIFIED] 完整替换 generateStructuredReport 函数 (v1.1 精修版)
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
 
     // 板块一：基础盘元
     [report appendString:@"// 1. 基础盘元\n"];
     
-    // -- 新的时间块处理逻辑 --
     NSString *timeBlockFull = SafeString(reportData[@"时间块"]);
     if (timeBlockFull.length > 0) {
         [report appendString:@"// 1.1. 时间参数\n"];
-        // 将多行文本格式化为列表项
         NSArray *timeLines = [timeBlockFull componentsSeparatedByString:@"\n"];
         for (NSString *line in timeLines) {
             NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (trimmedLine.length > 0) {
+                // [MODIFIED] 修改公历和干支的标签
+                if ([trimmedLine hasPrefix:@"公历"]) {
+                    trimmedLine = [trimmedLine stringByReplacingOccurrencesOfString:@"公历" withString:@"公历(北京时间)"];
+                } else if ([trimmedLine hasPrefix:@"干支"]) {
+                    trimmedLine = [trimmedLine stringByReplacingOccurrencesOfString:@"干支" withString:@"干支(真太阳时)"];
+                }
                 [report appendFormat:@"- %@\n", trimmedLine];
             }
         }
         [report appendString:@"\n"];
-    } else {
-        // -- 保留旧的、逐项解析的逻辑作为备用方案 --
-        NSString *siZhuFull = SafeString(reportData[@"时间块_备用"]); // 假设有一个备用字段
-        NSArray *siZhuParts = [siZhuFull componentsSeparatedByString:@" "];
-        NSString *siZhu = (siZhuParts.count >= 4) ? [NSString stringWithFormat:@"%@ %@ %@ %@", siZhuParts[0], siZhuParts[1], siZhuParts[2], siZhuParts[3]] : siZhuFull;
-        NSString *jieQi = (siZhuParts.count > 4) ? [[siZhuParts subarrayWithRange:NSMakeRange(4, siZhuParts.count - 4)] componentsJoinedByString:@" "] : @"";
-        [report appendFormat:@"// 1.1. 四柱与节气\n- 四柱: %@\n- 节气: %@\n\n", siZhu, jieQi];
     }
     
     NSString *yueJiangFull = SafeString(reportData[@"月将"]);
@@ -152,7 +150,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     if (reportData[@"四课"]) [report appendFormat:@"// 2.2. 四课\n%@\n\n", reportData[@"四课"]];
     if (reportData[@"三传"]) [report appendFormat:@"// 2.3. 三传\n%@\n\n", reportData[@"三传"]];
 
-    // ... 函数的其余部分保持不变 ...
     // 板块三：格局总览
     [report appendString:@"// 3. 格局总览\n"];
     NSString *keTiFull = reportData[@"课体范式_简"] ?: reportData[@"课体范式_详"];
@@ -161,7 +158,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         NSArray *keTiBlocks = [keTiFull componentsSeparatedByString:@"\n\n"];
         for (NSString *block in keTiBlocks) {
             if (block.length > 0) {
-                 [report appendFormat:@"- %@\n\n", block];
+                 [report appendFormat:@"- %@\n\n", [block stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             }
         }
     }
@@ -171,7 +168,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"];
         jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "];
         [report appendString:@"// 3.2. 九宗门\n"];
-        [report appendFormat:@"- %@\n\n", jiuZongMenFull];
+        [report appendFormat:@"- %@\n\n", [jiuZongMenFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
     }
     NSString *biFa = reportData[@"毕法要诀"];
     if (biFa.length > 0) {
@@ -199,7 +196,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     }
     
     // 板块四：爻位详解
-    [report appendString:@"// 4. 爻位详解\n"];
+    NSMutableString *yaoWeiContent = [NSMutableString string];
     NSString *fangFaFull = reportData[@"解析方法"];
     if (fangFaFull.length > 0) {
         NSDictionary *fangFaMap = @{ @"日辰主客→": @"// 4.1. 日辰关系\n", @"三传事体→": @"// 4.2. 三传事理\n", @"发用事端→": @"// 4.3. 发用详解\n", @"克应之期→": @"// 4.4. 克应之期\n", @"来占之情→": @"// 4.5. 来情占断\n" };
@@ -220,16 +217,27 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                 }
                 if (nextKeyRange.location != NSNotFound) { [content deleteCharactersInRange:NSMakeRange(nextKeyRange.location, content.length - nextKeyRange.location)]; }
                 
-                [report appendFormat:@"%@%@\n\n", fangFaMap[key], [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                [yaoWeiContent appendFormat:@"%@%@\n\n", fangFaMap[key], [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             }
         }
     }
     NSString *keChuanDetail = reportData[@"课传详解"];
     if (keChuanDetail.length > 0) {
-        [report appendString:@"// 4.6. 神将详解 (课传流注)\n"];
-        [report appendString:keChuanDetail];
+        [yaoWeiContent appendString:@"// 4.6. 神将详解 (课传流注)\n"];
+        [yaoWeiContent appendString:keChuanDetail];
+        [yaoWeiContent appendString:@"\n"]; // [MODIFIED] 确保末尾只有一个换行
+    }
+    
+    if (yaoWeiContent.length > 0) {
+        // [MODIFIED] 去除最后的空行，避免重复换行
+        while ([yaoWeiContent hasSuffix:@"\n\n"]) {
+            [yaoWeiContent deleteCharactersInRange:NSMakeRange(yaoWeiContent.length - 1, 1)];
+        }
+        [report appendString:@"// 4. 爻位详解\n"];
+        [report appendString:yaoWeiContent];
         [report appendString:@"\n"];
     }
+
 
     // 板块五：辅助系统
     NSMutableString *auxiliaryContent = [NSMutableString string];
@@ -274,10 +282,15 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
     NSString *nianMing = reportData[@"行年参数"];
     if (nianMing.length > 0) {
-        [auxiliaryContent appendFormat:@"// 5.3. 行年参数\n%@\n\n", nianMing];
+        [auxiliaryContent appendFormat:@"// 5.3. 行年参数\n%@\n\n", nianming];
     }
+    
     if (auxiliaryContent.length > 0) {
-        [report appendString:@"// 5. 辅助系统\n"];
+        // [MODIFIED] 在输出前，确保主报告末尾不是换行符，避免双重换行
+        while ([report hasSuffix:@"\n"]) {
+             [report deleteCharactersInRange:NSMakeRange(report.length - 1, 1)];
+        }
+        [report appendString:@"\n\n// 5. 辅助系统\n"]; // 确保标题前有空行
         [report appendString:auxiliaryContent];
     }
     
@@ -1729,5 +1742,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI + TimeExtract) 已加载。");
     }
 }
+
 
 
