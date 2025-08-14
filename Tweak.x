@@ -1,3 +1,8 @@
+////// Filename: Echo_AnalysisEngine_v13.40_CompileFix.xm
+// 描述: Echo 六壬解析引擎 v13.40 (编译修复版)。
+//      - [FIX] 修复了因缺少`extractDetailedTimeInfoWithCompletion:`方法声明而导致的编译错误。
+//      - [STABILITY] 继承v13.39所有功能和修复。
+
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
@@ -66,6 +71,8 @@ static NSString *g_lastGeneratedReport = nil;
 
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES; 
+static BOOL g_isExtractingTimeDetail = NO; // 专门用于时间提取的状态标志
+static void (^g_timeDetailCompletionHandler)(NSString *result) = nil; // 时间提取的回调
 
 #define SafeString(str) (str ?: @"")
 
@@ -368,6 +375,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
 - (NSString *)GetStringFromLayer:(id)layer;
 - (void)presentAIActionSheetWithReport:(NSString *)report;
+- (void)extractDetailedTimeInfoWithCompletion:(void (^)(NSString *result))completion;
 @end
 %hook UILabel
 - (void)setText:(NSString *)text { 
@@ -421,6 +429,41 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
+    // 专门处理时间提取的逻辑
+    if (g_isExtractingTimeDetail) {
+        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+        if ([vcClassName containsString:@"時間選擇視圖"]) {
+            LogMessage(EchoLogTypeInfo, @"[时间拦截] 成功拦截到 '時間選擇視圖'。");
+            vcToPresent.view.alpha = 0.0f; animated = NO;
+            
+            void (^extractionCompletion)(void) = ^{
+                if (completion) completion();
+
+                NSMutableArray<UITextView *> *textViews = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UITextView class], vcToPresent.view, textViews);
+
+                NSString *detailedTimeInfo = @"";
+                if (textViews.count > 0) {
+                    detailedTimeInfo = textViews.firstObject.text;
+                    LogMessage(EchoLogTypeSuccess, @"[时间拦截] 成功从UITextView提取时间信息。");
+                } else {
+                    detailedTimeInfo = @"[错误: 未找到时间文本框]";
+                    LogMessage(EchoLogError, @"[时间拦截] 错误: 在 '時間選擇視圖' 中未找到UITextView。");
+                }
+
+                [vcToPresent dismissViewControllerAnimated:NO completion:^{
+                    if (g_timeDetailCompletionHandler) {
+                        g_timeDetailCompletionHandler([detailedTimeInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
+                        g_timeDetailCompletionHandler = nil;
+                    }
+                    g_isExtractingTimeDetail = NO;
+                }];
+            };
+            Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion);
+            return;
+        }
+    }
+    
     if (g_s1_isExtracting) {
         if ([NSStringFromClass([vcToPresent class]) containsString:@"課體概覽視圖"]) {
             vcToPresent.view.alpha = 0.0f; animated = NO;
@@ -459,7 +502,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
     }
-    // 最终版：智能拦截逻辑
+    // 通用拦截器（用于毕法、格局等）
     else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         vcToPresent.view.alpha = 0.0f; animated = NO;
         
@@ -467,22 +510,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             NSString *vcClassName = NSStringFromClass([vcToPresent class]);
             NSString *title = vcToPresent.title ?: @"";
             
-            // 智能识别时间选择器
-            if ([vcClassName containsString:@"時間選擇視圖"]) {
-                LogMessage(EchoLogTypeInfo, @"[捕获] 识别到时间选择器: [%@]", title);
-                NSMutableArray<UITextView *> *textViews = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UITextView class], vcToPresent.view, textViews);
-
-                if (textViews.count > 0) {
-                    g_extractedData[@"时间块"] = textViews.firstObject.text;
-                    LogMessage(EchoLogTypeSuccess, @"[捕获] 成功解析 [时间块] 内容。");
-                } else {
-                    g_extractedData[@"时间块"] = @"[错误: 未找到时间文本框]";
-                    LogMessage(EchoLogError, @"[捕获] 错误: 在时间选择器中未找到UITextView。");
-                }
-            }
-            // 原有的其他弹窗逻辑
-            else if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
+            if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
                 NSMutableArray *textParts = [NSMutableArray array];
                 NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], vcToPresent.view, stackViews); [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
                 for (UIStackView *stackView in stackViews) {
@@ -529,6 +557,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
+
 
 %hook UIViewController
 
@@ -1071,6 +1100,25 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 // MARK: - Task Launchers & Processors
 %new
+- (void)extractDetailedTimeInfoWithCompletion:(void (^)(NSString *result))completion {
+    LogMessage(EchoLogTypeInfo, @"[时间] 启动详细时间信息提取...");
+    g_isExtractingTimeDetail = YES;
+    g_timeDetailCompletionHandler = [completion copy];
+
+    SEL selector = NSSelectorFromString(@"顯示時間選擇");
+    if ([self respondsToSelector:selector]) {
+        SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]);
+    } else {
+        LogMessage(EchoLogError, @"[时间] 错误：无法响应 '顯示時間選擇' 方法。");
+        g_isExtractingTimeDetail = NO;
+        if (g_timeDetailCompletionHandler) {
+            g_timeDetailCompletionHandler(@"[错误: 无法调用时间选择器]");
+            g_timeDetailCompletionHandler = nil;
+        }
+    }
+}
+
+%new
 - (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include completion:(void (^)(NSString *result))completion {
     g_s1_isExtracting = YES;
     g_s1_currentTaskType = taskType;
@@ -1394,10 +1442,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 // MARK: - Data Extraction Logic
 %new
 - (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion {
-    __weak typeof(self) weakSelf = self;
     g_extractedData = [NSMutableDictionary new];
-    LogMessage(EchoLogTypeInfo, @"[盘面] 1. 开始提取时间信息...");
-
+    LogMessage(EchoLogTypeInfo, @"[盘面] 开始解析基础信息...");
+    __weak typeof(self) weakSelf = self;
+    
     // 步骤1: 专门提取时间信息
     [self extractDetailedTimeInfoWithCompletion:^(NSString *timeResult) {
         g_extractedData[@"时间块"] = timeResult;
@@ -1430,8 +1478,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 if (!strongSelf) return;
 
                 LogMessage(EchoLogTypeInfo, @"[盘面] 3. 所有弹窗信息已捕获，开始提取静态信息...");
-
-                // 提取界面上的静态信息
+                
+                // 4. 提取界面上的静态信息
                 g_extractedData[@"月将"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
                 g_extractedData[@"空亡"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
                 g_extractedData[@"昼夜"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
