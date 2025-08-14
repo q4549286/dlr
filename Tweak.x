@@ -115,7 +115,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *mainXunKongPart = kongWangFull;
     NSString *switchedXunKongInfo = @"";
 
-    // 1. 分离主信息和附加信息
     if ([kongWangFull containsString:@" | "]) {
         NSArray *parts = [kongWangFull componentsSeparatedByString:@" | "];
         mainXunKongPart = parts.firstObject;
@@ -127,33 +126,21 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *xun = @"";
     NSString *kong = @"";
     
-    // 2. 从主信息中解析 旬 和 空
-    // 格式: "旬空: 子丑 (甲寅旬)"
+    // **关键修改**: 使用更简单的解析逻辑
     NSRange bracketStart = [mainXunKongPart rangeOfString:@"("];
-    NSRange bracketEnd = [mainXunKongPart rangeOfString:@")"];
-    
-    if (bracketStart.location != NSNotFound && bracketEnd.location != NSNotFound && bracketStart.location < bracketEnd.location) {
-        // 提取括号内的 "甲寅旬"
-        xun = [mainXunKongPart substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
+    if (bracketStart.location != NSNotFound) {
+        kong = [[mainXunKongPart substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         
-        // 提取括号前的 "旬空: 子丑"
-        NSString *beforeBracket = [mainXunKongPart substringToIndex:bracketStart.location];
-        
-        // 从 "旬空: 子丑" 中分离出 "子丑"
-        NSArray *kongParts = [beforeBracket componentsSeparatedByString:@":"];
-        if (kongParts.count > 1) {
-            kong = [kongParts.lastObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        } else {
-             // 如果没有冒号，就直接用
-            kong = [beforeBracket stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSRange bracketEnd = [mainXunKongPart rangeOfString:@")"];
+        if (bracketEnd.location != NSNotFound) {
+             xun = [mainXunKongPart substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
         }
     } else {
-        // 如果没有括号，作为备用方案
+        // 备用方案
         kong = [mainXunKongPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     }
 
     [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)%@\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, switchedXunKongInfo, SafeString(reportData[@"昼夜"])];
-
     // ... 函数的其余部分保持不变 ...
     
     // 板块二：核心盘架
@@ -1506,6 +1493,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
 
 
