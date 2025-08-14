@@ -1,12 +1,3 @@
-////// Filename: Echo_AnalysisEngine_v13.41_FinalSimpleFix.xm
-// 描述: Echo 六壬解析引擎 v13.41 (最终简洁修复版)。
-//      - [FIX] 彻底解决时间提取问题，回归到最简洁有效的拦截模型。
-//          - `extractKePanInfoWithCompletion`恢复为一次性触发所有弹窗的简单逻辑。
-//          - `Tweak_presentViewController`的通用拦截器被增强，现在可以根据VC的`title`内容精准识别出快速闪现的“时间信息”弹窗。
-//          - 识别成功后，直接从`title`提取所需信息，不再进行复杂的视图遍历。
-//          - 此方案统一了所有弹窗的处理方式，解决了所有已知问题。
-//      - [STABILITY] 此版本为基于所有日志和观察的最终正确实现。
-
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
@@ -94,18 +85,15 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
     // 板块一：基础盘元
     [report appendString:@"// 1. 基础盘元\n"];
-    NSString *siZhuFull = SafeString(reportData[@"时间块"]);
     
-    // 修正后的时间块处理逻辑
-    if ([siZhuFull containsString:@"公历"]) { // 如果是详细时间
-        [report appendString:@"// 1.1. 详细时间\n"];
-        [report appendString:siZhuFull];
-        [report appendString:@"\n\n"];
-    } else { // 如果是旧的标题格式
-        NSArray *siZhuParts = [siZhuFull componentsSeparatedByString:@" "];
-        NSString *siZhu = (siZhuParts.count >= 4) ? [NSString stringWithFormat:@"%@ %@ %@ %@", siZhuParts[0], siZhuParts[1], siZhuParts[2], siZhuParts[3]] : siZhuFull;
-        NSString *jieQi = (siZhuParts.count > 4) ? [[siZhuParts subarrayWithRange:NSMakeRange(4, siZhuParts.count - 4)] componentsJoinedByString:@" "] : @"";
-        [report appendFormat:@"// 1.1. 四柱与节气\n- 四柱: %@\n- 节气: %@\n\n", siZhu, jieQi];
+    // 同时使用两部分时间信息
+    NSString *siZhuFromTitle = SafeString(reportData[@"时间标题"]);
+    NSString *detailedTimeFromView = SafeString(reportData[@"时间块"]);
+    
+    [report appendFormat:@"// 1.1. 四柱与节气 (来自标题)\n- 四柱: %@\n\n", siZhuFromTitle];
+    
+    if (detailedTimeFromView.length > 0) {
+        [report appendFormat:@"// 1.2. 详细时间 (来自内容)\n%@\n\n", detailedTimeFromView];
     }
     
     NSString *yueJiangFull = SafeString(reportData[@"月将"]);
@@ -131,7 +119,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         }
     }
 
-    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, SafeString(reportData[@"昼夜"])];
+    [report appendFormat:@"// 1.3. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, SafeString(reportData[@"昼夜"])];
 
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
@@ -482,9 +470,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             NSString *vcClassName = NSStringFromClass([vcToPresent class]);
             NSString *title = vcToPresent.title ?: @"";
             
-            // 智能识别时间选择器
+            // 智能识别时间选择器 (根据类名)
             if ([vcClassName containsString:@"時間選擇視圖"]) {
                 LogMessage(EchoLogTypeInfo, @"[捕获] 识别到时间选择器: [%@]", title);
+                g_extractedData[@"时间标题"] = title; // 提取标题
+
                 NSMutableArray<UITextView *> *textViews = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UITextView class], vcToPresent.view, textViews);
 
@@ -607,7 +597,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // Title
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.41" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.44" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString;
@@ -1451,17 +1441,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             g_extractedData[@"四课"] = [strongSelf _echo_extractSiKeInfo];
             g_extractedData[@"三传"] = [strongSelf _echo_extractSanChuanInfo];
 
-            // 4. 清理数据并回调
-            NSArray *keysToClean = @[@"毕法要诀", @"格局要览", @"解析方法"];
-            NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
-            for (NSString *key in keysToClean) {
-                NSString *value = g_extractedData[key];
-                if (value) {
-                    for (NSString *t in trash) { value = [value stringByReplacingOccurrencesOfString:t withString:@""]; }
-                    g_extractedData[key] = value;
-                }
-            }
-            
             LogMessage(EchoLogTypeSuccess, @"[盘面] 基础信息解析完成。");
             if (completion) {
                 completion([g_extractedData mutableCopy]);
@@ -1661,6 +1640,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.41 (FinalSimpleFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.42 (MinimalFix) 已加载。");
     }
 }
