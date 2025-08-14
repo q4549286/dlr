@@ -121,7 +121,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // 【【【【【【【【 最终版、经过验证的旬空处理逻辑 】】】】】】】】
     // =========================================================================
     
-    NSString *kongWangFull = SafeString(reportData[@"空亡"]);
+   NSString *kongWangFull = SafeString(reportData[@"空亡"]);
     NSString *xun = @"";
     NSString *kong_formatted = @"";
 
@@ -192,7 +192,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     }
 
     [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong_formatted, xun, SafeString(reportData[@"昼夜"])];
-    
     // =========================================================================
     // 【【【【【【【【 核心修正区域结束 】】】】】】】】
     // =========================================================================
@@ -1520,6 +1519,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
 
 
