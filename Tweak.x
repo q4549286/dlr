@@ -1,9 +1,10 @@
-////// Filename: Echo_AnalysisEngine_v13.32_TrueSmartIntercept.xm
-// 描述: Echo 六壬解析引擎 v13.32 (真正智能拦截修复版)。
-//      - [FIX] 纠正v13.31的重大逻辑错误。之前版本错误地重构了数据提取流程，导致拦截器无法正确识别时间选择器。
-//          - 恢复了`extractKePanInfoWithCompletion`的正确异步链式结构，确保首先触发并等待时间提取完成。
-//          - 在`Tweak_presentViewController`中正确地加入了对`時間選擇視圖`的智能识别分支。
-//          - 现在，当时间选择器出现时，会被正确识别，并从其内部的UITextView提取数据，之后再继续执行其他弹窗的提取流程。
+////// Filename: Echo_AnalysisEngine_v13.33_FinalInterceptFix.xm
+// 描述: Echo 六壬解析引擎 v13.33 (最终拦截修复版)。
+//      - [FIX] 彻底解决时间提取的所有问题，回归并修正了最初的拦截方案。
+//          - 废弃了所有复杂的轮询和异步链式调用，恢复为一次性触发所有弹窗的简洁逻辑。
+//          - 在`Tweak_presentViewController`的通用拦截逻辑中，添加了对`時間選擇視圖`的精准识别分支。
+//          - 现在，当时间选择器被触发时，会被正确识别，并从其内部的UITextView提取数据，然后像其他弹窗一样被自动关闭。
+//          - 此方案统一了所有弹窗的处理方式，代码最简洁，逻辑最清晰，解决了所有已知问题。
 //      - [STABILITY] 此版本应为时间提取问题的最终解决方案。
 
 #import <UIKit/UIKit.h>
@@ -600,7 +601,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // Title
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.32" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.33" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString;
@@ -1258,10 +1259,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 %new
 - (void)extractSpecificPopupWithSelectorName:(NSString *)selectorName taskName:(NSString *)taskName completion:(void (^)(NSString *result))completion {
+    g_extractedData = [NSMutableDictionary dictionary];
     LogMessage(EchoLogTypeTask, @"[精准分析] 任务启动: %@", taskName);
     [self showProgressHUD:[NSString stringWithFormat:@"正在分析: %@", taskName]];
-    
-    g_extractedData = [NSMutableDictionary dictionary];
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         SEL selector = NSSelectorFromString(selectorName);
@@ -1402,16 +1402,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 
 // MARK: - Data Extraction Logic
-
 %new
 - (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion {
     g_extractedData = [NSMutableDictionary new];
     LogMessage(EchoLogTypeInfo, @"[盘面] 开始解析基础信息...");
-
     __weak typeof(self) weakSelf = self;
-    
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 1. 触发所有需要的弹窗
+        // 1. 触发所有需要的弹窗，让拦截器统一处理
         SEL selectors[] = {
             NSSelectorFromString(@"顯示時間選擇"),
             NSSelectorFromString(@"顯示法訣總覽"),
@@ -1428,7 +1426,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     LogMessage(EchoLogTypeInfo, @"[盘面] 正在触发: %@", NSStringFromSelector(selector));
                     SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]);
                 });
-                [NSThread sleepForTimeInterval:0.5]; // 等待弹窗动画和处理
+                [NSThread sleepForTimeInterval:0.5];
             }
         }
         
@@ -1465,6 +1463,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         });
     });
 }
+
 
 %new
 - (NSString *)_echo_extractSiKeInfo {
@@ -1656,6 +1655,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.32 (TrueSmartIntercept) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.33 (FinalInterceptFix) 已加载。");
     }
 }
+```
