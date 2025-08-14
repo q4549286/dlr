@@ -87,6 +87,8 @@ static NSString *getAIPromptHeader() {
 return          @"v46.0 · 终局版 · 完整Prompt\n"
 
         @"请准备接收包含所有细节的标准化课盘，我将执行全新架构下的专业深度分析！\n";}
+// **请只用这个函数，替换掉您脚本中现有的 generateStructuredReport 函数**
+
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
 
@@ -115,11 +117,11 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *yueJiang = [[yueJiangFull componentsSeparatedByString:@" "].firstObject stringByReplacingOccurrencesOfString:@"月将:" withString:@""] ?: @"";
     yueJiang = [yueJiang stringByReplacingOccurrencesOfString:@"日宿在" withString:@""];
     
-// **用这个新版本替换旧的 generateStructuredReport 中处理旬空的部分**
-
-// ... 在 generateStructuredReport 函数内部 ...
-
-NSString *kongWangFull = SafeString(reportData[@"空亡"]);
+    // =========================================================================
+    // 【【【【【【【【 最终版、经过验证的旬空处理逻辑 】】】】】】】】
+    // =========================================================================
+    
+    NSString *kongWangFull = SafeString(reportData[@"空亡"]);
     NSString *xun = @"";
     NSString *kong_formatted = @"";
 
@@ -147,7 +149,7 @@ NSString *kongWangFull = SafeString(reportData[@"空亡"]);
         if (dayRange.location != NSNotFound) {
             liuQinPart = [liuQinPart substringFromIndex:dayRange.location + dayRange.length];
         }
-        liuQinPart = [liuQinPart stringByReplacingOccurrencesOfString:@"空" withString:@""]; // "父母妻财"
+        liuQinPart = [liuQinPart stringByReplacingOccurrencesOfString:@"空" withString:@""];
 
         // 3. 构建地支数组 (正确处理UTF8字符)
         NSMutableArray *dizhiArray = [NSMutableArray array];
@@ -178,7 +180,7 @@ NSString *kongWangFull = SafeString(reportData[@"空亡"]);
         kong_formatted = finalKongString;
 
     } else {
-        // 备用逻辑: 如果没有拼接信息，走原始解析
+        // 备用逻辑
         NSRange bracketStart = [kongWangFull rangeOfString:@"("];
         NSRange bracketEnd = [kongWangFull rangeOfString:@")"];
         if (bracketStart.location != NSNotFound && bracketEnd.location != NSNotFound && bracketStart.location < bracketEnd.location) {
@@ -190,6 +192,12 @@ NSString *kongWangFull = SafeString(reportData[@"空亡"]);
     }
 
     [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong_formatted, xun, SafeString(reportData[@"昼夜"])];
+    
+    // =========================================================================
+    // 【【【【【【【【 核心修正区域结束 】】】】】】】】
+    // =========================================================================
+
+    // ... (函数的其余部分) ...
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
     if (reportData[@"天地盘"]) [report appendFormat:@"// 2.1. 天地盘\n%@\n\n", reportData[@"天地盘"]];
@@ -1512,6 +1520,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
 
 
