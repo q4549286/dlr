@@ -1,11 +1,11 @@
-////// Filename: Echo_AnalysisEngine_v13.35_TrueFinalFix.xm
-// 描述: Echo 六壬解析引擎 v13.35 (最终修复版 - 流程与拦截逻辑修正)。
-//      - [FIX] 彻底解决时间提取问题，纠正了之前所有版本的逻辑缺陷。
-//          - 恢复`extractKePanInfoWithCompletion`为正确的异步链式调用，确保先获取时间信息，再处理其他弹窗。
-//          - 在`Tweak_presentViewController`的通用拦截逻辑中，正确地加入了对`時間選擇視圖`的智能识别分支。
-//          - 当时间选择器被拦截后，会从其内部的UITextView提取数据，然后自动关闭。
-//          - 此方案确保了正确的执行顺序和对所有弹窗类型的正确处理。
-//      - [STABILITY] 此版本为时间提取问题的最终、正确解决方案。
+////// Filename: Echo_AnalysisEngine_v13.36_TrueFinalPushFix.xm
+// 描述: Echo 六壬解析引擎 v13.36 (最终Push处理修复版)。
+//      - [FIX] 彻底解决时间提取问题。明确了时间选择器为Push跳转，其他为Present弹窗，并采用不同策略处理。
+//          - `extractKePanInfoWithCompletion`恢复为正确的异步链式调用，确保先通过轮询提取时间信息。
+//          - `extractDetailedTimeInfoWithCompletion`函数被重写，现在通过轮询检测topViewController来精准定位被Push的`時間選擇視圖`。
+//          - 提取完UITextView文本后，通过调用`popViewControllerAnimated:NO`安全返回，不影响应用状态。
+//          - 时间提取成功后，再继续触发并使用`Tweak_presentViewController`拦截其他真正的模态弹窗。
+//      - [STABILITY] 此方案分离了两种界面逻辑，是目前最稳定、最正确的实现。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -377,6 +377,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
 - (NSString *)GetStringFromLayer:(id)layer;
 - (void)presentAIActionSheetWithReport:(NSString *)report;
+- (void)extractDetailedTimeInfoWithCompletion:(void (^)(NSString *result))completion; // 新增声明
 @end
 %hook UILabel
 - (void)setText:(NSString *)text { 
@@ -468,7 +469,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
     }
-    // 最终版：智能拦截逻辑
     else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         vcToPresent.view.alpha = 0.0f; animated = NO;
         
@@ -476,7 +476,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             NSString *vcClassName = NSStringFromClass([vcToPresent class]);
             NSString *title = vcToPresent.title ?: @"";
             
-            // 智能识别时间选择器
+            // 修正后的逻辑：将时间选择器也纳入拦截范围
             if ([vcClassName containsString:@"時間選擇視圖"]) {
                 LogMessage(EchoLogTypeInfo, @"[捕获] 识别到时间选择器: [%@]", title);
                 NSMutableArray<UITextView *> *textViews = [NSMutableArray array];
@@ -490,7 +490,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     LogMessage(EchoLogError, @"[捕获] 错误: 在时间选择器中未找到UITextView。");
                 }
             }
-            // 原有的其他弹窗逻辑
             else if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
                 NSMutableArray *textParts = [NSMutableArray array];
                 NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], vcToPresent.view, stackViews); [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
@@ -601,7 +600,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // Title
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.33" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v13.35" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString;
@@ -1655,6 +1654,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.33 (FinalInterceptFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.35 (TrueFinalFix) 已加载。");
     }
 }
