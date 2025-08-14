@@ -115,97 +115,81 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *yueJiang = [[yueJiangFull componentsSeparatedByString:@" "].firstObject stringByReplacingOccurrencesOfString:@"月将:" withString:@""] ?: @"";
     yueJiang = [yueJiang stringByReplacingOccurrencesOfString:@"日宿在" withString:@""];
     
-NSString *kongWangFull = SafeString(reportData[@"空亡"]);
-NSString *originalXunKong = kongWangFull;
-NSString *xun = @"";
-NSString *kong_formatted = @""; // 用一个新的变量来存储最终格式化的空亡信息
+// **用这个新版本替换旧的 generateStructuredReport 中处理旬空的部分**
 
-// 检查是否包含我们拼接的分隔符 " | "
+// ... 在 generateStructuredReport 函数内部 ...
+
+NSString *kongWangFull = SafeString(reportData[@"空亡"]);
+NSString *xun = @"";
+NSString *kong_formatted = @"";
+
 if ([kongWangFull containsString:@" | "]) {
     NSArray *parts = [kongWangFull componentsSeparatedByString:@" | "];
-    originalXunKong = parts.firstObject; // "子丑 (甲寅旬)"
-    
-    // 1. 从 originalXunKong 中解析出空亡地支和旬
+    NSString *xunKongInfo = parts[0]; // "子丑 (甲寅旬)"
+    NSString *riKongInfo = parts[1];  // "乙卯日 父母妻财空"
+
+    // 1. 解析旬空信息
     NSString *kong_dizhi_str = @"";
-    NSRange bracketStartXun = [originalXunKong rangeOfString:@"("];
+    NSRange bracketStartXun = [xunKongInfo rangeOfString:@"("];
     if (bracketStartXun.location != NSNotFound) {
-        kong_dizhi_str = [[originalXunKong substringToIndex:bracketStartXun.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        NSRange bracketEndXun = [originalXunKong rangeOfString:@")"];
+        kong_dizhi_str = [[xunKongInfo substringToIndex:bracketStartXun.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSRange bracketEndXun = [xunKongInfo rangeOfString:@")"];
         if(bracketEndXun.location != NSNotFound) {
-            //  !!!!!!!!!!!!!! 这里是修正后的代码 !!!!!!!!!!!!!!
-            xun = [originalXunKong substringWithRange:NSMakeRange(bracketStartXun.location + 1, bracketEndXun.location - bracketStartXun.location - 1)];
+            xun = [xunKongInfo substringWithRange:NSMakeRange(bracketStartXun.location + 1, bracketEndXun.location - bracketStartXun.location - 1)];
         }
     } else {
-        kong_dizhi_str = [originalXunKong stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        kong_dizhi_str = [xunKongInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     }
-
-    // 2. 从 switchedXunKongInfo 中解析出六亲关系
-    if (parts.count > 1) {
-        NSString *switchedInfo = parts[1]; // "乙卯日 父母妻财空"
-        
-        // 3. 【核心修正】使用硬编码的映射规则
-        NSString *liuQin1 = @"";
-        NSString *liuQin2 = @"";
-
-        if ([switchedInfo containsString:@"父母"]) {
-            liuQin1 = @"父母";
-        }
-        if ([switchedInfo containsString:@"妻财"]) {
-            // 注意：要确保先找到“父母”再找“妻财”的顺序
-            if ([liuQin1 isEqualToString:@""]) {
-                liuQin1 = @"妻财";
-            } else {
-                liuQin2 = @"妻财";
-            }
-        }
-        // ... 这里可以根据需要添加更多六亲的判断
-        
-        // 4. 将地支和六亲一一对应
-        NSString *dizhi1 = (kong_dizhi_str.length > 0) ? [kong_dizhi_str substringToIndex:1] : @""; // "子"
-        NSString *dizhi2 = (kong_dizhi_str.length > 1) ? [kong_dizhi_str substringWithRange:NSMakeRange(1, 1)] : @""; // "丑"
-        
-        // 5. 拼接成最终格式
-        NSMutableString *finalKongString = [NSMutableString string];
-        if (dizhi1.length > 0 && liuQin1.length > 0) {
-            [finalKongString appendFormat:@"%@日干%@爻)", dizhi1, liuQin1];
-        } else if (dizhi1.length > 0) {
-            [finalKongString appendString:dizhi1];
-        }
-
-        if (dizhi2.length > 0 && liuQin2.length > 0) {
-            if (finalKongString.length > 0) {
-                [finalKongString appendString:@"、"];
-            }
-            [finalKongString appendFormat:@"%@日干%@爻)", dizhi2, liuQin2];
-        } else if (dizhi2.length > 0) {
-             if (finalKongString.length > 0) {
-                [finalKongString appendString:@"、"];
-            }
-            [finalKongString appendString:dizhi2];
-        }
-        
-        kong_formatted = finalKongString;
-        
-    } else {
-        kong_formatted = kong_dizhi_str; // 如果没有切换信息，则直接使用
+    
+    // 2. 解析日空信息中的六亲
+    NSString *liuQinPart = riKongInfo;
+    NSRange dayRange = [liuQinPart rangeOfString:@"日 "];
+    if (dayRange.location != NSNotFound) {
+        liuQinPart = [liuQinPart substringFromIndex:dayRange.location + dayRange.length];
     }
+    liuQinPart = [liuQinPart stringByReplacingOccurrencesOfString:@"空" withString:@""]; // "父母妻财"
+
+    // 3. 构建地支和六亲的映射
+    NSArray *dizhiArray = [kong_dizhi_str componentsSeparatedByString:@""]; // 正确拆分UTF8字符
+    NSMutableArray *liuQinArray = [NSMutableArray array];
+    NSArray *knownLiuQins = @[@"父母", @"妻财", @"官鬼", @"子孙", @"兄弟"];
+    for (NSString *lq in knownLiuQins) {
+        if ([liuQinPart containsString:lq]) {
+            [liuQinArray addObject:lq];
+        }
+    }
+    
+    // 4. 智能拼接
+    NSMutableString *finalKongString = [NSMutableString string];
+    for (int i = 0; i < dizhiArray.count; i++) {
+        NSString *dizhi = dizhiArray[i];
+        if (dizhi.length == 0) continue; // 忽略空字符串
+        
+        NSString *liuQin = (i < liuQinArray.count) ? liuQinArray[i] : @"";
+        
+        [finalKongString appendFormat:@"%@日干%@爻)", dizhi, liuQin];
+        
+        if (i < dizhiArray.count - 2) { // 考虑到 componentsSeparatedByString 会产生额外的空串
+            [finalKongString appendString:@"、"];
+        }
+    }
+    kong_formatted = finalKongString;
 
 } else {
-    // 如果没有拼接信息，走原始解析逻辑
-    NSRange bracketStartOriginal = [kongWangFull rangeOfString:@"("];
-    NSRange bracketEndOriginal = [kongWangFull rangeOfString:@")"];
-    if (bracketStartOriginal.location != NSNotFound && bracketEndOriginal.location != NSNotFound && bracketStartOriginal.location < bracketEndOriginal.location) {
-        xun = [kongWangFull substringWithRange:NSMakeRange(bracketStartOriginal.location + 1, bracketEndOriginal.location - bracketStartOriginal.location - 1)];
-        kong_formatted = [[kongWangFull substringToIndex:bracketStartOriginal.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    // 保持原始逻辑作为备用
+    NSRange bracketStart = [kongWangFull rangeOfString:@"("];
+    NSRange bracketEnd = [kongWangFull rangeOfString:@")"];
+    if (bracketStart.location != NSNotFound && bracketEnd.location != NSNotFound && bracketStart.location < bracketEnd.location) {
+        xun = [kongWangFull substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
+        kong_formatted = [[kongWangFull substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     } else {
         kong_formatted = [kongWangFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     }
 }
 
-
-// [MODIFIED] 采用您指定的最终输出格式
 [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong_formatted, xun, SafeString(reportData[@"昼夜"])];
 
+// ... 函数的其余部分保持不变 ...
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
     if (reportData[@"天地盘"]) [report appendFormat:@"// 2.1. 天地盘\n%@\n\n", reportData[@"天地盘"]];
@@ -1023,13 +1007,27 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [self extractTimeInfoWithCompletion:^{
         
         LogMessage(EchoLogTypeInfo, @"[盘面] 时间提取完成，开始解析其他基础信息...");
-        NSString *originalXunKong = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
-        NSString *switchedXunKong = [self extractSwitchedXunKongInfo];
+        // **关键修正：处理两种可能的顺序**
+        NSString *info1 = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
+        NSString *info2 = [self extractSwitchedXunKongInfo];
         
-        if (switchedXunKong.length > 0) {
-            g_extractedData[@"空亡"] = [NSString stringWithFormat:@"%@ | %@", originalXunKong, switchedXunKong];
+        NSString *xunKongInfo; // 格式如: "子丑 (甲寅旬)"
+        NSString *riKongInfo;  // 格式如: "乙卯日 父母妻财空"
+        
+        // 判断哪个是旬空，哪个是日空
+        if (([info1 containsString:@"旬"]) && ([info1 containsString:@"空"])) {
+            xunKongInfo = info1;
+            riKongInfo = info2;
         } else {
-            g_extractedData[@"空亡"] = originalXunKong;
+            xunKongInfo = info2;
+            riKongInfo = info1;
+        }
+        
+        // 确保两个信息都有效才拼接，否则只用有效的那个
+        if (xunKongInfo.length > 0 && riKongInfo.length > 0) {
+            g_extractedData[@"空亡"] = [NSString stringWithFormat:@"%@ | %@", xunKongInfo, riKongInfo];
+        } else {
+            g_extractedData[@"空亡"] = (xunKongInfo.length > 0) ? xunKongInfo : riKongInfo;
         }
 
         g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
@@ -1514,6 +1512,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
 
 
