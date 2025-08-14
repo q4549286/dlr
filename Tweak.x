@@ -1,10 +1,10 @@
-////// Filename: Echo_AnalysisEngine_v13.33_ChainAsyncFinal.xm
-// 描述: Echo 六壬解析引擎 v13.33 (链式异步最终修复版)。
-//      - [FIX] 彻底解决所有弹窗提取的逻辑冲突和竞态条件问题。
-//          - `extractKePanInfoWithCompletion`被完全重写，采用链式异步任务队列模型。不再一次性触发所有弹窗。
-//          - 现在脚本会按顺序、一次只触发一个弹窗。在前一个弹窗被拦截器处理并关闭后，才会触发下一个，保证了流程的绝对稳定。
-//          - `Tweak_presentViewController`中的智能拦截逻辑被保留，它可以正确处理队列中不同类型的弹窗（包括时间选择器）。
-//      - [STABILITY] 此方案是处理多个异步UI操作的标准模式，是目前最稳定可靠的实现。
+////// Filename: Echo_AnalysisEngine_v13.32_TrueSmartIntercept.xm
+// 描述: Echo 六壬解析引擎 v13.32 (真正智能拦截修复版)。
+//      - [FIX] 纠正v13.31的重大逻辑错误。之前版本错误地重构了数据提取流程，导致拦截器无法正确识别时间选择器。
+//          - 恢复了`extractKePanInfoWithCompletion`的正确异步链式结构，确保首先触发并等待时间提取完成。
+//          - 在`Tweak_presentViewController`中正确地加入了对`時間選擇視圖`的智能识别分支。
+//          - 现在，当时间选择器出现时，会被正确识别，并从其内部的UITextView提取数据，之后再继续执行其他弹窗的提取流程。
+//      - [STABILITY] 此版本应为时间提取问题的最终解决方案。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -75,10 +75,6 @@ static NSString *g_lastGeneratedReport = nil;
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES; 
 
-// For KePan Chain Extraction
-static NSMutableArray *g_kePan_workQueue = nil;
-static void (^g_kePan_completion_handler)(void) = nil;
-
 #define SafeString(str) (str ?: @"")
 
 #define SUPPRESS_LEAK_WARNING(code) \
@@ -98,6 +94,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // 板块一：基础盘元
     [report appendString:@"// 1. 基础盘元\n"];
     NSString *siZhuFull = SafeString(reportData[@"时间块"]);
+    // 修改时间块处理，以适应新的多行详细格式
     if (siZhuFull.length > 0) {
         [report appendString:@"// 1.1. 详细时间\n"];
         [report appendString:siZhuFull];
@@ -371,7 +368,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)processKeTiWorkQueue_S1;
 - (void)processKeChuanQueue_Truth_S2;
 - (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion;
-- (void)processKePanWorkQueue;
 - (NSString *)_echo_extractSiKeInfo;
 - (NSString *)_echo_extractSanChuanInfo;
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView;
@@ -475,13 +471,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         vcToPresent.view.alpha = 0.0f; animated = NO;
         
-        void (^extractionCompletion)(void) = ^{
-            if (completion) { completion(); }
-
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             NSString *vcClassName = NSStringFromClass([vcToPresent class]);
             NSString *title = vcToPresent.title ?: @"";
             
-            // 智能识别时间选择器 (优先)
+            // 智能识别时间选择器
             if ([vcClassName containsString:@"時間選擇視圖"]) {
                 LogMessage(EchoLogTypeInfo, @"[捕获] 识别到时间选择器: [%@]", title);
                 NSMutableArray<UITextView *> *textViews = [NSMutableArray array];
@@ -536,13 +530,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 LogMessage(EchoLogTypeInfo, @"[捕获] 发现未知弹窗 [%@]，内容已忽略。", title); 
             }
 
-            [vcToPresent dismissViewControllerAnimated:NO completion:^{
-                // 在弹窗关闭后，处理下一个任务
-                [self processKePanWorkQueue];
-            }];
-        };
-
-        Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion);
+            [vcToPresent dismissViewControllerAnimated:NO completion:nil];
+        });
+        Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
         return;
     }
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
@@ -1090,35 +1080,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 // MARK: - Task Launchers & Processors
 %new
-- (void)processKePanWorkQueue {
-    if (g_kePan_workQueue.count == 0) {
-        // 所有任务完成
-        if (g_kePan_completion_handler) {
-            g_kePan_completion_handler();
-            g_kePan_completion_handler = nil;
-        }
-        return;
-    }
-
-    NSString *selectorName = g_kePan_workQueue.firstObject;
-    [g_kePan_workQueue removeObjectAtIndex:0];
-    
-    SEL selector = NSSelectorFromString(selectorName);
-    if ([self respondsToSelector:selector]) {
-        LogMessage(EchoLogTypeInfo, @"[盘面队列] 正在触发: %@", selectorName);
-        dispatch_async(dispatch_get_main_queue(), ^{
-            SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]);
-        });
-    } else {
-        LogMessage(EchoLogTypeWarning, @"[盘面队列] 无法响应 %@，跳过。", selectorName);
-        // 即使失败也要继续下一个任务
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self processKePanWorkQueue];
-        });
-    }
-}
-
-%new
 - (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include completion:(void (^)(NSString *result))completion {
     g_s1_isExtracting = YES;
     g_s1_currentTaskType = taskType;
@@ -1302,25 +1263,34 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     g_extractedData = [NSMutableDictionary dictionary];
     
-    // 使用新的队列处理单个任务
-    g_kePan_workQueue = [@[selectorName] mutableCopy];
-    g_kePan_completion_handler = [^{
-        NSString *result = g_extractedData[taskName];
-        if (result.length > 0) {
-            NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
-            for (NSString *t in trash) { result = [result stringByReplacingOccurrencesOfString:t withString:@""]; }
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        SEL selector = NSSelectorFromString(selectorName);
+        if ([self respondsToSelector:selector]) {
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]);
+            });
+            [NSThread sleepForTimeInterval:0.5];
         } else {
-            LogMessage(EchoLogTypeWarning, @"[警告] %@ 分析失败或无内容。", taskName);
-            result = @"";
+            LogMessage(EchoLogError, @"[错误] 无法响应选择器 '%@'", selectorName);
         }
         
-        if (completion) {
-            completion(result);
-        }
-        
-        g_extractedData = nil;
-    } copy];
-    [self processKePanWorkQueue];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *result = g_extractedData[taskName];
+            if (result.length > 0) {
+                NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
+                for (NSString *t in trash) { result = [result stringByReplacingOccurrencesOfString:t withString:@""]; }
+            } else {
+                LogMessage(EchoLogTypeWarning, @"[警告] %@ 分析失败或无内容。", taskName);
+                result = @"";
+            }
+            
+            if (completion) {
+                completion(result);
+            }
+            
+            g_extractedData = nil;
+        });
+    });
 }
 %new
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion {
@@ -1432,51 +1402,68 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 
 // MARK: - Data Extraction Logic
+
 %new
 - (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion {
     g_extractedData = [NSMutableDictionary new];
-    LogMessage(EchoLogTypeInfo, @"[盘面] 开始构建基础信息提取队列...");
-    
-    g_kePan_workQueue = [@[
-        @"顯示時間選擇",
-        @"顯示法訣總覽",
-        @"顯示格局總覽",
-        @"顯示方法總覽",
-        @"顯示七政信息WithSender:",
-        @"顯示三宮時信息WithSender:"
-    ] mutableCopy];
+    LogMessage(EchoLogTypeInfo, @"[盘面] 开始解析基础信息...");
 
     __weak typeof(self) weakSelf = self;
-    g_kePan_completion_handler = [^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-
-        LogMessage(EchoLogTypeInfo, @"[盘面] 所有弹窗信息已捕获，开始提取静态信息...");
-
-        g_extractedData[@"月将"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
-        g_extractedData[@"空亡"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
-        g_extractedData[@"昼夜"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
-        g_extractedData[@"天地盘"] = [strongSelf extractTianDiPanInfo_V18];
-        g_extractedData[@"四课"] = [strongSelf _echo_extractSiKeInfo];
-        g_extractedData[@"三传"] = [strongSelf _echo_extractSanChuanInfo];
-
-        NSArray *keysToClean = @[@"毕法要诀", @"格局要览", @"解析方法"];
-        NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
-        for (NSString *key in keysToClean) {
-            NSString *value = g_extractedData[key];
-            if (value) {
-                for (NSString *t in trash) { value = [value stringByReplacingOccurrencesOfString:t withString:@""]; }
-                g_extractedData[key] = value;
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        // 1. 触发所有需要的弹窗
+        SEL selectors[] = {
+            NSSelectorFromString(@"顯示時間選擇"),
+            NSSelectorFromString(@"顯示法訣總覽"),
+            NSSelectorFromString(@"顯示格局總覽"),
+            NSSelectorFromString(@"顯示方法總覽"),
+            NSSelectorFromString(@"顯示七政信息WithSender:"),
+            NSSelectorFromString(@"顯示三宮時信息WithSender:")
+        };
+        
+        for (int i = 0; i < sizeof(selectors)/sizeof(SEL); ++i) {
+            SEL selector = selectors[i];
+            if ([self respondsToSelector:selector]) {
+                dispatch_sync(dispatch_get_main_queue(), ^{
+                    LogMessage(EchoLogTypeInfo, @"[盘面] 正在触发: %@", NSStringFromSelector(selector));
+                    SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]);
+                });
+                [NSThread sleepForTimeInterval:0.5]; // 等待弹窗动画和处理
             }
         }
         
-        LogMessage(EchoLogTypeSuccess, @"[盘面] 基础信息解析完成。");
-        if (completion) {
-            completion([g_extractedData mutableCopy]);
-        }
-    } copy];
+        // 2. 所有弹窗处理完后，回到主线程整合数据
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
 
-    [self processKePanWorkQueue];
+            LogMessage(EchoLogTypeInfo, @"[盘面] 所有弹窗信息已捕获，开始提取静态信息...");
+
+            // 3. 提取界面上的静态信息
+            g_extractedData[@"月将"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
+            g_extractedData[@"空亡"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
+            g_extractedData[@"昼夜"] = [strongSelf extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
+            g_extractedData[@"天地盘"] = [strongSelf extractTianDiPanInfo_V18];
+            g_extractedData[@"四课"] = [strongSelf _echo_extractSiKeInfo];
+            g_extractedData[@"三传"] = [strongSelf _echo_extractSanChuanInfo];
+
+            // 4. 清理数据并回调
+            NSArray *keysToClean = @[@"毕法要诀", @"格局要览", @"解析方法"];
+            NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
+            for (NSString *key in keysToClean) {
+                NSString *value = g_extractedData[key];
+                if (value) {
+                    for (NSString *t in trash) { value = [value stringByReplacingOccurrencesOfString:t withString:@""]; }
+                    g_extractedData[key] = value;
+                }
+            }
+            
+            LogMessage(EchoLogTypeSuccess, @"[盘面] 基础信息解析完成。");
+            if (completion) {
+                completion([g_extractedData mutableCopy]);
+            }
+        });
+    });
 }
 
 %new
@@ -1669,7 +1656,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.32 (SmartInterceptFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.32 (TrueSmartIntercept) 已加载。");
     }
 }
-
