@@ -77,8 +77,6 @@ static NSString *g_lastGeneratedReport = nil;
 
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES; 
-static BOOL g_isExtractingTimeDetail = NO; // 专门用于时间提取的状态标志
-static void (^g_timeDetailCompletionHandler)(void) = nil; // 时间提取的回调
 
 #define SafeString(str) (str ?: @"")
 
@@ -1663,3 +1661,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.44 (FinalDualExtractFix) 已加载。");
     }
 }
+
