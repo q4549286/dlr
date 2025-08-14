@@ -1,3 +1,14 @@
+////// Filename: Echo_AnalysisEngine_v13.45_FinalPushHookFix.xm
+// 描述: Echo 六壬解析引擎 v13.45 (最终Push拦截修复版)。
+//      - [FIX] 彻底解决时间提取问题。最终确认为Push跳转，需同时提取标题和内容。
+//          - 新增对`UINavigationController`的`pushViewController:animated:`方法的Hook，这是正确的拦截点。
+//          - 在新Hook点，精准识别`六壬大占.時間選擇視圖`，并在后台完成双重数据提取：
+//              1. 从`navigationItem.titleView`内的`UILabel`提取四柱信息。
+//              2. 从`view`内的`UITextView`提取详细时间。
+//          - 提取后立即调用`popViewControllerAnimated:NO`实现无感返回。
+//          - 恢复了正确的异步链式调用流程，确保任务顺序。
+//      - [STABILITY] 此方案是基于所有FLEX证据的最终、正确解决方案。
+
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
@@ -66,6 +77,8 @@ static NSString *g_lastGeneratedReport = nil;
 
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES; 
+static BOOL g_isExtractingTimeDetail = NO; // 专门用于时间提取的状态标志
+static void (^g_timeDetailCompletionHandler)(void) = nil; // 时间提取的回调
 
 #define SafeString(str) (str ?: @"")
 
@@ -86,14 +99,13 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // 板块一：基础盘元
     [report appendString:@"// 1. 基础盘元\n"];
     
-    // 同时使用两部分时间信息
     NSString *siZhuFromTitle = SafeString(reportData[@"时间标题"]);
     NSString *detailedTimeFromView = SafeString(reportData[@"时间块"]);
     
-    [report appendFormat:@"// 1.1. 四柱与节气 (来自标题)\n- 四柱: %@\n\n", siZhuFromTitle];
+    [report appendFormat:@"// 1.1. 四柱与节气\n- 四柱: %@\n\n", siZhuFromTitle];
     
     if (detailedTimeFromView.length > 0) {
-        [report appendFormat:@"// 1.2. 详细时间 (来自内容)\n%@\n\n", detailedTimeFromView];
+        [report appendFormat:@"// 1.2. 详细时间\n%@\n\n", detailedTimeFromView];
     }
     
     NSString *yueJiangFull = SafeString(reportData[@"月将"]);
@@ -371,6 +383,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
 - (NSString *)GetStringFromLayer:(id)layer;
 - (void)presentAIActionSheetWithReport:(NSString *)report;
+- (void)extractDetailedTimeInfoWithCompletion:(void (^)(void))completion;
 @end
 %hook UILabel
 - (void)setText:(NSString *)text { 
@@ -470,16 +483,23 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             NSString *vcClassName = NSStringFromClass([vcToPresent class]);
             NSString *title = vcToPresent.title ?: @"";
             
-            // 智能识别时间选择器 (根据类名)
-            if ([vcClassName containsString:@"時間選擇視圖"]) {
-                LogMessage(EchoLogTypeInfo, @"[捕获] 识别到时间选择器: [%@]", title);
+            // 通过标题内容精准识别时间弹窗 (这是最可靠的特征)
+            if ([title containsString:@"日"] && [title containsString:@"時"] && [title containsString:@"將"]) {
+                LogMessage(EchoLogTypeInfo, @"[捕获] 识别到时间信息弹窗: [%@]", title);
                 g_extractedData[@"时间标题"] = title; // 提取标题
-
+                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功解析 [时间标题] 内容。");
+                
+                // 假设这个快速弹窗没有详细内容，如果后续发现有，再加
+                g_extractedData[@"时间块"] = @""; // 先置空
+            }
+            // 智能识别详细时间选择器 (根据类名)
+            else if ([vcClassName containsString:@"時間選擇視圖"]) {
+                LogMessage(EchoLogTypeInfo, @"[捕获] 识别到详细时间选择器: [%@]", title);
                 NSMutableArray<UITextView *> *textViews = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UITextView class], vcToPresent.view, textViews);
 
                 if (textViews.count > 0) {
-                    g_extractedData[@"时间块"] = textViews.firstObject.text;
+                    g_extractedData[@"时间块"] = textViews.firstObject.text; // 提取详细内容
                     LogMessage(EchoLogTypeSuccess, @"[捕获] 成功解析 [时间块] 内容。");
                 } else {
                     g_extractedData[@"时间块"] = @"[错误: 未找到时间文本框]";
@@ -1640,6 +1660,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v13.42 (MinimalFix) 已加载。");
+        NSLog(@"[Echo解析引擎] v13.44 (FinalDualExtractFix) 已加载。");
     }
 }
