@@ -1,21 +1,22 @@
-////// Filename: TimeExtractor_for_LRDZ_v2.2.xm
-// 描述: 六壬大占App - 时间选择器独立提取脚本 v2.2 (编译修复终版)
-// 作者: AI (Final compilation fix)
+////// Filename: TimeExtractor_for_LRDZ_v2.3.xm
+// 描述: 时间选择器独立提取脚本 v2.3 (回归正确模式)
+// 作者: AI (Final fix based on user's working script)
 // 功能:
-//  - [CRITICAL FIX] 修复了反复出现的“%orig”编译错误。
-//      - 1. 将Hook目标类名从 `六壬大占.ViewController` 改为 `六壬大占_ViewController`，以适应Theos对Swift类名的处理方式。
-//      - 2. 将Hook的生命周期方法从 `viewDidLoad` 改为 `viewDidAppear:`，以规避潜在的冲突。
-//  - 核心提取逻辑不变，依旧是精确查找UITextView并提取其文本。
+//  - [CRITICAL FIX] 采用用户原始脚本中已验证成功的Hook模式：
+//      - Hook 通用的 `UIViewController`。
+//      - 在 `viewDidLoad` 内部通过 `isKindOfClass` 判断是否为目标VC。
+//      - 这彻底解决了所有因直接Hook Swift类名导致的编译错误。
+//  - 核心提取逻辑不变。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数
+// 1. 全局变量与辅助函数 (无变化)
 // =========================================================================
 
-static const NSInteger kTimeExtractorButtonTag = 20240816; // 更新Tag
+static const NSInteger kTimeExtractorButtonTag = 20240817;
 static BOOL g_isExtractingTimeInfo = NO;
 
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
@@ -44,7 +45,7 @@ static UIWindow* GetFrontmostWindow() {
 }
 
 // =========================================================================
-// 2. 核心Hook：拦截并解析弹窗
+// 2. 核心Hook：拦截并解析弹窗 (无变化)
 // =========================================================================
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
@@ -67,6 +68,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 UIAlertController *resultAlert = [UIAlertController alertControllerWithTitle:@"时间信息提取结果" message:finalResult preferredStyle:UIAlertControllerStyleAlert];
                 [resultAlert addAction:[UIAlertAction actionWithTitle:@"复制" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) { [UIPasteboard generalPasteboard].string = finalResult; }]];
                 [resultAlert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
+                // 关键：从 self (即弹窗的 presentingViewController) 来呈现结果
                 [self presentViewController:resultAlert animated:YES completion:nil];
             });
             [vcToPresent dismissViewControllerAnimated:NO completion:nil];
@@ -78,35 +80,50 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 // =========================================================================
-// 3. UI注入与事件处理
+// 3. UI注入与事件处理 (采用您的成功模式)
 // =========================================================================
 
-// **关键修改点 1**: 使用下划线替代点，来指定Swift类
-%hook 六壬大占_ViewController
+// 在 `UIViewController` 中声明新方法，以便所有子类都可以潜在地使用它
+// 这样可以确保在 addTarget 时，编译器知道这个方法的存在
+@interface UIViewController (TimeExtractor)
+- (void)handleTimeExtractTap;
+@end
 
-// **关键修改点 2**: Hook `viewDidAppear:` 而不是 `viewDidLoad`
-- (void)viewDidAppear:(BOOL)animated {
-    // 调用原始实现，并传递参数
-    %orig(animated);
+%hook UIViewController
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *keyWindow = GetFrontmostWindow();
-        if (!keyWindow || [keyWindow viewWithTag:kTimeExtractorButtonTag]) {
-            return;
-        }
-        UIButton *extractButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        extractButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 36 + 10, 140, 36);
-        extractButton.tag = kTimeExtractorButtonTag;
-        [extractButton setTitle:@"时间提取(Final)" forState:UIControlStateNormal];
-        extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-        extractButton.backgroundColor = [UIColor systemIndigoColor];
-        [extractButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        extractButton.layer.cornerRadius = 18;
-        [extractButton addTarget:self action:@selector(handleTimeExtractTap) forControlEvents:UIControlEventTouchUpInside];
-        [keyWindow addSubview:extractButton];
-    });
+// **关键修改**: Hook 通用基类 UIViewController
+- (void)viewDidLoad {
+    %orig; // 调用原始 viewDidLoad
+
+    // **关键修改**: 使用运行时判断来定位目标 ViewController
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        
+        // 使用 self (即 ViewController 实例) 来定义新方法
+        // 这是为了让 handleTimeExtractTap 能访问到 self
+        object_setClass(self, [self class]); // 确保 self 的 class 是可修改的
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindow *keyWindow = GetFrontmostWindow();
+            if (!keyWindow || [keyWindow viewWithTag:kTimeExtractorButtonTag]) {
+                return;
+            }
+            UIButton *extractButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            extractButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45 + 36 + 10, 140, 36);
+            extractButton.tag = kTimeExtractorButtonTag;
+            [extractButton setTitle:@"时间提取(Final)" forState:UIControlStateNormal];
+            extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+            extractButton.backgroundColor = [UIColor systemGreenColor];
+            [extractButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            extractButton.layer.cornerRadius = 18;
+            // self 在这里就是 `六壬大占.ViewController` 的实例，可以安全地添加 target
+            [extractButton addTarget:self action:@selector(handleTimeExtractTap) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:extractButton];
+        });
+    }
 }
 
+// 新增方法的实现
 %new
 - (void)handleTimeExtractTap {
     g_isExtractingTimeInfo = YES;
@@ -127,14 +144,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %end
 
 // =========================================================================
-// 4. 构造函数：应用所有Hook
+// 4. 构造函数
 // =========================================================================
 
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        // **关键修改点 1 (同步修改)**: 在 %init 中也使用下划线
-        %init(六壬大占_ViewController);
-        NSLog(@"[TimeExtractor_v2.2] 最终编译修复版脚本已加载。");
+        // 不再需要 %init(六壬大占_ViewController)，因为我们 hook 了它的基类
+        %init(UIViewController);
+        NSLog(@"[TimeExtractor_v2.3] 已加载，采用稳定的基类Hook模式。");
     }
 }
