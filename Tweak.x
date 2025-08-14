@@ -1,8 +1,8 @@
-////// Filename: Echo_AnalysisEngine_v13.23_Final_Full_Corrected.xm
+////// Filename: Echo_AnalysisEngine_v13.23_Final_Corrected_v2.xm
 // 描述: Echo 六壬解析引擎 v13.23
-//      - [CRITICAL FIX] 修复了异步流程和旬空切换的最终逻辑。
-//      - [CRITICAL FIX] 恢复了之前被意外删除的所有常量定义，解决编译错误。
-//      - [STABILITY] 继承之前所有功能和修复。
+//      - [CRITICAL FIX] 最终修正版。根据用户提示，将“切换旬日”方法的调用目标修正为 ViewController (self)，与其他功能调用方式保持一致。
+//      - 修复了异步流程问题。
+//      - 包含了所有常量定义。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -900,8 +900,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     });
 }
 
-
-// MARK - Task Launchers & Processors
 %new
 - (void)extractTimeInfoWithCompletion:(void (^)(void))completion {
     LogMessage(EchoLogTypeInfo, @"[盘面] 开始通过弹窗提取时间信息...");
@@ -932,59 +930,28 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 %new
 - (NSString *)extractSwitchedXunKongInfo {
-    Class leftColumnViewClass = NSClassFromString(@"六壬大占.左列視圖");
-    if (!leftColumnViewClass) {
-        LogMessage(EchoLogTypeWarning, @"[旬空] 未找到“左列視圖”类。");
-        return @"";
-    }
-    
-    NSMutableArray *leftColumnViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(leftColumnViewClass, self.view, leftColumnViews);
-    
-    if (leftColumnViews.count == 0) {
-        LogMessage(EchoLogTypeWarning, @"[旬空] 未找到“左列視圖”实例。");
-        return @"";
-    }
-    
-    UIView *leftColumnView = leftColumnViews.firstObject;
-    
+    // 关键修正：直接在 self (ViewController) 上调用
     SEL switchSelector = NSSelectorFromString(@"切换旬日");
-    if ([leftColumnView respondsToSelector:switchSelector]) {
-        LogMessage(EchoLogTypeInfo, @"[旬空] 在“左列視圖”上找到切换方法，正在模拟点击...");
+    if ([self respondsToSelector:switchSelector]) {
+        LogMessage(EchoLogTypeInfo, @"[旬空] 在 ViewController 上找到切换方法，正在模拟点击...");
         
-        SUPPRESS_LEAK_WARNING([leftColumnView performSelector:switchSelector]);
+        // 调用方法，模拟点击
+        SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
+        
+        // UI更新可能需要一个运行循环周期，所以我们延迟一小下
         [NSThread sleepForTimeInterval:0.1];
         
-        Class xunKongViewClass = NSClassFromString(@"六壬大占.旬空視圖");
-        if (!xunKongViewClass) return @"";
-        
-        NSMutableArray *xunKongViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(xunKongViewClass, leftColumnView, xunKongViews);
-        if (xunKongViews.count == 0) return @"";
-        
-        UIView *xunKongView = xunKongViews.firstObject;
-        NSMutableArray *labelsInView = [NSMutableArray array];
-        FindSubviewsOfClassRecursive([UILabel class], xunKongView, labelsInView);
-        [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-            return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-        }];
-        
-        NSMutableArray *textParts = [NSMutableArray array];
-        for (UILabel *label in labelsInView) {
-            if (label.text && label.text.length > 0) {
-                [textParts addObject:label.text];
-            }
-        }
-        
-        NSString *switchedText = [textParts componentsJoinedByString:@" "];
+        // 再次从旬空视图中提取文本
+        NSString *switchedText = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
         LogMessage(EchoLogTypeSuccess, @"[旬空] 成功提取切换后信息: %@", switchedText);
         
-        SUPPRESS_LEAK_WARNING([leftColumnView performSelector:switchSelector]);
+        // 再次调用，把它切换回去，避免影响App的正常状态
+        SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
 
         return switchedText;
         
     } else {
-        LogMessage(EchoLogTypeWarning, @"[旬空] 在“左列視圖”上未找到 '切换旬日' 方法。");
+        LogMessage(EchoLogTypeWarning, @"[旬空] 在 ViewController 上未找到 '切换旬日' 方法。");
         return @"";
     }
 }
@@ -993,6 +960,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion {
     g_extractedData = [NSMutableDictionary dictionary];
     
+    // **关键修改**: 重构流程，确保同步执行
     [self extractTimeInfoWithCompletion:^{
         
         LogMessage(EchoLogTypeInfo, @"[盘面] 时间提取完成，开始解析其他基础信息...");
@@ -1042,8 +1010,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         });
     }];
 }
-
-// ... (其余所有方法，如 startS1Extraction, executeSimpleExtraction, _echo_extractSiKeInfo 等，都保持原样) ...
 
 %new
 - (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include completion:(void (^)(NSString *result))completion {
