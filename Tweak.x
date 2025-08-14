@@ -291,7 +291,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
     NSString *nianMing = reportData[@"行年参数"];
     if (nianMing.length > 0) {
-        [auxiliaryContent appendFormat:@"// 5.3. 行年参数\n%@\n\n", nianming];
+        [auxiliaryContent appendFormat:@"// 5.3. 行年参数\n%@\n\n", nianMing];
     }
     
     if (auxiliaryContent.length > 0) {
@@ -1800,3 +1800,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final UI + Time/XunKong Extract) 已加载。");
     }
 }
+
