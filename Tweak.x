@@ -121,7 +121,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // 【【【【【【【【 最终版、经过验证的旬空处理逻辑 】】】】】】】】
     // =========================================================================
     
-  NSString *kongWangFull = SafeString(reportData[@"空亡"]);
+     NSString *kongWangFull = SafeString(reportData[@"空亡"]);
     NSString *xun = @"";
     NSString *kong_formatted = @"";
 
@@ -130,59 +130,56 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         NSString *xunKongInfo = parts[0]; // "子丑 (甲寅旬)"
         NSString *riKongInfo = parts[1];  // "乙卯日 父母妻财空"
 
-        // 1. 从 xunKongInfo 中解析出空亡地支和旬
         NSString *kong_dizhi_str = @"";
-        NSError *error = NULL;
+        NSString *liuQinPart = @"";
         
-        // 正则表达式: 匹配括号外面的所有非空白字符 (地支)
-        NSRegularExpression *dizhiRegex = [NSRegularExpression regularExpressionWithPattern:@"^\\s*([^\\(]+)" options:0 error:&error];
-        NSTextCheckingResult *dizhiMatch = [dizhiRegex firstMatchInString:xunKongInfo options:0 range:NSMakeRange(0, xunKongInfo.length)];
-        if (dizhiMatch) {
-            kong_dizhi_str = [[xunKongInfo substringWithRange:[dizhiMatch rangeAtIndex:1]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        }
-        
-        // 正则表达式: 匹配括号内的内容 (旬)
-        NSRegularExpression *xunRegex = [NSRegularExpression regularExpressionWithPattern:@"\\(([^\\)]+)\\)" options:0 error:&error];
-        NSTextCheckingResult *xunMatch = [xunRegex firstMatchInString:xunKongInfo options:0 range:NSMakeRange(0, xunKongInfo.length)];
-        if (xunMatch) {
-            xun = [xunKongInfo substringWithRange:[xunMatch rangeAtIndex:1]];
-        }
-        
-        // 2. 从 riKongInfo 中解析出六亲
-        NSString *liuQinPart = riKongInfo;
-        NSRange dayRange = [liuQinPart rangeOfString:@"日 "];
-        if (dayRange.location != NSNotFound) {
-            liuQinPart = [liuQinPart substringFromIndex:dayRange.location + dayRange.length];
-        }
-        liuQinPart = [liuQinPart stringByReplacingOccurrencesOfString:@"空" withString:@""];
-
-        // 3. 构建地支数组
-        NSMutableArray *dizhiArray = [NSMutableArray array];
-        [kong_dizhi_str enumerateSubstringsInRange:NSMakeRange(0, [kong_dizhi_str length]) 
-                                           options:NSStringEnumerationByComposedCharacterSequences 
-                                        usingBlock:^(NSString *substring, NSRange substringRange, NSRange enclosingRange, BOOL *stop) {
-            [dizhiArray addObject:substring];
-        }];
-
-        // 4. 构建六亲数组
-        NSMutableArray *liuQinArray = [NSMutableArray array];
-        for (NSUInteger i = 0; i + 2 <= liuQinPart.length; i += 2) {
-            [liuQinArray addObject:[liuQinPart substringWithRange:NSMakeRange(i, 2)]];
-        }
-        
-        // 5. 智能拼接
-        NSMutableString *finalKongString = [NSMutableString string];
-        for (NSUInteger i = 0; i < dizhiArray.count; i++) {
-            NSString *dizhi = dizhiArray[i];
-            NSString *liuQin = (i < liuQinArray.count) ? liuQinArray[i] : @"";
-            
-            [finalKongString appendFormat:@"%@日干%@爻)", dizhi, liuQin];
-            
-            if (i < dizhiArray.count - 1) {
-                [finalKongString appendString:@"、"];
+        @try {
+            // 1. 使用正则表达式精准提取地支和旬
+            NSRegularExpression *xunRegex = [NSRegularExpression regularExpressionWithPattern:@"^\\s*([^\\(]+)\\s*\\(([^\\)]+)\\)" options:0 error:NULL];
+            NSTextCheckingResult *xunMatch = [xunRegex firstMatchInString:xunKongInfo options:0 range:NSMakeRange(0, xunKongInfo.length)];
+            if (xunMatch && [xunMatch numberOfRanges] == 3) {
+                kong_dizhi_str = [xunKongInfo substringWithRange:[xunMatch rangeAtIndex:1]]; // 捕获组1: 子丑
+                xun = [xunKongInfo substringWithRange:[xunMatch rangeAtIndex:2]];             // 捕获组2: 甲寅旬
             }
+
+            // 2. 使用正则表达式精准提取六亲
+            NSRegularExpression *riKongRegex = [NSRegularExpression regularExpressionWithPattern:@"日\\s+(.*)空" options:0 error:NULL];
+            NSTextCheckingResult *riKongMatch = [riKongRegex firstMatchInString:riKongInfo options:0 range:NSMakeRange(0, riKongInfo.length)];
+            if (riKongMatch && [riKongMatch numberOfRanges] == 2) {
+                liuQinPart = [riKongInfo substringWithRange:[riKongMatch rangeAtIndex:1]]; // 捕获组1: 父母妻财
+            }
+            
+            // 3. 构建地支数组
+            NSMutableArray *dizhiArray = [NSMutableArray array];
+            [kong_dizhi_str enumerateSubstringsInRange:NSMakeRange(0, [kong_dizhi_str length]) 
+                                               options:NSStringEnumerationByComposedCharacterSequences 
+                                            usingBlock:^(NSString *substring, NSRange substringRange, NSRange enclosingRange, BOOL *stop) {
+                [dizhiArray addObject:substring];
+            }];
+
+            // 4. 构建六亲数组
+            NSMutableArray *liuQinArray = [NSMutableArray array];
+            for (NSUInteger i = 0; i + 2 <= liuQinPart.length; i += 2) {
+                [liuQinArray addObject:[liuQinPart substringWithRange:NSMakeRange(i, 2)]];
+            }
+            
+            // 5. 智能拼接
+            NSMutableString *finalKongString = [NSMutableString string];
+            for (NSUInteger i = 0; i < dizhiArray.count; i++) {
+                NSString *dizhi = dizhiArray[i];
+                NSString *liuQin = (i < liuQinArray.count) ? liuQinArray[i] : @"";
+                
+                [finalKongString appendFormat:@"%@日干%@爻)", dizhi, liuQin];
+                
+                if (i < dizhiArray.count - 1) {
+                    [finalKongString appendString:@"、"];
+                }
+            }
+            kong_formatted = finalKongString;
+        } @catch (NSException *exception) {
+            // 如果正则表达式失败，回退到原始显示
+            kong_formatted = kongWangFull;
         }
-        kong_formatted = finalKongString;
 
     } else {
         // 备用逻辑
@@ -1508,6 +1505,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
 
 
