@@ -1,3 +1,10 @@
+////// Filename: Echo_AnalysisEngine_v13.23_Final_Corrected_v3.xm
+// 描述: Echo 六壬解析引擎 v13.23
+//      - [CRITICAL FIX] 最终修正版 v3。重写了旬空信息的提取和解析逻辑，彻底解决格式错乱问题。
+//      - 新增智能提取函数 extractStructuredXunKongText，保证初始旬空格式的正确性。
+//      - 修正了异步流程问题。
+//      - 包含了所有常量定义和UI代码。
+
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
@@ -81,7 +88,6 @@ static NSString *getAIPromptHeader() {
 return          @"v46.0 · 终局版 · 完整Prompt\n"
 
         @"请准备接收包含所有细节的标准化课盘，我将执行全新架构下的专业深度分析！\n";}
-// [MODIFIED] 完整替换 generateStructuredReport 函数 (旬空解析最终修正版)
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
 
@@ -126,23 +132,20 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *xun = @"";
     NSString *kong = @"";
     
-    // **关键修改**: 使用更简单的解析逻辑
     NSRange bracketStart = [mainXunKongPart rangeOfString:@"("];
     if (bracketStart.location != NSNotFound) {
         kong = [[mainXunKongPart substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         
         NSRange bracketEnd = [mainXunKongPart rangeOfString:@")"];
-        if (bracketEnd.location != NSNotFound) {
+        if (bracketEnd.location != NSNotFound && bracketStart.location < bracketEnd.location) {
              xun = [mainXunKongPart substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
         }
     } else {
-        // 备用方案
         kong = [mainXunKongPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     }
 
     [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)%@\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, switchedXunKongInfo, SafeString(reportData[@"昼夜"])];
-    // ... 函数的其余部分保持不变 ...
-    
+
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
     if (reportData[@"天地盘"]) [report appendFormat:@"// 2.1. 天地盘\n%@\n\n", reportData[@"天地盘"]];
@@ -295,7 +298,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 }
 
 
-
 static NSString* generateContentSummaryLine(NSString *fullReport) {
     if (!fullReport || fullReport.length == 0) return @"";
     NSDictionary *keywordMap = @{ @"// 1. 基础盘元": @"基础盘元", @"// 2. 核心盘架": @"核心盘架", @"// 3. 格局总览": @"格局总览", @"// 4. 爻位详解": @"爻位详解", @"// 4.6. 神将详解": @"课传详解", @"// 5. 辅助系统": @"辅助系统", @"// 5.3. 行年参数": @"行年参数"};
@@ -403,6 +405,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion;
 - (void)extractTimeInfoWithCompletion:(void (^)(void))completion;
 - (NSString *)extractSwitchedXunKongInfo;
+- (NSString *)extractStructuredXunKongText;
 - (NSString *)_echo_extractSiKeInfo;
 - (NSString *)_echo_extractSanChuanInfo;
 - (NSString *)formatNianmingGejuFromView:(UIView *)contentView;
@@ -612,45 +615,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         });
     }
 }
-// [MODIFIED] 新增一个智能的旬空文本提取函数
-%new
-- (NSString *)extractStructuredXunKongText {
-    Class xunKongViewClass = NSClassFromString(@"六壬大占.旬空視圖");
-    if (!xunKongViewClass) return @"";
-    
-    NSMutableArray *xunKongViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(xunKongViewClass, self.view, xunKongViews);
-    if (xunKongViews.count == 0) return @"";
-    
-    UIView *xunKongView = xunKongViews.firstObject;
-    NSMutableArray *labels = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UILabel class], xunKongView, labels);
 
-    NSString *kongText = @"";
-    NSString *xunText = @"";
-
-    for (UILabel *label in labels) {
-        NSString *text = label.text;
-        if (!text || text.length == 0) continue;
-
-        // 智能判断内容
-        if ([text hasPrefix:@"("] && [text hasSuffix:@")"]) {
-            // 括号里的内容是旬名，例如 "(甲寅旬)"
-            xunText = text;
-        } else if (![text containsString:@":"]) {
-            // 没有冒号的，通常是旬空对，例如 "子丑"
-            kongText = text;
-        }
-    }
-    
-    // 拼接成标准格式
-    if (kongText.length > 0 && xunText.length > 0) {
-        return [NSString stringWithFormat:@"%@ %@", kongText, xunText]; // 返回 "子丑 (甲寅旬)"
-    } else {
-        // 如果无法智能识别，则退回旧的拼接方式
-        return [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
-    }
-}
+// MARK: - UI Creation and Layout
 %new
 - (void)createOrShowMainControlPanel {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
@@ -935,6 +901,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     });
 }
 
+
 %new
 - (void)extractTimeInfoWithCompletion:(void (^)(void))completion {
     LogMessage(EchoLogTypeInfo, @"[盘面] 开始通过弹窗提取时间信息...");
@@ -963,25 +930,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-// [MODIFIED] 完整替换 extractSwitchedXunKongInfo 函数，采用手动恢复UI状态的策略
-// [MODIFIED] 修改 extractSwitchedXunKongInfo，让它不再需要手动恢复UI
 %new
 - (NSString *)extractSwitchedXunKongInfo {
     SEL switchSelector = NSSelectorFromString(@"切換旬日");
     if ([self respondsToSelector:switchSelector]) {
         LogMessage(EchoLogTypeInfo, @"[旬空] 在 ViewController 上找到切换方法，正在模拟点击...");
         
-        // 调用方法，切换UI
         SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
         [NSThread sleepForTimeInterval:0.1];
         
-        // 提取切换后的文本（此时格式是 "乙卯日 父母妻财空"）
         NSString *switchedText = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
         LogMessage(EchoLogTypeSuccess, @"[旬空] 成功提取切换后信息: %@", switchedText);
         
-        // 再次调用，把它切换回去
         SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
-        [NSThread sleepForTimeInterval:0.1]; // 等待UI切换回来
+        [NSThread sleepForTimeInterval:0.1];
 
         return switchedText;
         
@@ -991,7 +953,40 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-// [MODIFIED] 修改 extractKePanInfoWithCompletion，调用新的智能提取函数
+%new
+- (NSString *)extractStructuredXunKongText {
+    Class xunKongViewClass = NSClassFromString(@"六壬大占.旬空視圖");
+    if (!xunKongViewClass) return @"";
+    
+    NSMutableArray *xunKongViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(xunKongViewClass, self.view, xunKongViews);
+    if (xunKongViews.count == 0) return @"";
+    
+    UIView *xunKongView = xunKongViews.firstObject;
+    NSMutableArray *labels = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], xunKongView, labels);
+
+    NSString *kongText = @"";
+    NSString *xunText = @"";
+
+    for (UILabel *label in labels) {
+        NSString *text = label.text;
+        if (!text || text.length == 0) continue;
+
+        if ([text hasPrefix:@"("] && [text hasSuffix:@")"]) {
+            xunText = text;
+        } else if (![text containsString:@":"]) {
+            kongText = text;
+        }
+    }
+    
+    if (kongText.length > 0 && xunText.length > 0) {
+        return [NSString stringWithFormat:@"%@ %@", kongText, xunText];
+    } else {
+        return [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
+    }
+}
+
 %new
 - (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion {
     g_extractedData = [NSMutableDictionary dictionary];
@@ -999,8 +994,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [self extractTimeInfoWithCompletion:^{
         
         LogMessage(EchoLogTypeInfo, @"[盘面] 时间提取完成，开始解析其他基础信息...");
-        
-        // **关键修改**：使用新的智能提取函数获取格式正确的初始旬空文本
         NSString *originalXunKong = [self extractStructuredXunKongText];
         NSString *switchedXunKong = [self extractSwitchedXunKongInfo];
         
@@ -1012,7 +1005,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
         g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
         g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
-        // ... (其余部分保持不变) ...
         g_extractedData[@"天地盘"] = [self extractTianDiPanInfo_V18];
         g_extractedData[@"四课"] = [self _echo_extractSiKeInfo];
         g_extractedData[@"三传"] = [self _echo_extractSanChuanInfo];
@@ -1049,6 +1041,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }];
 }
 
+// ... (Rest of the file remains the same) ...
 %new
 - (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include completion:(void (^)(NSString *result))completion {
     g_s1_isExtracting = YES;
@@ -1493,9 +1486,3 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
-
-
-
-
-
-
