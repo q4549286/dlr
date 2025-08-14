@@ -625,7 +625,45 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         });
     }
 }
+// [MODIFIED] 新增一个智能的旬空文本提取函数
+%new
+- (NSString *)extractStructuredXunKongText {
+    Class xunKongViewClass = NSClassFromString(@"六壬大占.旬空視圖");
+    if (!xunKongViewClass) return @"";
+    
+    NSMutableArray *xunKongViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(xunKongViewClass, self.view, xunKongViews);
+    if (xunKongViews.count == 0) return @"";
+    
+    UIView *xunKongView = xunKongViews.firstObject;
+    NSMutableArray *labels = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], xunKongView, labels);
 
+    NSString *kongText = @"";
+    NSString *xunText = @"";
+
+    for (UILabel *label in labels) {
+        NSString *text = label.text;
+        if (!text || text.length == 0) continue;
+
+        // 智能判断内容
+        if ([text hasPrefix:@"("] && [text hasSuffix:@")"]) {
+            // 括号里的内容是旬名，例如 "(甲寅旬)"
+            xunText = text;
+        } else if (![text containsString:@":"]) {
+            // 没有冒号的，通常是旬空对，例如 "子丑"
+            kongText = text;
+        }
+    }
+    
+    // 拼接成标准格式
+    if (kongText.length > 0 && xunText.length > 0) {
+        return [NSString stringWithFormat:@"%@ %@", kongText, xunText]; // 返回 "子丑 (甲寅旬)"
+    } else {
+        // 如果无法智能识别，则退回旧的拼接方式
+        return [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
+    }
+}
 %new
 - (void)createOrShowMainControlPanel {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
@@ -939,54 +977,24 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 // [MODIFIED] 完整替换 extractSwitchedXunKongInfo 函数，采用手动恢复UI状态的策略
+// [MODIFIED] 修改 extractSwitchedXunKongInfo，让它不再需要手动恢复UI
 %new
 - (NSString *)extractSwitchedXunKongInfo {
-    // 目标是在 ViewController (self) 上调用方法
-    SEL switchSelector = NSSelectorFromString(@"切換旬日"); // 使用繁体
+    SEL switchSelector = NSSelectorFromString(@"切換旬日");
     if ([self respondsToSelector:switchSelector]) {
         LogMessage(EchoLogTypeInfo, @"[旬空] 在 ViewController 上找到切换方法，正在模拟点击...");
         
-        // 步骤1: 找到旬空视图，并保存其初始文本
-        Class xunKongViewClass = NSClassFromString(@"六壬大占.旬空視圖");
-        if (!xunKongViewClass) return @"";
-        
-        NSMutableArray *xunKongViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(xunKongViewClass, self.view, xunKongViews);
-        if (xunKongViews.count == 0) return @"";
-        
-        UIView *xunKongView = xunKongViews.firstObject;
-        
-        // 遍历所有 UILabel，保存初始状态
-        NSMutableArray *initialLabels = [NSMutableArray array];
-        FindSubviewsOfClassRecursive([UILabel class], xunKongView, initialLabels);
-        NSMutableArray *initialTexts = [NSMutableArray array];
-        for (UILabel *label in initialLabels) {
-            [initialTexts addObject:label.text ?: @""];
-        }
-
-        // 步骤2: 调用方法，切换UI
+        // 调用方法，切换UI
         SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
-        [NSThread sleepForTimeInterval:0.1]; // 等待UI更新
+        [NSThread sleepForTimeInterval:0.1];
         
-        // 步骤3: 提取切换后的文本
+        // 提取切换后的文本（此时格式是 "乙卯日 父母妻财空"）
         NSString *switchedText = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
         LogMessage(EchoLogTypeSuccess, @"[旬空] 成功提取切换后信息: %@", switchedText);
         
-        // 步骤4: 【关键】手动将UILabel的文本恢复到初始状态
-        NSMutableArray *currentLabels = [NSMutableArray array];
-        FindSubviewsOfClassRecursive([UILabel class], xunKongView, currentLabels);
-        if (currentLabels.count == initialTexts.count) {
-            for (NSUInteger i = 0; i < currentLabels.count; i++) {
-                UILabel *label = currentLabels[i];
-                NSString *initialText = initialTexts[i];
-                label.text = initialText;
-            }
-            LogMessage(EchoLogTypeInfo, @"[旬空] 已手动恢复UI至初始状态。");
-        } else {
-            // 如果标签数量变了（不太可能），作为备用方案，我们还是调用一下切换方法
-            LogMessage(EchoLogTypeWarning, @"[旬空] 标签数量发生变化，尝试通过再次调用方法来恢复UI。");
-            SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
-        }
+        // 再次调用，把它切换回去
+        SUPPRESS_LEAK_WARNING([self performSelector:switchSelector]);
+        [NSThread sleepForTimeInterval:0.1]; // 等待UI切换回来
 
         return switchedText;
         
@@ -996,15 +1004,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
+// [MODIFIED] 修改 extractKePanInfoWithCompletion，调用新的智能提取函数
 %new
 - (void)extractKePanInfoWithCompletion:(void (^)(NSMutableDictionary *reportData))completion {
     g_extractedData = [NSMutableDictionary dictionary];
     
-    // **关键修改**: 重构流程，确保同步执行
     [self extractTimeInfoWithCompletion:^{
         
         LogMessage(EchoLogTypeInfo, @"[盘面] 时间提取完成，开始解析其他基础信息...");
-        NSString *originalXunKong = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@""];
+        
+        // **关键修改**：使用新的智能提取函数获取格式正确的初始旬空文本
+        NSString *originalXunKong = [self extractStructuredXunKongText];
         NSString *switchedXunKong = [self extractSwitchedXunKongInfo];
         
         if (switchedXunKong.length > 0) {
@@ -1015,6 +1025,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
         g_extractedData[@"月将"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.七政視圖" separator:@" "];
         g_extractedData[@"昼夜"] = [self extractTextFromFirstViewOfClassName:@"六壬大占.晝夜切換視圖" separator:@" "];
+        // ... (其余部分保持不变) ...
         g_extractedData[@"天地盘"] = [self extractTianDiPanInfo_V18];
         g_extractedData[@"四课"] = [self _echo_extractSiKeInfo];
         g_extractedData[@"三传"] = [self _echo_extractSanChuanInfo];
@@ -1495,6 +1506,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
 
 
