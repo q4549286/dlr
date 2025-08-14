@@ -110,48 +110,63 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     yueJiang = [yueJiang stringByReplacingOccurrencesOfString:@"日宿在" withString:@""];
     
     // =================================================================
-    // vvvvvvvvvvvvv  旬空格式化终极修复逻辑 (v13.26)  vvvvvvvvvvvvvvvv
+    // vvvvvvvvvvvvvv 旬空格式化无歧义终极版 (v13.28) vvvvvvvvvvvvvvv
     // =================================================================
-    // 接收两个独立的、已识别好的信息
-    NSString *xunInfo = SafeString(reportData[@"旬空_旬信息"]); // e.g., "子丑 (甲寅旬)"
-    NSString *riKongInfo = SafeString(reportData[@"旬空_日空信息"]); // e.g., "丙辰日 官鬼子孙空"
+    NSString *xunInfo = SafeString(reportData[@"旬空_旬信息"]);
+    NSString *riGan = SafeString(reportData[@"旬空_日干"]);
+    NSArray<NSString *> *liuQinArray = reportData[@"旬空_六亲数组"];
 
     NSString *kong = @"";
     NSString *xun = @"";
 
-    // 1. 从“旬信息”中精确拆解出“空亡地支”和“旬”
+    // 1. 从“旬信息”中拆解出空亡地支和旬
     if (xunInfo.length > 0) {
-        // 先尝试用括号拆分
         NSRange bracketStart = [xunInfo rangeOfString:@"("];
         NSRange bracketEnd = [xunInfo rangeOfString:@")"];
         if (bracketStart.location != NSNotFound && bracketEnd.location != NSNotFound && bracketStart.location < bracketEnd.location) {
             xun = [xunInfo substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
             kong = [[xunInfo substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         } else {
-            // 如果没有括号，再尝试用关键字拆分 (e.g., "甲子旬戌亥空")
-            NSDictionary *xunKongMap = @{ @"甲子":@"戌亥", @"甲戌":@"申酉", @"甲申":@"午未", @"甲午":@"辰巳", @"甲辰":@"寅卯", @"甲寅":@"子丑" };
+             NSDictionary *xunKongMap = @{ @"甲子":@"戌亥", @"甲戌":@"申酉", @"甲申":@"午未", @"甲午":@"辰巳", @"甲辰":@"寅卯", @"甲寅":@"子丑" };
             BOOL found = NO;
             for (NSString* xunKey in xunKongMap.allKeys) {
                 if ([xunInfo containsString:xunKey]) {
                     xun = [xunKey stringByAppendingString:@"旬"];
-                    kong = xunKongMap[xunKey];
-                    // 处理 "甲寅旬子丑空" 这种格式，把"旬"和"空"去掉
                     NSString *tempKong = [[xunInfo stringByReplacingOccurrencesOfString:xun withString:@""] stringByReplacingOccurrencesOfString:@"空" withString:@""];
-                    if(tempKong.length > 0) kong = tempKong;
+                    tempKong = [tempKong stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    kong = (tempKong.length > 0) ? tempKong : xunKongMap[xunKey];
                     found = YES;
                     break;
                 }
             }
-            if (!found) { // 如果都失败，就把整个字符串当做空亡地支
-                kong = xunInfo;
-            }
+            if (!found) { kong = xunInfo; }
         }
     }
 
-    // 2. 准备补充信息（日空）的括号
-    NSString *formattedRiKong = @"";
-    if (riKongInfo.length > 0) {
-        formattedRiKong = [NSString stringWithFormat:@" (%@)", riKongInfo];
+    // 2. 准备空亡详解的括号，将地支和六亲一一对应
+    NSString *formattedDetail = @"";
+    if (liuQinArray && liuQinArray.count > 0 && kong.length == liuQinArray.count) {
+        NSMutableString *detailBuilder = [NSMutableString string];
+        for (int i = 0; i < kong.length; i++) {
+            NSString *diZhi = [kong substringWithRange:NSMakeRange(i, 1)];
+            NSString *liuQin = liuQinArray[i];
+            [detailBuilder appendFormat:@"%@(%@)", diZhi, liuQin];
+            if (i < kong.length - 1) {
+                [detailBuilder appendString:@", "];
+            }
+        }
+        if (riGan.length > 0) {
+             formattedDetail = [NSString stringWithFormat:@" [空亡详解: %@ (以日干'%@'论)]", detailBuilder, riGan];
+        } else {
+             formattedDetail = [NSString stringWithFormat:@" [空亡详解: %@]", detailBuilder];
+        }
+    } else if (reportData[@"旬空_六亲"]) { // Fallback to less precise format if array matching fails
+        NSString *liuQinStr = reportData[@"旬空_六亲"];
+        if(riGan.length > 0) {
+            formattedDetail = [NSString stringWithFormat:@" [空亡详解: %@ (以日干'%@'论)]", liuQinStr, riGan];
+        } else {
+            formattedDetail = [NSString stringWithFormat:@" [空亡详解: %@]", liuQinStr];
+        }
     }
 
     // 3. 严格按格式重建
@@ -159,7 +174,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]],
         kong,
         xun,
-        formattedRiKong,
+        formattedDetail,
         SafeString(reportData[@"昼夜"])];
     // =================================================================
     // ^^^^^^^^^^^^^^^^         旬空逻辑结束         ^^^^^^^^^^^^^^^^
@@ -977,34 +992,64 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         LogMessage(EchoLogTypeInfo, @"[盘面] 时间提取完成，开始解析其他基础信息...");
 
         // =================================================================
-        // vvvvvvvvvv  旬空语义识别与重建逻辑 (v13.26)  vvvvvvvvvv
+        // vvvvvvvv 旬空语义识别与拆解逻辑 (v13.28) vvvvvvvv
         // =================================================================
         // 1. 数据采集
         NSString *textA = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
         NSString *textB = [self extractSwitchedXunKongInfo];
 
         NSString *xunInfo = nil;
-        NSString *riKongInfo = nil;
+        NSString *liuQinFullInfo = nil;
 
-        // 2. 语义识别：包含“旬”字的是旬信息，不包含的是日空信息。
+        // 2. 语义识别：通过“旬”字区分两种信息
         if ([textA containsString:@"旬"]) {
             xunInfo = textA;
-            riKongInfo = textB;
+            liuQinFullInfo = textB;
         } else if ([textB containsString:@"旬"]) {
             xunInfo = textB;
-            riKongInfo = textA;
+            liuQinFullInfo = textA;
         } else {
-            // 兜底策略：如果两个都不含“旬”，或都含“旬”，则按旧逻辑处理，以防万一
             xunInfo = textA;
-            riKongInfo = textB;
+            liuQinFullInfo = textB;
             LogMessage(EchoLogTypeWarning, @"[旬空] 无法通过'旬'字识别，采用默认顺序。");
         }
         
-        // 3. 将识别好的、独立的信息存入字典，交给格式化函数处理
-        g_extractedData[@"旬空_旬信息"] = [xunInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        g_extractedData[@"旬空_日空信息"] = [riKongInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        // 3. 拆解六亲信息
+        NSString *riGan = @"";
+        NSString *liuQinStr = @"";
+        if (liuQinFullInfo.length > 0) {
+            // 从 "丙辰日 官鬼子孙空" 中提取日干和六亲部分
+            NSRange riRange = [liuQinFullInfo rangeOfString:@"日"];
+            if (riRange.location != NSNotFound) {
+                // "丙辰日" -> 日干为第一个字 "丙"
+                riGan = [liuQinFullInfo substringToIndex:1];
+                // "官鬼子孙空" -> "官鬼子孙"
+                liuQinStr = [[liuQinFullInfo substringFromIndex:riRange.location + 1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+                liuQinStr = [liuQinStr stringByReplacingOccurrencesOfString:@"空" withString:@""];
+            } else {
+                // 如果格式不符，则整个作为六亲字符串
+                liuQinStr = [liuQinFullInfo stringByReplacingOccurrencesOfString:@"空" withString:@""];
+            }
+        }
+
+        // 4. 将六亲字符串转为数组 (e.g., "官鬼子孙" -> @[@"官鬼", @"子孙"])
+        NSMutableArray<NSString *> *liuQinArray = [NSMutableArray array];
+        if(liuQinStr.length > 0) {
+            for (int i = 0; i < liuQinStr.length; i += 2) {
+                if (i + 2 <= liuQinStr.length) {
+                    [liuQinArray addObject:[liuQinStr substringWithRange:NSMakeRange(i, 2)]];
+                }
+            }
+        }
         
-        LogMessage(EchoLogTypeSuccess, @"[旬空] 识别结果 -> 旬信息: [%@], 日空信息: [%@]", g_extractedData[@"旬空_旬信息"], g_extractedData[@"旬空_日空信息"]);
+        // 5. 将拆解后的所有信息存入字典
+        g_extractedData[@"旬空_旬信息"] = [xunInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        g_extractedData[@"旬空_日干"] = riGan;
+        g_extractedData[@"旬空_六亲数组"] = liuQinArray;
+        // 同时保留原始六亲字符串作为备用
+        g_extractedData[@"旬空_六亲"] = [liuQinStr stringByReplacingOccurrencesOfString:@"/" withString:@""];
+
+        LogMessage(EchoLogTypeSuccess, @"[旬空] 识别结果 -> 旬信息:[%@], 日干:[%@], 六亲:%@", g_extractedData[@"旬空_旬信息"], riGan, [liuQinArray componentsJoinedByString:@","]);
         // =================================================================
         // ^^^^^^^^^^^^^^^^      旬空逻辑结束      ^^^^^^^^^^^^^^^^
         // =================================================================
@@ -1491,3 +1536,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.26 (Semantic XunKong Fix) 已加载。");
     }
 }
+
