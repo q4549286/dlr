@@ -81,6 +81,7 @@ static NSString *getAIPromptHeader() {
 return          @"v46.0 · 终局版 · 完整Prompt\n"
 
         @"请准备接收包含所有细节的标准化课盘，我将执行全新架构下的专业深度分析！\n";}
+// [MODIFIED] 完整替换 generateStructuredReport 函数 (旬空解析最终修正版)
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
 
@@ -109,13 +110,15 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *yueJiang = [[yueJiangFull componentsSeparatedByString:@" "].firstObject stringByReplacingOccurrencesOfString:@"月将:" withString:@""] ?: @"";
     yueJiang = [yueJiang stringByReplacingOccurrencesOfString:@"日宿在" withString:@""];
     
+    // -- 旬空处理最终逻辑 --
     NSString *kongWangFull = SafeString(reportData[@"空亡"]);
-    NSString *originalXunKong = kongWangFull;
+    NSString *mainXunKongPart = kongWangFull;
     NSString *switchedXunKongInfo = @"";
 
+    // 1. 分离主信息和附加信息
     if ([kongWangFull containsString:@" | "]) {
         NSArray *parts = [kongWangFull componentsSeparatedByString:@" | "];
-        originalXunKong = parts.firstObject;
+        mainXunKongPart = parts.firstObject;
         if (parts.count > 1) {
             switchedXunKongInfo = [NSString stringWithFormat:@" (%@)", parts[1]];
         }
@@ -123,24 +126,36 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
     NSString *xun = @"";
     NSString *kong = @"";
-    NSRange bracketStart = [originalXunKong rangeOfString:@"("];
-    NSRange bracketEnd = [originalXunKong rangeOfString:@")"];
+    
+    // 2. 从主信息中解析 旬 和 空
+    // 格式: "旬空: 子丑 (甲寅旬)"
+    NSRange bracketStart = [mainXunKongPart rangeOfString:@"("];
+    NSRange bracketEnd = [mainXunKongPart rangeOfString:@")"];
+    
     if (bracketStart.location != NSNotFound && bracketEnd.location != NSNotFound && bracketStart.location < bracketEnd.location) {
-        xun = [originalXunKong substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
-        kong = [[originalXunKong substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    } else {
-        NSDictionary *xunKongMap = @{ @"甲子":@"戌亥", @"甲戌":@"申酉", @"甲申":@"午未", @"甲午":@"辰巳", @"甲辰":@"寅卯", @"甲寅":@"子丑" };
-        for (NSString* xunKey in xunKongMap.allKeys) {
-            if ([originalXunKong containsString:xunKey]) {
-                xun = [xunKey stringByAppendingString:@"旬"];
-                kong = xunKongMap[xunKey];
-                break;
-            }
+        // 提取括号内的 "甲寅旬"
+        xun = [mainXunKongPart substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
+        
+        // 提取括号前的 "旬空: 子丑"
+        NSString *beforeBracket = [mainXunKongPart substringToIndex:bracketStart.location];
+        
+        // 从 "旬空: 子丑" 中分离出 "子丑"
+        NSArray *kongParts = [beforeBracket componentsSeparatedByString:@":"];
+        if (kongParts.count > 1) {
+            kong = [kongParts.lastObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        } else {
+             // 如果没有冒号，就直接用
+            kong = [beforeBracket stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         }
+    } else {
+        // 如果没有括号，作为备用方案
+        kong = [mainXunKongPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     }
 
     [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)%@\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, switchedXunKongInfo, SafeString(reportData[@"昼夜"])];
 
+    // ... 函数的其余部分保持不变 ...
+    
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
     if (reportData[@"天地盘"]) [report appendFormat:@"// 2.1. 天地盘\n%@\n\n", reportData[@"天地盘"]];
@@ -288,6 +303,9 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         [report appendString:@"\n\n// 5. 辅助系统\n"];
         [report appendString:auxiliaryContent];
     }
+    
+    return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
     
     return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
@@ -1479,5 +1497,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.23 (Final Full Corrected) 已加载。");
     }
 }
+
 
 
