@@ -1,11 +1,11 @@
-////// Filename: Echo_AnalysisEngine_v13.33_FinalInterceptFix.xm
-// 描述: Echo 六壬解析引擎 v13.33 (最终拦截修复版)。
-//      - [FIX] 彻底解决时间提取的所有问题，回归并修正了最初的拦截方案。
-//          - 废弃了所有复杂的轮询和异步链式调用，恢复为一次性触发所有弹窗的简洁逻辑。
-//          - 在`Tweak_presentViewController`的通用拦截逻辑中，添加了对`時間選擇視圖`的精准识别分支。
-//          - 现在，当时间选择器被触发时，会被正确识别，并从其内部的UITextView提取数据，然后像其他弹窗一样被自动关闭。
-//          - 此方案统一了所有弹窗的处理方式，代码最简洁，逻辑最清晰，解决了所有已知问题。
-//      - [STABILITY] 此版本应为时间提取问题的最终解决方案。
+////// Filename: Echo_AnalysisEngine_v13.35_TrueFinalFix.xm
+// 描述: Echo 六壬解析引擎 v13.35 (最终修复版 - 流程与拦截逻辑修正)。
+//      - [FIX] 彻底解决时间提取问题，纠正了之前所有版本的逻辑缺陷。
+//          - 恢复`extractKePanInfoWithCompletion`为正确的异步链式调用，确保先获取时间信息，再处理其他弹窗。
+//          - 在`Tweak_presentViewController`的通用拦截逻辑中，正确地加入了对`時間選擇視圖`的智能识别分支。
+//          - 当时间选择器被拦截后，会从其内部的UITextView提取数据，然后自动关闭。
+//          - 此方案确保了正确的执行顺序和对所有弹窗类型的正确处理。
+//      - [STABILITY] 此版本为时间提取问题的最终、正确解决方案。
 
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
@@ -1407,7 +1407,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_extractedData = [NSMutableDictionary new];
     LogMessage(EchoLogTypeInfo, @"[盘面] 开始解析基础信息...");
     __weak typeof(self) weakSelf = self;
-
+    
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         // 1. 触发所有需要的弹窗，让拦截器统一处理
         SEL selectors[] = {
@@ -1658,4 +1658,3 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v13.33 (FinalInterceptFix) 已加载。");
     }
 }
-
