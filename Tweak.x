@@ -85,6 +85,7 @@ return  @"v46.0 · 终局版 · 完整Prompt\n"
 
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
+   __block NSInteger sectionCounter = 4; 
 
     // 板块一：基础盘元
     [report appendString:@"// 1. 基础盘元\n"];
@@ -232,67 +233,96 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
 // 这是修改后的、顺序调整过的代码块
 
-// 板块五：行年参数 (如果存在)
-NSString *nianMing = reportData[@"行年参数"];
-if (nianMing.length > 0) {
-    [report appendString:@"// 5. 行年参数\n"];
-    [report appendString:nianMing];
-    [report appendString:@"\n\n"];
-}
+// (接在板块四：爻位详解的代码之后)
 
-// 板块六：神煞系统 (如果存在)
-NSString *shenSha = reportData[@"神煞详情"];
-if (shenSha.length > 0) {
-    [report appendString:@"// 6. 神煞系统\n"];
-    [report appendString:@"// 本模块提供所有相关神煞信号，但其最终解释权从属于【信号管辖权与关联度终审协议】。请结合核心议题进行批判性审查。\n"];
-    [report appendString:shenSha];
-    [report appendString:@"\n\n"];
-}
+// =================================================================
+// vvvvvvvvvvvvvv 动态序号生成逻辑 vvvvvvvvvvvvvvv
+// =================================================================
 
-// 板块七：辅助系统
-NSMutableString *auxiliaryContent = [NSMutableString string];
-NSString *qiZheng = reportData[@"七政四余"];
-if (qiZheng.length > 0) {
-    [auxiliaryContent appendFormat:@"// 7.1. 七政四余\n%@\n\n", qiZheng];
+// 定义所有可选板块及其内容
+NSArray<NSDictionary *> *optionalSections = @[
+    @{
+        @"key": @"行年参数",
+        @"title": @"行年参数",
+        @"content": SafeString(reportData[@"行年参数"])
+    },
+    @{
+        @"key": @"神煞详情",
+        @"title": @"神煞系统",
+        @"content": SafeString(reportData[@"神煞详情"]),
+        @"prefix": @"// 本模块提供所有相关神煞信号，但其最终解释权从属于【信号管辖权与关联度终审协议】。请结合核心议题进行批判性审查。\n"
+    },
+    @{
+        @"key": @"辅助系统", // 这是一个复合板块
+        @"title": @"辅助系统",
+        @"content": @"COMPOSITE_SECTION_PLACEHOLDER" // 使用占位符
+    }
+];
 
-    NSMutableString *keyPlanetTips = [NSMutableString string];
-    NSDictionary *planetToDeity = @{@"水星": @"天后", @"土星": @"天空", @"火星":@"朱雀", @"金星":@"太阴", @"木星":@"太常"};
-    for(NSString *line in [qiZheng componentsSeparatedByString:@"\n"]) {
-        for(NSString *planet in planetToDeity.allKeys) {
-            if([line hasPrefix:planet]) {
-                NSScanner *scanner = [NSScanner scannerWithString:line]; NSString *palace;
-                [scanner scanUpToString:@"宫" intoString:NULL];
-                if(scanner.scanLocation > 0 && scanner.scanLocation <= line.length) {
-                    [scanner setScanLocation:scanner.scanLocation - 1];
-                    [scanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:@" "] intoString:&palace];
-                    if (palace.length > 0 && [[report copy] containsString:palace]) {
-                         [keyPlanetTips appendFormat:@"- %@(%@): 正在%@宫%@。对应神将`%@`。请关注%@宫相关事宜。\n", planet, ([line containsString:@"逆行"]?@"逆":@"顺"), palace, ([line containsString:@"逆行"]?@"逆行":@"顺行"), planetToDeity[planet], palace];
+// 遍历并添加存在的板块
+for (NSDictionary *sectionInfo in optionalSections) {
+    NSString *content = sectionInfo[@"content"];
+    
+    // 特殊处理复合的“辅助系统”
+    if ([content isEqualToString:@"COMPOSITE_SECTION_PLACEHOLDER"]) {
+        NSMutableString *auxiliaryContent = [NSMutableString string];
+        NSString *qiZheng = reportData[@"七政四余"];
+        if (qiZheng.length > 0) {
+            [auxiliaryContent appendFormat:@"// 7.1. 七政四余\n%@\n\n", qiZheng]; // 这里的子序号是固定的，所以写死
+            // ... 七政的关键星曜提示逻辑 ...
+            NSMutableString *keyPlanetTips = [NSMutableString string];
+            NSDictionary *planetToDeity = @{@"水星": @"天后", @"土星": @"天空", @"火星":@"朱雀", @"金星":@"太阴", @"木星":@"太常"};
+            for(NSString *line in [qiZheng componentsSeparatedByString:@"\n"]) {
+                for(NSString *planet in planetToDeity.allKeys) {
+                    if([line hasPrefix:planet]) {
+                        NSScanner *scanner = [NSScanner scannerWithString:line]; NSString *palace;
+                        [scanner scanUpToString:@"宫" intoString:NULL];
+                        if(scanner.scanLocation > 0 && scanner.scanLocation <= line.length) {
+                            [scanner setScanLocation:scanner.scanLocation - 1];
+                            [scanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:@" "] intoString:&palace];
+                            if (palace.length > 0 && [[report copy] containsString:palace]) {
+                                 [keyPlanetTips appendFormat:@"- %@(%@): 正在%@宫%@。对应神将`%@`。请关注%@宫相关事宜。\n", planet, ([line containsString:@"逆行"]?@"逆":@"顺"), palace, ([line containsString:@"逆行"]?@"逆行":@"顺行"), planetToDeity[planet], palace];
+                            }
+                        }
+                        break;
                     }
                 }
-                break;
+            }
+            if (keyPlanetTips.length > 0) { 
+                [auxiliaryContent appendString:@"// 关键星曜提示\n"]; 
+                [auxiliaryContent appendString:keyPlanetTips]; 
+                [auxiliaryContent appendString:@"\n"]; 
             }
         }
+        NSString *sanGong = reportData[@"三宫时信息"];
+        if (sanGong.length > 0) {
+            [auxiliaryContent appendFormat:@"// 7.2. 三宫时信息\n%@\n\n", sanGong];
+        }
+        
+        content = [auxiliaryContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     }
-    if (keyPlanetTips.length > 0) { 
-        [auxiliaryContent appendString:@"// 关键星曜提示\n"]; 
-        [auxiliaryContent appendString:keyPlanetTips]; 
-        [auxiliaryContent appendString:@"\n"]; 
+
+    // 只有当板块有实际内容时，才增加序号并添加到报告中
+    if (content.length > 0) {
+        sectionCounter++;
+        [report appendFormat:@"// %ld. %@\n", (long)sectionCounter, sectionInfo[@"title"]];
+        
+        // 如果有前缀备注，添加它
+        if (sectionInfo[@"prefix"]) {
+            [report appendString:sectionInfo[@"prefix"]];
+        }
+        
+        [report appendString:content];
+        [report appendString:@"\n\n"];
     }
-}
-NSString *sanGong = reportData[@"三宫时信息"];
-if (sanGong.length > 0) {
-    [auxiliaryContent appendFormat:@"// 7.2. 三宫时信息\n%@\n\n", sanGong];
 }
 
-if (auxiliaryContent.length > 0) {
-    while ([report hasSuffix:@"\n\n"]) {
-         [report deleteCharactersInRange:NSMakeRange(report.length - 1, 1)];
-    }
-    [report appendString:@"\n// 7. 辅助系统\n"];
-    [report appendString:auxiliaryContent];
+// 移除末尾多余的换行符
+while ([report hasSuffix:@"\n\n"]) {
+    [report deleteCharactersInRange:NSMakeRange(report.length - 1, 1)];
 }
-    
-    return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
 
@@ -1452,6 +1482,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
