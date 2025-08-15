@@ -609,7 +609,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)}, 
         @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)},
         @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)},
-        @{@"title": @"神煞", @"icon": @"wand.and.stars", @"tag": @(kButtonTag_ShenSha)}
+        @{@"title": @"神煞系统", @"icon": @"shield.lefthalf.filled", @"tag": @(kButtonTag_ShenSha)}
     ];
 for (int i = 0; i < coreButtons.count; i++) {
     NSDictionary *config = coreButtons[i];
@@ -1426,6 +1426,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
