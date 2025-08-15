@@ -18,7 +18,7 @@
 
 static const NSInteger kEchoControlButtonTag = 556699;
 static const NSInteger kEchoMainPanelTag = 778899;
-static const NSInteger kButtonTag_ExtractShenSha = 101;
+static const NSInteger kButtonTag_Investigate = 101;
 static const NSInteger kButtonTag_ClosePanel = 998;
 
 #pragma mark - Global State
@@ -54,12 +54,9 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
         NSMutableAttributedString *existingText = [[NSMutableAttributedString alloc] initWithAttributedString:g_logTextView.attributedText];
         [logLine appendAttributedString:existingText];
         g_logTextView.attributedText = logLine;
-        NSLog(@"[EchoShenShaTest] %@", message);
+        NSLog(@"[EchoDataScout] %@", message);
     });
 }
-
-// 该函数已不再需要，故移除
-// static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { ... }
 
 static UIWindow* GetFrontmostWindow() {
     UIWindow *frontmostWindow = nil;
@@ -67,10 +64,7 @@ static UIWindow* GetFrontmostWindow() {
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
                 for (UIWindow *window in scene.windows) {
-                    if (window.isKeyWindow) {
-                        frontmostWindow = window;
-                        break;
-                    }
+                    if (window.isKeyWindow) { frontmostWindow = window; break; }
                 }
                 if (frontmostWindow) break;
             }
@@ -88,11 +82,10 @@ static UIWindow* GetFrontmostWindow() {
 // =========================================================================
 // 2. 接口声明与核心 Hook
 // =========================================================================
-@interface UIViewController (EchoShenShaTest)
+@interface UIViewController (EchoDataScout)
 - (void)createOrShowMainControlPanel;
 - (void)handleMasterButtonTap:(UIButton *)sender;
-- (void)presentAIActionSheetWithReport:(NSString *)report;
-- (NSString *)extractShenShaInfo_TheRealFinalSolution;
+- (void)investigateViewControllerIvars;
 @end
 
 %hook UILabel
@@ -106,13 +99,12 @@ static UIWindow* GetFrontmostWindow() {
     Class targetClass = NSClassFromString(@"六壬大占.ViewController"); 
     if (targetClass && [self isKindOfClass:targetClass]) { 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ 
-            UIWindow *keyWindow = GetFrontmostWindow(); 
-            if (!keyWindow) return; 
+            UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return; 
             if ([keyWindow viewWithTag:kEchoControlButtonTag]) [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview]; 
             UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem]; 
             controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36); 
             controlButton.tag = kEchoControlButtonTag; 
-            [controlButton setTitle:@"Echo 神煞提取" forState:UIControlStateNormal]; 
+            [controlButton setTitle:@"Echo 数据侦察" forState:UIControlStateNormal]; 
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; 
             controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE; 
             [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; 
@@ -129,118 +121,78 @@ static UIWindow* GetFrontmostWindow() {
     g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds]; g_mainControlPanelView.tag = kEchoMainPanelTag; 
     if (@available(iOS 8.0, *)) { UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]]; blurView.frame = g_mainControlPanelView.bounds; [g_mainControlPanelView addSubview:blurView]; } else { g_mainControlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9]; } 
     UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)]; [g_mainControlPanelView addSubview:contentView]; 
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)]; titleLabel.text = @"Echo 神煞提取 (最终决战)"; titleLabel.font = [UIFont boldSystemFontOfSize:22]; titleLabel.textColor = [UIColor whiteColor]; titleLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:titleLabel]; 
-    UIButton *extractButton = [UIButton buttonWithType:UIButtonTypeCustom]; [extractButton setTitle:@"提取全部神煞信息" forState:UIControlStateNormal]; extractButton.tag = kButtonTag_ExtractShenSha; extractButton.backgroundColor = ECHO_COLOR_MAIN_TEAL; [extractButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:18]; extractButton.layer.cornerRadius = 12; extractButton.frame = CGRectMake(15, 80, contentView.bounds.size.width - 30, 50); [contentView addSubview:extractButton]; 
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, 150, contentView.bounds.size.width, contentView.bounds.size.height - 210)]; g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12]; g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8; g_logTextView.textColor = [UIColor whiteColor]; g_logTextView.text = @"[EchoShenShaTest]: 就绪。\n"; [contentView addSubview:g_logTextView]; 
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)]; titleLabel.text = @"Echo 数据侦察兵"; titleLabel.font = [UIFont boldSystemFontOfSize:22]; titleLabel.textColor = [UIColor whiteColor]; titleLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:titleLabel]; 
+    UIButton *investigateButton = [UIButton buttonWithType:UIButtonTypeCustom]; [investigateButton setTitle:@"侦察 ViewController 数据" forState:UIControlStateNormal]; investigateButton.tag = kButtonTag_Investigate; investigateButton.backgroundColor = ECHO_COLOR_MAIN_TEAL; [investigateButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; investigateButton.titleLabel.font = [UIFont boldSystemFontOfSize:18]; investigateButton.layer.cornerRadius = 12; investigateButton.frame = CGRectMake(15, 80, contentView.bounds.size.width - 30, 50); [contentView addSubview:investigateButton]; 
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, 150, contentView.bounds.size.width, contentView.bounds.size.height - 210)]; g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12]; g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8; g_logTextView.textColor = [UIColor whiteColor]; g_logTextView.text = @"[EchoDataScout]: 就绪。请点击上方按钮开始侦察。\n"; [contentView addSubview:g_logTextView]; 
     UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeCustom]; [closeButton setTitle:@"关闭面板" forState:UIControlStateNormal]; closeButton.tag = kButtonTag_ClosePanel; closeButton.backgroundColor = ECHO_COLOR_ACTION_CLOSE; [closeButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; closeButton.layer.cornerRadius = 10; closeButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, contentView.bounds.size.width - 30, 40); [contentView addSubview:closeButton]; 
     g_mainControlPanelView.alpha = 0; [keyWindow addSubview:g_mainControlPanelView]; [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 1.0; }]; 
 }
 %new 
 - (void)handleMasterButtonTap:(UIButton *)sender { 
     switch (sender.tag) { 
-        case kButtonTag_ExtractShenSha: { 
-            LogMessage(EchoLogTypeTask, @"[任务] 开始从ViewController->神煞行年->列表提取..."); 
-            NSString *shenShaResult = [self extractShenShaInfo_TheRealFinalSolution]; 
-            if (shenShaResult && shenShaResult.length > 0) { NSString *finalReport = [NSString stringWithFormat:@"// 神煞详情 (所有分类)\n%@", shenShaResult]; [self presentAIActionSheetWithReport:finalReport]; } else { LogMessage(EchoLogTypeWarning, @"[结果] 神煞信息为空或提取失败。"); } 
+        case kButtonTag_Investigate: { 
+            [self investigateViewControllerIvars]; 
             break; 
         } 
-        case kButtonTag_ClosePanel: [self createOrShowMainControlPanel]; break; 
+        case kButtonTag_ClosePanel: 
+            [self createOrShowMainControlPanel]; 
+            break; 
     } 
 }
-%new 
-- (void)presentAIActionSheetWithReport:(NSString *)report { if (!report || report.length == 0) { LogMessage(EchoLogError, @"报告为空，无法执行后续操作。"); return; } [UIPasteboard generalPasteboard].string = report; UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"神煞提取结果" message:@"内容已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet]; UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"确认 (已复制)" style:UIAlertActionStyleDefault handler:nil]; [actionSheet addAction:copyAction]; UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]; [actionSheet addAction:cancelAction]; if (actionSheet.popoverPresentationController) { actionSheet.popoverPresentationController.sourceView = self.view; actionSheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height, 1.0, 1.0); } [self presentViewController:actionSheet animated:YES completion:nil]; }
-
 
 // =========================================================================
-// 3. 核心提取函数 (最终决战版 - 跨对象读取变量)
+// 3. 核心侦察函数
 // =========================================================================
 %new
-- (NSString *)extractShenShaInfo_TheRealFinalSolution {
-    // 1. 获取主 ViewController 实例
-    Class viewControllerClass = NSClassFromString(@"六壬大占.ViewController");
-    if (![self isKindOfClass:viewControllerClass]) {
-        LogMessage(EchoLogError, @"[神煞] 错误: 当前上下文不是 '六壬大占.ViewController'。");
-        return @"[提取失败: 上下文错误]";
+- (void)investigateViewControllerIvars {
+    LogMessage(EchoLogTypeTask, @"开始侦察 '六壬大占.ViewController' 的成员变量...");
+    Class vcClass = NSClassFromString(@"六壬大占.ViewController");
+    if (![self isKindOfClass:vcClass]) {
+        LogMessage(EchoLogError, @"错误: 当前上下文不是 '六壬大占.ViewController'。");
+        return;
     }
 
-    // 2. 从 ViewController 中获取名为 "神煞行年" 的实例变量
-    Ivar ivar_shenShaContainer = class_getInstanceVariable(viewControllerClass, "神煞行年");
-     if (!ivar_shenShaContainer) {
-        ivar_shenShaContainer = class_getInstanceVariable(viewControllerClass, "_神煞行年");
-    }
-    if (!ivar_shenShaContainer) {
-        LogMessage(EchoLogError, @"[神煞] 致命错误: 在 ViewController 中找不到 '神煞行年' 成员变量。");
-        return @"[提取失败: 找不到'神煞行年'容器]";
-    }
-    id shenShaContainerObject = object_getIvar(self, ivar_shenShaContainer);
-    if (!shenShaContainerObject) {
-        LogMessage(EchoLogError, @"[神煞] 错误: '神煞行年' 变量值为 nil。请确保神煞视图已加载。");
-        return @"[提取失败: '神煞行年'为nil]";
+    unsigned int ivarCount;
+    Ivar *ivars = class_copyIvarList(vcClass, &ivarCount);
+    if (!ivars) {
+        LogMessage(EchoLogError, @"错误: 无法获取成员变量列表。");
+        return;
     }
 
-    // 3. 从 "神煞行年" 对象中获取名为 "列表" 的实例变量
-    Class containerViewClass = [shenShaContainerObject class];
-    Ivar ivar_list = class_getInstanceVariable(containerViewClass, "列表");
-    if (!ivar_list) {
-        ivar_list = class_getInstanceVariable(containerViewClass, "_列表");
-    }
-    if (!ivar_list) {
-        LogMessage(EchoLogError, @"[神煞] 致命错误: 在 '%@' 中找不到 '列表' 成员变量。", NSStringFromClass(containerViewClass));
-        return @"[提取失败: 找不到数据源'列表']";
-    }
-    
-    id dataSourceList = object_getIvar(shenShaContainerObject, ivar_list);
-    if (!dataSourceList || ![dataSourceList isKindOfClass:[NSArray class]]) {
-        LogMessage(EchoLogError, @"[神煞] 错误: '列表'变量不是一个有效的数组，或当前值为nil。");
-        return @"[提取失败: 数据源'列表'无效]";
-    }
-    
-    NSArray *categories = (NSArray *)dataSourceList;
-    LogMessage(EchoLogTypeInfo, @"[神煞] 成功从 VC->神煞行年->列表 获取数据源，共 %lu 个分类。", (unsigned long)categories.count);
+    LogMessage(EchoLogTypeInfo, @"发现 %d 个成员变量，开始筛选数组类型...", ivarCount);
 
-    // 4. 遍历数据源并解析
-    NSMutableString *finalResultString = [NSMutableString string];
-    for (id categoryObject in categories) {
-        if (![categoryObject isKindOfClass:[NSObject class]]) continue;
+    BOOL foundPotentialData = NO;
+    for (unsigned int i = 0; i < ivarCount; i++) {
+        Ivar ivar = ivars[i];
+        const char *name = ivar_getName(ivar);
+        const char *type = ivar_getTypeEncoding(ivar);
         
-        NSString *categoryTitle = [categoryObject valueForKey:@"标题"];
-        NSArray *items = [categoryObject valueForKey:@"列表"];
-        
-        if (!categoryTitle || !items) {
-            LogMessage(EchoLogTypeWarning, @"[神煞] 警告: 无法从分类对象中获取'标题'或'列表'属性。");
-            continue;
-        }
+        NSString *ivarName = [NSString stringWithUTF8String:name];
+        NSString *ivarType = [NSString stringWithUTF8String:type];
 
-        [finalResultString appendFormat:@"\n// %@\n", categoryTitle];
-
-        NSMutableString *categoryContent = [NSMutableString string];
-        for (NSUInteger j = 0; j < items.count; j++) {
-            id itemObject = items[j];
-            if (![itemObject isKindOfClass:[NSObject class]]) continue;
-            
-            NSString *nameText = [itemObject valueForKey:@"名"];
-            NSString *weiText = [itemObject valueForKey:@"位"];
-
-            if (!nameText) nameText = @"?";
-            if (!weiText) weiText = @"";
-
-            if (j > 0) { [categoryContent appendString:@" |"]; }
-            
-            if (weiText.length > 0) {
-                [categoryContent appendFormat:@" %@(%@)", nameText, weiText];
-            } else {
-                [categoryContent appendFormat:@" %@", nameText];
+        // 我们只关心对象类型，特别是数组
+        if ([ivarType hasPrefix:@"@"] && ([ivarType containsString:@"NSArray"] || [ivarType containsString:@"NSMutableArray"])) {
+            id value = object_getIvar(self, ivar);
+            if (value && [value isKindOfClass:[NSArray class]]) {
+                NSArray *arrayValue = (NSArray *)value;
+                LogMessage(EchoLogTypeTask, @"发现数组变量 '%@' (共 %lu 项)，内容如下:", ivarName, (unsigned long)arrayValue.count);
+                // 打印数组内容以供分析
+                LogMessage(EchoLogTypeInfo, @"%@", arrayValue);
+                foundPotentialData = YES;
             }
         }
-        [finalResultString appendString:[categoryContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
-        [finalResultString appendString:@"\n"];
     }
-    
-    LogMessage(EchoLogTypeSuccess, @"[神煞] 所有分类通过数据源'列表'变量完整提取成功！");
-    return [finalResultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+    free(ivars);
+
+    if (!foundPotentialData) {
+        LogMessage(EchoLogTypeWarning, @"侦察完毕，未发现任何包含数据的数组变量。");
+    } else {
+        LogMessage(EchoLogTypeSuccess, @"侦察完毕！请检查以上日志，寻找包含神煞数据的数组。");
+    }
 }
 %end
 
 %ctor {
-    NSLog(@"[EchoShenShaTest v_real_final_fixed] 最终决战版脚本已加载。");
+    NSLog(@"[EchoDataScout] 数据侦察脚本已加载。");
 }
