@@ -228,11 +228,11 @@ static UIWindow* GetFrontmostWindow() {
 - (NSString *)extractShenShaInfo {
     // 定义我们可能需要用到的所有类名
     Class shenShaXingNianViewClass = NSClassFromString(@"六壬大占.神煞行年視圖");
-    Class shenShaViewClass = NSClassFromString(@"六壬大占.神煞視圖");
+    Class shenShaViewClass = NSClassFromString(@"六壬大占.神煞单元");
 
     // 首先检查目标类是否存在，如果连最核心的类都找不到，直接返回错误
     if (!shenShaViewClass) {
-        LogMessage(@"致命错误: 无法在运行时找到 '六壬大占.神煞視圖' 类。请检查App版本或类名。");
+        LogMessage(@"致命错误: 无法在运行时找到 '六壬大占.神煞单元' 类。请检查App版本或类名。");
         return @"[神煞提取失败: 找不到核心视图类]";
     }
 
@@ -253,11 +253,11 @@ static UIWindow* GetFrontmostWindow() {
         LogMessage(@"提示: '神煞行年視圖' 类不存在，将直接在主视图中搜索。");
     }
 
-    // 在确定好的搜索范围 (searchScope) 内寻找最终目标 '神煞視圖'
+    // 在确定好的搜索范围 (searchScope) 内寻找最终目标 '神煞单元'
     NSMutableArray *shenShaViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(shenShaViewClass, searchScope, shenShaViews);
     if (shenShaViews.count == 0) {
-        LogMessage(@"错误: 在指定的搜索范围内未找到 '神煞視圖' 实例。");
+        LogMessage(@"错误: 在指定的搜索范围内未找到 '神煞单元' 实例。");
         return @"[神煞提取失败: 找不到神煞视图实例]";
     }
     UIView *containerView = shenShaViews.firstObject;
@@ -331,3 +331,4 @@ static UIWindow* GetFrontmostWindow() {
 %ctor {
     NSLog(@"[Echo神煞测试] Tweak 已加载 (版本: v2 - 两层搜索策略)。");
 }
+
