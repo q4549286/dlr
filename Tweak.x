@@ -305,8 +305,12 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
         @"// 6. 神煞系统": @"神煞系统", @"// 7. 辅助系统": @"辅助系统"
     };
  NSMutableArray *includedSections = [NSMutableArray array];
-    NSArray *orderedKeys = @[@"// 1. 基础盘元", @"// 2. 核心盘架", @"// 3. 格局总览", @"// 4. 爻位详解", @"// 4.6. 神将详解", @"// 5. 神煞系统", @"// 6. 辅助系统", @"// 6.3. 行年参数"];
-    for (NSString *keyword in orderedKeys) {
+NSArray *orderedKeys = @[
+        @"// 1. 基础盘元", @"// 2. 核心盘架", @"// 3. 格局总览", 
+        @"// 4. 爻位详解", @"// 4.6. 神将详解", @"// 5. 行年参数", 
+        @"// 6. 神煞系统", @"// 7. 辅助系统"
+    ];
+for (NSString *keyword in orderedKeys) {
         if ([fullReport containsString:keyword]) {
             NSString *sectionName = keywordMap[keyword];
             if (![includedSections containsObject:sectionName]) { [includedSections addObject:sectionName]; }
@@ -1448,6 +1452,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
