@@ -4,7 +4,7 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局变量、常量定义与辅助函数 (无变动)
+// 1. 全局变量、常量定义与辅助函数
 // =========================================================================
 #pragma mark - Constants & Colors
 #define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0]
@@ -60,9 +60,28 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
 
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 
-static UIWindow* GetFrontmostWindow() { /* ... 无变动 ... */ }
+static UIWindow* GetFrontmostWindow() {
+    UIWindow *frontmostWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *window in scene.windows) { if (window.isKeyWindow) { frontmostWindow = window; break; } }
+                if (frontmostWindow) break;
+            }
+        }
+    }
+    if (!frontmostWindow) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        frontmostWindow = [UIApplication sharedApplication].keyWindow;
+        #pragma clang diagnostic pop
+    }
+    return frontmostWindow;
+}
 
-// ... UIViewController (EchoShenShaTest) 接口声明 (无变动) ...
+// =========================================================================
+// 2. 接口声明与核心 Hook
+// =========================================================================
 @interface UIViewController (EchoShenShaTest)
 - (void)createOrShowMainControlPanel;
 - (void)handleMasterButtonTap:(UIButton *)sender;
@@ -70,12 +89,110 @@ static UIWindow* GetFrontmostWindow() { /* ... 无变动 ... */ }
 - (NSString *)extractShenShaInfo_Complete;
 @end
 
-// ... Hook (无变动) ...
-%hook UILabel /* ... */ %end
-%hook UIViewController /* ... */ %end
+%hook UILabel
+- (void)setText:(NSString *)text { if (!text) { %orig(text); return; } NSMutableString *s = [text mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)s, NULL, CFSTR("Hant-Hans"), false); %orig(s); }
+- (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSMutableAttributedString *s = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)s.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(s); }
+%end
 
-// ... 面板创建和按钮点击处理 (无变动) ...
-// createOrShowMainControlPanel, handleMasterButtonTap, presentAIActionSheetWithReport
+
+%hook UIViewController
+
+- (void)viewDidLoad {
+    %orig;
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
+            if ([keyWindow viewWithTag:kEchoControlButtonTag]) [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview];
+            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
+            controlButton.tag = kEchoControlButtonTag;
+            [controlButton setTitle:@"Echo 神煞测试" forState:UIControlStateNormal];
+            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
+            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            controlButton.layer.cornerRadius = 18;
+            [controlButton addTarget:self action:@selector(createOrShowMainControlPanel) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:controlButton];
+        });
+    }
+}
+
+%new
+- (void)createOrShowMainControlPanel {
+    UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
+    if (g_mainControlPanelView && g_mainControlPanelView.superview) {
+        [g_mainControlPanelView removeFromSuperview]; g_mainControlPanelView = nil; g_logTextView = nil; return;
+    }
+    g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds];
+    g_mainControlPanelView.tag = kEchoMainPanelTag;
+    if (@available(iOS 8.0, *)) {
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+        blurView.frame = g_mainControlPanelView.bounds; [g_mainControlPanelView addSubview:blurView];
+    } else { g_mainControlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9]; }
+    UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)];
+    [g_mainControlPanelView addSubview:contentView];
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
+    titleLabel.text = @"Echo 神煞提取 (最终版)"; titleLabel.font = [UIFont boldSystemFontOfSize:22];
+    titleLabel.textColor = [UIColor whiteColor]; titleLabel.textAlignment = NSTextAlignmentCenter;
+    [contentView addSubview:titleLabel];
+    
+    UIButton *extractButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    [extractButton setTitle:@"提取全部神煞信息" forState:UIControlStateNormal];
+    extractButton.tag = kButtonTag_ExtractSha; extractButton.backgroundColor = ECHO_COLOR_MAIN_TEAL;
+    [extractButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+    extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:18]; extractButton.layer.cornerRadius = 12;
+    extractButton.frame = CGRectMake(15, 80, contentView.bounds.size.width - 30, 50);
+    [contentView addSubview:extractButton];
+
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, 150, contentView.bounds.size.width, contentView.bounds.size.height - 210)];
+    g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12];
+    g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8; g_logTextView.textColor = [UIColor whiteColor];
+    g_logTextView.text = @"[EchoShenShaTest]: 就绪。\n"; [contentView addSubview:g_logTextView];
+
+    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    [closeButton setTitle:@"关闭面板" forState:UIControlStateNormal]; closeButton.tag = kButtonTag_ClosePanel;
+    closeButton.backgroundColor = ECHO_COLOR_ACTION_CLOSE;
+    [closeButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+    closeButton.layer.cornerRadius = 10; closeButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, contentView.bounds.size.width - 30, 40);
+    [contentView addSubview:closeButton];
+
+    g_mainControlPanelView.alpha = 0; [keyWindow addSubview:g_mainControlPanelView];
+    [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 1.0; }];
+}
+
+%new
+- (void)handleMasterButtonTap:(UIButton *)sender {
+    switch (sender.tag) {
+        case kButtonTag_ExtractShenSha: {
+            LogMessage(EchoLogTypeTask, @"[任务] 开始完整提取所有神煞...");
+            NSString *shenShaResult = [self extractShenShaInfo_Complete];
+            if (shenShaResult && shenShaResult.length > 0) {
+                 NSString *finalReport = [NSString stringWithFormat:@"// 神煞详情 (全部)\n%@", shenShaResult];
+                 [self presentAIActionSheetWithReport:finalReport];
+            } else { LogMessage(EchoLogTypeWarning, @"[结果] 神煞信息为空或提取失败。"); }
+            break;
+        }
+        case kButtonTag_ClosePanel: [self createOrShowMainControlPanel]; break;
+    }
+}
+
+%new
+- (void)presentAIActionSheetWithReport:(NSString *)report {
+    if (!report || report.length == 0) { LogMessage(EchoLogError, @"报告为空，无法执行后续操作。"); return; }
+    [UIPasteboard generalPasteboard].string = report; 
+    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"神煞提取结果" message:@"内容已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"确认 (已复制)" style:UIAlertActionStyleDefault handler:nil];
+    [actionSheet addAction:copyAction];
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
+    [actionSheet addAction:cancelAction];
+    if (actionSheet.popoverPresentationController) {
+        actionSheet.popoverPresentationController.sourceView = self.view;
+        actionSheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height, 1.0, 1.0);
+    }
+    [self presentViewController:actionSheet animated:YES completion:nil];
+}
+
 
 // =========================================================================
 // 3. 核心提取函数 (最终修正版 - 严格限定搜索范围)
@@ -132,19 +249,27 @@ static UIWindow* GetFrontmostWindow() { /* ... 无变动 ... */ }
     LogMessage(EchoLogTypeInfo, @"[神煞] 神煞专用 CollectionView 包含 %ld 个 Section，开始全量提取...", (long)totalSections);
 
     // 4. 【新逻辑】智能匹配标题
-    // 标题 UILabel 应该也在 containerView 内，但不在 collectionView 内
+    // 标题 UILabel 应该也在 containerView 内，但不在 collectionView 的 cell 内
     NSMutableArray *allLabelsInContainer = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UILabel class], containerView, allLabelsInContainer);
     NSMutableArray *titleLabels = [NSMutableArray array];
     for(UILabel *label in allLabelsInContainer) {
-        if (![label.superview isKindOfClass:[UICollectionViewCell class]] && label.frame.origin.x < 50) { // 简单判断，标题一般在左侧
-            [titleLabels addObject:label];
+        BOOL isInCell = NO;
+        UIView *superview = label.superview;
+        while (superview && superview != containerView) {
+            if ([superview isKindOfClass:[UICollectionViewCell class]]) {
+                isInCell = YES;
+                break;
+            }
+            superview = superview.superview;
+        }
+        if (!isInCell) {
+             [titleLabels addObject:label];
         }
     }
     [titleLabels sortUsingComparator:^NSComparisonResult(UILabel* obj1, UILabel* obj2) {
         return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
     }];
-
 
     // 5. 遍历所有 Section 和 Item
     NSMutableString *finalResultString = [NSMutableString string];
@@ -210,9 +335,6 @@ static UIWindow* GetFrontmostWindow() { /* ... 无变动 ... */ }
 
 %end
 
-// ... %ctor (无变动) ...
-
 %ctor {
-    NSLog(@"[EchoShenShaTest v_final] 多 Section 提取脚本已加载。");
+    NSLog(@"[EchoShenShaTest v_final_scoped] 多 Section 提取脚本已加载。");
 }
-
