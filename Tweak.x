@@ -60,7 +60,24 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
 
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 
-static UIWindow* GetFrontmostWindow() { /* ... unchanged ... */ } // 省略未修改的代码
+static UIWindow* GetFrontmostWindow() {
+    UIWindow *frontmostWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *window in scene.windows) { if (window.isKeyWindow) { frontmostWindow = window; break; } }
+                if (frontmostWindow) break;
+            }
+        }
+    }
+    if (!frontmostWindow) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        frontmostWindow = [UIApplication sharedApplication].keyWindow;
+        #pragma clang diagnostic pop
+    }
+    return frontmostWindow;
+}
 
 // =========================================================================
 // 2. 接口声明与核心 Hook
@@ -223,3 +240,4 @@ static UIWindow* GetFrontmostWindow() { /* ... unchanged ... */ } // 省略未�
 %ctor {
     NSLog(@"[EchoShenShaTest v_final_multisection] 已加载。");
 }
+
