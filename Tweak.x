@@ -230,50 +230,67 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         [report appendString:@"\n"];
     }
 
-    // 板块五：神煞系统
-    NSString *shenSha = reportData[@"神煞详情"];
-    if (shenSha.length > 0) {
-        [report appendString:@"// 5. 神煞系统\n"];
-// 下面是新增的一行
-    [report appendString:@"// 本模块提供所有相关神煞信号，但其最终解释权从属于【信号管辖权与关联度终审协议】。请结合核心议题进行批判性审查。\n"];
-        [report appendString:shenSha];
-        [report appendString:@"\n\n"];
-    }
+// 这是修改后的、顺序调整过的代码块
 
-    // 板块六：辅助系统
-    NSMutableString *auxiliaryContent = [NSMutableString string];
-    NSString *qiZheng = reportData[@"七政四余"];
-    if (qiZheng.length > 0) {
-        [auxiliaryContent appendFormat:@"// 6.1. 七政四余\n%@\n\n", qiZheng];
-        NSMutableString *keyPlanetTips = [NSMutableString string];
-        NSDictionary *planetToDeity = @{@"水星": @"天后", @"土星": @"天空", @"火星":@"朱雀", @"金星":@"太阴", @"木星":@"太常"};
-        for(NSString *line in [qiZheng componentsSeparatedByString:@"\n"]) {
-            for(NSString *planet in planetToDeity.allKeys) {
-                if([line hasPrefix:planet]) {
-                    NSScanner *scanner = [NSScanner scannerWithString:line]; NSString *palace;
-                    [scanner scanUpToString:@"宫" intoString:NULL];
-                    if(scanner.scanLocation > 0 && scanner.scanLocation <= line.length) {
-                        [scanner setScanLocation:scanner.scanLocation - 1];
-                        [scanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:@" "] intoString:&palace];
-                        if (palace.length > 0 && [[report copy] containsString:palace]) {
-                             [keyPlanetTips appendFormat:@"- %@(%@): 正在%@宫%@。对应神将`%@`。请关注%@宫相关事宜。\n", planet, ([line containsString:@"逆行"]?@"逆":@"顺"), palace, ([line containsString:@"逆行"]?@"逆行":@"顺行"), planetToDeity[planet], palace];
-                        }
+// 板块五：行年参数 (如果存在)
+NSString *nianMing = reportData[@"行年参数"];
+if (nianMing.length > 0) {
+    [report appendString:@"// 5. 行年参数\n"];
+    [report appendString:nianMing];
+    [report appendString:@"\n\n"];
+}
+
+// 板块六：神煞系统 (如果存在)
+NSString *shenSha = reportData[@"神煞详情"];
+if (shenSha.length > 0) {
+    [report appendString:@"// 6. 神煞系统\n"];
+    [report appendString:@"// 本模块提供所有相关神煞信号，但其最终解释权从属于【信号管辖权与关联度终审协议】。请结合核心议题进行批判性审查。\n"];
+    [report appendString:shenSha];
+    [report appendString:@"\n\n"];
+}
+
+// 板块七：辅助系统
+NSMutableString *auxiliaryContent = [NSMutableString string];
+NSString *qiZheng = reportData[@"七政四余"];
+if (qiZheng.length > 0) {
+    [auxiliaryContent appendFormat:@"// 7.1. 七政四余\n%@\n\n", qiZheng];
+
+    NSMutableString *keyPlanetTips = [NSMutableString string];
+    NSDictionary *planetToDeity = @{@"水星": @"天后", @"土星": @"天空", @"火星":@"朱雀", @"金星":@"太阴", @"木星":@"太常"};
+    for(NSString *line in [qiZheng componentsSeparatedByString:@"\n"]) {
+        for(NSString *planet in planetToDeity.allKeys) {
+            if([line hasPrefix:planet]) {
+                NSScanner *scanner = [NSScanner scannerWithString:line]; NSString *palace;
+                [scanner scanUpToString:@"宫" intoString:NULL];
+                if(scanner.scanLocation > 0 && scanner.scanLocation <= line.length) {
+                    [scanner setScanLocation:scanner.scanLocation - 1];
+                    [scanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:@" "] intoString:&palace];
+                    if (palace.length > 0 && [[report copy] containsString:palace]) {
+                         [keyPlanetTips appendFormat:@"- %@(%@): 正在%@宫%@。对应神将`%@`。请关注%@宫相关事宜。\n", planet, ([line containsString:@"逆行"]?@"逆":@"顺"), palace, ([line containsString:@"逆行"]?@"逆行":@"顺行"), planetToDeity[planet], palace];
                     }
-                    break;
                 }
+                break;
             }
         }
-        if (keyPlanetTips.length > 0) { [auxiliaryContent appendString:@"// 关键星曜提示\n"]; [auxiliaryContent appendString:keyPlanetTips]; [auxiliaryContent appendString:@"\n"]; }
     }
-    NSString *sanGong = reportData[@"三宫时信息"];
-    if (sanGong.length > 0) { [auxiliaryContent appendFormat:@"// 6.2. 三宫时信息\n%@\n\n", sanGong]; }
-    NSString *nianMing = reportData[@"行年参数"];
-    if (nianMing.length > 0) { [auxiliaryContent appendFormat:@"// 6.3. 行年参数\n%@\n\n", nianMing]; }
-    if (auxiliaryContent.length > 0) {
-        while ([report hasSuffix:@"\n"]) { [report deleteCharactersInRange:NSMakeRange(report.length - 1, 1)]; }
-        [report appendString:@"\n// 6. 辅助系统\n"];
-        [report appendString:auxiliaryContent];
+    if (keyPlanetTips.length > 0) { 
+        [auxiliaryContent appendString:@"// 关键星曜提示\n"]; 
+        [auxiliaryContent appendString:keyPlanetTips]; 
+        [auxiliaryContent appendString:@"\n"]; 
     }
+}
+NSString *sanGong = reportData[@"三宫时信息"];
+if (sanGong.length > 0) {
+    [auxiliaryContent appendFormat:@"// 7.2. 三宫时信息\n%@\n\n", sanGong];
+}
+
+if (auxiliaryContent.length > 0) {
+    while ([report hasSuffix:@"\n\n"]) {
+         [report deleteCharactersInRange:NSMakeRange(report.length - 1, 1)];
+    }
+    [report appendString:@"\n// 7. 辅助系统\n"];
+    [report appendString:auxiliaryContent];
+}
     
     return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
@@ -281,8 +298,13 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
 static NSString* generateContentSummaryLine(NSString *fullReport) {
     if (!fullReport || fullReport.length == 0) return @"";
-    NSDictionary *keywordMap = @{ @"// 1. 基础盘元": @"基础盘元", @"// 2. 核心盘架": @"核心盘架", @"// 3. 格局总览": @"格局总览", @"// 4. 爻位详解": @"爻位详解", @"// 4.6. 神将详解": @"课传详解", @"// 5. 神煞系统": @"神煞系统", @"// 6. 辅助系统": @"辅助系统", @"// 6.3. 行年参数": @"行年参数"};
-    NSMutableArray *includedSections = [NSMutableArray array];
+    NSDictionary *keywordMap = @{ 
+        @"// 1. 基础盘元": @"基础盘元", @"// 2. 核心盘架": @"核心盘架", 
+        @"// 3. 格局总览": @"格局总览", @"// 4. 爻位详解": @"爻位详解", 
+        @"// 4.6. 神将详解": @"课传详解", @"// 5. 行年参数": @"行年参数", 
+        @"// 6. 神煞系统": @"神煞系统", @"// 7. 辅助系统": @"辅助系统"
+    };
+ NSMutableArray *includedSections = [NSMutableArray array];
     NSArray *orderedKeys = @[@"// 1. 基础盘元", @"// 2. 核心盘架", @"// 3. 格局总览", @"// 4. 爻位详解", @"// 4.6. 神将详解", @"// 5. 神煞系统", @"// 6. 辅助系统", @"// 6.3. 行年参数"];
     for (NSString *keyword in orderedKeys) {
         if ([fullReport containsString:keyword]) {
@@ -1426,6 +1448,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
