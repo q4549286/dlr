@@ -145,7 +145,7 @@ static UIWindow* GetFrontmostWindow() {
     extractButton.frame = CGRectMake(15, 80, contentView.bounds.size.width - 30, 50);
     [contentView addSubview:extractButton];
 
-    g_logTextView = [[UITextview alloc] initWithFrame:CGRectMake(0, 150, contentView.bounds.size.width, contentView.bounds.size.height - 210)];
+   g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, 150, contentView.bounds.size.width, contentView.bounds.size.height - 210)];
     g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12];
     g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8; g_logTextView.textColor = [UIColor whiteColor];
     g_logTextView.text = @"[EchoShenShaTest]: 就绪。\n"; [contentView addSubview:g_logTextView];
@@ -324,3 +324,4 @@ static UIWindow* GetFrontmostWindow() {
 %ctor {
     NSLog(@"[EchoShenShaTest v_complete] 多分类全量提取脚本已加载。");
 }
+
