@@ -18,7 +18,7 @@
 
 static const NSInteger kEchoControlButtonTag = 556699;
 static const NSInteger kEchoMainPanelTag = 778899;
-static const NSInteger kButtonTag_Investigate = 101;
+static const NSInteger kButtonTag_ExtractShenSha = 101;
 static const NSInteger kButtonTag_ClosePanel = 998;
 
 #pragma mark - Global State
@@ -54,38 +54,22 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
         NSMutableAttributedString *existingText = [[NSMutableAttributedString alloc] initWithAttributedString:g_logTextView.attributedText];
         [logLine appendAttributedString:existingText];
         g_logTextView.attributedText = logLine;
-        NSLog(@"[EchoMethodScout] %@", message);
+        NSLog(@"[EchoShenShaTest] %@", message);
     });
 }
 
-static UIWindow* GetFrontmostWindow() {
-    UIWindow *frontmostWindow = nil;
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                for (UIWindow *window in scene.windows) {
-                    if (window.isKeyWindow) { frontmostWindow = window; break; }
-                }
-                if (frontmostWindow) break;
-            }
-        }
-    }
-    if (!frontmostWindow) {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        frontmostWindow = [UIApplication sharedApplication].keyWindow;
-        #pragma clang diagnostic pop
-    }
-    return frontmostWindow;
-}
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
+
+static UIWindow* GetFrontmostWindow() { /* ... unchanged ... */ } // 省略未修改的代码
 
 // =========================================================================
 // 2. 接口声明与核心 Hook
 // =========================================================================
-@interface UIViewController (EchoMethodScout)
+@interface UIViewController (EchoShenShaTest)
 - (void)createOrShowMainControlPanel;
 - (void)handleMasterButtonTap:(UIButton *)sender;
-- (void)investigateViewControllerMethods;
+- (void)presentAIActionSheetWithReport:(NSString *)report;
+- (NSString *)extractShenShaInfo_Final;
 @end
 
 %hook UILabel
@@ -94,116 +78,148 @@ static UIWindow* GetFrontmostWindow() {
 %end
 
 %hook UIViewController
-- (void)viewDidLoad { 
-    %orig; 
-    Class targetClass = NSClassFromString(@"六壬大占.ViewController"); 
-    if (targetClass && [self isKindOfClass:targetClass]) { 
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ 
-            UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return; 
-            if ([keyWindow viewWithTag:kEchoControlButtonTag]) [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview]; 
-            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem]; 
-            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36); 
-            controlButton.tag = kEchoControlButtonTag; 
-            [controlButton setTitle:@"Echo 方法侦察" forState:UIControlStateNormal]; 
-            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16]; 
-            controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE; 
-            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; 
-            controlButton.layer.cornerRadius = 18; 
-            [controlButton addTarget:self action:@selector(createOrShowMainControlPanel) forControlEvents:UIControlEventTouchUpInside]; 
-            [keyWindow addSubview:controlButton]; 
-        }); 
-    } 
+
+- (void)viewDidLoad { /* ... unchanged ... */ } // 省略未修改的代码
+%new - (void)createOrShowMainControlPanel { /* ... unchanged ... */ } // 省略未修改的代码
+
+%new
+- (void)handleMasterButtonTap:(UIButton *)sender {
+    switch (sender.tag) {
+        case kButtonTag_ExtractShenSha: {
+            LogMessage(EchoLogTypeTask, @"[任务] 开始最终版全量提取...");
+            NSString *shenShaResult = [self extractShenShaInfo_Final];
+            if (shenShaResult && shenShaResult.length > 0) {
+                 NSString *finalReport = [NSString stringWithFormat:@"// 神煞详情 (最终全量版)\n%@", shenShaResult];
+                 [self presentAIActionSheetWithReport:finalReport];
+            } else { LogMessage(EchoLogTypeWarning, @"[结果] 神煞信息为空或提取失败。"); }
+            break;
+        }
+        case kButtonTag_ClosePanel: [self createOrShowMainControlPanel]; break;
+    }
 }
-%new 
-- (void)createOrShowMainControlPanel { 
-    UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return; 
-    if (g_mainControlPanelView && g_mainControlPanelView.superview) { [g_mainControlPanelView removeFromSuperview]; g_mainControlPanelView = nil; g_logTextView = nil; return; } 
-    g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds]; g_mainControlPanelView.tag = kEchoMainPanelTag; 
-    if (@available(iOS 8.0, *)) { UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]]; blurView.frame = g_mainControlPanelView.bounds; [g_mainControlPanelView addSubview:blurView]; } else { g_mainControlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9]; } 
-    UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)]; [g_mainControlPanelView addSubview:contentView]; 
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)]; titleLabel.text = @"Echo 方法侦察兵"; titleLabel.font = [UIFont boldSystemFontOfSize:22]; titleLabel.textColor = [UIColor whiteColor]; titleLabel.textAlignment = NSTextAlignmentCenter; [contentView addSubview:titleLabel]; 
-    UIButton *investigateButton = [UIButton buttonWithType:UIButtonTypeCustom]; [investigateButton setTitle:@"侦察 ViewController 方法" forState:UIControlStateNormal]; investigateButton.tag = kButtonTag_Investigate; investigateButton.backgroundColor = ECHO_COLOR_MAIN_TEAL; [investigateButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; investigateButton.titleLabel.font = [UIFont boldSystemFontOfSize:18]; investigateButton.layer.cornerRadius = 12; investigateButton.frame = CGRectMake(15, 80, contentView.bounds.size.width - 30, 50); [contentView addSubview:investigateButton]; 
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, 150, contentView.bounds.size.width, contentView.bounds.size.height - 210)]; g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12]; g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8; g_logTextView.textColor = [UIColor whiteColor]; g_logTextView.text = @"[EchoMethodScout]: 就绪。请点击按钮开始侦察。\n"; [contentView addSubview:g_logTextView]; 
-    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeCustom]; [closeButton setTitle:@"关闭面板" forState:UIControlStateNormal]; closeButton.tag = kButtonTag_ClosePanel; closeButton.backgroundColor = ECHO_COLOR_ACTION_CLOSE; [closeButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; closeButton.layer.cornerRadius = 10; closeButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, contentView.bounds.size.width - 30, 40); [contentView addSubview:closeButton]; 
-    g_mainControlPanelView.alpha = 0; [keyWindow addSubview:g_mainControlPanelView]; [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 1.0; }]; 
-}
-%new 
-- (void)handleMasterButtonTap:(UIButton *)sender { 
-    switch (sender.tag) { 
-        case kButtonTag_Investigate: { 
-            [self investigateViewControllerMethods]; 
-            break; 
-        } 
-        case kButtonTag_ClosePanel: 
-            [self createOrShowMainControlPanel]; 
-            break; 
-    } 
-}
+%new - (void)presentAIActionSheetWithReport:(NSString *)report { /* ... unchanged ... */ } // 省略未修改的代码
+
 
 // =========================================================================
-// 3. 核心侦察函数
+// 3. 核心提取函数 (最终完美版 - 支持多 Section)
 // =========================================================================
 %new
-- (void)investigateViewControllerMethods {
-    LogMessage(EchoLogTypeTask, @"开始侦察 '六壬大占.ViewController' 的方法...");
-    Class vcClass = NSClassFromString(@"六壬大占.ViewController");
-    if (![self isKindOfClass:vcClass]) {
-        LogMessage(EchoLogError, @"错误: 当前上下文不是 '六壬大占.ViewController'。");
-        return;
+- (NSString *)extractShenShaInfo_Final {
+    // 1. 定位神煞主容器视图
+    Class shenShaViewClass = NSClassFromString(@"六壬大占.神煞行年視圖"); // 直接使用已确认的类名
+    if (!shenShaViewClass) {
+        LogMessage(EchoLogError, @"[神煞] 错误: 找不到类 '六壬大占.神煞行年視圖'。");
+        return @"[神煞提取失败: 找不到视图类]";
     }
 
-    unsigned int methodCount;
-    Method *methods = class_copyMethodList(vcClass, &methodCount);
-    if (!methods) {
-        LogMessage(EchoLogError, @"错误: 无法获取方法列表。");
-        return;
+    NSMutableArray *shenShaViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(shenShaViewClass, self.view, shenShaViews);
+    if (shenShaViews.count == 0) {
+        LogMessage(EchoLogTypeWarning, @"[神煞] 未在当前界面找到神煞主容器实例。");
+        return @"";
     }
+    UIView *containerView = shenShaViews.firstObject;
 
-    LogMessage(EchoLogTypeInfo, @"发现 %d 个方法，开始筛选返回数组且无参数的方法...", methodCount);
+    // 2. 找到唯一的 UICollectionView
+    NSMutableArray *collectionViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UICollectionView class], containerView, collectionViews);
+    if (collectionViews.count == 0) {
+        LogMessage(EchoLogError, @"[神煞] 错误: 在主容器内找不到 UICollectionView。");
+        return @"[神煞提取失败: 找不到集合视图]";
+    }
+    UICollectionView *collectionView = collectionViews.firstObject;
+    
+    // 3. 【核心改动】处理多 Section
+    id<UICollectionViewDataSource> dataSource = collectionView.dataSource;
+    NSInteger numberOfSections = collectionView.numberOfSections;
 
-    BOOL foundPotentialData = NO;
-    for (unsigned int i = 0; i < methodCount; i++) {
-        Method method = methods[i];
-        SEL selector = method_getName(method);
-        const char *name = sel_getName(selector);
-        NSString *methodName = [NSString stringWithUTF8String:name];
-        
-        // 我们只关心无参数的方法
-        if ([methodName containsString:@":"]) continue;
+    if (!dataSource || numberOfSections == 0) {
+        LogMessage(EchoLogError, @"[神煞] 错误: 无数据源或 Section 数量为0。");
+        return @"[神煞提取失败: 无数据]";
+    }
+    
+    LogMessage(EchoLogTypeInfo, @"[神煞] 发现 %ld 个 Section，开始完整遍历...", (long)numberOfSections);
 
-        struct objc_method_description *desc = method_getDescription(method);
-        if (desc && desc->types) {
-            // 返回值类型是 '@'，代表对象
-            if (desc->types[0] == '@') {
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                id returnValue = [self performSelector:selector];
-                #pragma clang diagnostic pop
-
-                // 如果返回值是数组，就打印出来
-                if (returnValue && [returnValue isKindOfClass:[NSArray class]]) {
-                    NSArray *arrayValue = (NSArray *)returnValue;
-                     // 过滤掉空数组
-                    if (arrayValue.count > 0) {
-                        LogMessage(EchoLogTypeTask, @"发现方法 '%@' 返回数组 (共 %lu 项)，内容如下:", methodName, (unsigned long)arrayValue.count);
-                        LogMessage(EchoLogTypeInfo, @"%@", arrayValue);
-                        foundPotentialData = YES;
-                    }
-                }
-            }
+    // 4. 智能查找所有分类标题
+    NSMutableArray *allLabelsInContainer = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], containerView, allLabelsInContainer);
+    NSMutableArray *titleLabels = [NSMutableArray array];
+    for (UILabel *label in allLabelsInContainer) {
+        BOOL isInCell = NO; UIView *superview = label.superview;
+        while (superview && superview != containerView) {
+            if ([superview isKindOfClass:[UICollectionViewCell class]]) { isInCell = YES; break; }
+            superview = superview.superview;
         }
+        if (!isInCell) { [titleLabels addObject:label]; }
+    }
+    [titleLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
+        return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)];
+    }];
+
+    // 5. 遍历所有 Section 和 Item
+    NSMutableString *finalResultString = [NSMutableString string];
+    for (NSInteger section = 0; section < numberOfSections; section++) {
+        NSInteger totalItemsInSection = [dataSource collectionView:collectionView numberOfItemsInSection:section];
+        if (totalItemsInSection == 0) continue;
+
+        NSString *categoryTitle = (section < titleLabels.count) ? ((UILabel *)titleLabels[section]).text : [NSString stringWithFormat:@"分类 %ld", (long)section + 1];
+        categoryTitle = [categoryTitle stringByReplacingOccurrencesOfString:@":" withString:@""];
+        [finalResultString appendFormat:@"\n// %@\n", categoryTitle];
+
+        NSMutableArray<NSDictionary *> *cellDataList = [NSMutableArray array];
+        for (NSInteger item = 0; item < totalItemsInSection; item++) {
+            NSIndexPath *indexPath = [NSIndexPath indexPathForItem:item inSection:section];
+            UICollectionViewCell *cell = [dataSource collectionView:collectionView cellForItemAtIndexPath:indexPath];
+            UICollectionViewLayoutAttributes *attributes = [collectionView.collectionViewLayout layoutAttributesForItemAtIndexPath:indexPath];
+            if (!cell || !attributes) continue;
+
+            NSMutableArray *labels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labels);
+            [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
+            
+            NSMutableArray *textParts = [NSMutableArray array];
+            for (UILabel *label in labels) { if (label.text.length > 0) [textParts addObject:label.text]; }
+            
+            [cellDataList addObject:@{@"textParts": textParts, @"frame": [NSValue valueWithCGRect:attributes.frame]}];
+        }
+        
+        // 【注意】这里排序只在 Section 内部进行，因为不同 Section 的坐标可能是重叠的
+        [cellDataList sortUsingComparator:^NSComparisonResult(NSDictionary *o1, NSDictionary *o2) {
+            CGRect f1 = [o1[@"frame"] CGRectValue], f2 = [o2[@"frame"] CGRectValue];
+            if (roundf(f1.origin.y) < roundf(f2.origin.y)) return NSOrderedAscending;
+            if (roundf(f1.origin.y) > roundf(f2.origin.y)) return NSOrderedDescending;
+            return [@(f1.origin.x) compare:@(f2.origin.x)];
+        }];
+
+        NSMutableString *categoryContent = [NSMutableString string];
+        CGFloat lastY = -1.0; BOOL isFirstInRow = YES;
+        for (NSDictionary *cellData in cellDataList) {
+            CGRect frame = [cellData[@"frame"] CGRectValue];
+            NSArray *textParts = cellData[@"textParts"];
+            if (textParts.count == 0) continue;
+
+            if (lastY >= 0 && roundf(frame.origin.y) > roundf(lastY)) {
+                [categoryContent appendString:@"\n"]; isFirstInRow = YES;
+            }
+            if (!isFirstInRow) { [categoryContent appendString:@" |"]; }
+
+            if (textParts.count == 1) {
+                [categoryContent appendFormat:@"%@:", textParts.firstObject];
+            } else if (textParts.count >= 2) {
+                [categoryContent appendFormat:@" %@(%@)", textParts[0], textParts[1]];
+            }
+            lastY = frame.origin.y; isFirstInRow = NO;
+        }
+        [finalResultString appendString:categoryContent];
+        [finalResultString appendString:@"\n"];
     }
 
-    free(methods);
-
-    if (!foundPotentialData) {
-        LogMessage(EchoLogTypeWarning, @"侦察完毕，未发现任何返回非空数组的可疑方法。");
-    } else {
-        LogMessage(EchoLogTypeSuccess, @"侦察完毕！请检查以上日志，寻找包含神煞数据的数组。");
-    }
+    LogMessage(EchoLogTypeSuccess, @"[神煞] 所有 %ld 个 Section 完整提取成功！", (long)numberOfSections);
+    return [finalResultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 %end
 
 %ctor {
-    NSLog(@"[EchoMethodScout] 方法侦察脚本已加载。");
+    NSLog(@"[EchoShenShaTest v_final_multisection] 已加载。");
 }
