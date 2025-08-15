@@ -611,13 +611,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)},
         @{@"title": @"神煞", @"icon": @"star.grid.1x2", @"tag": @(kButtonTag_ShenSha)}
     ];
-    for (int i = 0; i < coreButtons.count; i++) {
-        NSDictionary *config = coreButtons[i];
-        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
-        btn.frame = CGRectMake(padding + (i % 2) * (btnWidth + padding), currentY + (i / 2) * 56, btnWidth, 46);
-        [scrollView addSubview:btn];
-    }
-    currentY += ((coreButtons.count + 1) / 2) * 56 + 15;
+for (int i = 0; i < coreButtons.count; i++) {
+    NSDictionary *config = coreButtons[i];
+    UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
+    // 统一使用网格布局，不再有特殊处理
+    btn.frame = CGRectMake(padding + (i % 2) * (btnWidth + padding), currentY + (i / 2) * 56, btnWidth, 46);
+    [scrollView addSubview:btn];
+}
+// 动态计算总高度
+currentY += ((coreButtons.count + 1) / 2) * 56; 
     UILabel *sec3Title = createSectionTitle(@"格局资料库");
     sec3Title.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 22); [scrollView addSubview:sec3Title];
     currentY += 22 + 10;
@@ -1424,4 +1426,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
