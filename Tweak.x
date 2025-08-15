@@ -233,10 +233,10 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
 // 这是修改后的、顺序调整过的代码块
 
-// (接在板块四：爻位详解的代码之后)
+// (接在板块四：// (接在板块四：爻位详解的代码之后)
 
 // =================================================================
-// vvvvvvvvvvvvvv 动态序号生成逻辑 vvvvvvvvvvvvvvv
+// vvvvvvvvvvvvvv 动态序号生成逻辑 v2.0 vvvvvvvvvvvvvvv
 // =================================================================
 
 // 定义所有可选板块及其内容
@@ -266,9 +266,15 @@ for (NSDictionary *sectionInfo in optionalSections) {
     // 特殊处理复合的“辅助系统”
     if ([content isEqualToString:@"COMPOSITE_SECTION_PLACEHOLDER"]) {
         NSMutableString *auxiliaryContent = [NSMutableString string];
+        // 子模块计数器
+        NSInteger subSectionCounter = 0;
+        
         NSString *qiZheng = reportData[@"七政四余"];
         if (qiZheng.length > 0) {
-            [auxiliaryContent appendFormat:@"// 7.1. 七政四余\n%@\n\n", qiZheng]; // 这里的子序号是固定的，所以写死
+            subSectionCounter++;
+            // 【关键修正】子序号使用主序号 + . + 子序号
+            [auxiliaryContent appendFormat:@"// %ld.%ld. 七政四余\n%@\n\n", (long)(sectionCounter + 1), (long)subSectionCounter, qiZheng];
+            
             // ... 七政的关键星曜提示逻辑 ...
             NSMutableString *keyPlanetTips = [NSMutableString string];
             NSDictionary *planetToDeity = @{@"水星": @"天后", @"土星": @"天空", @"火星":@"朱雀", @"金星":@"太阴", @"木星":@"太常"};
@@ -296,7 +302,9 @@ for (NSDictionary *sectionInfo in optionalSections) {
         }
         NSString *sanGong = reportData[@"三宫时信息"];
         if (sanGong.length > 0) {
-            [auxiliaryContent appendFormat:@"// 7.2. 三宫时信息\n%@\n\n", sanGong];
+            subSectionCounter++;
+            // 【关键修正】子序号使用主序号 + . + 子序号
+            [auxiliaryContent appendFormat:@"// %ld.%ld. 三宫时信息\n%@\n\n", (long)(sectionCounter + 1), (long)subSectionCounter, sanGong];
         }
         
         content = [auxiliaryContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -307,7 +315,6 @@ for (NSDictionary *sectionInfo in optionalSections) {
         sectionCounter++;
         [report appendFormat:@"// %ld. %@\n", (long)sectionCounter, sectionInfo[@"title"]];
         
-        // 如果有前缀备注，添加它
         if (sectionInfo[@"prefix"]) {
             [report appendString:sectionInfo[@"prefix"]];
         }
@@ -316,6 +323,8 @@ for (NSDictionary *sectionInfo in optionalSections) {
         [report appendString:@"\n\n"];
     }
 }
+
+// ... 后续代码 ...
 
 // 移除末尾多余的换行符
 while ([report hasSuffix:@"\n\n"]) {
@@ -1482,6 +1491,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
