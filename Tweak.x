@@ -22,7 +22,7 @@ static const NSInteger kButtonTag_ExtractShenSha = 101;
 static const NSInteger kButtonTag_ClosePanel = 998;
 
 // 【新增】指定要提取的 Section 标题
-static NSString *kTargetSectionTitle = @""; // 【请在这里输入您要提取的Section的标题文本】
+static NSString *kTargetSectionTitle = @"支煞"; // 【请在这里输入您要提取的Section的标题文本】
 
 #pragma mark - Global State
 static UIView *g_mainControlPanelView = nil;
@@ -338,3 +338,4 @@ static UIWindow* GetFrontmostWindow() {
 %ctor {
     NSLog(@"[EchoShenShaTest v_targeted] 定目标Section测试脚本已加载。");
 }
+
