@@ -181,10 +181,10 @@ static UIWindow* GetFrontmostWindow() {
             LogMessage(@"任务开始: 提取神煞信息...");
             NSString *shenShaResult = [self extractShenShaInfo];
             LogMessage(@"提取结果:\n---\n%@\n---", shenShaResult);
-            if (shenShaResult.length > 0) {
+            if (shenShaResult.length > 0 && ![shenShaResult containsString:@"失败"]) {
                  [self presentAIActionSheetWithReport:shenShaResult];
             } else {
-                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"未找到神煞信息或信息为空。" preferredStyle:UIAlertControllerStyleAlert];
+                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取失败或无内容" message:shenShaResult preferredStyle:UIAlertControllerStyleAlert];
                  [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
                  [self presentViewController:alert animated:YES completion:nil];
             }
@@ -205,14 +205,12 @@ static UIWindow* GetFrontmostWindow() {
 
     UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"提取成功" message:@"神煞信息已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
     
-    // 仅提供复制和取消选项
     UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"好的，已复制" style:UIAlertActionStyleDefault handler:nil];
     [actionSheet addAction:copyAction];
     
     UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
     [actionSheet addAction:cancelAction];
     
-    // 兼容 iPad
     if (actionSheet.popoverPresentationController) {
         actionSheet.popoverPresentationController.sourceView = self.view;
         actionSheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height, 1.0, 1.0);
@@ -223,28 +221,48 @@ static UIWindow* GetFrontmostWindow() {
 }
 
 // =========================================================================
-// 3. 核心提取函数
+// 3. 核心提取函数 (已更新为两层搜索策略)
 // =========================================================================
 
 %new
 - (NSString *)extractShenShaInfo {
-    // 1. 定位神煞视图的类
+    // 定义我们可能需要用到的所有类名
+    Class shenShaXingNianViewClass = NSClassFromString(@"六壬大占.神煞行年視圖");
     Class shenShaViewClass = NSClassFromString(@"六壬大占.神煞視圖");
+
+    // 首先检查目标类是否存在，如果连最核心的类都找不到，直接返回错误
     if (!shenShaViewClass) {
-        LogMessage(@"错误: 找不到 '六壬大占.神煞視圖' 类。");
-        return @"[神煞提取失败: 找不到视图类]";
+        LogMessage(@"致命错误: 无法在运行时找到 '六壬大占.神煞視圖' 类。请检查App版本或类名。");
+        return @"[神煞提取失败: 找不到核心视图类]";
     }
 
-    // 2. 在当前视图中找到神煞视图的实例
+    // --- 开始执行两层搜索策略 ---
+    UIView *searchScope = self.view; // 默认搜索范围是整个主视图
+
+    // 策略1: 优先寻找 '神煞行年視圖' 作为更精确的搜索范围
+    if (shenShaXingNianViewClass) {
+        NSMutableArray *containerViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(shenShaXingNianViewClass, self.view, containerViews);
+        if (containerViews.count > 0) {
+            searchScope = containerViews.firstObject;
+            LogMessage(@"策略1: 发现 '神煞行年視圖'，将在其内部搜索。");
+        } else {
+            LogMessage(@"策略2: 未发现 '神煞行年視圖'，将在主视图中搜索。");
+        }
+    } else {
+        LogMessage(@"提示: '神煞行年視圖' 类不存在，将直接在主视图中搜索。");
+    }
+
+    // 在确定好的搜索范围 (searchScope) 内寻找最终目标 '神煞視圖'
     NSMutableArray *shenShaViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(shenShaViewClass, self.view, shenShaViews);
+    FindSubviewsOfClassRecursive(shenShaViewClass, searchScope, shenShaViews);
     if (shenShaViews.count == 0) {
-        LogMessage(@"未在当前界面找到神煞视图。");
-        return @""; // 可能当前盘面没有神煞信息，返回空字符串
+        LogMessage(@"错误: 在指定的搜索范围内未找到 '神煞視圖' 实例。");
+        return @"[神煞提取失败: 找不到神煞视图实例]";
     }
     UIView *containerView = shenShaViews.firstObject;
 
-    // 3. 在神煞视图中找到 UICollectionView
+    // --- 后续逻辑与之前相同，因为内部结构是确定的 ---
     NSMutableArray *collectionViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UICollectionView class], containerView, collectionViews);
     if (collectionViews.count == 0) {
@@ -253,24 +271,18 @@ static UIWindow* GetFrontmostWindow() {
     }
     UICollectionView *collectionView = collectionViews.firstObject;
 
-    // 4. 获取所有可见的单元格并进行精确排序
     NSMutableArray<UICollectionViewCell *> *cells = [[collectionView visibleCells] mutableCopy];
+    if (cells.count == 0) {
+        LogMessage(@"信息为空: 神煞的 UICollectionView 中没有可见的单元格。");
+        return @""; // 没有内容是正常情况
+    }
+
     [cells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-        if (roundf(v1.frame.origin.y) < roundf(v2.frame.origin.y)) {
-            return NSOrderedAscending;
-        }
-        if (roundf(v1.frame.origin.y) > roundf(v2.frame.origin.y)) {
-            return NSOrderedDescending;
-        }
+        if (roundf(v1.frame.origin.y) < roundf(v2.frame.origin.y)) return NSOrderedAscending;
+        if (roundf(v1.frame.origin.y) > roundf(v2.frame.origin.y)) return NSOrderedDescending;
         return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)];
     }];
 
-    if (cells.count == 0) {
-        LogMessage(@"信息为空。");
-        return @"";
-    }
-
-    // 5. 遍历单元格，提取文本并格式化
     NSMutableString *resultString = [NSMutableString string];
     CGFloat lastY = -1.0;
 
@@ -284,11 +296,8 @@ static UIWindow* GetFrontmostWindow() {
 
         NSMutableArray *textParts = [NSMutableArray array];
         for (UILabel *label in labels) {
-            if (label.text.length > 0) {
-                [textParts addObject:label.text];
-            }
+            if (label.text.length > 0) [textParts addObject:label.text];
         }
-        
         if (textParts.count == 0) continue;
 
         if (lastY > 0 && roundf(cell.frame.origin.y) > roundf(lastY)) {
@@ -299,20 +308,19 @@ static UIWindow* GetFrontmostWindow() {
              [resultString appendString:@" | "];
         }
         
-        if (textParts.count == 1) { // 适用于行首的标识，如 "亥"
+        if (textParts.count == 1) {
             [resultString appendFormat:@"%@:", textParts.firstObject];
-        } else if (textParts.count >= 2) { // 适用于神煞对，如 "死符" "申"
+        } else if (textParts.count >= 2) {
             [resultString appendFormat:@" %@(%@)", textParts[0], textParts[1]];
         } else {
              [resultString appendString:[textParts componentsJoinedByString:@" "]];
         }
-        
         lastY = cell.frame.origin.y;
     }
     
     NSString *finalResult = [resultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    // 清理可能产生的行首多余空格
     finalResult = [finalResult stringByReplacingOccurrencesOfString:@"\n " withString:@"\n"];
+    finalResult = [finalResult stringByReplacingOccurrencesOfString:@"\n|" withString:@"\n"];
 
     LogMessage(@"提取成功。");
     return finalResult;
@@ -321,5 +329,5 @@ static UIWindow* GetFrontmostWindow() {
 %end
 
 %ctor {
-    NSLog(@"[Echo神煞测试] Tweak 已加载。");
+    NSLog(@"[Echo神煞测试] Tweak 已加载 (版本: v2 - 两层搜索策略)。");
 }
