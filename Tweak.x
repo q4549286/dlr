@@ -139,8 +139,8 @@ static UIWindow* GetFrontmostWindow() {
     
     UIButton *extractButton = [UIButton buttonWithType:UIButtonTypeCustom];
     [extractButton setTitle:@"提取全部神煞信息" forState:UIControlStateNormal];
-    extractButton.tag = kButtonTag_ExtractSha; extractButton.backgroundColor = ECHO_COLOR_MAIN_TEAL;
-    [extractButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+extractButton.tag = kButtonTag_ExtractShenSha; extractButton.backgroundColor = ECHO_COLOR_MAIN_TEAL;
+[extractButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
     extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:18]; extractButton.layer.cornerRadius = 12;
     extractButton.frame = CGRectMake(15, 80, contentView.bounds.size.width - 30, 50);
     [contentView addSubview:extractButton];
@@ -338,3 +338,4 @@ static UIWindow* GetFrontmostWindow() {
 %ctor {
     NSLog(@"[EchoShenShaTest v_final_scoped] 多 Section 提取脚本已加载。");
 }
+
