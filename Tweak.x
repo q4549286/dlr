@@ -21,6 +21,9 @@ static const NSInteger kEchoMainPanelTag = 778899;
 static const NSInteger kButtonTag_ExtractShenSha = 101;
 static const NSInteger kButtonTag_ClosePanel = 998;
 
+// 【新增】指定要提取的 Section 标题
+static NSString *kTargetSectionTitle = @""; // 【请在这里输入您要提取的Section的标题文本】
+
 #pragma mark - Global State
 static UIView *g_mainControlPanelView = nil;
 static UITextView *g_logTextView = nil;
@@ -86,7 +89,7 @@ static UIWindow* GetFrontmostWindow() {
 - (void)createOrShowMainControlPanel;
 - (void)handleMasterButtonTap:(UIButton *)sender;
 - (void)presentAIActionSheetWithReport:(NSString *)report;
-- (NSString *)extractShenShaInfo_Full;
+- (NSString *)extractShenShaInfo_Targeted;
 @end
 
 %hook UILabel
@@ -133,12 +136,12 @@ static UIWindow* GetFrontmostWindow() {
     UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)];
     [g_mainControlPanelView addSubview:contentView];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
-    titleLabel.text = @"Echo 神煞提取 (全量)"; titleLabel.font = [UIFont boldSystemFontOfSize:22];
+    titleLabel.text = @"Echo 神煞提取 (定Section)"; titleLabel.font = [UIFont boldSystemFontOfSize:22];
     titleLabel.textColor = [UIColor whiteColor]; titleLabel.textAlignment = NSTextAlignmentCenter;
     [contentView addSubview:titleLabel];
     
     UIButton *extractButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    [extractButton setTitle:@"提取全部神煞信息" forState:UIControlStateNormal];
+    [extractButton setTitle:@"提取指定神煞信息" forState:UIControlStateNormal];
     extractButton.tag = kButtonTag_ExtractShenSha; extractButton.backgroundColor = ECHO_COLOR_MAIN_TEAL;
     [extractButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
     extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:18]; extractButton.layer.cornerRadius = 12;
@@ -165,10 +168,10 @@ static UIWindow* GetFrontmostWindow() {
 - (void)handleMasterButtonTap:(UIButton *)sender {
     switch (sender.tag) {
         case kButtonTag_ExtractShenSha: {
-            LogMessage(EchoLogTypeTask, @"[任务] 开始全量提取神煞信息...");
-            NSString *shenShaResult = [self extractShenShaInfo_Full];
+            LogMessage(EchoLogTypeTask, @"[任务] 开始提取指定神煞信息...");
+            NSString *shenShaResult = [self extractShenShaInfo_Targeted];
             if (shenShaResult && shenShaResult.length > 0) {
-                 NSString *finalReport = [NSString stringWithFormat:@"// 神煞详情 (全量)\n%@", shenShaResult];
+                 NSString *finalReport = [NSString stringWithFormat:@"// 神煞详情 (指定Section)\n%@", shenShaResult];
                  [self presentAIActionSheetWithReport:finalReport];
             } else { LogMessage(EchoLogTypeWarning, @"[结果] 神煞信息为空或提取失败。"); }
             break;
@@ -195,11 +198,19 @@ static UIWindow* GetFrontmostWindow() {
 
 
 // =========================================================================
-// 3. 核心提取函数 (最终全量版)
+// 3. 核心提取函数 (最终版 - 指定Section)
 // =========================================================================
 
 %new
-- (NSString *)extractShenShaInfo_Full {
+- (NSString *)extractShenShaInfo_Targeted {
+    // 0. 【重要】请务必在这里设置您要提取的 Section 标题
+    NSString *targetSectionTitle = kTargetSectionTitle;
+    if (!targetSectionTitle || targetSectionTitle.length == 0) {
+        LogMessage(EchoLogError, @"[神煞] 错误: 尚未设置目标 Section 的标题 (请修改 kTargetSectionTitle)。");
+        return @"[神煞提取失败: 尚未设置目标Section标题]";
+    }
+    LogMessage(EchoLogTypeInfo, @"[神煞] 目标 Section 标题: %@", targetSectionTitle);
+
     // 1. 定位神煞容器视图的类
     NSArray *possibleClassNames = @[@"六壬大占.行年神煞視圖", @"六壬大占.神煞行年視圖", @"六壬大占.神煞視圖"];
     Class shenShaViewClass = nil;
@@ -230,7 +241,7 @@ static UIWindow* GetFrontmostWindow() {
     }
     UICollectionView *collectionView = collectionViews.firstObject;
     
-    // 4. 【核心改动】直接与数据源交互
+    // 4. 获取数据源
     id<UICollectionViewDataSource> dataSource = collectionView.dataSource;
     if (!dataSource) {
         LogMessage(EchoLogError, @"[神煞] 错误: UICollectionView 没有数据源 (dataSource)。");
@@ -245,20 +256,44 @@ static UIWindow* GetFrontmostWindow() {
     
     LogMessage(EchoLogTypeInfo, @"[神煞] 发现总计 %ld 个神煞单元，开始全量提取...", (long)totalItems);
 
-    // 5. 存储每个单元格的数据及其布局信息
-    NSMutableArray<NSDictionary *> *cellDataList = [NSMutableArray array];
+    // 5. 遍历所有单元格，寻找目标 Section 的起始位置
+    NSInteger startIndex = -1;
     for (NSInteger i = 0; i < totalItems; i++) {
         NSIndexPath *indexPath = [NSIndexPath indexPathForItem:i inSection:0];
-        
-        // 从数据源获取单元格
         UICollectionViewCell *cell = [dataSource collectionView:collectionView cellForItemAtIndexPath:indexPath];
         
-        // 获取单元格的布局属性 (位置和大小)
+        // 查找 Cell 内部的 UILabel, 看看有没有 Section 标题
+        NSMutableArray *labels = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labels);
+
+        //如果该Cell包含标题Label
+        for(UILabel* label in labels) {
+            if ([label.text isEqualToString:targetSectionTitle]) {
+                startIndex = i;
+                LogMessage(EchoLogTypeInfo, @"[神煞] 找到目标 Section 的起始索引: %ld", (long)startIndex);
+                break;
+            }
+        }
+        if (startIndex >= 0) break; // 找到起始位置，退出循环
+    }
+
+    if (startIndex == -1) {
+        LogMessage(EchoLogError, @"[神煞] 错误: 没有找到标题为 '%@' 的 Section。", targetSectionTitle);
+        return [NSString stringWithFormat:@"[神煞提取失败: 找不到目标Section (标题: %@)]", targetSectionTitle];
+    }
+
+    // 6. 从目标 Section 的起始位置开始，提取数据
+    NSMutableString *resultString = [NSMutableString string];
+    CGFloat lastY = -1.0;
+    BOOL isFirstInRow = YES;
+
+    for (NSInteger i = startIndex; i < totalItems; i++) {
+        NSIndexPath *indexPath = [NSIndexPath indexPathForItem:i inSection:0];
+        UICollectionViewCell *cell = [dataSource collectionView:collectionView cellForItemAtIndexPath:indexPath];
         UICollectionViewLayoutAttributes *attributes = [collectionView.collectionViewLayout layoutAttributesForItemAtIndexPath:indexPath];
         
         if (!cell || !attributes) continue;
 
-        // 从单元格中提取文本
         NSMutableArray *labels = [NSMutableArray array];
         FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labels);
         [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
@@ -272,32 +307,9 @@ static UIWindow* GetFrontmostWindow() {
             }
         }
         
-        [cellDataList addObject:@{
-            @"textParts": textParts,
-            @"frame": [NSValue valueWithCGRect:attributes.frame]
-        }];
-    }
-
-    // 6. 根据布局信息对提取到的数据进行排序
-    [cellDataList sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-        CGRect frame1 = [obj1[@"frame"] CGRectValue];
-        CGRect frame2 = [obj2[@"frame"] CGRectValue];
-        if (roundf(frame1.origin.y) < roundf(frame2.origin.y)) return NSOrderedAscending;
-        if (roundf(frame1.origin.y) > roundf(frame2.origin.y)) return NSOrderedDescending;
-        return [@(frame1.origin.x) compare:@(frame2.origin.x)];
-    }];
-
-    // 7. 格式化输出
-    NSMutableString *resultString = [NSMutableString string];
-    CGFloat lastY = -1.0;
-    BOOL isFirstInRow = YES;
-
-    for (NSDictionary *cellData in cellDataList) {
-        CGRect frame = [cellData[@"frame"] CGRectValue];
-        NSArray *textParts = cellData[@"textParts"];
-
         if (textParts.count == 0) continue;
 
+        CGRect frame = attributes.frame;
         if (lastY >= 0 && roundf(frame.origin.y) > roundf(lastY)) {
             [resultString appendString:@"\n"];
             isFirstInRow = YES;
@@ -317,12 +329,12 @@ static UIWindow* GetFrontmostWindow() {
         isFirstInRow = NO;
     }
     
-    LogMessage(EchoLogTypeSuccess, @"[神煞] 全量提取成功，共 %lu 条记录。", (unsigned long)cellDataList.count);
+    LogMessage(EchoLogTypeSuccess, @"[神煞] 成功提取指定 Section 的信息，共 %lu 条记录。", (unsigned long)(totalItems - startIndex));
     return [resultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
 %end
 
 %ctor {
-    NSLog(@"[EchoShenShaTest v_full] 全量提取测试脚本已加载。");
+    NSLog(@"[EchoShenShaTest v_targeted] 定目标Section测试脚本已加载。");
 }
