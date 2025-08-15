@@ -31,8 +31,29 @@ typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeTask, Echo
 // ... (LogMessage, FindSubviewsOfClassRecursive, GetFrontmostWindow 函数保持不变) ...
 static void LogMessage(EchoLogType type, NSString *format, ...) { if (!g_logTextView) return; va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args); dispatch_async(dispatch_get_main_queue(), ^{ NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"]; NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]]; NSMutableAttributedString *logLine = [[NSMutableAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@%@\n", logPrefix, message]]; UIColor *color; switch (type) { case EchoLogTypeTask: color = ECHO_COLOR_LOG_TASK; break; case EchoLogTypeSuccess: color = ECHO_COLOR_SUCCESS; break; case EchoLogTypeWarning: color = ECHO_COLOR_LOG_WARN; break; case EchoLogError: color = ECHO_COLOR_LOG_ERROR; break; case EchoLogTypeInfo: default: color = ECHO_COLOR_LOG_INFO; break; } [logLine addAttribute:NSForegroundColorAttributeName value:color range:NSMakeRange(0, logLine.length)]; [logLine addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, logLine.length)]; NSMutableAttributedString *existingText = [[NSMutableAttributedString alloc] initWithAttributedString:g_logTextView.attributedText]; [logLine appendAttributedString:existingText]; g_logTextView.attributedText = logLine; NSLog(@"[EchoShenShaTest] %@", message); }); }
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
-static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@available(iOS 13.0, *)) { for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) { if (scene.activationState == UISceneActivationStateForegroundActive) { for (UIWindow *window in scene.windows) { if (window.isKeyWindow) { frontmostWindow = window; break; } } if (frontmostWindow) break; } } } if (!frontmostWindow) { #pragma clang diagnostic push \n #pragma clang diagnostic ignored "-Wdeprecated-declarations" \n frontmostWindow = [UIApplication sharedApplication].keyWindow; \n #pragma clang diagnostic pop \n } return frontmostWindow; }
-
+static UIWindow* GetFrontmostWindow() {
+    UIWindow *frontmostWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *window in scene.windows) {
+                    if (window.isKeyWindow) {
+                        frontmostWindow = window;
+                        break;
+                    }
+                }
+                if (frontmostWindow) break;
+            }
+        }
+    }
+    if (!frontmostWindow) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        frontmostWindow = [UIApplication sharedApplication].keyWindow;
+        #pragma clang diagnostic pop
+    }
+    return frontmostWindow;
+}
 
 // =========================================================================
 // 2. 接口声明与核心 Hook
@@ -159,3 +180,4 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 %ctor {
     NSLog(@"[EchoShenShaTest v_ivar] 最终版脚本已加载。");
 }
+
