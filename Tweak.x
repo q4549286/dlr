@@ -234,6 +234,8 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *shenSha = reportData[@"神煞详情"];
     if (shenSha.length > 0) {
         [report appendString:@"// 5. 神煞系统\n"];
+// 下面是新增的一行
+    [report appendString:@"// 本模块提供所有相关神煞信号，但其最终解释权从属于【信号管辖权与关联度终审协议】。请结合核心议题进行批判性审查。\n"];
         [report appendString:shenSha];
         [report appendString:@"\n\n"];
     }
