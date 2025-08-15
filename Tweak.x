@@ -58,13 +58,8 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
     });
 }
 
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { 
-    if (!view || !storage) return; 
-    if ([view isKindOfClass:aClass]) { [storage addObject:view]; } 
-    for (UIView *subview in view.subviews) { 
-        FindSubviewsOfClassRecursive(aClass, subview, storage); 
-    } 
-}
+// 该函数已不再需要，故移除
+// static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { ... }
 
 static UIWindow* GetFrontmostWindow() {
     UIWindow *frontmostWindow = nil;
@@ -161,7 +156,7 @@ static UIWindow* GetFrontmostWindow() {
 // =========================================================================
 %new
 - (NSString *)extractShenShaInfo_TheRealFinalSolution {
-    // 1. 获取主 ViewController 实例 (因为我们就在ViewController的hook里，所以self就是它)
+    // 1. 获取主 ViewController 实例
     Class viewControllerClass = NSClassFromString(@"六壬大占.ViewController");
     if (![self isKindOfClass:viewControllerClass]) {
         LogMessage(EchoLogError, @"[神煞] 错误: 当前上下文不是 '六壬大占.ViewController'。");
@@ -208,7 +203,6 @@ static UIWindow* GetFrontmostWindow() {
     for (id categoryObject in categories) {
         if (![categoryObject isKindOfClass:[NSObject class]]) continue;
         
-        // 动态获取属性值
         NSString *categoryTitle = [categoryObject valueForKey:@"标题"];
         NSArray *items = [categoryObject valueForKey:@"列表"];
         
@@ -248,5 +242,5 @@ static UIWindow* GetFrontmostWindow() {
 %end
 
 %ctor {
-    NSLog(@"[EchoShenShaTest v_real_final] 最终决战版脚本已加载。");
+    NSLog(@"[EchoShenShaTest v_real_final_fixed] 最终决战版脚本已加载。");
 }
