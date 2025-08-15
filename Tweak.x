@@ -86,7 +86,7 @@ static UIWindow* GetFrontmostWindow() {
 - (void)createOrShowMainControlPanel;
 - (void)handleMasterButtonTap:(UIButton *)sender;
 - (void)presentAIActionSheetWithReport:(NSString *)report;
-- (NSString *)extractShenShaInfo_Final;
+- (NSString *)extractShenShaInfo_Complete;
 @end
 
 %hook UILabel
@@ -94,19 +94,81 @@ static UIWindow* GetFrontmostWindow() {
 - (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSMutableAttributedString *s = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)s.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(s); }
 %end
 
+
 %hook UIViewController
 
-- (void)viewDidLoad { /* ... unchanged ... */ } // 省略未修改的代码
-%new - (void)createOrShowMainControlPanel { /* ... unchanged ... */ } // 省略未修改的代码
+- (void)viewDidLoad {
+    %orig;
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
+            if ([keyWindow viewWithTag:kEchoControlButtonTag]) [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview];
+            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
+            controlButton.tag = kEchoControlButtonTag;
+            [controlButton setTitle:@"Echo 神煞测试" forState:UIControlStateNormal];
+            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
+            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            controlButton.layer.cornerRadius = 18;
+            [controlButton addTarget:self action:@selector(createOrShowMainControlPanel) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:controlButton];
+        });
+    }
+}
+
+%new
+- (void)createOrShowMainControlPanel {
+    UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
+    if (g_mainControlPanelView && g_mainControlPanelView.superview) {
+        [g_mainControlPanelView removeFromSuperview]; g_mainControlPanelView = nil; g_logTextView = nil; return;
+    }
+    g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds];
+    g_mainControlPanelView.tag = kEchoMainPanelTag;
+    if (@available(iOS 8.0, *)) {
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+        blurView.frame = g_mainControlPanelView.bounds; [g_mainControlPanelView addSubview:blurView];
+    } else { g_mainControlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9]; }
+    UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)];
+    [g_mainControlPanelView addSubview:contentView];
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
+    titleLabel.text = @"Echo 神煞提取 (最终版)"; titleLabel.font = [UIFont boldSystemFontOfSize:22];
+    titleLabel.textColor = [UIColor whiteColor]; titleLabel.textAlignment = NSTextAlignmentCenter;
+    [contentView addSubview:titleLabel];
+    
+    UIButton *extractButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    [extractButton setTitle:@"提取全部神煞信息" forState:UIControlStateNormal];
+    extractButton.tag = kButtonTag_ExtractShenSha; extractButton.backgroundColor = ECHO_COLOR_MAIN_TEAL;
+    [extractButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+    extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:18]; extractButton.layer.cornerRadius = 12;
+    extractButton.frame = CGRectMake(15, 80, contentView.bounds.size.width - 30, 50);
+    [contentView addSubview:extractButton];
+
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, 150, contentView.bounds.size.width, contentView.bounds.size.height - 210)];
+    g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12];
+    g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8; g_logTextView.textColor = [UIColor whiteColor];
+    g_logTextView.text = @"[EchoShenShaTest]: 就绪。\n"; [contentView addSubview:g_logTextView];
+
+    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    [closeButton setTitle:@"关闭面板" forState:UIControlStateNormal]; closeButton.tag = kButtonTag_ClosePanel;
+    closeButton.backgroundColor = ECHO_COLOR_ACTION_CLOSE;
+    [closeButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+    closeButton.layer.cornerRadius = 10; closeButton.frame = CGRectMake(15, contentView.bounds.size.height - 50, contentView.bounds.size.width - 30, 40);
+    [contentView addSubview:closeButton];
+
+    g_mainControlPanelView.alpha = 0; [keyWindow addSubview:g_mainControlPanelView];
+    [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 1.0; }];
+}
 
 %new
 - (void)handleMasterButtonTap:(UIButton *)sender {
     switch (sender.tag) {
         case kButtonTag_ExtractShenSha: {
-            LogMessage(EchoLogTypeTask, @"[任务] 开始最终版全量提取...");
-            NSString *shenShaResult = [self extractShenShaInfo_Final];
+            LogMessage(EchoLogTypeTask, @"[任务] 开始完整提取所有神煞...");
+            NSString *shenShaResult = [self extractShenShaInfo_Complete];
             if (shenShaResult && shenShaResult.length > 0) {
-                 NSString *finalReport = [NSString stringWithFormat:@"// 神煞详情 (最终全量版)\n%@", shenShaResult];
+                 NSString *finalReport = [NSString stringWithFormat:@"// 神煞详情 (全部)\n%@", shenShaResult];
                  [self presentAIActionSheetWithReport:finalReport];
             } else { LogMessage(EchoLogTypeWarning, @"[结果] 神煞信息为空或提取失败。"); }
             break;
@@ -114,130 +176,120 @@ static UIWindow* GetFrontmostWindow() {
         case kButtonTag_ClosePanel: [self createOrShowMainControlPanel]; break;
     }
 }
-%new - (void)presentAIActionSheetWithReport:(NSString *)report { /* ... unchanged ... */ } // 省略未修改的代码
+
+%new
+- (void)presentAIActionSheetWithReport:(NSString *)report {
+    if (!report || report.length == 0) { LogMessage(EchoLogError, @"报告为空，无法执行后续操作。"); return; }
+    [UIPasteboard generalPasteboard].string = report; 
+    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"神煞提取结果" message:@"内容已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"确认 (已复制)" style:UIAlertActionStyleDefault handler:nil];
+    [actionSheet addAction:copyAction];
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
+    [actionSheet addAction:cancelAction];
+    if (actionSheet.popoverPresentationController) {
+        actionSheet.popoverPresentationController.sourceView = self.view;
+        actionSheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height, 1.0, 1.0);
+    }
+    [self presentViewController:actionSheet animated:YES completion:nil];
+}
 
 
 // =========================================================================
-// 3. 核心提取函数 (最终完美版 - 支持多 Section)
+// 3. 核心提取函数 (遍历所有 Section 的最终版)
 // =========================================================================
 %new
-- (NSString *)extractShenShaInfo_Final {
-    // 1. 定位神煞主容器视图
-    Class shenShaViewClass = NSClassFromString(@"六壬大占.神煞行年視圖"); // 直接使用已确认的类名
-    if (!shenShaViewClass) {
-        LogMessage(EchoLogError, @"[神煞] 错误: 找不到类 '六壬大占.神煞行年視圖'。");
-        return @"[神煞提取失败: 找不到视图类]";
-    }
-
-    NSMutableArray *shenShaViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(shenShaViewClass, self.view, shenShaViews);
-    if (shenShaViews.count == 0) {
-        LogMessage(EchoLogTypeWarning, @"[神煞] 未在当前界面找到神煞主容器实例。");
-        return @"";
-    }
-    UIView *containerView = shenShaViews.firstObject;
-
-    // 2. 找到唯一的 UICollectionView
-    NSMutableArray *collectionViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UICollectionView class], containerView, collectionViews);
+- (NSString *)extractShenShaInfo_Complete {
+    // 1. 找到 UICollectionView
+    // 为了简化，我们直接在 self.view 中寻找第一个 UICollectionView，因为神煞界面结构比较单一
+    NSMutableArray<UICollectionView *> *collectionViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UICollectionView class], self.view, collectionViews);
     if (collectionViews.count == 0) {
-        LogMessage(EchoLogError, @"[神煞] 错误: 在主容器内找不到 UICollectionView。");
+        LogMessage(EchoLogError, @"[神煞] 错误: 在当前界面找不到任何 UICollectionView。");
         return @"[神煞提取失败: 找不到集合视图]";
     }
+    // 假设第一个找到的就是目标
     UICollectionView *collectionView = collectionViews.firstObject;
     
-    // 3. 【核心改动】处理多 Section
+    // 2. 获取数据源和 Section 总数
     id<UICollectionViewDataSource> dataSource = collectionView.dataSource;
-    NSInteger numberOfSections = collectionView.numberOfSections;
-
-    if (!dataSource || numberOfSections == 0) {
-        LogMessage(EchoLogError, @"[神煞] 错误: 无数据源或 Section 数量为0。");
-        return @"[神煞提取失败: 无数据]";
+    if (!dataSource) {
+        LogMessage(EchoLogError, @"[神煞] 错误: UICollectionView 没有数据源。");
+        return @"[神煞提取失败: 找不到数据源]";
     }
     
-    LogMessage(EchoLogTypeInfo, @"[神煞] 发现 %ld 个 Section，开始完整遍历...", (long)numberOfSections);
-
-    // 4. 智能查找所有分类标题
-    NSMutableArray *allLabelsInContainer = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UILabel class], containerView, allLabelsInContainer);
-    NSMutableArray *titleLabels = [NSMutableArray array];
-    for (UILabel *label in allLabelsInContainer) {
-        BOOL isInCell = NO; UIView *superview = label.superview;
-        while (superview && superview != containerView) {
-            if ([superview isKindOfClass:[UICollectionViewCell class]]) { isInCell = YES; break; }
-            superview = superview.superview;
-        }
-        if (!isInCell) { [titleLabels addObject:label]; }
+    NSInteger totalSections = 1; // 默认为1
+    if ([dataSource respondsToSelector:@selector(numberOfSectionsInCollectionView:)]) {
+        totalSections = [dataSource numberOfSectionsInCollectionView:collectionView];
     }
-    [titleLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
-        return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)];
-    }];
+    LogMessage(EchoLogTypeInfo, @"[神煞] 发现 %ld 个 Section，开始全量提取...", (long)totalSections);
 
-    // 5. 遍历所有 Section 和 Item
-    NSMutableString *finalResultString = [NSMutableString string];
-    for (NSInteger section = 0; section < numberOfSections; section++) {
+    // 3. 存储所有单元格的数据及其布局信息
+    NSMutableArray<NSDictionary *> *cellDataList = [NSMutableArray array];
+    for (NSInteger section = 0; section < totalSections; section++) {
         NSInteger totalItemsInSection = [dataSource collectionView:collectionView numberOfItemsInSection:section];
-        if (totalItemsInSection == 0) continue;
-
-        NSString *categoryTitle = (section < titleLabels.count) ? ((UILabel *)titleLabels[section]).text : [NSString stringWithFormat:@"分类 %ld", (long)section + 1];
-        categoryTitle = [categoryTitle stringByReplacingOccurrencesOfString:@":" withString:@""];
-        [finalResultString appendFormat:@"\n// %@\n", categoryTitle];
-
-        NSMutableArray<NSDictionary *> *cellDataList = [NSMutableArray array];
+        
         for (NSInteger item = 0; item < totalItemsInSection; item++) {
             NSIndexPath *indexPath = [NSIndexPath indexPathForItem:item inSection:section];
+            
             UICollectionViewCell *cell = [dataSource collectionView:collectionView cellForItemAtIndexPath:indexPath];
             UICollectionViewLayoutAttributes *attributes = [collectionView.collectionViewLayout layoutAttributesForItemAtIndexPath:indexPath];
+            
             if (!cell || !attributes) continue;
 
             NSMutableArray *labels = [NSMutableArray array];
             FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labels);
-            [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
-            
+            [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
+                return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
+            }];
             NSMutableArray *textParts = [NSMutableArray array];
             for (UILabel *label in labels) { if (label.text.length > 0) [textParts addObject:label.text]; }
             
             [cellDataList addObject:@{@"textParts": textParts, @"frame": [NSValue valueWithCGRect:attributes.frame]}];
         }
-        
-        // 【注意】这里排序只在 Section 内部进行，因为不同 Section 的坐标可能是重叠的
-        [cellDataList sortUsingComparator:^NSComparisonResult(NSDictionary *o1, NSDictionary *o2) {
-            CGRect f1 = [o1[@"frame"] CGRectValue], f2 = [o2[@"frame"] CGRectValue];
-            if (roundf(f1.origin.y) < roundf(f2.origin.y)) return NSOrderedAscending;
-            if (roundf(f1.origin.y) > roundf(f2.origin.y)) return NSOrderedDescending;
-            return [@(f1.origin.x) compare:@(f2.origin.x)];
-        }];
-
-        NSMutableString *categoryContent = [NSMutableString string];
-        CGFloat lastY = -1.0; BOOL isFirstInRow = YES;
-        for (NSDictionary *cellData in cellDataList) {
-            CGRect frame = [cellData[@"frame"] CGRectValue];
-            NSArray *textParts = cellData[@"textParts"];
-            if (textParts.count == 0) continue;
-
-            if (lastY >= 0 && roundf(frame.origin.y) > roundf(lastY)) {
-                [categoryContent appendString:@"\n"]; isFirstInRow = YES;
-            }
-            if (!isFirstInRow) { [categoryContent appendString:@" |"]; }
-
-            if (textParts.count == 1) {
-                [categoryContent appendFormat:@"%@:", textParts.firstObject];
-            } else if (textParts.count >= 2) {
-                [categoryContent appendFormat:@" %@(%@)", textParts[0], textParts[1]];
-            }
-            lastY = frame.origin.y; isFirstInRow = NO;
-        }
-        [finalResultString appendString:categoryContent];
-        [finalResultString appendString:@"\n"];
     }
+    
+    // 4. 根据布局信息对所有提取到的数据进行统一排序
+    [cellDataList sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
+        CGRect frame1 = [obj1[@"frame"] CGRectValue];
+        CGRect frame2 = [obj2[@"frame"] CGRectValue];
+        if (roundf(frame1.origin.y) < roundf(frame2.origin.y)) return NSOrderedAscending;
+        if (roundf(frame1.origin.y) > roundf(frame2.origin.y)) return NSOrderedDescending;
+        return [@(frame1.origin.x) compare:@(frame2.origin.x)];
+    }];
 
-    LogMessage(EchoLogTypeSuccess, @"[神煞] 所有 %ld 个 Section 完整提取成功！", (long)numberOfSections);
-    return [finalResultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    // 5. 格式化输出
+    // 为了简化，我们不再尝试匹配标题，直接按行列输出
+    NSMutableString *resultString = [NSMutableString string];
+    CGFloat lastY = -1.0;
+    
+    for (NSDictionary *cellData in cellDataList) {
+        CGRect frame = [cellData[@"frame"] CGRectValue];
+        NSArray *textParts = cellData[@"textParts"];
+        if (textParts.count == 0) continue;
+
+        if (lastY >= 0 && roundf(frame.origin.y) > roundf(lastY)) {
+            [resultString appendString:@"\n"];
+        }
+
+        if (resultString.length > 0 && ![resultString hasSuffix:@"\n"]) {
+             [resultString appendString:@" |"];
+        }
+
+        if (textParts.count == 1) {
+            [resultString appendFormat:@"%@:", textParts.firstObject];
+        } else if (textParts.count >= 2) {
+            [resultString appendFormat:@" %@(%@)", textParts[0], textParts[1]];
+        }
+        
+        lastY = frame.origin.y;
+    }
+    
+    LogMessage(EchoLogTypeSuccess, @"[神煞] 所有 Section 完整提取成功，共 %lu 条记录。", (unsigned long)cellDataList.count);
+    return [resultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
 %end
 
 %ctor {
-    NSLog(@"[EchoShenShaTest v_final_multisection] 已加载。");
+    NSLog(@"[EchoShenShaTest v_final] 多 Section 提取脚本已加载。");
 }
-
