@@ -26,7 +26,7 @@ static UIView *g_mainControlPanelView = nil;
 static UITextView *g_logTextView = nil;
 
 #pragma mark - Helper Functions
-typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeTask, EchoLogTypeSuccess, EchoLogTypeWarning, EchoLogError };
+typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeTask, EchoLogTypeWarning, EchoLogError };
 
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     if (!g_logTextView) return;
@@ -41,9 +41,8 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         NSMutableAttributedString *logLine = [[NSMutableAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@%@\n", logPrefix, message]];
         UIColor *color;
-     switch (type) {
+        switch (type) {
             case EchoLogTypeTask:    color = ECHO_COLOR_LOG_TASK; break;
-            case EchoLogTypeSuccess: color = ECHO_COLOR_SUCCESS; break; // <-- 添加这一行
             case EchoLogTypeWarning: color = ECHO_COLOR_LOG_WARN; break;
             case EchoLogError:       color = ECHO_COLOR_LOG_ERROR; break;
             case EchoLogTypeInfo:
@@ -338,4 +337,3 @@ static UIWindow* GetFrontmostWindow() {
 %ctor {
     NSLog(@"[EchoShenShaTest v2] 独立测试脚本已加载。");
 }
-
