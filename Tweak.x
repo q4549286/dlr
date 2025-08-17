@@ -1382,7 +1382,7 @@ return   @"## v69.0 · 终局版 · 完整Prompt\n"
          @"    >     *   **2025年8月30日 (癸酉日)**\n"
          @"    >     *   **2025年9月5日 (己卯日 冲酉 - 备考)**\n"
          @"    >     *   **2025年9月10日 (甲申日 - 月建)**\n"
-         @"    >     *   **2025年9月11日 (乙酉日)**"\n"
+         @"    >     *   **2025年9月11日 (乙酉日)**\n"
          @"    > *   **情景指认**：...\n"
          @"    >\n"
          @"    > **B级应期备考**\n"
@@ -2936,6 +2936,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
