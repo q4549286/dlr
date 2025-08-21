@@ -1657,7 +1657,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *tianDiPanText = reportData[@"天地盘"];
     if (tianDiPanText) {
         NSMutableString *formattedTianDiPan = [NSMutableString string];
-        [formattedTianDiPan appendString:@"// 2.1. 天地盘 (附日干十二长生状态)\n"];
+        [formattedTianDiPan appendString:@"// 2.1. 天地盘 (附日干十二长生落宫状态)\n"];
         
         NSDictionary *riGanChangShengMap = generateRiGanChangShengMap(riGan);
         
@@ -3025,6 +3025,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
