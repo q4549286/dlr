@@ -1536,59 +1536,42 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
    __block NSInteger sectionCounter = 4;
 
     // =========================================================================
-    // vvvvvvvvvvvvvv 新增：日干十二长生数据与计算引擎 v3.0 vvvvvvvvvvvvvvvvvv
+    // vvvvvvvvvvvvvv 新增：日干十二长生数据与计算引擎 v3.1 vvvvvvvvvvvvvvvvvv
     // =========================================================================
     
-    // 十天干属性表 (五行、阴阳)
-    NSDictionary *tianGanAttributes = @{
-        @"甲": @{@"wuxing": @"木", @"yinyang": @"阳"}, @"乙": @{@"wuxing": @"木", @"yinyang": @"阴"},
-        @"丙": @{@"wuxing": @"火", @"yinyang": @"阳"}, @"丁": @{@"wuxing": @"火", @"yinyang": @"阴"},
-        @"戊": @{@"wuxing": @"土", @"yinyang": @"阳"}, @"己": @{@"wuxing": @"土", @"yinyang": @"阴"},
-        @"庚": @{@"wuxing": @"金", @"yinyang": @"阳"}, @"辛": @{@"wuxing": @"金", @"yinyang": @"阴"},
-        @"壬": @{@"wuxing": @"水", @"yinyang": @"阳"}, @"癸": @{@"wuxing": @"水", @"yinyang": @"阴"}
+    // 十天干五行归属表
+    NSDictionary *tianGanToWuxing = @{
+        @"甲": @"木", @"乙": @"木", @"丙": @"火", @"丁": @"火", @"戊": @"土",
+        @"己": @"土", @"庚": @"金", @"辛": @"金", @"壬": @"水", @"癸": @"水"
     };
     
-    // 十二长生状态列表
+    // 十二长生状态列表 (固定顺序)
     NSArray *changShengStates = @[@"长生", @"沐浴", @"冠带", @"临官", @"帝旺", @"衰", @"病", @"死", @"墓", @"绝", @"胎", @"养"];
     
-    // 五行长生位 (阳干起点)
+    // 五行长生起点 (统一采用阳干起点)
     NSDictionary *wuxingChangShengStart = @{ @"木":@"亥", @"火":@"寅", @"金":@"巳", @"水":@"申", @"土":@"申" };
     
-    // 十二地支顺序 (用于顺逆行计算)
+    // 十二地支顺序 (用于顺行计算)
     NSArray *dizhiOrder = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
 
-    // 核心函数：为日干生成其在所有12宫的状态映射表
+    // 【v3.1 核心升级】简化核心函数，移除阴阳顺逆判断，统一采用顺行
     NSDictionary* (^generateRiGanChangShengMap)(NSString*) = ^(NSString *riGan) {
-        if (!riGan || riGan.length == 0 || !tianGanAttributes[riGan]) return @{};
+        if (!riGan || riGan.length == 0 || !tianGanToWuxing[riGan]) return @{};
         
-        NSDictionary *attributes = tianGanAttributes[riGan];
-        NSString *wuxing = attributes[@"wuxing"];
-        BOOL isYang = [attributes[@"yinyang"] isEqualToString:@"阳"];
+        // 1. 获取日干的五行
+        NSString *wuxing = tianGanToWuxing[riGan];
         
-        // 确定长生起点
+        // 2. 查找该五行的固定长生起点
         NSString *startDiZhi = wuxingChangShengStart[wuxing];
         if (!startDiZhi) return @{};
-        
-        // 阴干需要找到阳干的死地作为长生起点 (阳死则阴生)
-        if (!isYang) {
-            NSUInteger yangStartIdx = [dizhiOrder indexOfObject:startDiZhi];
-            NSUInteger yangDeadIdx = (yangStartIdx + 7) % 12; // 顺数第8位是死
-            startDiZhi = dizhiOrder[yangDeadIdx];
-        }
         
         NSUInteger startIndex = [dizhiOrder indexOfObject:startDiZhi];
         NSMutableDictionary *map = [NSMutableDictionary dictionary];
         
+        // 3. 统一进行顺时针循环
         for (int i = 0; i < 12; i++) {
             NSString *currentState = changShengStates[i];
-            NSUInteger currentDiZhiIndex;
-            
-            if (isYang) { // 阳干顺行
-                currentDiZhiIndex = (startIndex + i) % 12;
-            } else { // 阴干逆行
-                currentDiZhiIndex = (startIndex - i + 12) % 12;
-            }
-            
+            NSUInteger currentDiZhiIndex = (startIndex + i) % 12; // 只保留顺行逻辑
             NSString *currentDiZhi = dizhiOrder[currentDiZhiIndex];
             map[currentDiZhi] = currentState;
         }
@@ -1596,7 +1579,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     };
     
     // =========================================================================
-    // ^^^^^^^^^^^^^^^^ 新增：日干十二长生数据与计算引擎 v3.0 ^^^^^^^^^^^^^^^^^^^^^
+    // ^^^^^^^^^^^^^^^^ 新增：日干十二长生数据与计算引擎 v3.1 ^^^^^^^^^^^^^^^^^^^^^
     // =========================================================================
 
 
@@ -1670,7 +1653,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
     
-    // 【核心升级】重构天地盘输出逻辑
+    // 重构天地盘输出逻辑
     NSString *tianDiPanText = reportData[@"天地盘"];
     if (tianDiPanText) {
         NSMutableString *formattedTianDiPan = [NSMutableString string];
@@ -3041,6 +3024,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
