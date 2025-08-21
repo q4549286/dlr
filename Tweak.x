@@ -1533,7 +1533,95 @@ return          @"## v69.0 · 终局版 · 完整Prompt\n"
 
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
-   __block NSInteger sectionCounter = 4; 
+   __block NSInteger sectionCounter = 4;
+
+    // =========================================================================
+    // vvvvvvvvvvvvvv 新增：五行十二长生数据与计算引擎 v2.1 vvvvvvvvvvvvvvvvvv
+    // =========================================================================
+    
+    // 【v2.1 核心修正】彻底修正地支五行归属，确保数据源100%正确
+    NSDictionary *dizhiToWuxing = @{
+        // 木
+        @"寅": @"木", @"卯": @"木",
+        // 火
+        @"巳": @"火", @"午": @"火",
+        // 金
+        @"申": @"金", @"酉": @"金",
+        // 水
+        @"亥": @"水", @"子": @"水",
+        // 土
+        @"辰": @"土", @"戌": @"土", @"丑": @"土", @"未": @"土"
+    };
+
+    // 基于您提供的“五行十二长生表”数据
+    NSDictionary *changShengTable_WuXing = @{
+        @"木": @{@"亥":@"长生", @"子":@"沐浴", @"丑":@"冠带", @"寅":@"临官", @"卯":@"帝旺", @"辰":@"衰", @"巳":@"病", @"午":@"死", @"未":@"墓", @"申":@"绝", @"酉":@"胎", @"戌":@"养"},
+        @"火": @{@"寅":@"长生", @"卯":@"沐浴", @"辰":@"冠带", @"巳":@"临官", @"午":@"帝旺", @"未":@"衰", @"申":@"病", @"酉":@"死", @"戌":@"墓", @"亥":@"绝", @"子":@"胎", @"丑":@"养"},
+        @"金": @{@"巳":@"长生", @"午":@"沐浴", @"未":@"冠带", @"申":@"临官", @"酉":@"帝旺", @"戌":@"衰", @"亥":@"病", @"子":@"死", @"丑":@"墓", @"寅":@"绝", @"卯":@"胎", @"辰":@"养"},
+        @"水": @{@"申":@"长生", @"酉":@"沐浴", @"戌":@"冠带", @"亥":@"临官", @"子":@"帝旺", @"丑":@"衰", @"寅":@"病", @"卯":@"死", @"辰":@"墓", @"巳":@"绝", @"午":@"胎", @"未":@"养"},
+        @"土": @{@"申":@"长生", @"酉":@"沐浴", @"戌":@"冠带", @"亥":@"临官", @"子":@"帝旺", @"丑":@"衰", @"寅":@"病", @"卯":@"死", @"辰":@"墓", @"巳":@"绝", @"午":@"胎", @"未":@"养"} // 按表格，水土同宫
+    };
+    
+    // 辅助函数，用于计算并格式化十二长生状态
+    NSString* (^calculateAndFormatChangSheng)(NSString*, NSString*, NSString*) = ^(NSString *tianDiPanString, NSString *siKeString, NSString *sanChuanString) {
+        if (!tianDiPanString || tianDiPanString.length == 0) return @"";
+        
+        // 1. 从天地盘构建天盘神到地盘宫的映射
+        NSMutableDictionary *tianPanShenToDiPanGong = [NSMutableDictionary dictionary];
+        NSArray *tianDiPanLines = [tianDiPanString componentsSeparatedByString:@"\n"];
+        for (NSString *line in tianDiPanLines) {
+            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s*(\\S)宫:\\s*(\\S)\\(" options:0 error:nil];
+            NSTextCheckingResult *match = [regex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
+            if (match && [match numberOfRanges] == 3) {
+                NSString *diPanGong = [line substringWithRange:[match rangeAtIndex:1]];
+                NSString *tianPanShen = [line substringWithRange:[match rangeAtIndex:2]];
+                tianPanShenToDiPanGong[tianPanShen] = diPanGong;
+            }
+        }
+        
+        // 2. 提取四课和三传中的核心神
+        NSMutableOrderedSet *coreShenSet = [NSMutableOrderedSet orderedSet];
+        // 提取四课上神
+        if (siKeString) {
+            NSRegularExpression *siKeRegex = [NSRegularExpression regularExpressionWithPattern:@"乘(\\S)" options:0 error:nil];
+            NSArray<NSTextCheckingResult *> *siKeMatches = [siKeRegex matchesInString:siKeString options:0 range:NSMakeRange(0, siKeString.length)];
+            for (NSTextCheckingResult *match in siKeMatches) {
+                [coreShenSet addObject:[siKeString substringWithRange:[match rangeAtIndex:1]]];
+            }
+        }
+        // 提取三传
+        if (sanChuanString) {
+            NSArray *sanChuanLines = [sanChuanString componentsSeparatedByString:@"\n"];
+            for (NSString *line in sanChuanLines) {
+                NSRegularExpression *sanChuanRegex = [NSRegularExpression regularExpressionWithPattern:@":\\s*(\\S)" options:0 error:nil];
+                NSTextCheckingResult *match = [sanChuanRegex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
+                if (match && [match numberOfRanges] == 2) {
+                    [coreShenSet addObject:[line substringWithRange:[match rangeAtIndex:1]]];
+                }
+            }
+        }
+        
+        // 3. 计算并格式化输出
+        NSMutableString *resultString = [NSMutableString stringWithString:@"// 2.1.1. 核心神将十二长生状态 (五行版)\n"];
+        BOOL foundAny = NO;
+        for (NSString *shen in coreShenSet) {
+            NSString *gong = tianPanShenToDiPanGong[shen];
+            NSString *wuxing = dizhiToWuxing[shen];
+            if (gong && wuxing) {
+                NSString *status = changShengTable_WuXing[wuxing][gong];
+                if (status) {
+                    [resultString appendFormat:@"- 天盘【%@】(属%@) 临地盘【%@】宫，状态为【%@】\n", shen, wuxing, gong, status];
+                    foundAny = YES;
+                }
+            }
+        }
+        
+        return foundAny ? [resultString stringByAppendingString:@"\n"] : @"";
+    };
+    // =========================================================================
+    // ^^^^^^^^^^^^^^^^ 新增：五行十二长生数据与计算引擎 v2.1 ^^^^^^^^^^^^^^^^^^^^^
+    // =========================================================================
+
 
     // 板块一：基础盘元
     [report appendString:@"// 1. 基础盘元\n"];
@@ -1604,9 +1692,19 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
-    if (reportData[@"天地盘"]) [report appendFormat:@"// 2.1. 天地盘\n%@\n\n", reportData[@"天地盘"]];
-    if (reportData[@"四课"]) [report appendFormat:@"// 2.2. 四课\n%@\n\n", reportData[@"四课"]];
-    if (reportData[@"三传"]) [report appendFormat:@"// 2.3. 三传\n%@\n\n", reportData[@"三传"]];
+    NSString *tianDiPanText = reportData[@"天地盘"];
+    if (tianDiPanText) [report appendFormat:@"// 2.1. 天地盘\n%@\n\n", tianDiPanText];
+    
+    // 【注入点】在这里调用十二长生计算函数
+    NSString *siKeText = reportData[@"四课"];
+    NSString *sanChuanText = reportData[@"三传"];
+    NSString *changShengReport = calculateAndFormatChangSheng(tianDiPanText, siKeText, sanChuanText);
+    if (changShengReport.length > 0) {
+        [report appendString:changShengReport];
+    }
+
+    if (siKeText) [report appendFormat:@"// 2.2. 四课\n%@\n\n", siKeText];
+    if (sanChuanText) [report appendFormat:@"// 2.3. 三传\n%@\n\n", sanChuanText];
 
     // 板块三：格局总览
     [report appendString:@"// 3. 格局总览\n"];
@@ -1742,10 +1840,10 @@ for (NSDictionary *sectionInfo in optionalSections) {
                     }
                 }
             }
-            if (keyPlanetTips.length > 0) { 
-                [auxiliaryContent appendString:@"// 关键星曜提示\n"]; 
-                [auxiliaryContent appendString:keyPlanetTips]; 
-                [auxiliaryContent appendString:@"\n"]; 
+            if (keyPlanetTips.length > 0) {
+                [auxiliaryContent appendString:@"// 关键星曜提示\n"];
+                [auxiliaryContent appendString:keyPlanetTips];
+                [auxiliaryContent appendString:@"\n"];
             }
         }
         NSString *sanGong = reportData[@"三宫时信息"];
@@ -2949,6 +3047,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
