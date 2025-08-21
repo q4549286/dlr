@@ -1536,7 +1536,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
    __block NSInteger sectionCounter = 4;
 
     // =========================================================================
-    // vvvvvvvvvvvvvv 新增：日干十二长生数据与计算引擎 v3.1 vvvvvvvvvvvvvvvvvv
+    // vvvvvvvvvvvvvv 新增：日干十二长生数据与计算引擎 v3.2 vvvvvvvvvvvvvvvvvv
     // =========================================================================
     
     // 十天干五行归属表
@@ -1554,8 +1554,8 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // 十二地支顺序 (用于顺行计算)
     NSArray *dizhiOrder = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
 
-    // 【v3.1 核心升级】简化核心函数，移除阴阳顺逆判断，统一采用顺行
-    NSDictionary* (^generateRiGanChangShengMap)(NSString*) = ^(NSString *riGan) {
+    // 【v3.2 编译错误修正】明确指定了Block的返回类型为 NSDictionary*
+    NSDictionary* (^generateRiGanChangShengMap)(NSString*) = ^NSDictionary*(NSString *riGan) {
         if (!riGan || riGan.length == 0 || !tianGanToWuxing[riGan]) return @{};
         
         // 1. 获取日干的五行
@@ -1579,7 +1579,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     };
     
     // =========================================================================
-    // ^^^^^^^^^^^^^^^^ 新增：日干十二长生数据与计算引擎 v3.1 ^^^^^^^^^^^^^^^^^^^^^
+    // ^^^^^^^^^^^^^^^^ 新增：日干十二长生数据与计算引擎 v3.2 ^^^^^^^^^^^^^^^^^^^^^
     // =========================================================================
 
 
@@ -1663,7 +1663,8 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         
         NSArray *tianDiPanLines = [tianDiPanText componentsSeparatedByString:@"\n"];
         for (NSString *line in tianDiPanLines) {
-            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s*(\\S)宫:\\s*(.*)"];
+            // 【v3.2 编译错误修正】使用了完整的NSRegularExpression方法签名
+            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s*(\\S)宫:\\s*(.*)" options:0 error:nil];
             NSTextCheckingResult *match = [regex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
             if (match && [match numberOfRanges] == 3) {
                 NSString *diPanGong = [line substringWithRange:[match rangeAtIndex:1]];
@@ -3024,6 +3025,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
