@@ -1779,7 +1779,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     };
     
     // 十二长生状态列表 (固定顺序)
-    NSArray *changShengStates = @[@"长生", @"沐浴", @"冠带", @"临官", @"帝旺", @"衰", @"病", @"死", @"墓", @"绝", @"胎", @"养"];
+    NSArray *changShengStates = @[@"长生", @"沐浴", @"冠带", @"临官(禄)", @"羊刃", @"衰", @"病", @"死", @"墓", @"绝", @"胎神", @"养"];
     
     // 五行长生起点 (统一采用阳干起点)
     NSDictionary *wuxingChangShengStart = @{ @"木":@"亥", @"火":@"寅", @"金":@"巳", @"水":@"申", @"土":@"申" };
@@ -3258,6 +3258,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
