@@ -749,39 +749,39 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
     }
 
-      // 基础盘面中的各类弹窗 (毕法/格局/方法/七政/三宫时)
+ // 基础盘面中的各类弹窗 (毕法/格局/方法/七政/三宫时) - 【无痕修正 v2.0】
     else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         NSString *title = vcToPresent.title ?: @"";
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        UIView *contentView = vcToPresent.view;
-        BOOL shouldReturn = NO;
 
-        // 【整合点】使用从脚本B整合的、更可靠的 `extractFromComplexTableViewPopup` 函数
-        // 这个函数同时适用于毕法、格局、方法、七政、三宫时
+        // 毕法、格局、方法、七政、三宫时 - 统一拦截逻辑
         if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"] || [vcClassName containsString:@"七政"] || [vcClassName containsString:@"三宮時信息視圖"]) {
-             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                NSString *content = extractFromComplexTableViewPopup(contentView);
-                NSString *logTitle = title;
-                if ([vcClassName containsString:@"七政"]) {
-                    g_extractedData[@"七政四余"] = content;
-                    logTitle = @"七政四余";
-                } else if ([vcClassName containsString:@"三宮時信息視圖"]) {
-                    g_extractedData[@"三宫时信息"] = content;
-                    logTitle = @"三宫时信息";
-                } else if ([title containsString:@"方法"]) {
-                    g_extractedData[@"解析方法"] = content;
-                } else if ([title containsString:@"格局"]) {
-                    g_extractedData[@"格局要览"] = content;
-                } else {
-                    g_extractedData[@"毕法要诀"] = content;
-                }
-                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析弹窗 [%@]", logTitle);
-             });
-             shouldReturn = YES;
-        }
+            
+            // 1. 强制加载视图到内存
+            UIView *contentView = vcToPresent.view;
 
-        if(shouldReturn) {
-            return; // 阻止弹窗呈现
+            // 2. 立即从内存中的视图提取数据
+            NSString *content = extractFromComplexTableViewPopup(contentView);
+            NSString *logTitle = title;
+
+            if ([vcClassName containsString:@"七政"]) {
+                g_extractedData[@"七政四余"] = content;
+                logTitle = @"七政四余";
+            } else if ([vcClassName containsString:@"三宮時信息視圖"]) {
+                g_extractedData[@"三宫时信息"] = content;
+                logTitle = @"三宫时信息";
+            } else if ([title containsString:@"方法"]) {
+                g_extractedData[@"解析方法"] = content;
+            } else if ([title containsString:@"格局"]) {
+                g_extractedData[@"格局要览"] = content;
+            } else { // 毕法
+                g_extractedData[@"毕法要诀"] = content;
+            }
+
+            LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析弹窗 [%@]", logTitle);
+            
+            // 3. 立即返回，阻止弹窗显示
+            return;
         }
     }
 
@@ -1718,4 +1718,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final & Popup-B Merged) 已加载。");
     }
 }
+
 
