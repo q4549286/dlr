@@ -310,11 +310,11 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
 // 这是修改后的、顺序调整过的代码块
 
-// (接在板块四：// (接在板块四：爻位详解的代码之后)
+    // 板块四：爻位详解的代码之后
 
-// =================================================================
-// vvvvvvvvvvvvvv 动态序号生成逻辑 v2.0 vvvvvvvvvvvvvvv
-// =================================================================
+    // =================================================================
+    // vvvvvvvvvvvvvv 动态序号生成逻辑 v2.0 vvvvvvvvvvvvvvv
+    // =================================================================
 
 // 定义所有可选板块及其内容
 NSArray<NSDictionary *> *optionalSections = @[
@@ -1687,6 +1687,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
