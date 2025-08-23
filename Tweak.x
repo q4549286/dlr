@@ -44,17 +44,24 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
         }
         [cells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2){ return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
 
-        for (UIView *cell in cells) {
-            NSMutableArray<UILabel *> *labelsInCell = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
-            if (labelsInCell.count > 0) {
-                [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
-                NSMutableString *fullEntryText = [NSMutableString string];
-                for (UILabel *label in labelsInCell) {
-                    if (label.text.length > 0) {
-                        [fullEntryText appendFormat:@"%@\n", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        for (UIView *cellView in cells) {
+            // <<< 关键修正：将 UIView* 转换为 UITableViewCell* >>>
+            // 我们先检查它是否真的是一个 UITableViewCell，以确保安全
+            if ([cellView isKindOfClass:[UITableViewCell class]]) {
+                UITableViewCell *cell = (UITableViewCell *)cellView;
+                
+                NSMutableArray<UILabel *> *labelsInCell = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell); // 现在可以安全地访问 contentView
+                if (labelsInCell.count > 0) {
+                    [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
+                    NSMutableString *fullEntryText = [NSMutableString string];
+                    for (UILabel *label in labelsInCell) {
+                        if (label.text.length > 0) {
+                            [fullEntryText appendFormat:@"%@\n", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                        }
                     }
+                    [allEntries addObject:[fullEntryText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
                 }
-                [allEntries addObject:[fullEntryText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             }
         }
         return [allEntries componentsJoinedByString:@"\n\n"];
