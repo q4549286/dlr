@@ -1087,11 +1087,12 @@ int availableApps = 0;
             @{@"key": @"三宫时信息", @"selector": @"顯示三宮時信息WithSender:"}
         ]];
 
-        // 定义一个递归处理函数
+        // 【循环引用修复】
         __block void (^processNextTaskBlock)(void);
         __weak __typeof(self) weakSelf = self;
+
         processNextTaskBlock = [^{
-            __strong __typeof(weakSelf) strongSelf = weakSelf;
+            __strong __typeof(weakSelf) strongSelf = weakSelf; // 在 block 内部重新强引用
             if (!strongSelf || popupTasks.count == 0) {
                 // 所有任务完成，执行最后的回调
                 dispatch_async(dispatch_get_main_queue(), ^{
@@ -1113,25 +1114,29 @@ int availableApps = 0;
             SEL selector = NSSelectorFromString(task[@"selector"]);
 
             if ([strongSelf respondsToSelector:selector]) {
-                // 设置信使，然后触发
                 g_currentPopupKey = key;
                 dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([strongSelf performSelector:selector withObject:nil]); });
-
-                // 轮询检查信使是否被清空（任务是否完成）
+                
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                    for (int i = 0; i < 50; i++) { // 最多等5秒
+                    for (int i = 0; i < 50; i++) {
                         if (!g_currentPopupKey) break;
                         [NSThread sleepForTimeInterval:0.1];
                     }
                     if (g_currentPopupKey) {
                         LogMessage(EchoLogTypeWarning, @"[盘面] 解析 %@ 超时", g_currentPopupKey);
-                        g_currentPopupKey = nil; // 超时也要清空信使
+                        g_currentPopupKey = nil;
                     }
-                    processNextTaskBlock(); // 处理下一个任务
+                    // 通过 block 自身调用来形成递归
+                    if (processNextTaskBlock) {
+                        processNextTaskBlock();
+                    }
                 });
             } else {
                 LogMessage(EchoLogTypeWarning, @"[盘面] 找不到选择器 %@, 跳过。", task[@"selector"]);
-                processNextTaskBlock(); // 直接处理下一个任务
+                // 即使失败也要继续下一个
+                if (processNextTaskBlock) {
+                    processNextTaskBlock();
+                }
             }
         } copy];
 
@@ -1683,3 +1688,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
