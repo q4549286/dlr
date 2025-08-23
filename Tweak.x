@@ -673,39 +673,89 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
     }
-    else if (g_s2_isExtractingKeChuanDetail) {
-        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            
-            // 1. 【无痕加载】访问 .view 属性会强制加载视图到内存，但不会显示它。
-            UIView *contentView = vcToPresent.view;
-            
-            // 2. 【直接提取】从这个内存中的视图里提取数据，逻辑和之前一样。
-            NSMutableArray *allLabels = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
-                if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
-                if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
-                return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
-            }];
-            NSMutableArray<NSString *> *textParts = [NSMutableArray array];
-            for (UILabel *label in allLabels) {
-                if (label.text && label.text.length > 0) [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
+   else if (g_s2_isExtractingKeChuanDetail) {
+    NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+    if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
+        
+        UIView *contentView = vcToPresent.view;
+        
+        // 1. 创建一个临时数组，用于存储所有文本元素及其位置
+        NSMutableArray<NSDictionary *> *textElements = [NSMutableArray array];
+        
+        // 2. 查找并处理顶部的独立 UILabel
+        NSMutableArray *allLabels = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+        for (UILabel *label in allLabels) {
+            // 为避免重复计算，我们只添加不在 TableViewCell 内部的 Label
+            UIView *superview = label.superview;
+            BOOL isInCell = NO;
+            while (superview) {
+                if ([superview isKindOfClass:[UITableViewCell class]]) {
+                    isInCell = YES;
+                    break;
+                }
+                superview = superview.superview;
             }
-            [g_s2_capturedKeChuanDetailArray addObject:[textParts componentsJoinedByString:@"\n"]];
-            LogMessage(EchoLogTypeSuccess, @"[课传] 成功无痕捕获内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
-            
-            // 3. 【手动推进】因为没有了 dismiss 的回调，我们需要在这里手动调用下一个任务。
-            // 使用 dispatch_async 是为了防止栈溢出，并给主线程一点喘息时间。
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self processKeChuanQueue_Truth_S2];
-            });
-            
-            // 4. 【阻止呈现】这是最重要的一步：直接 return，不调用 Original_presentViewController。
-            // 这样，这个弹窗就永远不会被呈现到屏幕上，也就彻底解决了闪烁问题。
-            return;
+            if (!isInCell && label.text.length > 0) {
+                [textElements addObject:@{ @"text": label.text, @"y": @(label.frame.origin.y) }];
+            }
         }
+        
+        // 3. 查找并使用 dataSource 提取 TableView (八象等内容)
+        Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
+        if (tableViewClass) {
+            NSMutableArray *tableViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews);
+            if (tableViews.count > 0) {
+                UITableView *tableView = tableViews.firstObject;
+                id<UITableViewDataSource> dataSource = tableView.dataSource;
+                if (dataSource) {
+                    NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
+                    for (NSInteger section = 0; section < sections; section++) {
+                        NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
+                        for (NSInteger row = 0; row < rows; row++) {
+                            NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
+                            UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
+                            if (cell) {
+                                NSMutableArray *labelsInCell = [NSMutableArray array];
+                                FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
+                                // 按x坐标排序，确保一行内的文本顺序正确 (例如 "墓: 支墓...")
+                                [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
+                                
+                                NSMutableArray<NSString *> *cellTextParts = [NSMutableArray array];
+                                for(UILabel *l in labelsInCell) {
+                                    if(l.text.length > 0) [cellTextParts addObject:l.text];
+                                }
+                                NSString *fullCellText = [cellTextParts componentsJoinedByString:@" "];
+                                [textElements addObject:@{ @"text": fullCellText, @"y": @(cell.frame.origin.y + tableView.frame.origin.y) }];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 4. 按Y坐标对所有文本元素进行最终排序
+        [textElements sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
+            return [obj1[@"y"] compare:obj2[@"y"]];
+        }];
+        
+        // 5. 提取纯文本并组合成最终结果
+        NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
+        for (NSDictionary *element in textElements) {
+            [finalTextParts addObject:element[@"text"]];
+        }
+        
+        [g_s2_capturedKeChuanDetailArray addObject:[finalTextParts componentsJoinedByString:@"\n"]];
+        LogMessage(EchoLogTypeSuccess, @"[课传] 成功无痕捕获完整内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self processKeChuanQueue_Truth_S2];
+        });
+        
+        return;
     }
+}
     else if (g_isExtractingNianming && g_currentItemToExtract) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
         // UIAlertController 依旧需要呈现来触发后续逻辑，但它本身不闪烁
@@ -1769,6 +1819,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
