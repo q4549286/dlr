@@ -1755,59 +1755,46 @@ int availableApps = 0;
 // =========================================================================
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
     if (!rootView) return @"[错误: 根视图为空]";
-    NSMutableString *finalResult = [NSMutableString string];
+    
+    // 1. 精准定位核心容器 UIStackView
     NSMutableArray *stackViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
-    if (stackViews.count > 0) {
-        UIStackView *mainStackView = stackViews.firstObject;
-        NSMutableArray *blocks = [NSMutableArray array];
-        NSMutableDictionary *currentBlock = nil;
-        for (UIView *subview in mainStackView.arrangedSubviews) {
-            if (![subview isKindOfClass:[UILabel class]]) continue;
+    
+    if (stackViews.count == 0) {
+        return @"[错误: 未在课体范式弹窗中找到 UIStackView]";
+    }
+    
+    // 通常第一个就是主 StackView
+    UIStackView *mainStackView = stackViews.firstObject;
+    NSMutableString *finalResult = [NSMutableString string];
+    
+    // 2. 遍历 arrangedSubviews，这是最可靠的视图顺序
+    for (UIView *subview in mainStackView.arrangedSubviews) {
+        // 我们只关心 UILabel
+        if ([subview isKindOfClass:[UILabel class]]) {
             UILabel *label = (UILabel *)subview;
-            NSString *text = label.text;
+            NSString *text = [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            
             if (!text || text.length == 0) continue;
-            BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0;
-            if (isTitle) {
-                if (currentBlock) [blocks addObject:currentBlock];
-                currentBlock = [NSMutableDictionary dictionaryWithDictionary:@{@"title": text, @"content": [NSMutableString string]}];
-            } else {
-                if (currentBlock) {
-                    NSMutableString *content = currentBlock[@"content"];
-                    if (content.length > 0) [content appendString:@"\n"];
-                    [content appendString:text];
-                }
+            
+            // 3. 【核心条件】严格遵守您的要求：遇到“详解”就立即停止
+            if ([text isEqualToString:@"详解"]) {
+                break; // 停止循环，后续所有内容（包括详解本身）都将被忽略
             }
-        }
-        if (currentBlock) [blocks addObject:currentBlock];
-        for (NSDictionary *block in blocks) {
-            NSString *title = block[@"title"];
-            NSString *content = [block[@"content"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            if (content.length > 0) { [finalResult appendFormat:@"%@\n%@\n\n", title, content]; } 
-            else { [finalResult appendFormat:@"%@\n\n", title]; }
+            
+            // 4. 将有效内容拼接起来
+            [finalResult appendFormat:@"%@\n", text];
         }
     }
-    if (includeXiangJie) {
-        Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
-        if (tableViewClass) {
-            NSMutableArray *tableViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive(tableViewClass, rootView, tableViews);
-            if (tableViews.count > 0) {
-                NSMutableArray *xiangJieLabels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], tableViews.firstObject, xiangJieLabels);
-                if (xiangJieLabels.count > 0) {
-                    [finalResult appendString:@"// 详解内容\n\n"];
-                    for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) {
-                        UILabel *titleLabel = xiangJieLabels[i];
-                        if (i + 1 >= xiangJieLabels.count && [titleLabel.text isEqualToString:@"详解"]) continue;
-                        if (i + 1 < xiangJieLabels.count) { [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, ((UILabel*)xiangJieLabels[i+1]).text]; } 
-                        else { [finalResult appendFormat:@"%@→\n\n", titleLabel.text]; }
-                    }
-                }
-            }
-        }
+    
+    // 5. 格式化输出，移除多余的换行符
+    // 原始文本块之间可能有空UILabel导致多余换行，这里进行清理
+    NSString *cleanedResult = [finalResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
+    while ([cleanedResult containsString:@"\n\n\n"]) {
+        cleanedResult = [cleanedResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
     }
-    return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    
+    return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
 // =========================================================================
@@ -1819,6 +1806,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
