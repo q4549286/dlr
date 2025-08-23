@@ -2328,8 +2328,40 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
     }
-    else if (g_s2_isExtractingKeChuanDetail) { NSString *vcClassName = NSStringFromClass([vcToPresent class]); if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) { vcToPresent.view.alpha = 0.0f; animated = NO; void (^newCompletion)(void) = ^{ if (completion) { completion(); } UIView *contentView = vcToPresent.view; NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels); [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending; if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending; return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; NSMutableArray<NSString *> *textParts = [NSMutableArray array]; for (UILabel *label in allLabels) { if (label.text && label.text.length > 0) [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]; } [g_s2_capturedKeChuanDetailArray addObject:[textParts componentsJoinedByString:@"\n"]]; LogMessage(EchoLogTypeSuccess, @"[课传] 成功捕获内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count); [vcToPresent dismissViewControllerAnimated:NO completion:^{ dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self processKeChuanQueue_Truth_S2]; }); }]; }; Original_presentViewController(self, _cmd, vcToPresent, animated, newCompletion); return; } }
-    else if (g_isExtractingNianming && g_currentItemToExtract) {
+    else if (g_s2_isExtractingKeChuanDetail) {
+        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
+            
+            // 1. 【无痕加载】访问 .view 属性会强制加载视图到内存，但不会显示它。
+            UIView *contentView = vcToPresent.view;
+            
+            // 2. 【直接提取】从这个内存中的视图里提取数据，逻辑和之前一样。
+            NSMutableArray *allLabels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
+                if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+                return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+            }];
+            NSMutableArray<NSString *> *textParts = [NSMutableArray array];
+            for (UILabel *label in allLabels) {
+                if (label.text && label.text.length > 0) [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
+            }
+            [g_s2_capturedKeChuanDetailArray addObject:[textParts componentsJoinedByString:@"\n"]];
+            LogMessage(EchoLogTypeSuccess, @"[课传] 成功无痕捕获内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
+            
+            // 3. 【手动推进】因为没有了 dismiss 的回调，我们需要在这里手动调用下一个任务。
+            // 使用 dispatch_async 是为了防止栈溢出，并给主线程一点喘息时间。
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self processKeChuanQueue_Truth_S2];
+            });
+            
+            // 4. 【阻止呈现】这是最重要的一步：直接 return，不调用 Original_presentViewController。
+            // 这样，这个弹窗就永远不会被呈现到屏幕上，也就彻底解决了闪烁问题。
+            return;
+        }
+    }
+else if (g_isExtractingNianming && g_currentItemToExtract) {
         __weak typeof(self) weakSelf = self;
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
         if ([vcToPresent isKindOfClass:[UIAlertController class]]) { UIAlertController *alert = (UIAlertController *)vcToPresent; UIAlertAction *targetAction = nil; for (UIAlertAction *action in alert.actions) { if ([action.title isEqualToString:g_currentItemToExtract]) { targetAction = action; break; } } if (targetAction) { id handler = [targetAction valueForKey:@"handler"]; if (handler) { ((void (^)(UIAlertAction *))handler)(targetAction); } return; } }
@@ -3312,6 +3344,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
