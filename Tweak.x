@@ -68,6 +68,18 @@ static NSString *g_lastGeneratedReport = nil;
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES;
 static BOOL g_isExtractingTimeInfo = NO;
+// +++ START: 添加新的无痕提取状态变量 +++
+static BOOL g_isExtractingBiFa = NO;
+static void (^g_biFa_completion)(NSString *) = nil;
+static BOOL g_isExtractingGeJu = NO;
+static void (^g_geJu_completion)(NSString *) = nil;
+static BOOL g_isExtractingFangFa = NO;
+static void (^g_fangFa_completion)(NSString *) = nil;
+static BOOL g_isExtractingQiZheng = NO;
+static void (^g_qiZheng_completion)(NSString *) = nil;
+static BOOL g_isExtractingSanGong = NO;
+static void (^g_sanGong_completion)(NSString *) = nil;
+// +++ END: 添加新的无痕提取状态变量 +++
 
 #define SafeString(str) (str ?: @"")
 
@@ -1676,3 +1688,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
