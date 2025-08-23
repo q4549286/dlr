@@ -12,7 +12,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 #define SUPPRESS_LEAK_WARNING(code) _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") code; _Pragma("clang diagnostic pop")
 
 // =========================================================================
-// 2. 全局状态定义 (包含所有任务)
+// 2. 全局状态定义
 // =========================================================================
 static BOOL g_isExtractingJiuZongMen = NO; static void (^g_jiuZongMen_completion)(NSString *) = nil;
 static BOOL g_isExtractingBiFa = NO; static void (^g_biFa_completion)(NSString *) = nil;
@@ -22,112 +22,119 @@ static BOOL g_isExtractingQiZheng = NO; static void (^g_qiZheng_completion)(NSSt
 static BOOL g_isExtractingSanGong = NO; static void (^g_sanGong_completion)(NSString *) = nil;
 
 // =========================================================================
-// 3. 提取逻辑函数
+// 3. 提取逻辑函数 (使用真实解析逻辑)
 // =========================================================================
-static NSString* extractDataFromSplitView(UIView *rootView) { /*...*/ return @"[九宗门数据]"; }
-static NSString* extractDataFromStackViewPopup(UIView *contentView, NSString* type) { /*...*/ return [NSString stringWithFormat:@"[%@数据]", type]; }
-static NSString* extractDataFromSimpleLabelPopup(UIView *contentView) { /*...*/ return @"[七政/三宫数据]"; }
+static NSString* extractDataFromSplitView(UIView *rootView) {
+    NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], rootView, allLabels);
+    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+    NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in allLabels) { [textParts addObject:(label.text ?: @"")]; }
+    return [textParts componentsJoinedByString:@"\n"];
+}
+static NSString* extractDataFromStackViewPopup(UIView *contentView, NSString* type) {
+    NSMutableArray *textParts = [NSMutableArray array]; NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
+    [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
+    for (UIStackView *stackView in stackViews) {
+        NSArray *arrangedSubviews = stackView.arrangedSubviews; if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
+            UILabel *titleLabel = arrangedSubviews[0]; NSString *cleanTitle = [[(titleLabel.text ?: @"") stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] stringByReplacingOccurrencesOfString:[NSString stringWithFormat:@" %@", type] withString:@""];
+            NSMutableArray *descParts = [NSMutableArray array]; if (arrangedSubviews.count > 1) { for (NSUInteger i = 1; i < arrangedSubviews.count; i++) { if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) { [descParts addObject:((UILabel *)arrangedSubviews[i]).text]; } } }
+            NSString *fullDesc = [[descParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+            [textParts addObject:[NSString stringWithFormat:@"%@→%@", cleanTitle, [fullDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]];
+        }
+    } return [textParts componentsJoinedByString:@"\n"];
+}
+static NSString* extractDataFromSimpleLabelPopup(UIView *contentView) {
+    NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+    NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in allLabels) { if (label.text.length > 0) [textParts addObject:label.text]; }
+    return [textParts componentsJoinedByString:@"\n"];
+}
 
 // =========================================================================
 // 4. 核心 Hook 实现
 // =========================================================================
 @interface UIViewController (EchoNoPopupFinalTest)
-// ... 接口声明
 - (void)runEchoNoPopupExtractionTests;
-- (void)extractJiuZongMen_NoPopup_WithCompletion:(void (^)(NSString *))completion;
-- (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion;
-- (void)extractGeJu_NoPopup_WithCompletion:(void (^)(NSString *))completion;
-- (void)extractFangFa_NoPopup_WithCompletion:(void (^)(NSString *))completion;
-- (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion;
-- (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+- (void)extractJiuZongMen_NoPopup_WithCompletion:(void (^)(NSString *))completion; - (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion; - (void)extractGeJu_NoPopup_WithCompletion:(void (^)(NSString *))completion; - (void)extractFangFa_NoPopup_WithCompletion:(void (^)(NSString *))completion; - (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion; - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 @end
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+
+    void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSString *taskName, NSString *result, void(^completionBlock)(NSString*)) {
+        [UIPasteboard generalPasteboard].string = result ?: @"";
+        LogTestMessage(@"提取成功！%@ 内容已复制 (共 %lu 字符)", taskName, (unsigned long)(result.length));
+        if (completionBlock) {
+            completionBlock(result);
+        }
+    };
     
-    // 使用 dispatch_after 确保 view 内部组件加载完成
-    // 这个 block 会在拦截成功后执行
-    void (^processExtraction)(NSString *, void(^)(NSString *)) = ^(NSString *taskName, void(^extractionBlock)(void(^)(NSString *))) {
-        LogTestMessage(@"匹配成功 -> %@", taskName);
-        
-        // 关键：延迟0.1秒执行提取，给UI渲染留出时间
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            extractionBlock(^(NSString *result){
-                if (result) {
-                    [UIPasteboard generalPasteboard].string = result;
-                    LogTestMessage(@"提取成功！%@ 内容已复制 (共 %lu 字符)", taskName, (unsigned long)result.length);
-                } else {
-                    LogTestMessage(@"提取失败或无内容：%@", taskName);
-                }
-            });
-        });
+    // 延迟提取的公共逻辑
+    void (^delayedExtraction)(void(^)()) = ^(void(^extractionLogic)()) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), extractionLogic);
     };
 
     // --- 九宗门拦截 ---
     if (g_isExtractingJiuZongMen && [vcClassName containsString:@"課體概覽視圖"]) {
-        g_isExtractingJiuZongMen = NO; // 立刻重置，防止重复进入
-        processExtraction(@"九宗门", ^(void(^completionHandler)(NSString *)){
+        LogTestMessage(@"匹配成功 -> 九宗门");
+        g_isExtractingJiuZongMen = NO;
+        delayedExtraction(^{
             NSString *result = extractDataFromSplitView(vcToPresent.view);
-            if(g_jiuZongMen_completion) g_jiuZongMen_completion(result);
+            handleExtraction(@"九宗门", result, g_jiuZongMen_completion);
             g_jiuZongMen_completion = nil;
-            completionHandler(result);
         });
-        return; // 阻止弹窗
+        return;
     }
-    
     // --- 毕法/格局/方法 统一拦截 ---
     else if ([vcClassName containsString:@"格局總覽視圖"]) {
         if (g_isExtractingBiFa) {
+            LogTestMessage(@"匹配成功 -> 毕法要诀");
             g_isExtractingBiFa = NO;
-            processExtraction(@"毕法要诀", ^(void(^completionHandler)(NSString *)){
+            delayedExtraction(^{
                 NSString *result = extractDataFromStackViewPopup(vcToPresent.view, @"毕法");
-                if(g_biFa_completion) g_biFa_completion(result);
+                handleExtraction(@"毕法要诀", result, g_biFa_completion);
                 g_biFa_completion = nil;
-                completionHandler(result);
             });
             return;
         } else if (g_isExtractingGeJu) {
+            LogTestMessage(@"匹配成功 -> 格局要览");
             g_isExtractingGeJu = NO;
-            processExtraction(@"格局要览", ^(void(^completionHandler)(NSString *)){
+            delayedExtraction(^{
                 NSString *result = extractDataFromStackViewPopup(vcToPresent.view, @"格局");
-                if(g_geJu_completion) g_geJu_completion(result);
+                handleExtraction(@"格局要览", result, g_geJu_completion);
                 g_geJu_completion = nil;
-                completionHandler(result);
             });
             return;
         } else if (g_isExtractingFangFa) {
+            LogTestMessage(@"匹配成功 -> 解析方法");
             g_isExtractingFangFa = NO;
-            processExtraction(@"解析方法", ^(void(^completionHandler)(NSString *)){
+            delayedExtraction(^{
                 NSString *result = extractDataFromStackViewPopup(vcToPresent.view, @"方法");
-                if(g_fangFa_completion) g_fangFa_completion(result);
+                handleExtraction(@"解析方法", result, g_fangFa_completion);
                 g_fangFa_completion = nil;
-                completionHandler(result);
             });
             return;
         }
     }
-
     // --- 七政拦截 ---
     else if (g_isExtractingQiZheng && [vcClassName containsString:@"七政"]) {
+        LogTestMessage(@"匹配成功 -> 七政四余");
         g_isExtractingQiZheng = NO;
-        processExtraction(@"七政四余", ^(void(^completionHandler)(NSString *)){
+        delayedExtraction(^{
             NSString *result = extractDataFromSimpleLabelPopup(vcToPresent.view);
-            if(g_qiZheng_completion) g_qiZheng_completion(result);
+            handleExtraction(@"七政四余", result, g_qiZheng_completion);
             g_qiZheng_completion = nil;
-            completionHandler(result);
         });
         return;
     }
-
     // --- 三宫时拦截 ---
     else if (g_isExtractingSanGong && [vcClassName containsString:@"三宮時信息視圖"]) {
+        LogTestMessage(@"匹配成功 -> 三宫时信息");
         g_isExtractingSanGong = NO;
-        processExtraction(@"三宫时信息", ^(void(^completionHandler)(NSString *)){
+        delayedExtraction(^{
             NSString *result = extractDataFromSimpleLabelPopup(vcToPresent.view);
-            if(g_sanGong_completion) g_sanGong_completion(result);
+            handleExtraction(@"三宫时信息", result, g_sanGong_completion);
             g_sanGong_completion = nil;
-            completionHandler(result);
         });
         return;
     }
@@ -145,37 +152,50 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)runEchoNoPopupExtractionTests {
     LogTestMessage(@"================== 开始完整测试 ==================");
-    __weak typeof(self) weakSelf = self;
     
-    // 使用 block 创建一个任务队列
-    NSMutableArray *tasks = [NSMutableArray array];
+    // 创建一个包含所有任务触发器的数组
+    NSArray<dispatch_block_t> *tasks = @[
+        ^{ [self extractJiuZongMen_NoPopup_WithCompletion:nil]; },
+        ^{ [self extractBiFa_NoPopup_WithCompletion:nil]; },
+        ^{ [self extractGeJu_NoPopup_WithCompletion:nil]; },
+        ^{ [self extractFangFa_NoPopup_WithCompletion:nil]; },
+        ^{ [self extractQiZheng_NoPopup_WithCompletion:nil]; },
+        ^{ [self extractSanGong_NoPopup_WithCompletion:nil]; }
+    ];
     
-    [tasks addObject:^{ [weakSelf extractJiuZongMen_NoPopup_WithCompletion:^(NSString *result) { [tasks.firstObject performSelector:@selector(release)]; [tasks removeObjectAtIndex:0]; if(tasks.count > 0) ((void (^)(void))tasks.firstObject)(); }]; }];
-    [tasks addObject:^{ [weakSelf extractBiFa_NoPopup_WithCompletion:^(NSString *result) { [tasks.firstObject performSelector:@selector(release)]; [tasks removeObjectAtIndex:0]; if(tasks.count > 0) ((void (^)(void))tasks.firstObject)(); }]; }];
-    [tasks addObject:^{ [weakSelf extractGeJu_NoPopup_WithCompletion:^(NSString *result) { [tasks.firstObject performSelector:@selector(release)]; [tasks removeObjectAtIndex:0]; if(tasks.count > 0) ((void (^)(void))tasks.firstObject)(); }]; }];
-    [tasks addObject:^{ [weakSelf extractFangFa_NoPopup_WithCompletion:^(NSString *result) { [tasks.firstObject performSelector:@selector(release)]; [tasks removeObjectAtIndex:0]; if(tasks.count > 0) ((void (^)(void))tasks.firstObject)(); }]; }];
-    [tasks addObject:^{ [weakSelf extractQiZheng_NoPopup_WithCompletion:^(NSString *result) { [tasks.firstObject performSelector:@selector(release)]; [tasks removeObjectAtIndex:0]; if(tasks.count > 0) ((void (^)(void))tasks.firstObject)(); }]; }];
-    [tasks addObject:^{ [weakSelf extractSanGong_NoPopup_WithCompletion:^(NSString *result) { [tasks.firstObject performSelector:@selector(release)]; [tasks removeObjectAtIndex:0]; LogTestMessage(@"================== 所有测试完成 =================="); }]; }];
+    // 使用一个可变数组来管理任务队列
+    NSMutableArray<dispatch_block_t> *taskQueue = [tasks mutableCopy];
+    
+    // 定义一个 block 来递归执行队列中的任务
+    __block void (^executeNextTask)();
+    executeNextTask = [^{
+        if (taskQueue.count == 0) {
+            LogTestMessage(@"================== 所有测试完成 ==================");
+            // ARC 会自动处理 executeNextTask 的释放，无需担心循环引用
+            return;
+        }
+        
+        // 取出并执行当前任务
+        dispatch_block_t currentTask = taskQueue.firstObject;
+        [taskQueue removeObjectAtIndex:0];
+        currentTask();
+        
+        // 延迟一段时间后执行下一个任务，模拟用户操作间隔，也让系统有时间响应
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            executeNextTask();
+        });
+    } copy]; // copy a block to move it to the heap
     
     // 启动第一个任务
-    if (tasks.count > 0) {
-        ((void (^)(void))tasks.firstObject)();
-    }
+    executeNextTask();
 }
 
-// --- 新的无痕提取函数定义 ---
-%new
-- (void)extractJiuZongMen_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingJiuZongMen) return; LogTestMessage(@"[任务触发] 九宗门"); g_isExtractingJiuZongMen = YES; g_jiuZongMen_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示九宗門概覽"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); } }
-%new
-- (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingBiFa) return; LogTestMessage(@"[任务触发] 毕法要诀"); g_isExtractingBiFa = YES; g_biFa_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示法訣總覽"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); } }
-%new
-- (void)extractGeJu_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingGeJu) return; LogTestMessage(@"[任务触发] 格局要览"); g_isExtractingGeJu = YES; g_geJu_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示格局總覽"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); } }
-%new
-- (void)extractFangFa_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingFangFa) return; LogTestMessage(@"[任务触发] 解析方法"); g_isExtractingFangFa = YES; g_fangFa_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示方法總覽"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); } }
-%new
-- (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingQiZheng) return; LogTestMessage(@"[任务触发] 七政四余"); g_isExtractingQiZheng = YES; g_qiZheng_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示七政信息WithSender:"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]); } }
-%new
-- (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingSanGong) return; LogTestMessage(@"[任务触发] 三宫时信息"); g_isExtractingSanGong = YES; g_sanGong_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示三宮時信息WithSender:"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]); } }
+%new - (void)extractJiuZongMen_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingJiuZongMen) return; LogTestMessage(@"[任务触发] 九宗门"); g_isExtractingJiuZongMen = YES; g_jiuZongMen_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示九宗門概覽"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); } }
+%new - (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingBiFa) return; LogTestMessage(@"[任务触发] 毕法要诀"); g_isExtractingBiFa = YES; g_biFa_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示法訣總覽"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); } }
+%new - (void)extractGeJu_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingGeJu) return; LogTestMessage(@"[任务触发] 格局要览"); g_isExtractingGeJu = YES; g_geJu_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示格局總覽"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); } }
+%new - (void)extractFangFa_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingFangFa) return; LogTestMessage(@"[任务触发] 解析方法"); g_isExtractingFangFa = YES; g_fangFa_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示方法總覽"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); } }
+%new - (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingQiZheng) return; LogTestMessage(@"[任务触发] 七政四余"); g_isExtractingQiZheng = YES; g_qiZheng_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示七政信息WithSender:"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]); } }
+%new - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingSanGong) return; LogTestMessage(@"[任务触发] 三宫时信息"); g_isExtractingSanGong = YES; g_sanGong_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示三宮時信息WithSender:"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]); } }
 %end
 
 %ctor { @autoreleasepool { MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController); } }
