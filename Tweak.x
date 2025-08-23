@@ -85,10 +85,6 @@ static void CreateLogUI(UIWindow *window) {
     [window addSubview:g_logContainerView];
 }
 
-
-// 递归查找子视图
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
-
 // 抑制编译器警告
 #define SUPPRESS_LEAK_WARNING(code) \
     _Pragma("clang diagnostic push") \
@@ -97,27 +93,19 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     _Pragma("clang diagnostic pop")
 
 // =========================================================================
-// 2. 全局状态定义
+// 2. 全局状态定义 (只保留本次测试用到的)
 // =========================================================================
 
 static BOOL g_isExtractingJiuZongMen = NO;
 static void (^g_jiuZongMen_completion)(NSString *) = nil;
-// ... (其他全局状态变量与之前相同)
+
 static BOOL g_isExtractingBiFa = NO;
 static void (^g_biFa_completion)(NSString *) = nil;
 
 static BOOL g_isExtractingGeJu = NO;
 static void (^g_geJu_completion)(NSString *) = nil;
 
-static BOOL g_isExtractingFangFa = NO;
-static void (^g_fangFa_completion)(NSString *) = nil;
-
-static BOOL g_isExtractingQiZheng = NO;
-static void (^g_qiZheng_completion)(NSString *) = nil;
-
-static BOOL g_isExtractingSanGong = NO;
-static void (^g_sanGong_completion)(NSString *) = nil;
-
+// 移除了 g_isExtractingFangFa, g_isExtractingQiZheng, g_isExtractingSanGong
 
 // =========================================================================
 // 3. 提取逻辑函数 (与之前相同)
@@ -134,12 +122,7 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView, NSString* ty
     return [NSString stringWithFormat:@"成功从 StackView Popup 提取了 [%@] 的内容。", type];
 }
 
-// 用于解析七政/三宫弹窗
-static NSString* extractDataFromSimpleLabelPopup(UIView *contentView) {
-    // 实际的解析逻辑...
-    return @"成功从 Simple Label Popup 提取了内容。";
-}
-
+// 移除了 extractDataFromSimpleLabelPopup
 
 // =========================================================================
 // 4. 核心 Hook 实现
@@ -149,7 +132,6 @@ static NSString* extractDataFromSimpleLabelPopup(UIView *contentView) {
 - (void)extractJiuZongMen_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractGeJu_NoPopup_WithCompletion:(void (^)(NSString *))completion;
-// ... (其他函数的接口声明)
 @end
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
@@ -181,7 +163,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         g_isExtractingGeJu = NO; g_geJu_completion = nil;
         return;
     }
-    // --- 后续其他拦截逻辑... ---
     
     LogTestMessage(@"弹窗 %@ 未被拦截，正常显示。", vcClassName);
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
@@ -272,7 +253,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }];
 }
 
-// --- 新的无痕提取函数定义 (与之前相同，只展示2个作为示例) ---
+// --- 新的无痕提取函数定义 (只保留本次测试用到的) ---
 %new
 - (void)extractJiuZongMen_NoPopup_WithCompletion:(void (^)(NSString *))completion {
     if (g_isExtractingJiuZongMen) return;
@@ -300,7 +281,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     SEL selector = NSSelectorFromString(@"顯示格局總覽");
     if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); }
 }
-//... 其他提取函数的实现 ...
 
 %end
 
