@@ -1045,6 +1045,7 @@ int availableApps = 0;
     g_extractedData = [NSMutableDictionary dictionary];
     [self extractTimeInfoWithCompletion:^{
         LogMessage(EchoLogTypeInfo, @"[盘面] 时间提取完成，开始解析其他基础信息...");
+        // ... (前面的基础信息提取代码保持不变)
         NSString *textA = [self extractTextFromFirstViewOfClassName:@"六壬大占.旬空視圖" separator:@" "];
         NSString *textB = [self extractSwitchedXunKongInfo];
         NSString *xunInfo = nil, *liuQinFullInfo = nil;
@@ -1076,9 +1077,9 @@ int availableApps = 0;
         g_extractedData[@"天地盘"] = [self extractTianDiPanInfo_V18];
         g_extractedData[@"四课"] = [self _echo_extractSiKeInfo];
         g_extractedData[@"三传"] = [self _echo_extractSanChuanInfo];
+        
         LogMessage(EchoLogTypeInfo, @"[盘面] 开始顺序无痕解析弹窗类信息...");
 
-        // 创建一个任务队列
         NSMutableArray *popupTasks = [NSMutableArray arrayWithArray:@[
             @{@"key": @"毕法要诀", @"selector": @"顯示法訣總覽"},
             @{@"key": @"格局要览", @"selector": @"顯示格局總覽"},
@@ -1086,15 +1087,15 @@ int availableApps = 0;
             @{@"key": @"七政四余", @"selector": @"顯示七政信息WithSender:"},
             @{@"key": @"三宫时信息", @"selector": @"顯示三宮時信息WithSender:"}
         ]];
-
-        // 【循环引用修复】
+        
+        // 【最终循环引用修复】
         __block void (^processNextTaskBlock)(void);
         __weak __typeof(self) weakSelf = self;
+        __weak __block typeof(processNextTaskBlock) weakProcessNextTaskBlock; // 1. 创建一个弱引用的 block 指针
 
         processNextTaskBlock = [^{
-            __strong __typeof(weakSelf) strongSelf = weakSelf; // 在 block 内部重新强引用
+            __strong __typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf || popupTasks.count == 0) {
-                // 所有任务完成，执行最后的回调
                 dispatch_async(dispatch_get_main_queue(), ^{
                     LogMessage(EchoLogTypeInfo, @"[盘面] 所有弹窗信息整合完毕。");
                     NSArray *keysToClean = @[@"毕法要诀", @"格局要览", @"解析方法"]; NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
@@ -1109,7 +1110,6 @@ int availableApps = 0;
 
             NSDictionary *task = popupTasks.firstObject;
             [popupTasks removeObjectAtIndex:0];
-
             NSString *key = task[@"key"];
             SEL selector = NSSelectorFromString(task[@"selector"]);
 
@@ -1126,22 +1126,22 @@ int availableApps = 0;
                         LogMessage(EchoLogTypeWarning, @"[盘面] 解析 %@ 超时", g_currentPopupKey);
                         g_currentPopupKey = nil;
                     }
-                    // 通过 block 自身调用来形成递归
-                    if (processNextTaskBlock) {
-                        processNextTaskBlock();
+                    
+                    // 3. 在 block 内部通过弱引用来调用
+                    if (weakProcessNextTaskBlock) {
+                        weakProcessNextTaskBlock();
                     }
                 });
             } else {
                 LogMessage(EchoLogTypeWarning, @"[盘面] 找不到选择器 %@, 跳过。", task[@"selector"]);
-                // 即使失败也要继续下一个
-                if (processNextTaskBlock) {
-                    processNextTaskBlock();
+                if (weakProcessNextTaskBlock) {
+                    weakProcessNextTaskBlock();
                 }
             }
         } copy];
-
-        // 启动任务队列
-        processNextTaskBlock();
+        
+        weakProcessNextTaskBlock = processNextTaskBlock; // 2. 在定义完 block 后，将它赋值给弱引用指针
+        processNextTaskBlock(); // 启动队列
     }];
 }
 %new
@@ -1688,4 +1688,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
