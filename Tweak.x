@@ -599,45 +599,43 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // ================== 基础盘面复合任务拦截 ==================
      if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         
-        // --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
-// --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
+         // --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
         if ([vcClassName containsString:@"格局總覽視圖"]) {
             LogMessage(EchoLogTypeInfo, @"[捕获] 拦截到 格局總覽視圖, 当前任务: %@", g_currentPopupTaskType);
             
-            // 【回归正确逻辑】直接查找 UIStackView，而不是格局单元
+            // 【编译错误修复】在这里定义 contentView
+            UIView *contentView = vcToPresent.view;
+
+            // 【回归正确逻辑】直接查找 UIStackView
             NSMutableArray *stackViews = [NSMutableArray array];
             FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
             
-            // 按纵向位置排序，确保条目顺序正确
+            // 按纵向位置排序
             [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
                 return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
             }];
 
             NSMutableArray *textParts = [NSMutableArray array];
             for (UIStackView *stackView in stackViews) {
-                // 过滤掉不符合结构的 StackView
                 if (stackView.arrangedSubviews.count == 0 || ![stackView.arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
                     continue;
                 }
 
-                // 第一个 UILabel 是标题
                 UILabel *titleLabel = (UILabel *)stackView.arrangedSubviews[0];
                 NSString *rawTitle = titleLabel.text ?: @"";
-                // 清理标题中的多余词汇
                 rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
                 rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""];
                 rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""];
                 rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
                 NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 
-                // 拼接剩余的 UILabel 作为内容
                 NSMutableString *description = [NSMutableString string];
                 for (NSUInteger i = 1; i < stackView.arrangedSubviews.count; i++) {
                     if ([stackView.arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
                         UILabel *descLabel = (UILabel *)stackView.arrangedSubviews[i];
                         if (descLabel.text) {
                             if (description.length > 0) {
-                                [description appendString:@" "]; // 用空格分隔多行内容
+                                [description appendString:@" "];
                             }
                             [description appendString:descLabel.text];
                         }
@@ -645,7 +643,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 }
                 NSString *cleanDescription = [[description stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 
-                // 只有当标题不为空时，才添加
                 if (cleanTitle.length > 0) {
                     [textParts addObject:[NSString stringWithFormat:@"%@→%@", cleanTitle, cleanDescription]];
                 }
@@ -653,7 +650,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             
             NSString *finalContent = [textParts componentsJoinedByString:@"\n"];
 
-            // 后续逻辑保持不变...
             if ([g_currentPopupTaskType isEqualToString:@"BiFa"]) {
                 g_extractedData[@"毕法要诀"] = finalContent;
                 LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [毕法要诀], 内容长度: %lu", (unsigned long)finalContent.length);
@@ -1626,6 +1622,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
