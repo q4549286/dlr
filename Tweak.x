@@ -217,6 +217,7 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
 }
 
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeTask, EchoLogTypeSuccess, EchoLogTypeWarning, EchoLogError };
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     if (!g_logTextView) return;
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
@@ -280,7 +281,6 @@ static NSString* extractFromJiuZongMenPopup(UIView *contentView) {
 }
 
 
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@available(iOS 13.0, *)) { for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) { if (scene.activationState == UISceneActivationStateForegroundActive) { for (UIWindow *window in scene.windows) { if (window.isKeyWindow) { frontmostWindow = window; break; } } if (frontmostWindow) break; } } } if (!frontmostWindow) { _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"") frontmostWindow = [UIApplication sharedApplication].keyWindow; _Pragma("clang diagnostic pop") } return frontmostWindow; }
 
 // =========================================================================
@@ -402,8 +402,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 60, contentView.bounds.size.width, contentView.bounds.size.height - 230 - 60 - 10)]; [contentView addSubview:scrollView];
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; [btn setTitle:title forState:UIControlStateNormal]; [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) { UIImage *icon = [UIImage systemImageNamed:iconName]; [btn setImage:icon forState:UIControlStateNormal]; #pragma clang diagnostic push \n #pragma clang diagnostic ignored "-Wdeprecated-declarations" \n btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8); btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0); #pragma clang diagnostic pop }
-        btn.tag = tag; btn.backgroundColor = color; [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter]; [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
+if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
+    UIImage *icon = [UIImage systemImageNamed:iconName];
+    [btn setImage:icon forState:UIControlStateNormal];
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8);
+    btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
+    #pragma clang diagnostic pop
+}  
+btn.tag = tag; btn.backgroundColor = color; [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter]; [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
         btn.tintColor = [UIColor whiteColor]; btn.titleLabel.font = [UIFont boldSystemFontOfSize:15]; btn.titleLabel.adjustsFontSizeToFitWidth = YES; btn.titleLabel.minimumScaleFactor = 0.8; btn.layer.cornerRadius = 12; return btn;
     };
     UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { UILabel *label = [[UILabel alloc] init]; label.text = title; label.font = [UIFont boldSystemFontOfSize:16]; label.textColor = [UIColor lightGrayColor]; return label; };
@@ -476,7 +484,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
     UIView *existing = [keyWindow viewWithTag:kEchoProgressHUDTag]; if(existing) [existing removeFromSuperview];
     UIView *progressView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 120)]; progressView.center = keyWindow.center; progressView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.8]; progressView.layer.cornerRadius = 10; progressView.tag = kEchoProgressHUDTag;
-    UIActivityIndicatorView *spinner; if (@available(iOS 13.0, *)) { spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge]; spinner.color = [UIColor whiteColor]; } else { #pragma clang diagnostic push \n #pragma clang diagnostic ignored "-Wdeprecated-declarations" \n spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge]; #pragma clang diagnostic pop }
+    UIActivityIndicatorView *spinner; if (@available(iOS 13.0, *)) { spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge]; spinner.color = [UIColor whiteColor]; } } else {
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+    #pragma clang diagnostic pop
+}
     spinner.center = CGPointMake(110, 50); [spinner startAnimating]; [progressView addSubview:spinner];
     UILabel *progressLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 85, 200, 30)]; progressLabel.textColor = [UIColor whiteColor]; progressLabel.textAlignment = NSTextAlignmentCenter; progressLabel.font = [UIFont systemFontOfSize:14]; progressLabel.adjustsFontSizeToFitWidth = YES; progressLabel.text = text; [progressView addSubview:progressLabel];
     [keyWindow addSubview:progressView];
@@ -485,8 +498,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new - (void)hideProgressHUD { UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return; UIView *progressView = [keyWindow viewWithTag:kEchoProgressHUDTag]; if (progressView) { [UIView animateWithDuration:0.3 animations:^{ progressView.alpha = 0; } completion:^(BOOL finished) { [progressView removeFromSuperview]; }]; } }
 %new - (void)showEchoNotificationWithTitle:(NSString *)title message:(NSString *)message {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
-    CGFloat topPadding = (@available(iOS 11.0, *)) ? keyWindow.safeAreaInsets.top : 0; topPadding = topPadding > 0 ? topPadding : 20;
-    CGFloat bannerWidth = keyWindow.bounds.size.width - 32; UIView *bannerView = [[UIView alloc] initWithFrame:CGRectMake(16, -100, bannerWidth, 60)]; bannerView.layer.cornerRadius = 12; bannerView.clipsToBounds = YES;
+CGFloat topPadding = 0;
+if (@available(iOS 11.0, *)) {
+    topPadding = keyWindow.safeAreaInsets.top;
+}
+topPadding = topPadding > 0 ? topPadding : 20;    CGFloat bannerWidth = keyWindow.bounds.size.width - 32; UIView *bannerView = [[UIView alloc] initWithFrame:CGRectMake(16, -100, bannerWidth, 60)]; bannerView.layer.cornerRadius = 12; bannerView.clipsToBounds = YES;
     UIVisualEffectView *blurEffectView = nil; if (@available(iOS 8.0, *)) { blurEffectView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleProminent]]; blurEffectView.frame = bannerView.bounds; [bannerView addSubview:blurEffectView]; } else { bannerView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.9]; }
     UIView *containerForLabels = blurEffectView ? blurEffectView.contentView : bannerView;
     UILabel *iconLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 20, 20, 20)]; iconLabel.text = @"✓"; iconLabel.textColor = [UIColor colorWithRed:0.2 green:0.78 blue:0.35 alpha:1.0]; iconLabel.font = [UIFont boldSystemFontOfSize:16]; [containerForLabels addSubview:iconLabel];
@@ -604,3 +620,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v15.0 (推演升级版) 已加载。");
     }
 }
+
