@@ -464,7 +464,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (NSString *)extractSwitchedXunKongInfo;
 - (NSString *)_echo_extractSiKeInfo;
 - (NSString *)_echo_extractSanChuanInfo;
-- (NSString *)formatNianmingGejuFromView:(UIView *)contentView;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
 - (NSString *)extractTianDiPanInfo_V18;
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
@@ -673,35 +672,97 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
     }
-    else if (g_isExtractingNianming && g_currentItemToExtract) {
+  // =========================================================================
+// ↓↓↓ 使用下面这个完整的、修正后的代码块，替换掉您现有的版本 ↓↓↓
+// =========================================================================
+    else if (g_isExtractingNianming) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        if ([vcToPresent isKindOfClass:[UIAlertController class]]) {
+
+        // 统一处理“年命摘要”和“年命格局”
+        if ([vcClassName containsString:@"年命摘要視圖"] || [vcClassName containsString:@"年命格局視圖"]) {
+            
+            // 延迟以确保所有视图加载完毕
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                UIView *contentView = vcToPresent.view;
+                NSMutableArray *stackViews = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
+
+                if (stackViews.count > 0) {
+                    UIStackView *mainStackView = stackViews.firstObject;
+                    NSMutableArray<NSString *> *allTextParts = [NSMutableArray array];
+
+                    // 遍历 StackView 的所有子视图
+                    for (UIView *subview in mainStackView.arrangedSubviews) {
+                        if ([subview isKindOfClass:[UILabel class]]) {
+                            NSString *text = ((UILabel *)subview).text;
+                            if (text.length > 0) {
+                                [allTextParts addObject:text];
+                            }
+                        } 
+                        else if ([subview isKindOfClass:NSClassFromString(@"六壬大占.IntrinsicTableView")]) {
+                            // 如果是 TableView，就用 dataSource 提取
+                            UITableView *tableView = (UITableView *)subview;
+                            id<UITableViewDataSource> dataSource = tableView.dataSource;
+                            if (dataSource) {
+                                NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
+                                for (NSInteger section = 0; section < sections; section++) {
+                                    NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
+                                    for (NSInteger row = 0; row < rows; row++) {
+                                        UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:row inSection:section]];
+                                        if (cell) {
+                                            NSMutableArray *labelsInCell = [NSMutableArray array];
+                                            FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
+                                            [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
+                                            
+                                            NSMutableArray<NSString *> *cellTextParts = [NSMutableArray array];
+                                            for(UILabel *l in labelsInCell) { if(l.text.length > 0) [cellTextParts addObject:l.text]; }
+                                            
+                                            // 格式化为 “标题→内容”
+                                            if (cellTextParts.count >= 2) {
+                                                NSString *title = cellTextParts[0];
+                                                NSString *content = [[cellTextParts subarrayWithRange:NSMakeRange(1, cellTextParts.count - 1)] componentsJoinedByString:@" "];
+                                                [allTextParts addObject:[NSString stringWithFormat:@"%@→%@", title, content]];
+                                            } else if (cellTextParts.count == 1) {
+                                                [allTextParts addObject:cellTextParts[0]];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    NSString *finalText = [[allTextParts componentsJoinedByString:@" | "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
+                    
+                    if ([vcClassName containsString:@"年命摘要視圖"]) {
+                        [g_capturedZhaiYaoArray addObject:finalText];
+                         LogMessage(EchoLogTypeSuccess, @"[行年] 成功参详'年命摘要'。");
+                    } else {
+                        [g_capturedGeJuArray addObject:finalText];
+                        LogMessage(EchoLogTypeSuccess, @"[行年] 成功参详'年命格局'。");
+                    }
+                }
+            });
+
+            return; // 阻止弹窗显示
+        }
+        // 对于 UIAlertController，我们仍然需要让它触发后续的点击事件，但我们不让它显示
+        else if ([vcToPresent isKindOfClass:[UIAlertController class]]) {
             UIAlertController *alert = (UIAlertController *)vcToPresent;
             UIAlertAction *targetAction = nil;
-            for (UIAlertAction *action in alert.actions) { if ([action.title isEqualToString:g_currentItemToExtract]) { targetAction = action; break; } }
-            if (targetAction) {
-                id handler = [targetAction valueForKey:@"handler"]; if (handler) { ((void (^)(UIAlertAction *))handler)(targetAction); }
-                return;
+            for (UIAlertAction *action in alert.actions) {
+                if ([action.title isEqualToString:@"年命摘要"] || [action.title isEqualToString:@"格局方法"]) {
+                    targetAction = action;
+                    break;
+                }
             }
-        }
-        if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
-            UIView *contentView = vcToPresent.view;
-            NSMutableArray *allLabels = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
-            NSMutableArray *textParts = [NSMutableArray array];
-            for (UILabel *label in allLabels) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } }
-            [g_capturedZhaiYaoArray addObject:[[textParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
-            LogMessage(EchoLogTypeSuccess, @"[行年] 成功参详'年命摘要'。");
-            return;
-        }
-        else if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) {
-            UIView *contentView = vcToPresent.view;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [g_capturedGeJuArray addObject:[self formatNianmingGejuFromView:contentView]];
-                LogMessage(EchoLogTypeSuccess, @"[行年] 成功参详'格局方法'。");
-            });
-            return;
+            if (targetAction) {
+                id handler = [targetAction valueForKey:@"handler"];
+                if (handler) {
+                    ((void (^)(UIAlertAction *))handler)(targetAction);
+                }
+                return; // 模拟点击后直接返回，不显示 Alert
+            }
         }
     }
     
@@ -771,6 +832,88 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [keyWindow addSubview:controlButton];
         });
     }
+}
+// =========================================================================
+// ↓↓↓ 把下面这个全新的函数，粘贴到 %hook UIViewController 区域内 ↓↓↓
+// =========================================================================
+%new
+- (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
+    LogMessage(EchoLogTypeTask, @"[任务启动] 参详行年参数...");
+    g_isExtractingNianming = YES; 
+    g_capturedZhaiYaoArray = [NSMutableArray array]; 
+    g_capturedGeJuArray = [NSMutableArray array];
+    
+    UICollectionView *targetCV = nil;
+    Class unitClass = NSClassFromString(@"六壬大占.行年單元");
+    NSMutableArray *cvs = [NSMutableArray array]; 
+    FindSubviewsOfClassRecursive([UICollectionView class], self.view, cvs);
+    for (UICollectionView *cv in cvs) { 
+        if ([cv.visibleCells.firstObject isKindOfClass:unitClass]) { 
+            targetCV = cv; 
+            break; 
+        } 
+    }
+    
+    if (!targetCV) { 
+        LogMessage(EchoLogTypeWarning, @"[行年] 未找到行年单元，跳过分析。"); 
+        g_isExtractingNianming = NO; 
+        if (completion) { completion(@""); } 
+        return; 
+    }
+    
+    NSMutableArray *allUnitCells = [NSMutableArray array];
+    for (UIView *cell in targetCV.visibleCells) { 
+        if([cell isKindOfClass:unitClass]){ 
+            [allUnitCells addObject:cell]; 
+        } 
+    }
+    [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
+    
+    if (allUnitCells.count == 0) { 
+        LogMessage(EchoLogTypeWarning, @"[行年] 行年单元数量为0，跳过分析。"); 
+        g_isExtractingNianming = NO; 
+        if (completion) { completion(@""); } 
+        return; 
+    }
+    
+    LogMessage(EchoLogTypeInfo, @"[行年] 发现 %lu 个参数，将依次触发...", (unsigned long)allUnitCells.count);
+    
+    __weak typeof(self) weakSelf = self;
+    __block NSInteger currentIndex = 0;
+    __block void (^processNextCell)();
+    
+    processNextCell = [^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || currentIndex >= allUnitCells.count) {
+            // 所有单元格处理完毕，组合最终结果
+            LogMessage(EchoLogTypeTask, @"[行年] 所有参数参详完毕。");
+            NSMutableString *resultStr = [NSMutableString string];
+            for (NSUInteger i = 0; i < allUnitCells.count; i++) {
+                NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[摘要未获取]";
+                NSString *geJu = (i < g_capturedGeJuArray.count) ? g_capturedGeJuArray[i] : @"[格局未获取]";
+                [resultStr appendFormat:@"- 参数 %lu\n  摘要: %@\n  格局: %@", (unsigned long)i + 1, zhaiYao, geJu];
+                if (i < allUnitCells.count - 1) { [resultStr appendString:@"\n\n"]; }
+            }
+            g_isExtractingNianming = NO;
+            if (completion) { completion([resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
+            processNextCell = nil;
+            return;
+        }
+        
+        // 依次点击每个行年单元
+        UICollectionViewCell *cell = allUnitCells[currentIndex];
+        id delegate = targetCV.delegate;
+        NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
+        if (delegate && indexPath && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
+            [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
+        }
+        
+        currentIndex++;
+        // 等待拦截器处理完成，然后处理下一个
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), processNextCell);
+    } copy];
+    
+    processNextCell(); // 启动处理流程
 }
 %new 
 - (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion {
@@ -1465,60 +1608,9 @@ currentY += ((coreButtons.count + 1) / 2) * 56;
     return [lines componentsJoinedByString:@"\n"];
 }
 %new
-- (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
-    LogMessage(EchoLogTypeTask, @"[任务启动] 参详行年参数...");
-    g_isExtractingNianming = YES; g_capturedZhaiYaoArray = [NSMutableArray array]; g_capturedGeJuArray = [NSMutableArray array];
-    UICollectionView *targetCV = nil;
-    Class unitClass = NSClassFromString(@"六壬大占.行年單元");
-    NSMutableArray *cvs = [NSMutableArray array]; FindSubviewsOfClassRecursive([UICollectionView class], self.view, cvs);
-    for (UICollectionView *cv in cvs) { if ([cv.visibleCells.firstObject isKindOfClass:unitClass]) { targetCV = cv; break; } }
-    if (!targetCV) { LogMessage(EchoLogTypeWarning, @"[行年] 未找到行年单元，跳过分析。"); g_isExtractingNianming = NO; if (completion) { completion(@""); } return; }
-    NSMutableArray *allUnitCells = [NSMutableArray array];
-    for (UIView *cell in targetCV.visibleCells) { if([cell isKindOfClass:unitClass]){ [allUnitCells addObject:cell]; } }
-    [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
-    if (allUnitCells.count == 0) { LogMessage(EchoLogTypeWarning, @"[行年] 行年单元数量为0，跳过分析。"); g_isExtractingNianming = NO; if (completion) { completion(@""); } return; }
-    LogMessage(EchoLogTypeInfo, @"[行年] 发现 %lu 个参数，开始构建任务队列...", (unsigned long)allUnitCells.count);
-    NSMutableArray *workQueue = [NSMutableArray array];
-    for (NSUInteger i = 0; i < allUnitCells.count; i++) {
-        UICollectionViewCell *cell = allUnitCells[i];
-        [workQueue addObject:@{@"type": @"年命摘要", @"cell": cell, @"index": @(i)}];
-        [workQueue addObject:@{@"type": @"格局方法", @"cell": cell, @"index": @(i)}];
-    }
-    __weak typeof(self) weakSelf = self;
-    __block void (^processQueue)(void);
-    processQueue = [^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || workQueue.count == 0) {
-            LogMessage(EchoLogTypeTask, @"[行年] 所有参数参详完毕。");
-            NSMutableString *resultStr = [NSMutableString string];
-            NSUInteger personCount = allUnitCells.count;
-            for (NSUInteger i = 0; i < personCount; i++) {
-                NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[摘要未获取]";
-                NSString *geJu = (i < g_capturedGeJuArray.count) ? g_capturedGeJuArray[i] : @"[格局未获取]";
-                [resultStr appendFormat:@"- 参数 %lu\n  摘要: %@\n  格局: %@", (unsigned long)i+1, zhaiYao, geJu];
-                if (i < personCount - 1) { [resultStr appendString:@"\n\n"]; }
-            }
-            g_isExtractingNianming = NO; g_currentItemToExtract = nil;
-            if (completion) { completion([resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
-            processQueue = nil;
-            return;
-        }
-        NSDictionary *item = workQueue.firstObject; [workQueue removeObjectAtIndex:0];
-        NSString *type = item[@"type"]; UICollectionViewCell *cell = item[@"cell"]; NSInteger index = [item[@"index"] integerValue];
-        LogMessage(EchoLogTypeInfo, @"[行年] 正在参详参数 %ld 的 [%@]", (long)index + 1, type);
-        g_currentItemToExtract = type;
-        id delegate = targetCV.delegate; NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
-        if (delegate && indexPath && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) { [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath]; }
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ processQueue(); });
-    } copy];
-    processQueue();
-}
-%new
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix { if (!object || !ivarNameSuffix) return nil; unsigned int ivarCount; Ivar *ivars = class_copyIvarList([object class], &ivarCount); if (!ivars) { free(ivars); return nil; } id value = nil; for (unsigned int i = 0; i < ivarCount; i++) { Ivar ivar = ivars[i]; const char *name = ivar_getName(ivar); if (name) { NSString *ivarName = [NSString stringWithUTF8String:name]; if ([ivarName hasSuffix:ivarNameSuffix]) { value = object_getIvar(object, ivar); break; } } } free(ivars); return value; }
 %new
 - (NSString *)GetStringFromLayer:(id)layer { if (layer && [layer respondsToSelector:@selector(string)]) { id stringValue = [layer valueForKey:@"string"]; if ([stringValue isKindOfClass:[NSString class]]) return stringValue; if ([stringValue isKindOfClass:[NSAttributedString class]]) return ((NSAttributedString *)stringValue).string; } return @"?"; }
-%new
-- (NSString *)formatNianmingGejuFromView:(UIView *)contentView { Class cellClass = NSClassFromString(@"六壬大占.格局單元"); if (!cellClass) return @""; NSMutableArray *cells = [NSMutableArray array]; FindSubviewsOfClassRecursive(cellClass, contentView, cells); [cells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }]; NSMutableArray<NSString *> *formattedPairs = [NSMutableArray array]; for (UIView *cell in cells) { NSMutableArray *labelsInCell = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], cell, labelsInCell); if (labelsInCell.count > 0) { UILabel *titleLabel = labelsInCell[0]; NSString *title = [[titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] stringByReplacingOccurrencesOfString:@"\n" withString:@" "]; NSMutableString *contentString = [NSMutableString string]; if (labelsInCell.count > 1) { for (NSUInteger i = 1; i < labelsInCell.count; i++) { [contentString appendString:((UILabel *)labelsInCell[i]).text]; } } NSString *content = [[contentString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] stringByReplacingOccurrencesOfString:@"\n" withString:@" "]; NSString *pair = [NSString stringWithFormat:@"%@→%@", title, content]; if (![formattedPairs containsObject:pair]) { [formattedPairs addObject:pair]; } } } return [formattedPairs componentsJoinedByString:@" | "]; }
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator { Class targetViewClass = NSClassFromString(className); if (!targetViewClass) { LogMessage(EchoLogError, @"[错误] 类名 '%@' 未找到。", className); return @""; } NSMutableArray *targetViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(targetViewClass, self.view, targetViews); if (targetViews.count == 0) return @""; UIView *containerView = targetViews.firstObject; NSMutableArray *labelsInView = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], containerView, labelsInView); [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending; if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending; return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in labelsInView) { if (label.text && label.text.length > 0) { [textParts addObject:label.text]; } } return [textParts componentsJoinedByString:separator]; }
 %new
@@ -1682,3 +1774,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
