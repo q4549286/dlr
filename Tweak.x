@@ -162,12 +162,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if (completionBlock) { completionBlock(result); }
     };
     
+    // <<< 关键修正：在 block 外部声明一个强引用变量 >>>
+    __strong UIViewController *strongVcToPresent = vcToPresent;
+
     if (g_isExtractingJiuZongMen && [vcClassName containsString:@"課體概覽視圖"]) {
         LogTestMessage(@"匹配成功 -> 九宗门"); g_isExtractingJiuZongMen = NO;
+        // <<< 关键修正：Block 捕获 strongVcToPresent >>>
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            NSString *result = extractJiuZongMenData(vcToPresent.view);
-            handleExtractionResult(@"九宗门", result, g_jiuZongMen_completion); g_jiuZongMen_completion = nil;
-        }); return;
+            NSString *result = extractJiuZongMenData(strongVcToPresent.view);
+            handleExtractionResult(@"九宗门", result, g_jiuZongMen_completion);
+            g_jiuZongMen_completion = nil;
+        });
+        return;
     }
     else if ([vcClassName containsString:@"格局總覽視圖"]) {
         NSString *taskName = nil; void (^taskCompletion)(NSString *) = nil;
@@ -177,7 +183,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
         if (taskName) {
             LogTestMessage(@"匹配成功 -> %@", taskName);
-            extractExpandableTableViewData(vcToPresent.view, ^(NSString *result) {
+            // <<< 关键修正：Block 捕获 strongVcToPresent >>>
+            extractExpandableTableViewData(strongVcToPresent.view, ^(NSString *result) {
                 handleExtractionResult(taskName, result, taskCompletion);
             });
             return;
@@ -185,17 +192,23 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     else if (g_isExtractingQiZheng && [vcClassName containsString:@"七政"]) {
         LogTestMessage(@"匹配成功 -> 七政四余"); g_isExtractingQiZheng = NO;
+        // <<< 关键修正：Block 捕获 strongVcToPresent >>>
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            NSString *result = extractSimpleLabelPopupData(vcToPresent.view);
-            handleExtractionResult(@"七政四余", result, g_qiZheng_completion); g_qiZheng_completion = nil;
-        }); return;
+            NSString *result = extractSimpleLabelPopupData(strongVcToPresent.view);
+            handleExtractionResult(@"七政四余", result, g_qiZheng_completion);
+            g_qiZheng_completion = nil;
+        });
+        return;
     }
     else if (g_isExtractingSanGong && [vcClassName containsString:@"三宮時信息視圖"]) {
         LogTestMessage(@"匹配成功 -> 三宫时信息"); g_isExtractingSanGong = NO;
+        // <<< 关键修正：Block 捕获 strongVcToPresent >>>
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            NSString *result = extractSimpleLabelPopupData(vcToPresent.view);
-            handleExtractionResult(@"三宫时信息", result, g_sanGong_completion); g_sanGong_completion = nil;
-        }); return;
+            NSString *result = extractSimpleLabelPopupData(strongVcToPresent.view);
+            handleExtractionResult(@"三宫时信息", result, g_sanGong_completion);
+            g_sanGong_completion = nil;
+        });
+        return;
     }
     LogTestMessage(@"弹窗 %@ 未被拦截，正常显示。", vcClassName);
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
@@ -291,4 +304,5 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
     }
 }
+
 
