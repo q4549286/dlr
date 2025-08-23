@@ -9,37 +9,38 @@
 
 #pragma mark - Constants & Colors
 // View Tags
-static const NSInteger kEchoControlButtonTag    = 556699;
-static const NSInteger kEchoMainPanelTag        = 778899;
-static const NSInteger kEchoProgressHUDTag      = 556677;
+static const NSInteger kEchoControlButtonTag   = 556699;
+static const NSInteger kEchoMainPanelTag       = 778899;
+static const NSInteger kEchoProgressHUDTag     = 556677;
 
 // Button Tags
-static const NSInteger kButtonTag_StandardReport    = 101;
-static const NSInteger kButtonTag_DeepDiveReport    = 102;
-static const NSInteger kButtonTag_KeTi              = 201;
-static const NSInteger kButtonTag_JiuZongMen        = 203;
-static const NSInteger kButtonTag_ShenSha           = 204; // << 新增
-static const NSInteger kButtonTag_KeChuan           = 301;
-static const NSInteger kButtonTag_NianMing          = 302;
-static const NSInteger kButtonTag_BiFa              = 303;
-static const NSInteger kButtonTag_GeJu              = 304;
-static const NSInteger kButtonTag_FangFa            = 305;
-static const NSInteger kButtonTag_ClosePanel        = 998;
+static const NSInteger kButtonTag_StandardReport   = 101;
+static const NSInteger kButtonTag_DeepDiveReport   = 102;
+static const NSInteger kButtonTag_KeTi             = 201;
+static const NSInteger kButtonTag_JiuZongMen       = 203;
+static const NSInteger kButtonTag_ShenSha          = 204; // << 新增
+static const NSInteger kButtonTag_KeChuan          = 301;
+static const NSInteger kButtonTag_NianMing         = 302;
+static const NSInteger kButtonTag_BiFa             = 303;
+static const NSInteger kButtonTag_GeJu             = 304;
+static const NSInteger kButtonTag_FangFa           = 305;
+static const NSInteger kButtonTag_ClosePanel       = 998;
 static const NSInteger kButtonTag_SendLastReportToAI = 997;
-static const NSInteger kButtonTag_AIPromptToggle    = 996;
+static const NSInteger kButtonTag_AIPromptToggle   = 996;
 
 // Colors
-#define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
-#define ECHO_COLOR_MAIN_TEAL    [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
-#define ECHO_COLOR_AUX_GREY     [UIColor colorWithWhite:0.3 alpha:1.0]
+// Colors
+#define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
+#define ECHO_COLOR_MAIN_TEAL    [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
+#define ECHO_COLOR_AUX_GREY     [UIColor colorWithWhite:0.3 alpha:1.0]
 #define ECHO_COLOR_ACTION_CLOSE [UIColor colorWithWhite:0.25 alpha:1.0]
-#define ECHO_COLOR_ACTION_AI    [UIColor colorWithRed:0.22 green:0.59 blue:0.85 alpha:1.0]
-#define ECHO_COLOR_SUCCESS      [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
-#define ECHO_COLOR_PROMPT_ON    [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0]
-#define ECHO_COLOR_LOG_TASK     [UIColor whiteColor]
-#define ECHO_COLOR_LOG_INFO     [UIColor lightGrayColor]
-#define ECHO_COLOR_LOG_WARN     [UIColor orangeColor]
-#define ECHO_COLOR_LOG_ERROR    [UIColor redColor]
+#define ECHO_COLOR_ACTION_AI    [UIColor colorWithRed:0.22 green:0.59 blue:0.85 alpha:1.0]
+#define ECHO_COLOR_SUCCESS      [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
+#define ECHO_COLOR_PROMPT_ON    [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0]
+#define ECHO_COLOR_LOG_TASK     [UIColor whiteColor]
+#define ECHO_COLOR_LOG_INFO     [UIColor lightGrayColor]
+#define ECHO_COLOR_LOG_WARN     [UIColor orangeColor]
+#define ECHO_COLOR_LOG_ERROR    [UIColor redColor]
 
 
 #pragma mark - Global State & Flags
