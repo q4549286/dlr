@@ -3,7 +3,7 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 屏幕日志系统 & 辅助函数
+// 1. 屏幕日志系统 & 辅助函数 (无变化)
 // =========================================================================
 static UITextView *g_logTextView = nil; static UIView *g_logContainerView = nil;
 static void LogTestMessage(NSString *format, ...) { va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args); NSLog(@"[Echo无痕测试] %@", message); if (g_logTextView) { dispatch_async(dispatch_get_main_queue(), ^{ NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"]; NSString *logLine = [NSString stringWithFormat:@"[%@] %@\n", [formatter stringFromDate:[NSDate date]], message]; NSMutableAttributedString *newLog = [[NSMutableAttributedString alloc] initWithString:logLine attributes:@{NSForegroundColorAttributeName: [UIColor whiteColor], NSFontAttributeName: [UIFont fontWithName:@"Menlo" size:10]}]; NSMutableAttributedString *existingText = [[NSMutableAttributedString alloc] initWithAttributedString:g_logTextView.attributedText]; [newLog appendAttributedString:existingText]; if (newLog.length > 5000) { [newLog deleteCharactersInRange:NSMakeRange(5000, newLog.length - 5000)]; } g_logTextView.attributedText = newLog; }); } }
@@ -12,20 +12,15 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 #define SUPPRESS_LEAK_WARNING(code) _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") code; _Pragma("clang diagnostic pop")
 
 // =========================================================================
-// 2. 全局状态定义
+// 2. 全局状态定义 (无变化)
 // =========================================================================
-static BOOL g_isExtractingJiuZongMen = NO; static void (^g_jiuZongMen_completion)(NSString *) = nil;
-static BOOL g_isExtractingBiFa = NO; static void (^g_biFa_completion)(NSString *) = nil;
-static BOOL g_isExtractingGeJu = NO; static void (^g_geJu_completion)(NSString *) = nil;
-static BOOL g_isExtractingFangFa = NO; static void (^g_fangFa_completion)(NSString *) = nil;
-static BOOL g_isExtractingQiZheng = NO; static void (^g_qiZheng_completion)(NSString *) = nil;
-static BOOL g_isExtractingSanGong = NO; static void (^g_sanGong_completion)(NSString *) = nil;
+static BOOL g_isExtractingJiuZongMen = NO; static void (^g_jiuZongMen_completion)(NSString *) = nil; static BOOL g_isExtractingBiFa = NO; static void (^g_biFa_completion)(NSString *) = nil; static BOOL g_isExtractingGeJu = NO; static void (^g_geJu_completion)(NSString *) = nil; static BOOL g_isExtractingFangFa = NO; static void (^g_fangFa_completion)(NSString *) = nil; static BOOL g_isExtractingQiZheng = NO; static void (^g_qiZheng_completion)(NSString *) = nil; static BOOL g_isExtractingSanGong = NO; static void (^g_sanGong_completion)(NSString *) = nil;
 
 // =========================================================================
-// 3. 提取逻辑函数
+// 3. 提取逻辑函数 (核心修正)
 // =========================================================================
 
-// 用于毕法、格局、方法的复杂 TableView 弹窗 (强制提取隐藏内容)
+// (新) 专门用于毕法、格局、方法的复杂 TableView 弹窗
 static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
     Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
     if (!tableViewClass) { return @"错误: 找不到 IntrinsicTableView 类"; }
@@ -34,33 +29,36 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
     
     if (tableViews.count > 0) {
         UITableView *tableView = tableViews.firstObject;
+        id<UITableViewDataSource> dataSource = tableView.dataSource;
+        if (!dataSource) { return @"错误: TableView 没有 dataSource"; }
+
         NSMutableArray<NSString *> *allEntries = [NSMutableArray array];
         
-        [tableView layoutIfNeeded];
-        
-        NSMutableArray<UIView *> *cells = [NSMutableArray array];
-        for (UIView *subview in tableView.subviews) {
-            if ([NSStringFromClass([subview class]) containsString:@"Cell"]) { [cells addObject:subview]; }
+        NSInteger sections = 1;
+        if ([dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)]) {
+            sections = [dataSource numberOfSectionsInTableView:tableView];
         }
-        [cells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2){ return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
 
-        for (UIView *cellView in cells) {
-            // <<< 关键修正：将 UIView* 转换为 UITableViewCell* >>>
-            // 我们先检查它是否真的是一个 UITableViewCell，以确保安全
-            if ([cellView isKindOfClass:[UITableViewCell class]]) {
-                UITableViewCell *cell = (UITableViewCell *)cellView;
-                
-                NSMutableArray<UILabel *> *labelsInCell = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell); // 现在可以安全地访问 contentView
-                if (labelsInCell.count > 0) {
-                    [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
-                    NSMutableString *fullEntryText = [NSMutableString string];
-                    for (UILabel *label in labelsInCell) {
-                        if (label.text.length > 0) {
-                            [fullEntryText appendFormat:@"%@\n", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        for (NSInteger section = 0; section < sections; section++) {
+            NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
+            for (NSInteger row = 0; row < rows; row++) {
+                NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
+                // **核心逻辑**：强制数据源为我们构建 Cell
+                UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
+
+                if (cell) {
+                    NSMutableArray<UILabel *> *labelsInCell = [NSMutableArray array];
+                    FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
+                    if (labelsInCell.count > 0) {
+                        [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
+                        NSMutableString *fullEntryText = [NSMutableString string];
+                        for (UILabel *label in labelsInCell) {
+                            if (label.text.length > 0) {
+                                [fullEntryText appendFormat:@"%@\n", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                            }
                         }
+                        [allEntries addObject:[fullEntryText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
                     }
-                    [allEntries addObject:[fullEntryText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
                 }
             }
         }
@@ -69,19 +67,16 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
     return @"错误: 未在弹窗中找到 TableView";
 }
 
-// 用于九宗门的弹窗 (恢复 v5 的有效逻辑)
+// 用于九宗门的弹窗
 static NSString* extractFromJiuZongMenPopup(UIView *contentView) {
-    NSMutableArray *stackViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
+    NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
     if (stackViews.count > 0) {
         UIStackView *mainStackView = stackViews.firstObject; 
         NSMutableArray<NSString *> *textParts = [NSMutableArray array];
         for (UIView *arrangedSubview in mainStackView.arrangedSubviews) {
             NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], arrangedSubview, labels);
             for (UILabel *label in labels) {
-                if (label.text.length > 0) {
-                    [textParts addObject:label.text];
-                }
+                if (label.text.length > 0) { [textParts addObject:label.text]; }
             }
         }
         return [textParts componentsJoinedByString:@"\n"];
@@ -98,7 +93,7 @@ static NSString* extractDataFromSimpleLabelPopup(UIView *contentView) {
 }
 
 // =========================================================================
-// 4. 核心 Hook 实现
+// 4. 核心 Hook 实现 (无变化)
 // =========================================================================
 @interface UIViewController (EchoNoPopupFinalTest)
 - (void)runEchoNoPopupExtractionTests;
