@@ -628,8 +628,41 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 %new - (void)presentAIActionSheetWithReport:(NSString *)report { if (!report || report.length == 0) { LogMessage(EchoLogError, @"报告为空，无法执行后续操作。"); return; } [UIPasteboard generalPasteboard].string = report; UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"发送到AI助手" message:@"将使用内部缓存的报告内容" preferredStyle:UIAlertControllerStyleActionSheet]; NSString *encodedReport = [report stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]]; NSArray *aiApps = @[@{@"name": @"Kimi", @"scheme": @"kimi://", @"format": @"kimi://chat?q=%@"}, @{@"name": @"豆包", @"scheme": @"doubao://", @"format": @"doubao://chat/send?text=%@"}, @{@"name": @"腾讯元宝", @"scheme": @"yuanbao://", @"format": @"yuanbao://send?text=%@"}, @{@"name": @"ChatGPT", @"scheme": @"chatgpt://", @"format": @"chatgpt://chat?message=%@"}, @{@"name": @"DeepSeek", @"scheme": @"deepseek://", @"format": @"deepseek://send?text=%@"}, @{@"name": @"智谱清言", @"scheme": @"zhipuai://", @"format": @"zhipuai://chat/send?text=%@"}, @{@"name": @"BotGem", @"scheme": @"botgem://", @"format": @"botgem://send?text=%@"}, @{@"name": @"Google AI Studio", @"scheme": @"https://", @"format": @"https://aistudio.google.com/prompts/new_chat"}]; int availableApps = 0; for (NSDictionary *appInfo in aiApps) { NSString *checkScheme = appInfo[@"scheme"]; if ([[UIApplication sharedApplication] canOpenURL:[NSURL URLWithString:checkScheme]]) { UIAlertAction *action = [UIAlertAction actionWithTitle:[NSString stringWithFormat:@"发送到 %@", appInfo[@"name"]] style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) { NSString *urlString = [NSString stringWithFormat:appInfo[@"format"], encodedReport]; NSURL *url = [NSURL URLWithString:urlString]; [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) { if(success) { LogMessage(EchoLogTypeSuccess, @"成功跳转到 %@", appInfo[@"name"]); } else { LogMessage(EchoLogError, @"跳转到 %@ 失败", appInfo[@"name"]); } }]; }]; [actionSheet addAction:action]; availableApps++; } } if (availableApps == 0) { actionSheet.message = @"未检测到受支持的AI App。\n内容已复制到剪贴板。"; } UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"仅复制到剪贴板" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) { LogMessage(EchoLogTypeSuccess, @"报告已复制到剪贴板。"); [self showEchoNotificationWithTitle:@"复制成功" message:@"报告内容已同步至剪贴板。"]; }]; [actionSheet addAction:copyAction]; UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]; [actionSheet addAction:cancelAction]; if (actionSheet.popoverPresentationController) { actionSheet.popoverPresentationController.sourceView = self.view; actionSheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height, 1.0, 1.0); actionSheet.popoverPresentationController.permittedArrowDirections = 0; } [self presentViewController:actionSheet animated:YES completion:nil]; }
-%new - (void)showProgressHUD:(NSString *)text { UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return; UIView *existing = [keyWindow viewWithTag:kEchoProgressHUDTag]; if(existing) [existing removeFromSuperview]; UIView *progressView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 120)]; progressView.center = keyWindow.center; progressView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.8]; progressView.layer.cornerRadius = 10; progressView.tag = kEchoProgressHUDTag; UIActivityIndicatorView *spinner; if (@available(iOS 13.0, *)) { spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge]; spinner.color = [UIColor whiteColor]; } else { #pragma clang diagnostic push
- #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+%new
+- (void)showProgressHUD:(NSString *)text {
+    UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
+    UIView *existing = [keyWindow viewWithTag:kEchoProgressHUDTag];
+    if(existing) [existing removeFromSuperview];
+    UIView *progressView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 120)];
+    progressView.center = keyWindow.center;
+    progressView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.8];
+    progressView.layer.cornerRadius = 10;
+    progressView.tag = kEchoProgressHUDTag;
+    UIActivityIndicatorView *spinner;
+    if (@available(iOS 13.0, *)) {
+        spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+        spinner.color = [UIColor whiteColor];
+    } else {
+        // --- 这是修正后的部分 ---
+        _Pragma("clang diagnostic push")
+        _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"")
+        spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+        _Pragma("clang diagnostic pop")
+        // --- 修正结束 ---
+    }
+    spinner.center = CGPointMake(110, 50);
+    [spinner startAnimating];
+    [progressView addSubview:spinner];
+    UILabel *progressLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 85, 200, 30)];
+    progressLabel.textColor = [UIColor whiteColor];
+    progressLabel.textAlignment = NSTextAlignmentCenter;
+    progressLabel.font = [UIFont systemFontOfSize:14];
+    progressLabel.adjustsFontSizeToFitWidth = YES;
+    progressLabel.text = text;
+    [progressView addSubview:progressLabel];
+    [keyWindow addSubview:progressView];
+}
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
  spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge]; #pragma clang diagnostic pop
  } spinner.center = CGPointMake(110, 50); [spinner startAnimating]; [progressView addSubview:spinner]; UILabel *progressLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 85, 200, 30)]; progressLabel.textColor = [UIColor whiteColor]; progressLabel.textAlignment = NSTextAlignmentCenter; progressLabel.font = [UIFont systemFontOfSize:14]; progressLabel.adjustsFontSizeToFitWidth = YES; progressLabel.text = text; [progressView addSubview:progressLabel]; [keyWindow addSubview:progressView]; }
 %new - (void)updateProgressHUD:(NSString *)text { UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return; UIView *progressView = [keyWindow viewWithTag:kEchoProgressHUDTag]; if (progressView) { for (UIView *subview in progressView.subviews) { if ([subview isKindOfClass:[UILabel class]]) { ((UILabel *)subview).text = text; break; } } } }
@@ -710,3 +743,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo推演引擎] v15.2 (Fusion Final) 已加载。");
     }
 }
+
