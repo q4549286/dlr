@@ -607,7 +607,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 
                 // 1. 根据当前任务类型，确定要访问的懒加载属性名 (使用繁体字)
                 NSString *propertyName = nil;
-                if ([g_currentPopupTAg_currentPopupTaskType isEqualToString:@"BiFa"]) {
+                // 【编译错误修复】修正此处的拼写错误
+                if ([g_currentPopupTaskType isEqualToString:@"BiFa"]) {
                     propertyName = @"法訣列"; // 繁体：法訣列
                 } else if ([g_currentPopupTaskType isEqualToString:@"GeJu"]) {
                     propertyName = @"格局列"; // 繁体：格局列
@@ -1626,6 +1627,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
