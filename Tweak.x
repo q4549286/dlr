@@ -153,7 +153,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)runEchoNoPopupExtractionTests {
     LogTestMessage(@"================== 开始完整测试 ==================");
     
-    // 创建一个包含所有任务触发器的数组
     NSArray<dispatch_block_t> *tasks = @[
         ^{ [self extractJiuZongMen_NoPopup_WithCompletion:nil]; },
         ^{ [self extractBiFa_NoPopup_WithCompletion:nil]; },
@@ -163,28 +162,35 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         ^{ [self extractSanGong_NoPopup_WithCompletion:nil]; }
     ];
     
-    // 使用一个可变数组来管理任务队列
     NSMutableArray<dispatch_block_t> *taskQueue = [tasks mutableCopy];
     
-    // 定义一个 block 来递归执行队列中的任务
+    // 定义一个 block 变量
     __block void (^executeNextTask)();
-    executeNextTask = [^{
-        if (taskQueue.count == 0) {
+    
+    // 弱引用自身，打破循环引用
+    __weak __block void (^weak_executeNextTask)();
+
+    executeNextTask = ^{
+        // 在 block 内部，创建一个强引用，防止在执行期间被释放
+        __strong __block void (^strong_executeNextTask)() = weak_executeNextTask;
+        
+        if (taskQueue.count == 0 || !strong_executeNextTask) {
             LogTestMessage(@"================== 所有测试完成 ==================");
-            // ARC 会自动处理 executeNextTask 的释放，无需担心循环引用
             return;
         }
         
-        // 取出并执行当前任务
         dispatch_block_t currentTask = taskQueue.firstObject;
         [taskQueue removeObjectAtIndex:0];
         currentTask();
         
-        // 延迟一段时间后执行下一个任务，模拟用户操作间隔，也让系统有时间响应
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            executeNextTask();
+            // 递归调用
+            strong_executeNextTask();
         });
-    } copy]; // copy a block to move it to the heap
+    };
+    
+    // 将 block 赋值给弱引用变量
+    weak_executeNextTask = executeNextTask;
     
     // 启动第一个任务
     executeNextTask();
@@ -199,3 +205,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %end
 
 %ctor { @autoreleasepool { MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController); } }
+
