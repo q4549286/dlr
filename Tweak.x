@@ -503,7 +503,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)buttonTouchUp:(UIButton *)sender;
 - (void)executeSimpleExtraction;
 - (void)executeCompositeExtraction;
-- (void)extractSpecificPopupWithSelectorName:(NSString *)selectorName taskName:(NSString *)taskName completion:(void (^)(NSString *result))completion;
 - (void)startS1ExtractionWithTaskType:(NSString *)taskType includeXiangJie:(BOOL)include completion:(void (^)(NSString *result))completion;
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion;
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion;
@@ -992,9 +991,40 @@ currentY += ((coreButtons.count + 1) / 2) * 56;
             break;
         }
         case kButtonTag_NianMing: { [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        case kButtonTag_BiFa: { [self extractSpecificPopupWithSelectorName:@"顯示法訣總覽" taskName:@"毕法要诀" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"毕法要诀"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        case kButtonTag_GeJu: { [self extractSpecificPopupWithSelectorName:@"顯示格局總覽" taskName:@"格局要览" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"格局要览"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        case kButtonTag_FangFa: { [self extractSpecificPopupWithSelectorName:@"顯示方法總覽" taskName:@"解析方法" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"解析方法"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
+
+        // ================ VVVV  核心修正区域 VVVV ================
+        case kButtonTag_BiFa: {
+            [self showProgressHUD:@"正在分析: 毕法要诀"];
+            [self extractBiFa_NoPopup_WithCompletion:^(NSString *result) {
+                __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
+                NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"毕法要诀"] = result;
+                NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
+                [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport];
+            }];
+            break;
+        }
+        case kButtonTag_GeJu: {
+            [self showProgressHUD:@"正在分析: 格局要览"];
+            [self extractGeJu_NoPopup_WithCompletion:^(NSString *result) {
+                __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
+                NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"格局要览"] = result;
+                NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
+                [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport];
+            }];
+            break;
+        }
+        case kButtonTag_FangFa: {
+            [self showProgressHUD:@"正在分析: 解析方法"];
+            [self extractFangFa_NoPopup_WithCompletion:^(NSString *result) {
+                __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
+                NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"解析方法"] = result;
+                NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
+                [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport];
+            }];
+            break;
+        }
+        // ================ ^^^^  核心修正区域 ^^^^ ================
+
         default: break;
     }
 }
@@ -1379,28 +1409,7 @@ int availableApps = 0;
         }];
     }];
 }
-%new
-- (void)extractSpecificPopupWithSelectorName:(NSString *)selectorName taskName:(NSString *)taskName completion:(void (^)(NSString *result))completion {
-    LogMessage(EchoLogTypeTask, @"[精准分析] 任务启动: %@", taskName);
-    [self showProgressHUD:[NSString stringWithFormat:@"正在分析: %@", taskName]];
-    g_extractedData = [NSMutableDictionary dictionary];
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        SEL selector = NSSelectorFromString(selectorName);
-        if ([self respondsToSelector:selector]) {
-            dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]); });
-            [NSThread sleepForTimeInterval:0.5];
-        } else { LogMessage(EchoLogError, @"[错误] 无法响应选择器 '%@'", selectorName); }
-        dispatch_async(dispatch_get_main_queue(), ^{
-            NSString *result = g_extractedData[taskName];
-            if (result.length > 0) {
-                NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
-                for (NSString *t in trash) { result = [result stringByReplacingOccurrencesOfString:t withString:@""]; }
-            } else { result = @""; LogMessage(EchoLogTypeWarning, @"[警告] %@ 分析失败或无内容。", taskName); }
-            if (completion) { completion(result); }
-            g_extractedData = nil;
-        });
-    });
-}
+
 %new
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion {
     if (g_s2_isExtractingKeChuanDetail) { LogMessage(EchoLogError, @"[错误] 课传推演任务已在进行中。"); return; }
@@ -1760,6 +1769,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
