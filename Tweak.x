@@ -65,7 +65,6 @@ static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 static NSString *g_lastGeneratedReport = nil;
 static NSString *g_currentPopupTaskType = nil;
-static NSString *g_currentPopupTaskType = nil;
 
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES;
@@ -920,6 +919,7 @@ currentY += ((coreButtons.count + 1) / 2) * 56;
             break;
         }
 }
+}
 %new
 - (void)presentAIActionSheetWithReport:(NSString *)report {
     if (!report || report.length == 0) { LogMessage(EchoLogError, @"报告为空，无法执行后续操作。"); return; }
@@ -1687,6 +1687,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
