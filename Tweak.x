@@ -552,15 +552,38 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %end
 
 // =========================================================================
-//            【 V14.3 - 最终精准无痕修复版 】 Tweak_presentViewController
+//            【 V14.4 - 最终逻辑修复版 】 Tweak_presentViewController
 // =========================================================================
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    // ================= S1 提取 (课体/九宗门/毕法/格局/方法) =================
+    // 【修复】最优先处理时间弹窗，使用旧的半透明方式
+    if (g_isExtractingTimeInfo) {
+        UIViewController *contentVC = nil;
+        if ([vcToPresent isKindOfClass:[UINavigationController class]]) {
+            UINavigationController *nav = (UINavigationController *)vcToPresent;
+            if (nav.viewControllers.count > 0) contentVC = nav.viewControllers.firstObject;
+        } else { contentVC = vcToPresent; }
+
+        if (contentVC && [NSStringFromClass([contentVC class]) containsString:@"時間選擇視圖"]) {
+            g_isExtractingTimeInfo = NO; vcToPresent.view.alpha = 0.0f; animated = NO;
+            void (^extractionCompletion)(void) = ^{
+                if (completion) { completion(); }
+                UIView *targetView = contentVC.view; NSMutableArray *textViews = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UITextView class], targetView, textViews);
+                NSString *timeBlockText = @"[时间提取失败: 未找到UITextView]";
+                if (textViews.count > 0) { timeBlockText = ((UITextView *)textViews.firstObject).text; }
+                if (g_extractedData) { g_extractedData[@"时间块"] = timeBlockText; LogMessage(EchoLogTypeSuccess, @"[时间] 成功通过弹窗提取时间信息。"); }
+                [vcToPresent dismissViewControllerAnimated:NO completion:nil];
+            };
+            Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion);
+            return;
+        }
+    }
+    
+    // S1 提取 (专项分析和资料库)
     if (g_s1_isExtracting) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
         
-        // --- 课体 & 九宗门 (使用 extractDataFromSplitView_S1 解析) ---
         if ([vcClassName containsString:@"課體概覽視圖"]) {
             UIView *contentView = vcToPresent.view;
             NSString *extractedText = extractDataFromSplitView_S1(contentView, g_s1_shouldIncludeXiangJie);
@@ -573,9 +596,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 LogMessage(EchoLogTypeSuccess, @"[解析] 成功无痕处理“九宗门结构”...");
                 if (g_s1_completion_handler) { g_s1_completion_handler(extractedText); }
             }
-            return; // 阻止呈现
+            return;
         }
-        // --- 毕法/格局/方法 (使用 StackView 解析) ---
         else if ([vcClassName containsString:@"格局總覽視圖"]) {
              UIView *contentView = vcToPresent.view;
              NSMutableArray *textParts = [NSMutableArray array];
@@ -594,11 +616,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
              NSString *content = [textParts componentsJoinedByString:@"\n"];
              LogMessage(EchoLogTypeSuccess, @"[解析] 成功无痕处理 [%@]", g_s1_currentTaskType);
              if (g_s1_completion_handler) { g_s1_completion_handler(content); }
-             return; // 阻止呈现
+             return;
         }
     }
     
-    // ================= S2 提取 (课传流注) =================
+    // S2 提取 (课传流注)
     else if (g_s2_isExtractingKeChuanDetail) {
         if ([NSStringFromClass([vcToPresent class]) containsString:@"課傳摘要視圖"] || [NSStringFromClass([vcToPresent class]) containsString:@"天將摘要視圖"]) {
             UIView *contentView = vcToPresent.view;
@@ -619,10 +641,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
     }
     
-    // ================= 行年参数提取 =================
+    // 行年参数提取
     else if (g_isExtractingNianming && g_currentItemToExtract) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        if ([vcToPresent isKindOfClass:[UIAlertController class]]) { // UIAlertController 需要正常呈现
+        if ([vcToPresent isKindOfClass:[UIAlertController class]]) {
             Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
             return;
         }
@@ -645,7 +667,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
     }
     
-    // ================= 基础盘面复合任务中的弹窗 (七政/三宫时) =================
+    // 【修复】恢复对 g_extractedData 的判断，用于处理复合任务中的弹窗
     else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
         UIView *contentView = vcToPresent.view;
@@ -669,7 +691,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
     }
     
-    // 对于所有其他情况（包括时间选择），走原始的弹窗流程
+    // 对于所有其他情况，正常显示
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
@@ -724,7 +746,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [g_mainControlPanelView addSubview:contentView];
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 六壬解析引擎 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v14.3" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v14.4" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString;
@@ -840,7 +862,6 @@ currentY += ((coreButtons.count + 1) / 2) * 56;
         }
         case kButtonTag_NianMing: { [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
         
-        // 【逻辑统一】将毕法、格局、方法的调用方式改为和九宗门一样
         case kButtonTag_BiFa: {
             [self startS1ExtractionWithTaskType:@"BiFa" includeXiangJie:YES completion:^(NSString *result) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
@@ -1587,6 +1608,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo解析引擎] v14.3 (Final Precise No-Flash) 已加载。");
+        NSLog(@"[Echo解析引擎] v14.4 (Logic Final) 已加载。");
     }
 }
