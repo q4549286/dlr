@@ -272,8 +272,7 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
 }
 
 #pragma mark - No-Popup Extraction Logic
-// 用于毕法、格局、方法、七政、三宫时的复杂 TableView 弹窗 (强制提取隐藏内容)
-// 用于毕法、格局、方法的复杂 TableView 弹窗 (强制提取隐藏内容)
+// 【调试专用版】用于毕法、格局、方法、七政、三-宫时的复杂 TableView 弹窗
 static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
     Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
     if (!tableViewClass) { return @"错误: 找不到 IntrinsicTableView 类"; }
@@ -300,38 +299,25 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
                     FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
                     
                     if (labelsInCell.count > 0) {
+                        // 按 frame 的 y 和 x 坐标排序
                         [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){
                             if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
                             if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
                             return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
                         }];
                         
-                        // **最终修正逻辑 v5: 简单可靠**
-                        
-                        // 1. 第一个 Label 永远是标题
-                        NSString *title = [labelsInCell.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                        
-                        // 2. 剩下的所有 Label 都是描述
-                        NSMutableString *description = [NSMutableString string];
-                        if (labelsInCell.count > 1) {
-                            for (NSUInteger i = 1; i < labelsInCell.count; i++) {
-                                NSString *labelText = labelsInCell[i].text;
-                                if (labelText.length > 0) {
-                                    [description appendFormat:@"%@ ", [labelText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-                                }
-                            }
+                        // **调试模式：将所有 UILabel 文本用 | 分隔，不做任何处理**
+                        NSMutableArray *rawTextParts = [NSMutableArray array];
+                        for (UILabel *label in labelsInCell) {
+                            [rawTextParts addObject:(label.text ?: @"<空>")];
                         }
                         
-                        // 3. 组合成最终格式
-                        NSString *finalEntry = [NSString stringWithFormat:@"%@→%@",
-                            title,
-                            [description stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]
-                        ];
-                        [allEntries addObject:finalEntry];
+                        [allEntries addObject:[rawTextParts componentsJoinedByString:@" | "]];
                     }
                 }
             }
         }
+        // 用换行符连接每个 Cell 的原始数据
         return [allEntries componentsJoinedByString:@"\n"];
     }
     return @"错误: 未在弹窗中找到 TableView";
@@ -1243,6 +1229,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v15.0 (推演升级版) 已加载。");
     }
 }
+
 
 
 
