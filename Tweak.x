@@ -624,6 +624,8 @@ static NSString* extractFromJiuZongMenPopup(UIView *contentView) {
 }
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
+static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
+
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     if (g_isExtractingTimeInfo) {
         UIViewController *contentVC = nil;
@@ -1021,7 +1023,7 @@ int availableApps = 0;
     } else {
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorViewStyle:UIActivityIndicatorViewStyleWhiteLarge];
+        spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
         #pragma clang diagnostic pop
     }
     spinner.center = CGPointMake(110, 50);
@@ -1716,3 +1718,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final & Popup-B Merged) 已加载。");
     }
 }
+
