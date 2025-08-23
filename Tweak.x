@@ -330,18 +330,7 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
         } return [allEntries componentsJoinedByString:@"\n\n"];
     } return @"错误: 未在弹窗中找到 TableView";
 }
-static NSString* extractFromJiuZongMenPopup(UIView *contentView) {
-    NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
-    if (stackViews.count > 0) {
-        UIStackView *mainStackView = stackViews.firstObject; NSMutableArray<NSString *> *textParts = [NSMutableArray array];
-        for (UIView *arrangedSubview in mainStackView.arrangedSubviews) {
-            NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], arrangedSubview, labels);
-            for (UILabel *label in labels) { if (label.text.length > 0) { [textParts addObject:label.text]; } }
-        } return [textParts componentsJoinedByString:@"\n"];
-    } return @"错误: 未在九宗门弹窗中找到 StackView";
-}
 
-// =========================================================================
 // 2. 接口声明、UI微调与核心Hook
 // =========================================================================
 
@@ -705,3 +694,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo推演引擎] v16.0 (Stable Fusion) 已加载。");
     }
 }
+
