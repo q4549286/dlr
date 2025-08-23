@@ -165,15 +165,33 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     if (keTiFull.length > 0) { [report appendString:@"// 3.1. 课体范式\n"]; for (NSString *block in [keTiFull componentsSeparatedByString:@"\n\n"]) { if (block.length > 0) { [report appendFormat:@"- %@\n\n", [block stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; } } }
     NSString *jiuZongMenFull = reportData[@"九宗门_详"] ?: reportData[@"九宗门_简"];
     if (jiuZongMenFull.length > 0) { jiuZongMenFull = [[jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]; [report appendString:@"// 3.2. 九宗门\n"]; [report appendFormat:@"- %@\n\n", [jiuZongMenFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; }
-    NSString *biFa = reportData[@"毕法要诀"]; if (biFa.length > 0) { [report appendString:@"// 3.3. 毕法要诀\n"]; // 处理特定格局
-for (NSString *entry in geJuEntries) {
-    NSArray *parts = [entry componentsSeparatedByString:@"→"];
-    if (parts.count >= 2) { [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], parts[1]]; }
-}
-    NSString *geJu = reportData[@"格局要览"]; if (geJu.length > 0) { [report appendString:@"// 3.4. 特定格局\n"]; for (NSString *entry in geJuEntries) {
-    NSArray *parts = [entry componentsSeparatedByString:@"→"];
-    if (parts.count >= 2) { [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], parts[1]]; }
-}
+    NSString *biFa = reportData[@"毕法要诀"];
+    if (biFa.length > 0) {
+        [report appendString:@"// 3.3. 毕法要诀\n"];
+        NSArray *biFaEntries = [biFa componentsSeparatedByString:@"\n"];
+        for (NSString *entry in biFaEntries) {
+            NSArray *parts = [entry componentsSeparatedByString:@"→"];
+            if (parts.count >= 2) {
+                NSString *description = [parts[1] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n   "];
+                [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], description];
+            }
+        }
+        [report appendString:@"\n"];
+    }
+
+    NSString *geJu = reportData[@"格局要览"];
+    if (geJu.length > 0) {
+        [report appendString:@"// 3.4. 特定格局\n"];
+        NSArray *geJuEntries = [geJu componentsSeparatedByString:@"\n"];
+        for (NSString *entry in geJuEntries) {
+            NSArray *parts = [entry componentsSeparatedByString:@"→"];
+            if (parts.count >= 2) {
+                NSString *description = [parts[1] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n   "];
+                [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], description];
+            }
+        }
+        [report appendString:@"\n"];
+    }
     NSMutableString *yaoWeiContent = [NSMutableString string];
     NSString *fangFaFull = reportData[@"解析方法"];
     if (fangFaFull.length > 0) {
@@ -1257,6 +1275,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v15.0 (推演升级版) 已加载。");
     }
 }
+
 
 
 
