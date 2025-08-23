@@ -165,33 +165,34 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     if (keTiFull.length > 0) { [report appendString:@"// 3.1. 课体范式\n"]; for (NSString *block in [keTiFull componentsSeparatedByString:@"\n\n"]) { if (block.length > 0) { [report appendFormat:@"- %@\n\n", [block stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; } } }
     NSString *jiuZongMenFull = reportData[@"九宗门_详"] ?: reportData[@"九宗门_简"];
     if (jiuZongMenFull.length > 0) { jiuZongMenFull = [[jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]; [report appendString:@"// 3.2. 九宗门\n"]; [report appendFormat:@"- %@\n\n", [jiuZongMenFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; }
-    NSString *biFa = reportData[@"毕法要诀"];
+      NSString *biFa = reportData[@"毕法要诀"];
     if (biFa.length > 0) {
         [report appendString:@"// 3.3. 毕法要诀\n"];
-        NSArray *biFaEntries = [biFa componentsSeparatedByString:@"\n"];
+        // **新的处理逻辑**
+        NSArray *biFaEntries = [biFa componentsSeparatedByString:@"\n<--ECHO_CELL_SEPARATOR-->\n"];
         for (NSString *entry in biFaEntries) {
-            NSArray *parts = [entry componentsSeparatedByString:@"→"];
-            if (parts.count >= 2) {
-                NSString *description = [parts[1] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n   "];
-                [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], description];
+            if (entry.length > 0) {
+                // 直接将每个条目的原始内容格式化后加入报告
+                [report appendFormat:@"- %@\n", [entry stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]];
+            }
+        }
+        [report appendString:@"\n"];
+    }
+    
+    NSString *geJu = reportData[@"格局要览"];
+    if (geJu.length > 0) {
+        [report appendString:@"// 3.4. 特定格局\n"];
+        // **新的处理逻辑**
+        NSArray *geJuEntries = [geJu componentsSeparatedByString:@"\n<--ECHO_CELL_SEPARATOR-->\n"];
+        for (NSString *entry in geJuEntries) {
+            if (entry.length > 0) {
+                // 直接将每个条目的原始内容格式化后加入报告
+                [report appendFormat:@"- %@\n", [entry stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]];
             }
         }
         [report appendString:@"\n"];
     }
 
-    NSString *geJu = reportData[@"格局要览"];
-    if (geJu.length > 0) {
-        [report appendString:@"// 3.4. 特定格局\n"];
-        NSArray *geJuEntries = [geJu componentsSeparatedByString:@"\n"];
-        for (NSString *entry in geJuEntries) {
-            NSArray *parts = [entry componentsSeparatedByString:@"→"];
-            if (parts.count >= 2) {
-                NSString *description = [parts[1] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n   "];
-                [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], description];
-            }
-        }
-        [report appendString:@"\n"];
-    }
     NSMutableString *yaoWeiContent = [NSMutableString string];
     NSString *fangFaFull = reportData[@"解析方法"];
     if (fangFaFull.length > 0) {
@@ -299,26 +300,26 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
                     FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
                     
                     if (labelsInCell.count > 0) {
-                        // 按 frame 的 y 和 x 坐标排序
                         [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){
                             if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
                             if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
                             return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
                         }];
                         
-                        // **调试模式：将所有 UILabel 文本用 | 分隔，不做任何处理**
-                        NSMutableArray *rawTextParts = [NSMutableArray array];
+                        // **核心逻辑**：将所有 UILabel 的文本用换行符拼接，保留最原始的多行结构
+                        NSMutableString *fullEntryText = [NSMutableString string];
                         for (UILabel *label in labelsInCell) {
-                            [rawTextParts addObject:(label.text ?: @"<空>")];
+                            if (label.text.length > 0) {
+                                [fullEntryText appendFormat:@"%@\n", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                            }
                         }
-                        
-                        [allEntries addObject:[rawTextParts componentsJoinedByString:@" | "]];
+                        [allEntries addObject:[fullEntryText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
                     }
                 }
             }
         }
-        // 用换行符连接每个 Cell 的原始数据
-        return [allEntries componentsJoinedByString:@"\n"];
+        // 用一个非常特殊的、不可能出现在原文中的分隔符来分隔不同的 Cell
+        return [allEntries componentsJoinedByString:@"\n<--ECHO_CELL_SEPARATOR-->\n"];
     }
     return @"错误: 未在弹窗中找到 TableView";
 }
@@ -1250,6 +1251,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v15.0 (推演升级版) 已加载。");
     }
 }
+
 
 
 
