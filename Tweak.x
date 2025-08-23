@@ -68,18 +68,7 @@ static NSString *g_lastGeneratedReport = nil;
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES;
 static BOOL g_isExtractingTimeInfo = NO;
-// +++ START: 添加新的无痕提取状态变量 +++
-static BOOL g_isExtractingBiFa = NO;
-static void (^g_biFa_completion)(NSString *) = nil;
-static BOOL g_isExtractingGeJu = NO;
-static void (^g_geJu_completion)(NSString *) = nil;
-static BOOL g_isExtractingFangFa = NO;
-static void (^g_fangFa_completion)(NSString *) = nil;
-static BOOL g_isExtractingQiZheng = NO;
-static void (^g_qiZheng_completion)(NSString *) = nil;
-static BOOL g_isExtractingSanGong = NO;
-static void (^g_sanGong_completion)(NSString *) = nil;
-// +++ END: 添加新的无痕提取状态变量 +++
+
 
 #define SafeString(str) (str ?: @"")
 
@@ -561,6 +550,77 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 }
 %end
 
+// =========================================================================
+// 新增的无痕提取全局变量和核心函数 (移动到正确位置)
+// =========================================================================
+static BOOL g_isExtractingBiFa = NO;
+static void (^g_biFa_completion)(NSString *) = nil;
+static BOOL g_isExtractingGeJu = NO;
+static void (^g_geJu_completion)(NSString *) = nil;
+static BOOL g_isExtractingFangFa = NO;
+static void (^g_fangFa_completion)(NSString *) = nil;
+static BOOL g_isExtractingQiZheng = NO;
+static void (^g_qiZheng_completion)(NSString *) = nil;
+static BOOL g_isExtractingSanGong = NO;
+static void (^g_sanGong_completion)(NSString *) = nil;
+
+// 用于毕法、格局、方法、七政、三宫时的复杂 TableView 弹窗 (强制提取隐藏内容)
+static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
+    Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
+    if (!tableViewClass) { return @"错误: 找不到 IntrinsicTableView 类"; }
+    
+    NSMutableArray *tableViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews);
+    
+    if (tableViews.count > 0) {
+        UITableView *tableView = tableViews.firstObject;
+        id<UITableViewDataSource> dataSource = tableView.dataSource;
+        if (!dataSource) { return @"错误: TableView 没有 dataSource"; }
+
+        NSMutableArray<NSString *> *allEntries = [NSMutableArray array];
+        NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
+
+        for (NSInteger section = 0; section < sections; section++) {
+            NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
+             for (NSInteger row = 0; row < rows; row++) {
+                NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
+                UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
+
+                if (cell) {
+                    NSMutableArray<UILabel *> *labelsInCell = [NSMutableArray array];
+                    FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
+                    if (labelsInCell.count > 1) { // 至少需要一个标题和一个内容
+                        [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
+                        NSString *title = [labelsInCell[0].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                        // 清理标题中多余的词
+                        title = [title stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
+                        title = [title stringByReplacingOccurrencesOfString:@" 法诀" withString:@""];
+                        title = [title stringByReplacingOccurrencesOfString:@" 格局" withString:@""];
+                        title = [title stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
+
+                        NSMutableString *contentText = [NSMutableString string];
+                        for(NSUInteger i = 1; i < labelsInCell.count; i++) {
+                            if (labelsInCell[i].text.length > 0) {
+                                [contentText appendString:labelsInCell[i].text];
+                            }
+                        }
+                        NSString *content = [[contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringbytrimmingcharactersinset:[nscharacterset whitespaceandnewlinecharacterset]];
+                        [allEntries addObject:[NSString stringWithFormat:@"%@→%@", title, content]];
+
+                    } else if (labelsInCell.count == 1) { // 兼容七政、三宫时的单行UILabel
+                        [allEntries addObject:[labelsInCell[0].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                    }
+                }
+            }
+        }
+        return [allEntries componentsJoinedByString:@"\n"];
+    }
+    return @"错误: 未在弹窗中找到 TableView";
+}
+
+
+// =========================================================================
+// 核心 Hook 实现 (Tweak_presentViewController)
+// =========================================================================
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
@@ -677,7 +737,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
     }
     
-  // +++ START: 粘贴新的拦截逻辑 +++
+    // =========================================================================
+    // VVVV 全新的、已修正顺序的拦截逻辑 VVVV
+    // =========================================================================
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
     void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSString *taskName, NSString *result, void(^completionBlock)(NSString*)) {
         LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [%@]", taskName);
@@ -713,7 +775,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"三宫时信息", result, g_sanGong_completion); g_sanGong_completion = nil; });
         return; // 阻止弹窗
     }
-// +++ END: 粘贴新的拦截逻辑 +++
+    // =========================================================================
+    // ^^^^ 全新的、已修正顺序的拦截逻辑 ^^^^
+    // =========================================================================
     
     // 对于所有其他情况，正常显示弹窗
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
@@ -1618,59 +1682,7 @@ int availableApps = 0;
     });
 }
 %end
-// 用于毕法、格局、方法、七政、三宫时的复杂 TableView 弹窗 (强制提取隐藏内容)
-static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
-    Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
-    if (!tableViewClass) { return @"错误: 找不到 IntrinsicTableView 类"; }
-    
-    NSMutableArray *tableViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews);
-    
-    if (tableViews.count > 0) {
-        UITableView *tableView = tableViews.firstObject;
-        id<UITableViewDataSource> dataSource = tableView.dataSource;
-        if (!dataSource) { return @"错误: TableView 没有 dataSource"; }
 
-        NSMutableArray<NSString *> *allEntries = [NSMutableArray array];
-        NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
-
-        for (NSInteger section = 0; section < sections; section++) {
-            NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
-             for (NSInteger row = 0; row < rows; row++) {
-                NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
-                UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
-
-                if (cell) {
-                    NSMutableArray<UILabel *> *labelsInCell = [NSMutableArray array];
-                    FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
-                    if (labelsInCell.count > 1) { // 至少需要一个标题和一个内容
-                        [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
-                        NSString *title = [labelsInCell[0].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                        // 清理标题中多余的词
-                        title = [title stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
-                        title = [title stringByReplacingOccurrencesOfString:@" 法诀" withString:@""];
-                        title = [title stringByReplacingOccurrencesOfString:@" 格局" withString:@""];
-                        title = [title stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
-
-                        NSMutableString *contentText = [NSMutableString string];
-                        for(NSUInteger i = 1; i < labelsInCell.count; i++) {
-                            if (labelsInCell[i].text.length > 0) {
-                                [contentText appendString:labelsInCell[i].text];
-                            }
-                        }
-                        NSString *content = [[contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                        [allEntries addObject:[NSString stringWithFormat:@"%@→%@", title, content]];
-
-                    } else if (labelsInCell.count == 1) { // 兼容七政、三宫时的单行UILabel
-                        [allEntries addObject:[labelsInCell[0].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-                    }
-                }
-            }
-        }
-        return [allEntries componentsJoinedByString:@"\n"];
-    }
-    return @"错误: 未在弹窗中找到 TableView";
-}
-// +++ END: 添加新的核心提取函数 +++
 
 // =========================================================================
 // 4. S1 提取函数定义
@@ -1741,5 +1753,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
