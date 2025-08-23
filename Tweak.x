@@ -358,7 +358,6 @@ static NSString* extractFromJiuZongMenPopup(UIView *contentView) {
 - (void)setAttributedText:(NSAttributedString *)attributedText { if (!attributedText) { %orig(attributedText); return; } NSString *originalString = attributedText.string; NSString *newString = nil; if ([originalString isEqualToString:@"我的分类"] || [originalString isEqualToString:@"我的分類"] || [originalString isEqualToString:@"通類"]) { newString = @"Echo"; } else if ([originalString isEqualToString:@"起課"] || [originalString isEqualToString:@"起课"]) { newString = @"定制"; } else if ([originalString isEqualToString:@"法诀"] || [originalString isEqualToString:@"法訣"]) { newString = @"毕法"; } if (newString) { NSMutableAttributedString *newAttr = [attributedText mutableCopy]; [newAttr.mutableString setString:newString]; %orig(newAttr); return; } NSMutableAttributedString *finalAttributedText = [attributedText mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)finalAttributedText.mutableString, NULL, CFSTR("Hant-Hans"), false); %orig(finalAttributedText); }
 %end
 
-static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
@@ -726,79 +725,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new - (void)extractShenShaInfo_CompleteWithCompletion:(void (^)(NSString *result))completion { NSMutableArray<UISegmentedControl *> *segmentControls = [NSMutableArray array]; FindSubviewsOfClassRecursive([UISegmentedControl class], self.view, segmentControls); if (segmentControls.count == 0) { if (completion) completion(@"[推演失败: 找不到切换控件]"); return; } UISegmentedControl *segmentControl = segmentControls.firstObject; NSInteger shenShaIndex = -1; for (int i = 0; i < segmentControl.numberOfSegments; i++) { if ([[segmentControl titleForSegmentAtIndex:i] containsString:@"神煞"]) { shenShaIndex = i; break; } } if (shenShaIndex == -1) { if (completion) completion(@"[推演失败: 找不到'神煞'选项]"); return; } LogMessage(EchoLogTypeInfo, @"[神煞] 正在切换到 '神煞' (索引 %ld)...", (long)shenShaIndex); if (segmentControl.selectedSegmentIndex != shenShaIndex) { segmentControl.selectedSegmentIndex = shenShaIndex; [segmentControl sendActionsForControlEvents:UIControlEventValueChanged]; } dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ Class shenShaContainerClass = NSClassFromString(@"六壬大占.神煞行年視圖"); if (!shenShaContainerClass) { if (completion) completion(@"[推演失败: 找不到容器类]"); return; } NSMutableArray *shenShaContainers = [NSMutableArray array]; FindSubviewsOfClassRecursive(shenShaContainerClass, self.view, shenShaContainers); if (shenShaContainers.count == 0) { if (completion) completion(@""); return; } UIView *containerView = shenShaContainers.firstObject; NSMutableArray<UICollectionView *> *collectionViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UICollectionView class], containerView, collectionViews); if (collectionViews.count == 0) { if (completion) completion(@"[推演失败: 找不到集合视图]"); return; } UICollectionView *collectionView = collectionViews.firstObject; id<UICollectionViewDataSource> dataSource = collectionView.dataSource; if (!dataSource) { if (completion) completion(nil); return; } NSInteger totalSections = [dataSource respondsToSelector:@selector(numberOfSectionsInCollectionView:)] ? [dataSource numberOfSectionsInCollectionView:collectionView] : 1; NSArray *sectionTitles = @[@"岁煞", @"季煞", @"月煞", @"旬煞", @"干煞", @"支煞"]; NSMutableString *finalResultString = [NSMutableString string]; for (NSInteger section = 0; section < totalSections; section++) { NSString *title = (section < sectionTitles.count) ? sectionTitles[section] : [NSString stringWithFormat:@"未知分类 %ld", (long)section + 1]; [finalResultString appendFormat:@"\n// %@\n", title]; NSInteger totalItemsInSection = [dataSource collectionView:collectionView numberOfItemsInSection:section]; if(totalItemsInSection == 0) { [finalResultString appendString:@"\n"]; continue; } NSMutableArray<NSDictionary *> *cellDataList = [NSMutableArray array]; for (NSInteger item = 0; item < totalItemsInSection; item++) { NSIndexPath *indexPath = [NSIndexPath indexPathForItem:item inSection:section]; UICollectionViewCell *cell = [dataSource collectionView:collectionView cellForItemAtIndexPath:indexPath]; UICollectionViewLayoutAttributes *attributes = [collectionView.collectionViewLayout layoutAttributesForItemAtIndexPath:indexPath]; if (!cell || !attributes) continue; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labels); [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }]; NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in labels) { if (label.text.length > 0) [textParts addObject:label.text]; } [cellDataList addObject:@{@"textParts": textParts, @"frame": [NSValue valueWithCGRect:attributes.frame]}]; } [cellDataList sortUsingComparator:^NSComparisonResult(NSDictionary *o1, NSDictionary *o2) { CGRect f1 = [o1[@"frame"] CGRectValue], f2 = [o2[@"frame"] CGRectValue]; if (roundf(f1.origin.y) < roundf(f2.origin.y)) return NSOrderedAscending; if (roundf(f1.origin.y) > roundf(f2.origin.y)) return NSOrderedDescending; return [@(f1.origin.x) compare:@(f2.origin.x)]; }]; NSMutableString *sectionContent = [NSMutableString string]; CGFloat lastY = -1.0; for (NSDictionary *cellData in cellDataList) { CGRect frame = [cellData[@"frame"] CGRectValue]; NSArray *textParts = cellData[@"textParts"]; if (textParts.count == 0) continue; if (lastY >= 0 && roundf(frame.origin.y) > roundf(lastY)) { [sectionContent appendString:@"\n"]; } if (sectionContent.length > 0 && ![sectionContent hasSuffix:@"\n"]) { [sectionContent appendString:@" |"]; } if (textParts.count == 1) { [sectionContent appendFormat:@"%@:", textParts.firstObject]; } else if (textParts.count >= 2) { [sectionContent appendFormat:@" %@(%@)", textParts[0], textParts[1]]; } lastY = frame.origin.y; } [finalResultString appendString:sectionContent]; [finalResultString appendString:@"\n"]; } LogMessage(EchoLogTypeSuccess, @"[神煞] 所有 Section 推演成功！"); if (completion) completion([finalResultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }); }
 %end
 
-// =========================================================================
-// 4. S1 提取函数定义
-// =========================================================================
-// =========================================================================
-// 4. S1 提取函数定义
-// =========================================================================
-static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
-    if (!rootView) return @"[错误: 根视图为空]";
-    NSMutableString *finalResult = [NSMutableString string];
-    NSMutableArray *stackViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
-    
-    if (stackViews.count > 0) {
-        UIStackView *mainStackView = stackViews.firstObject;
-        NSMutableArray *blocks = [NSMutableArray array];
-        NSMutableDictionary *currentBlock = nil;
-        for (UIView *subview in mainStackView.arrangedSubviews) {
-            if (![subview isKindOfClass:[UILabel class]]) continue;
-            UILabel *label = (UILabel *)subview;
-            NSString *text = label.text;
-            if (!text || text.length == 0) continue;
-            BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0;
-            if (isTitle) {
-                if (currentBlock) [blocks addObject:currentBlock];
-                currentBlock = [NSMutableDictionary dictionaryWithDictionary:@{@"title": text, @"content": [NSMutableString string]}];
-            } else {
-                if (currentBlock) {
-                    NSMutableString *content = currentBlock[@"content"];
-                    if (content.length > 0) [content appendString:@"\n"];
-                    [content appendString:text];
-                }
-            }
-        }
-        if (currentBlock) [blocks addObject:currentBlock];
-        
-        for (NSDictionary *block in blocks) {
-            NSString *title = block[@"title"];
-            NSString *content = [block[@"content"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            if (content.length > 0) {
-                [finalResult appendFormat:@"%@\n%@\n\n", title, content];
-            } else {
-                [finalResult appendFormat:@"%@\n\n", title];
-            }
-        }
-    }
-    
-    if (includeXiangJie) {
-        Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
-        if (tableViewClass) {
-            NSMutableArray *tableViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive(tableViewClass, rootView, tableViews);
-            if (tableViews.count > 0) {
-                NSMutableArray *xiangJieLabels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], tableViews.firstObject, xiangJieLabels);
-                if (xiangJieLabels.count > 0) {
-                    [finalResult appendString:@"// 详解内容\n\n"];
-                    for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) {
-                        UILabel *titleLabel = xiangJieLabels[i];
-                        if (i + 1 >= xiangJieLabels.count && [titleLabel.text isEqualToString:@"详解"]) continue;
-                        if (i + 1 < xiangJieLabels.count) {
-                            [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, ((UILabel*)xiangJieLabels[i+1]).text];
-                        } else {
-                            [finalResult appendFormat:@"%@→\n\n", titleLabel.text];
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-}
-// =========================================================================
+==============================================================
 // 5. 构造函数
 // =========================================================================
 %ctor {
@@ -807,6 +734,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo推演引擎] v15.2 (Fusion Final) 已加载。");
     }
 }
+
 
 
 
