@@ -548,10 +548,9 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
     %orig(finalAttributedText); 
 }
 %end
-
+static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^)(void)) {
-    
+static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {    
     // 获取准确的类名，这是我们所有判断的基石
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
 
@@ -1573,6 +1572,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
