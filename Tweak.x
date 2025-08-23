@@ -1636,3 +1636,49 @@ currentY += ((coreButtons.count + 1) / 2) * 56;
         NSLog(@"[Echo推衍课盘] v15.0 已加载。");
     }
 }
+// =========================================================================
+// ↓↓↓ 把下面这个完整的函数，粘贴到您 Tweak.x 文件的最末尾 ↓↓↓
+// =========================================================================
+
+static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
+    if (!rootView) return @"[错误: 根视图为空]";
+    
+    // 1. 精准定位核心容器 UIStackView
+    NSMutableArray *stackViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
+    
+    if (stackViews.count == 0) {
+        return @"[错误: 未在课体范式弹窗中找到 UIStackView]";
+    }
+    
+    // 通常第一个就是主 StackView
+    UIStackView *mainStackView = stackViews.firstObject;
+    NSMutableString *finalResult = [NSMutableString string];
+    
+    // 2. 遍历 arrangedSubviews，这是最可靠的视图顺序
+    for (UIView *subview in mainStackView.arrangedSubviews) {
+        // 我们只关心 UILabel
+        if ([subview isKindOfClass:[UILabel class]]) {
+            UILabel *label = (UILabel *)subview;
+            NSString *text = [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            
+            if (!text || text.length == 0) continue;
+            
+            // 3. 【核心条件】严格遵守您的要求：遇到“详解”就立即停止
+            if ([text isEqualToString:@"详解"]) {
+                break; // 停止循环，后续所有内容（包括详解本身）都将被忽略
+            }
+            
+            // 4. 将有效内容拼接起来
+            [finalResult appendFormat:@"%@\n", text];
+        }
+    }
+    
+    // 5. 格式化输出，移除多余的换行符
+    NSString *cleanedResult = [finalResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
+    while ([cleanedResult containsString:@"\n\n\n"]) {
+        cleanedResult = [cleanedResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
+    }
+    
+    return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
