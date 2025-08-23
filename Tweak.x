@@ -273,11 +273,13 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
 
 #pragma mark - No-Popup Extraction Logic
 // 用于毕法、格局、方法、七政、三宫时的复杂 TableView 弹窗 (强制提取隐藏内容)
+// 用于毕法、格局、方法的复杂 TableView 弹窗 (强制提取隐藏内容)
 static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
     Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
     if (!tableViewClass) { return @"错误: 找不到 IntrinsicTableView 类"; }
     
-    NSMutableArray *tableViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews);
+    NSMutableArray *tableViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews);
     
     if (tableViews.count > 0) {
         UITableView *tableView = tableViews.firstObject;
@@ -304,41 +306,26 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
                             return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
                         }];
                         
-                        // **最终修正逻辑 v4**
-                        NSMutableArray<UILabel *> *titleLabels = [NSMutableArray array];
-                        NSMutableArray<UILabel *> *descriptionLabels = [NSMutableArray array];
+                        // **最终修正逻辑 v5: 简单可靠**
                         
-                        if (labelsInCell.count > 0) {
-                            CGFloat firstLineY = roundf(labelsInCell.firstObject.frame.origin.y);
-                            for (UILabel *label in labelsInCell) {
-                                if (fabs(roundf(label.frame.origin.y) - firstLineY) < 10.0) {
-                                    [titleLabels addObject:label];
-                                } else {
-                                    [descriptionLabels addObject:label];
+                        // 1. 第一个 Label 永远是标题
+                        NSString *title = [labelsInCell.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                        
+                        // 2. 剩下的所有 Label 都是描述
+                        NSMutableString *description = [NSMutableString string];
+                        if (labelsInCell.count > 1) {
+                            for (NSUInteger i = 1; i < labelsInCell.count; i++) {
+                                NSString *labelText = labelsInCell[i].text;
+                                if (labelText.length > 0) {
+                                    [description appendFormat:@"%@ ", [labelText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
                                 }
                             }
                         }
                         
-                        NSMutableString *titleString = [NSMutableString string];
-                        for (UILabel *label in titleLabels) {
-                            [titleString appendFormat:@"%@\t", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-                        }
-                        
-                        // **核心修正**：用换行符 `\n` 拼接多行描述
-                        NSMutableString *descriptionString = [NSMutableString string];
-                        for (UILabel *label in descriptionLabels) {
-                            if (label.text.length > 0) {
-                                // 在每行描述前加上换行和缩进，除了第一行
-                                if (descriptionString.length > 0) {
-                                    [descriptionString appendString:@"\n  "];
-                                }
-                                [descriptionString appendString:[label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-                            }
-                        }
-                        
+                        // 3. 组合成最终格式
                         NSString *finalEntry = [NSString stringWithFormat:@"%@→%@",
-                            [titleString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], // <--- 修改完成
-                            descriptionString
+                            title,
+                            [description stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]
                         ];
                         [allEntries addObject:finalEntry];
                     }
@@ -361,7 +348,20 @@ static NSString* extractFromJiuZongMenPopup(UIView *contentView) {
         } return [textParts componentsJoinedByString:@"\n"];
     } return @"错误: 未在九宗门弹窗中找到 StackView";
 }
-
+static NSString* extractDataFromSimpleLabelPopup(UIView *contentView) {
+    NSMutableArray *allLabels = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){
+        return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
+    }];
+    NSMutableArray *textParts = [NSMutableArray array];
+    for (UILabel *label in allLabels) {
+        if (label.text.length > 0) {
+            [textParts addObject:label.text];
+        }
+    }
+    return [textParts componentsJoinedByString:@"\n"];
+}
 
 static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@available(iOS 13.0, *)) { for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) { if (scene.activationState == UISceneActivationStateForegroundActive) { for (UIWindow *window in scene.windows) { if (window.isKeyWindow) { frontmostWindow = window; break; } } if (frontmostWindow) break; } } } if (!frontmostWindow) { _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"") frontmostWindow = [UIApplication sharedApplication].keyWindow; _Pragma("clang diagnostic pop") } return frontmostWindow; }
 
@@ -1277,6 +1277,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v15.0 (推演升级版) 已加载。");
     }
 }
+
 
 
 
