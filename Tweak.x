@@ -2400,20 +2400,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
     }
     
-    // 【无痕修复】毕法/格局/方法/七政/三宫时等
+      // 基础盘面中的各类弹窗 (毕法/格局/方法/七政/三宫时)
     else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         NSString *title = vcToPresent.title ?: @"";
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+        UIView *contentView = vcToPresent.view;
         
-        // 识别并处理目标弹窗
-        BOOL isHandled = NO;
-        UIView *contentView = vcToPresent.view; // 预先加载视图
-        
+        // 【关键修复】将所有数据提取逻辑填充到这里
         if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
-            isHandled = YES;
-            // ... (数据提取逻辑保持不变)
             NSMutableArray *textParts = [NSMutableArray array];
-            NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews); [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
+            NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
+            [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
             for (UIStackView *stackView in stackViews) {
                 NSArray *arrangedSubviews = stackView.arrangedSubviews;
                 if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
@@ -2427,28 +2424,27 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             NSString *content = [textParts componentsJoinedByString:@"\n"];
             if ([title containsString:@"方法"]) g_extractedData[@"解析方法"] = content; else if ([title containsString:@"格局"]) g_extractedData[@"格局要览"] = content; else g_extractedData[@"毕法要诀"] = content;
             LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析弹窗 [%@]", title);
+            return; // 阻止呈现
         } else if ([vcClassName containsString:@"七政"]) {
-            isHandled = YES;
-            NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels); [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+            NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
             NSMutableArray *textParts = [NSMutableArray array];
             for (UILabel *label in allLabels) { if (label.text.length > 0) [textParts addObject:label.text]; }
             g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
-            LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析弹窗 [%@]", title);
+            LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析弹窗 [七政四余]");
+            return; // 阻止呈现
         } else if ([vcClassName containsString:@"三宮時信息視圖"]) {
-            isHandled = YES;
-            NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels); [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+            NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
             NSMutableArray *textParts = [NSMutableArray array];
             for (UILabel *label in allLabels) { if (label.text.length > 0) { [textParts addObject:label.text]; } }
             g_extractedData[@"三宫时信息"] = [textParts componentsJoinedByString:@"\n"];
             LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析弹窗 [三宫时信息]");
-        }
-        
-        if (isHandled) {
-            return; // 如果是我们处理过的弹窗，阻止它呈现
+            return; // 阻止呈现
         }
     }
     
-    // 对于所有其他我们不关心的弹窗，或者在非提取模式下，让它正常显示
+    // 对于所有其他情况，正常显示弹窗
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
@@ -3375,6 +3371,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
