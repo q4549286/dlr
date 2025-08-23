@@ -9,38 +9,37 @@
 
 #pragma mark - Constants & Colors
 // View Tags
-static const NSInteger kEchoControlButtonTag   = 556699;
-static const NSInteger kEchoMainPanelTag       = 778899;
-static const NSInteger kEchoProgressHUDTag     = 556677;
+static const NSInteger kEchoControlButtonTag    = 556699;
+static const NSInteger kEchoMainPanelTag        = 778899;
+static const NSInteger kEchoProgressHUDTag      = 556677;
 
 // Button Tags
-static const NSInteger kButtonTag_StandardReport   = 101;
-static const NSInteger kButtonTag_DeepDiveReport   = 102;
-static const NSInteger kButtonTag_KeTi             = 201;
-static const NSInteger kButtonTag_JiuZongMen       = 203;
-static const NSInteger kButtonTag_ShenSha          = 204; // << 新增
-static const NSInteger kButtonTag_KeChuan          = 301;
-static const NSInteger kButtonTag_NianMing         = 302;
-static const NSInteger kButtonTag_BiFa             = 303;
-static const NSInteger kButtonTag_GeJu             = 304;
-static const NSInteger kButtonTag_FangFa           = 305;
-static const NSInteger kButtonTag_ClosePanel       = 998;
+static const NSInteger kButtonTag_StandardReport    = 101;
+static const NSInteger kButtonTag_DeepDiveReport    = 102;
+static const NSInteger kButtonTag_KeTi              = 201;
+static const NSInteger kButtonTag_JiuZongMen        = 203;
+static const NSInteger kButtonTag_ShenSha           = 204; // << 新增
+static const NSInteger kButtonTag_KeChuan           = 301;
+static const NSInteger kButtonTag_NianMing          = 302;
+static const NSInteger kButtonTag_BiFa              = 303;
+static const NSInteger kButtonTag_GeJu              = 304;
+static const NSInteger kButtonTag_FangFa            = 305;
+static const NSInteger kButtonTag_ClosePanel        = 998;
 static const NSInteger kButtonTag_SendLastReportToAI = 997;
-static const NSInteger kButtonTag_AIPromptToggle   = 996;
+static const NSInteger kButtonTag_AIPromptToggle    = 996;
 
 // Colors
-// Colors
-#define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
-#define ECHO_COLOR_MAIN_TEAL    [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
-#define ECHO_COLOR_AUX_GREY     [UIColor colorWithWhite:0.3 alpha:1.0]
+#define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
+#define ECHO_COLOR_MAIN_TEAL    [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
+#define ECHO_COLOR_AUX_GREY     [UIColor colorWithWhite:0.3 alpha:1.0]
 #define ECHO_COLOR_ACTION_CLOSE [UIColor colorWithWhite:0.25 alpha:1.0]
-#define ECHO_COLOR_ACTION_AI    [UIColor colorWithRed:0.22 green:0.59 blue:0.85 alpha:1.0]
-#define ECHO_COLOR_SUCCESS      [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
-#define ECHO_COLOR_PROMPT_ON    [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0]
-#define ECHO_COLOR_LOG_TASK     [UIColor whiteColor]
-#define ECHO_COLOR_LOG_INFO     [UIColor lightGrayColor]
-#define ECHO_COLOR_LOG_WARN     [UIColor orangeColor]
-#define ECHO_COLOR_LOG_ERROR    [UIColor redColor]
+#define ECHO_COLOR_ACTION_AI    [UIColor colorWithRed:0.22 green:0.59 blue:0.85 alpha:1.0]
+#define ECHO_COLOR_SUCCESS      [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
+#define ECHO_COLOR_PROMPT_ON    [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0]
+#define ECHO_COLOR_LOG_TASK     [UIColor whiteColor]
+#define ECHO_COLOR_LOG_INFO     [UIColor lightGrayColor]
+#define ECHO_COLOR_LOG_WARN     [UIColor orangeColor]
+#define ECHO_COLOR_LOG_ERROR    [UIColor redColor]
 
 
 #pragma mark - Global State & Flags
@@ -645,7 +644,7 @@ else if (g_isExtractingNianming && g_currentItemToExtract) {
             return;
         }
     }
-    else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
+   else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
         NSString *title = vcToPresent.title ?: @"";
         
@@ -725,7 +724,6 @@ else if (g_isExtractingNianming && g_currentItemToExtract) {
     // 如果没有任何逻辑拦截，则正常呈现VC
      Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
-
 
 %hook UIViewController
 
@@ -1649,4 +1647,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
-}
+}//////帮我梳理下课传流注的完整实现方式 目前这个功能完美 没有弹窗的体现 我们可以基于此 重写 三宫时 七政 格局毕法方法的提取逻辑  目前这几个功能有弹窗 我们以以课传流注这个为样板 对比 格局毕法方法 七政 三宫时 九宗门 的实现方式 告诉我应该怎么升级 需要提供什么信息给你 不要猜测 
+以上脚本为模板 用最小化脚本测试 
