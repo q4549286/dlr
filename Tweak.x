@@ -601,10 +601,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         UIView *contentView = vcToPresent.view; // 统一预加载视图
         
        // --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
+                // --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
         if ([vcClassName containsString:@"格局總覽視圖"]) {
             LogMessage(EchoLogTypeInfo, @"[捕获] 拦截到 格局總覽視圖, 当前任务: %@", g_currentPopupTaskType);
             
-            // 1. 查找所有 "格局單元" 实例
             Class geJuUnitClass = NSClassFromString(@"六壬大占.格局單元");
             if (!geJuUnitClass) {
                 LogMessage(EchoLogError, @"[错误] 找不到'格局單元'类!");
@@ -613,28 +613,38 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             NSMutableArray *unitCells = [NSMutableArray array];
             FindSubviewsOfClassRecursive(geJuUnitClass, contentView, unitCells);
             
-            // 2. 按Y坐标排序，确保顺序正确
             [unitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
                 return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
             }];
             
-            // 3. 遍历每个单元，提取内部的UILabel文本
             NSMutableArray *textParts = [NSMutableArray array];
             for (UIView *cell in unitCells) {
                 NSMutableArray *labels = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UILabel class], cell, labels);
+                
+                // 【关键假设】假设标题和内容是单元格内的前两个UILabel
                 if (labels.count >= 2) {
-                    // 假设第一个是标题，第二个是内容
+                    // 按x坐标排序，确保拿到的是左边的标题和右边的内容
+                    [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){
+                        return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
+                    }];
+
                     UILabel *titleLabel = labels[0];
                     UILabel *contentLabel = labels[1];
-                    NSString *title = [titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet.whitespaceAndNewlineCharacterSet]];
-                    NSString *content = [contentLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet.whitespaceAndNewlineCharacterSet]];
+                    
+                    // 【语法修正】将 . 改为 []
+                    NSString *title = [titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    NSString *content = [contentLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    
+                    // 防止内容为空时出错
+                    title = title ?: @"";
+                    content = content ?: @"";
+                    
                     [textParts addObject:[NSString stringWithFormat:@"%@→%@", title, content]];
                 }
             }
             NSString *finalContent = [textParts componentsJoinedByString:@"\n"];
 
-            // 4. 根据任务类型，存入正确的字典键
             if ([g_currentPopupTaskType isEqualToString:@"BiFa"]) {
                 g_extractedData[@"毕法要诀"] = finalContent;
                 LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [毕法要诀]");
@@ -645,8 +655,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 g_extractedData[@"解析方法"] = finalContent;
                 LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [解析方法]");
             }
-            g_currentPopupTaskType = nil; // 重置任务类型
-            return; // 拦截成功
+            g_currentPopupTaskType = nil;
+            return;
         }
         
         // --- 拦截 七政四余 ---
@@ -1603,6 +1613,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
