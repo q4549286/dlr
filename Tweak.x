@@ -521,6 +521,12 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
 - (NSString *)GetStringFromLayer:(id)layer;
 - (void)presentAIActionSheetWithReport:(NSString *)report;
+- (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+- (void)extractGeJu_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+- (void)extractFangFa_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+- (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+- (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+// +++ END: 添加结束 +++
 @end
 
 %hook UILabel
@@ -603,8 +609,9 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
                                 [contentText appendString:labelsInCell[i].text];
                             }
                         }
-                        NSString *content = [[contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringbytrimmingcharactersinset:[nscharacterset whitespaceandnewlinecharacterset]];
-                        [allEntries addObject:[NSString stringWithFormat:@"%@→%@", title, content]];
+// 这是正确的代码行
+NSString *content = [[contentText stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+[allEntries addObject:[NSString stringWithFormat:@"%@→%@", title, content]];
 
                     } else if (labelsInCell.count == 1) { // 兼容七政、三宫时的单行UILabel
                         [allEntries addObject:[labelsInCell[0].text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
@@ -1753,6 +1760,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
