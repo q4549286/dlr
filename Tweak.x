@@ -337,8 +337,8 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
                         }
                         
                         NSString *finalEntry = [NSString stringWithFormat:@"%@→%@",
-                            [titleString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndTabulationCharacterSet]],
-                            descriptionString // 现在它可能包含 \n
+                            [titleString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], // <--- 修改完成
+                            descriptionString
                         ];
                         [allEntries addObject:finalEntry];
                     }
@@ -1277,6 +1277,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v15.0 (推演升级版) 已加载。");
     }
 }
+
 
 
 
