@@ -553,38 +553,53 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 //            【 V14.2 - 全功能无痕修复版 】 Tweak_presentViewController
 // =========================================================================
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    // ================= S1 提取 (课体/九宗门/毕法/格局/方法) =================
+static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^)(void)) {
+
+    // ================= S1 提取 (统一处理所有类型) =================
     if (g_s1_isExtracting) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
         
-        // 课体 & 九宗门 (使用同一种解析方式)
+        // 【精准拦截】九宗门和课体
         if ([vcClassName containsString:@"課體概覽視圖"]) {
             UIView *contentView = vcToPresent.view;
             NSString *extractedText = extractDataFromSplitView_S1(contentView, g_s1_shouldIncludeXiangJie);
             
             if ([g_s1_currentTaskType isEqualToString:@"KeTi"]) {
                 [g_s1_keTi_resultsArray addObject:extractedText];
-                LogMessage(EchoLogTypeSuccess, @"[解析] 成功无痕处理“课体范式”第 %lu 项...", (unsigned long)g_s1_keTi_resultsArray.count);
+                LogMessage(EchoLogTypeSuccess, @"[精准拦截] 成功无痕处理“课体范式”第 %lu 项...", (unsigned long)g_s1_keTi_resultsArray.count);
                 dispatch_async(dispatch_get_main_queue(), ^{ [self processKeTiWorkQueue_S1]; });
             } else if ([g_s1_currentTaskType isEqualToString:@"JiuZongMen"]) {
-                LogMessage(EchoLogTypeSuccess, @"[解析] 成功无痕处理“九宗门结构”...");
+                LogMessage(EchoLogTypeSuccess, @"[精准拦截] 成功无痕处理“九宗门结构”...");
                 if (g_s1_completion_handler) { g_s1_completion_handler(extractedText); }
             }
             return; // 阻止呈现
-        } 
-        // 毕法/格局/方法 (使用 StackView 解析方式)
-        else if ([g_s1_currentTaskType isEqualToString:@"BiFa"] || [g_s1_currentTaskType isEqualToString:@"GeJu"] || [g_s1_currentTaskType isEqualToString:@"FangFa"]) {
-            NSString *title = vcToPresent.title ?: @"";
-            if ([title containsString:@"法诀"] || [title containsString:@"毕法"] || [title containsString:@"格局"] || [title containsString:@"方法"]) {
-                 UIView *contentView = vcToPresent.view;
+        }
+        
+        // 【精准拦截】毕法、格局、方法 (它们共用同一个 VC 类)
+        else if ([vcClassName isEqualToString:@"六壬大占.格局總覽視圖"]) {
+             UIView *contentView = vcToPresent.view;
+             
+             // 检查内部标题以确认内容是否与当前任务匹配
+            NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, labels);
+            BOOL isMatch = NO;
+            for (UILabel *label in labels) {
+                if (label.frame.origin.y < 100) { // 假设标题在顶部
+                    NSString *text = label.text;
+                    if (([g_s1_currentTaskType isEqualToString:@"BiFa"]) && ([text containsString:@"毕法"] || [text containsString:@"法诀"] || [text containsString:@"法訣"])) { isMatch = YES; break; }
+                    if (([g_s1_currentTaskType isEqualToString:@"GeJu"]) && ([text containsString:@"格局"])) { isMatch = YES; break; }
+                    if (([g_s1_currentTaskType isEqualToString:@"FangFa"]) && ([text containsString:@"方法"])) { isMatch = YES; break; }
+                }
+            }
+
+            if (isMatch) {
+                 // 既然匹配，就执行 StackView 的解析逻辑
                  NSMutableArray *textParts = [NSMutableArray array];
                  NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
                  [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
                  for (UIStackView *stackView in stackViews) {
                      NSArray *arrangedSubviews = stackView.arrangedSubviews;
                      if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                         UILabel *titleLabel = arrangedSubviews[0]; NSString *rawTitle = titleLabel.text ?: @""; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
+                         UILabel *titleLabel = arrangedSubviews[0]; NSString *rawTitle = titleLabel.text ?: @""; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法訣" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
                          NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                          NSMutableArray *descParts = [NSMutableArray array]; if (arrangedSubviews.count > 1) { for (NSUInteger i = 1; i < arrangedSubviews.count; i++) { if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) { [descParts addObject:((UILabel *)arrangedSubviews[i]).text]; } } }
                          NSString *fullDesc = [[descParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
@@ -592,7 +607,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                      }
                  }
                  NSString *content = [textParts componentsJoinedByString:@"\n"];
-                 LogMessage(EchoLogTypeSuccess, @"[解析] 成功无痕处理 [%@]", g_s1_currentTaskType);
+                 LogMessage(EchoLogTypeSuccess, @"[精准拦截] 成功无痕处理 [%@]", g_s1_currentTaskType);
                  if (g_s1_completion_handler) { g_s1_completion_handler(content); }
                  return; // 阻止呈现
             }
@@ -1591,4 +1606,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.2 (Final No-Flash) 已加载。");
     }
 }
+
 
