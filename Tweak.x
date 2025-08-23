@@ -190,6 +190,18 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         }
         [report appendString:@"\n"];
     }
+// (新) 处理“解析方法”
+NSString *fangFa = reportData[@"解析方法"];
+if (fangFa.length > 0) {
+    [report appendString:@"// 3.5. 解析方法\n"];
+    NSArray *fangFaEntries = [fangFa componentsSeparatedByString:@"\n<--ECHO_CELL_SEPARATOR-->\n"];
+    for (NSString *entry in fangFaEntries) {
+        if (entry.length > 0) {
+            [report appendFormat:@"- %@\n", [entry stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]];
+        }
+    }
+    [report appendString:@"\n"];
+}
 
     NSMutableString *yaoWeiContent = [NSMutableString string];
     NSString *fangFaFull = reportData[@"解析方法"];
@@ -219,10 +231,19 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                 for(NSString *line in [qiZheng componentsSeparatedByString:@"\n"]) { for(NSString *planet in planetToDeity.allKeys) { if([line hasPrefix:planet]) { NSScanner *scanner = [NSScanner scannerWithString:line]; NSString *palace; [scanner scanUpToString:@"宫" intoString:NULL]; if(scanner.scanLocation > 0 && scanner.scanLocation <= line.length) { [scanner setScanLocation:scanner.scanLocation - 1]; [scanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:@" "] intoString:&palace]; if (palace.length > 0 && [[report copy] containsString:palace]) { [keyPlanetTips appendFormat:@"- %@(%@): 正在%@宫%@。对应神将`%@`。请关注%@宫相关事宜。\n", planet, ([line containsString:@"逆行"]?@"逆":@"顺"), palace, ([line containsString:@"逆行"]?@"逆行":@"顺行"), planetToDeity[planet], palace]; } } break; } } }
                 if (keyPlanetTips.length > 0) { [auxiliaryContent appendString:@"// 关键星曜提示\n"]; [auxiliaryContent appendString:keyPlanetTips]; [auxiliaryContent appendString:@"\n"]; }
             }
-            NSString *sanGong = reportData[@"三宫时信息"]; if (sanGong.length > 0) { subSectionCounter++; [auxiliaryContent appendFormat:@"// %ld.%ld. 三宫时信息\n%@\n\n", (long)(sectionCounter + 1), (long)subSectionCounter, sanGong]; }
-            content = [auxiliaryContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSString *sanGong = reportData[@"三宫时信息"];
+        if (sanGong.length > 0) {
+            subSectionCounter++;
+            [auxiliaryContent appendFormat:@"// %ld.%ld. 三宫时信息\n", (long)(sectionCounter + 1), (long)subSectionCounter];
+            NSArray *sanGongEntries = [sanGong componentsSeparatedByString:@"\n<--ECHO_CELL_SEPARATOR-->\n"];
+             for (NSString *entry in sanGongEntries) {
+                 if (entry.length > 0) {
+                    [auxiliaryContent appendFormat:@"- %@\n", [entry stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]];
+                }
+            }
+            [auxiliaryContent appendString:@"\n"];
         }
-        if (content.length > 0) {
+if (content.length > 0) {
             sectionCounter++; [report appendFormat:@"// %ld. %@\n", (long)sectionCounter, sectionInfo[@"title"]];
             if (sectionInfo[@"prefix"]) { [report appendString:sectionInfo[@"prefix"]]; }
             [report appendString:content]; [report appendString:@"\n\n"];
@@ -333,18 +354,7 @@ static NSString* extractFromJiuZongMenPopup(UIView *contentView) {
     } return @"错误: 未在九宗门弹窗中找到 StackView";
 }
 // 用于方法、七政、三宫时等弹窗
-static NSString* extractDataFromSimpleLabelPopup(UIView *contentView) {
-    NSMutableArray *allLabels = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){
-        return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
-    }];
-    NSMutableArray *textParts = [NSMutableArray array];
-    for (UILabel *label in allLabels) {
-        if (label.text.length > 0) {
-            [textParts addObject:label.text];
-        }
-    }
+
     // 对于这类弹窗，简单拼接所有文本即可
     return [textParts componentsJoinedByString:@"\n"];
 }
@@ -368,11 +378,14 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
+
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
 
     void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSString *taskName, NSString *result, void(^completionBlock)(NSString*)) { [UIPasteboard generalPasteboard].string = result ?: @""; LogMessage(EchoLogTypeSuccess, @"[推演课盘] %@ -> 推演完毕", taskName); if (completionBlock) { completionBlock(result); } };
     void (^delayedExtraction)(void(^)()) = ^(void(^extractionLogic)()) { dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), extractionLogic); };
+
+    // --- 统一使用最强的提取逻辑 ---
 
     if (g_isExtractingJiuZongMen_NP && [vcClassName containsString:@"課體概覽視圖"]) {
         g_isExtractingJiuZongMen_NP = NO;
@@ -381,32 +394,30 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     else if ([vcClassName containsString:@"格局總覽視圖"]) {
         if (g_isExtractingBiFa_NP) {
-            // **毕法** 使用 Complex 提取器
             g_isExtractingBiFa_NP = NO;
             delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"毕法要诀", result, g_biFa_completion_NP); g_biFa_completion_NP = nil; });
             return;
         } else if (g_isExtractingGeJu_NP) {
-            // **格局** 使用 Complex 提取器
             g_isExtractingGeJu_NP = NO;
             delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"格局要览", result, g_geJu_completion_NP); g_geJu_completion_NP = nil; });
             return;
         } else if (g_isExtractingFangFa_NP) {
-            // **方法** 使用 Simple 提取器 (回退)
+            // **修正**：方法也使用 Complex 提取器
             g_isExtractingFangFa_NP = NO;
-            delayedExtraction(^{ NSString *result = extractDataFromSimpleLabelPopup(vcToPresent.view); handleExtraction(@"解析方法", result, g_fangFa_completion_NP); g_fangFa_completion_NP = nil; });
+            delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"解析方法", result, g_fangFa_completion_NP); g_fangFa_completion_NP = nil; });
             return;
         }
     }
     else if (g_isExtractingQiZheng_NP && [vcClassName containsString:@"七政"]) {
-        // **七政** 使用 Simple 提取器 (回退)
+        // **修正**：七政也使用 Complex 提取器
         g_isExtractingQiZheng_NP = NO;
-        delayedExtraction(^{ NSString *result = extractDataFromSimpleLabelPopup(vcToPresent.view); handleExtraction(@"七政四余", result, g_qiZheng_completion_NP); g_qiZheng_completion_NP = nil; });
+        delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"七政四余", result, g_qiZheng_completion_NP); g_qiZheng_completion_NP = nil; });
         return;
     }
     else if (g_isExtractingSanGong_NP && [vcClassName containsString:@"三宮時信息視圖"]) {
-        // **三宫时** 使用 Simple 提取器 (回退)
+        // **修正**：三宫时也使用 Complex 提取器
         g_isExtractingSanGong_NP = NO;
-        delayedExtraction(^{ NSString *result = extractDataFromSimpleLabelPopup(vcToPresent.view); handleExtraction(@"三宫时信息", result, g_sanGong_completion_NP); g_sanGong_completion_NP = nil; });
+        delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"三宫时信息", result, g_sanGong_completion_NP); g_sanGong_completion_NP = nil; });
         return;
     }
     if (g_isExtractingTimeInfo) {
@@ -1232,6 +1243,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v15.0 (推演升级版) 已加载。");
     }
 }
+
 
 
 
