@@ -3,7 +3,7 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 屏幕日志系统 & 辅助函数 (无变化)
+// 1. 屏幕日志系统 & 辅助函数
 // =========================================================================
 static UITextView *g_logTextView = nil; static UIView *g_logContainerView = nil;
 static void LogTestMessage(NSString *format, ...) { va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args); NSLog(@"[Echo无痕测试] %@", message); if (g_logTextView) { dispatch_async(dispatch_get_main_queue(), ^{ NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"]; NSString *logLine = [NSString stringWithFormat:@"[%@] %@\n", [formatter stringFromDate:[NSDate date]], message]; NSMutableAttributedString *newLog = [[NSMutableAttributedString alloc] initWithString:logLine attributes:@{NSForegroundColorAttributeName: [UIColor whiteColor], NSFontAttributeName: [UIFont fontWithName:@"Menlo" size:10]}]; NSMutableAttributedString *existingText = [[NSMutableAttributedString alloc] initWithAttributedString:g_logTextView.attributedText]; [newLog appendAttributedString:existingText]; if (newLog.length > 5000) { [newLog deleteCharactersInRange:NSMakeRange(5000, newLog.length - 5000)]; } g_logTextView.attributedText = newLog; }); } }
@@ -12,15 +12,20 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 #define SUPPRESS_LEAK_WARNING(code) _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") code; _Pragma("clang diagnostic pop")
 
 // =========================================================================
-// 2. 全局状态定义 (无变化)
+// 2. 全局状态定义
 // =========================================================================
-static BOOL g_isExtractingJiuZongMen = NO; static void (^g_jiuZongMen_completion)(NSString *) = nil; static BOOL g_isExtractingBiFa = NO; static void (^g_biFa_completion)(NSString *) = nil; static BOOL g_isExtractingGeJu = NO; static void (^g_geJu_completion)(NSString *) = nil; static BOOL g_isExtractingFangFa = NO; static void (^g_fangFa_completion)(NSString *) = nil; static BOOL g_isExtractingQiZheng = NO; static void (^g_qiZheng_completion)(NSString *) = nil; static BOOL g_isExtractingSanGong = NO; static void (^g_sanGong_completion)(NSString *) = nil;
+static BOOL g_isExtractingJiuZongMen = NO; static void (^g_jiuZongMen_completion)(NSString *) = nil;
+static BOOL g_isExtractingBiFa = NO; static void (^g_biFa_completion)(NSString *) = nil;
+static BOOL g_isExtractingGeJu = NO; static void (^g_geJu_completion)(NSString *) = nil;
+static BOOL g_isExtractingFangFa = NO; static void (^g_fangFa_completion)(NSString *) = nil;
+static BOOL g_isExtractingQiZheng = NO; static void (^g_qiZheng_completion)(NSString *) = nil;
+static BOOL g_isExtractingSanGong = NO; static void (^g_sanGong_completion)(NSString *) = nil;
 
 // =========================================================================
-// 3. 提取逻辑函数 (核心修正)
+// 3. 提取逻辑函数
 // =========================================================================
 
-// (新) 专门用于毕法、格局、方法的复杂 TableView 弹窗
+// 用于毕法、格局、方法、七政、三宫时的复杂 TableView 弹窗 (强制提取隐藏内容)
 static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
     Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
     if (!tableViewClass) { return @"错误: 找不到 IntrinsicTableView 类"; }
@@ -33,17 +38,12 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
         if (!dataSource) { return @"错误: TableView 没有 dataSource"; }
 
         NSMutableArray<NSString *> *allEntries = [NSMutableArray array];
-        
-        NSInteger sections = 1;
-        if ([dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)]) {
-            sections = [dataSource numberOfSectionsInTableView:tableView];
-        }
+        NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
 
         for (NSInteger section = 0; section < sections; section++) {
             NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
             for (NSInteger row = 0; row < rows; row++) {
                 NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
-                // **核心逻辑**：强制数据源为我们构建 Cell
                 UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
 
                 if (cell) {
@@ -75,25 +75,15 @@ static NSString* extractFromJiuZongMenPopup(UIView *contentView) {
         NSMutableArray<NSString *> *textParts = [NSMutableArray array];
         for (UIView *arrangedSubview in mainStackView.arrangedSubviews) {
             NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], arrangedSubview, labels);
-            for (UILabel *label in labels) {
-                if (label.text.length > 0) { [textParts addObject:label.text]; }
-            }
+            for (UILabel *label in labels) { if (label.text.length > 0) { [textParts addObject:label.text]; } }
         }
         return [textParts componentsJoinedByString:@"\n"];
     }
     return @"错误: 未在九宗门弹窗中找到 StackView";
 }
 
-// 用于七政、三宫时等简单弹窗
-static NSString* extractDataFromSimpleLabelPopup(UIView *contentView) {
-    NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-    NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in allLabels) { if (label.text.length > 0) [textParts addObject:label.text]; }
-    return [textParts componentsJoinedByString:@"\n"];
-}
-
 // =========================================================================
-// 4. 核心 Hook 实现 (无变化)
+// 4. 核心 Hook 实现
 // =========================================================================
 @interface UIViewController (EchoNoPopupFinalTest)
 - (void)runEchoNoPopupExtractionTests;
@@ -126,14 +116,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
     }
+    // <<< 核心修正：让七政和三宫时也使用 ComplexTableView 提取器 >>>
     else if (g_isExtractingQiZheng && [vcClassName containsString:@"七政"]) {
         LogTestMessage(@"匹配成功 -> 七政四余"); g_isExtractingQiZheng = NO;
-        delayedExtraction(^{ NSString *result = extractDataFromSimpleLabelPopup(vcToPresent.view); handleExtraction(@"七政四余", result, g_qiZheng_completion); g_qiZheng_completion = nil; });
+        delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"七政四余", result, g_qiZheng_completion); g_qiZheng_completion = nil; });
         return;
     }
     else if (g_isExtractingSanGong && [vcClassName containsString:@"三宮時信息視圖"]) {
         LogTestMessage(@"匹配成功 -> 三宫时信息"); g_isExtractingSanGong = NO;
-        delayedExtraction(^{ NSString *result = extractDataFromSimpleLabelPopup(vcToPresent.view); handleExtraction(@"三宫时信息", result, g_sanGong_completion); g_sanGong_completion = nil; });
+        delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"三宫时信息", result, g_sanGong_completion); g_sanGong_completion = nil; });
         return;
     }
 
