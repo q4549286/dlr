@@ -65,6 +65,7 @@ static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 static NSString *g_lastGeneratedReport = nil;
 static NSString *g_currentPopupTaskType = nil;
+static NSString *g_currentPopupTaskType = nil;
 
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES;
@@ -864,18 +865,60 @@ currentY += ((coreButtons.count + 1) / 2) * 56;
             }];
             break;
         }
-        case kButtonTag_NianMing: { [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-                case kButtonTag_BiFa: {
-            g_currentPopupTaskType = @"BiFa"; // << 设置任务类型
-            [self extractSpecificPopupWithSelectorName:@"顯示法訣總覽" taskName:@"毕法要诀" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"毕法要诀"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-          case kButtonTag_GeJu: {
-            g_currentPopupTaskType = @"GeJu"; // << 设置任务类型
-            [self extractSpecificPopupWithSelectorName:@"顯示格局總覽" taskName:@"格局要览" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"格局要览"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
+        case kButtonTag_BiFa:
+        case kButtonTag_GeJu:
         case kButtonTag_FangFa: {
-            g_currentPopupTaskType = @"FangFa"; // << 设置任务类型
-            [self extractSpecificPopupWithSelectorName:@"顯示方法總覽" taskName:@"解析方法" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"解析方法"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        default: break;
-    }
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) break;
+            
+            // 1. 根据点击的按钮，设置全局任务类型
+            NSString* taskNameForReport = nil;
+            SEL selector = nil;
+            if (sender.tag == kButtonTag_BiFa) {
+                g_currentPopupTaskType = @"BiFa";
+                taskNameForReport = @"毕法要诀";
+                selector = NSSelectorFromString(@"顯示法訣總覽");
+            } else if (sender.tag == kButtonTag_GeJu) {
+                g_currentPopupTaskType = @"GeJu";
+                taskNameForReport = @"格局要览";
+                selector = NSSelectorFromString(@"顯示格局總覽");
+            } else {
+                g_currentPopupTaskType = @"FangFa";
+                taskNameForReport = @"解析方法";
+                selector = NSSelectorFromString(@"顯示方法總覽");
+            }
+            
+            LogMessage(EchoLogTypeTask, @"[精准分析] 任务启动: %@", taskNameForReport);
+            [strongSelf showProgressHUD:[NSString stringWithFormat:@"正在分析: %@", taskNameForReport]];
+            
+            g_extractedData = [NSMutableDictionary dictionary];
+            
+            // 2. 触发弹窗
+            if (selector && [strongSelf respondsToSelector:selector]) {
+                SUPPRESS_LEAK_WARNING([strongSelf performSelector:selector withObject:nil]);
+            }
+            
+            // 3. 延迟处理结果
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                 NSString *result = g_extractedData[taskNameForReport];
+                 
+                 if (!result) {
+                    LogMessage(EchoLogTypeWarning, @"%@ 分析失败或无内容。", taskNameForReport);
+                    result = @"[提取失败]";
+                 }
+                 
+                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
+                 reportData[taskNameForReport] = result;
+                 NSString *finalReport = formatFinalReport(reportData);
+                 g_lastGeneratedReport = [finalReport copy];
+                 [strongSelf hideProgressHUD];
+                 [strongSelf presentAIActionSheetWithReport:finalReport];
+
+                 g_extractedData = nil;
+                 g_currentPopupTaskType = nil;
+            });
+            break;
+        }
 }
 %new
 - (void)presentAIActionSheetWithReport:(NSString *)report {
@@ -1083,14 +1126,31 @@ int availableApps = 0;
         g_extractedData[@"三传"] = [self _echo_extractSanChuanInfo];
         LogMessage(EchoLogTypeInfo, @"[盘面] 开始解析弹窗类信息 (毕法/格局等)...");
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            SEL sBiFa = NSSelectorFromString(@"顯示法訣總覽"), sGeJu = NSSelectorFromString(@"顯示格局總覽"), sQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:"), sFangFa = NSSelectorFromString(@"顯示方法總覽"), sSanGong = NSSelectorFromString(@"顯示三宮時信息WithSender:");
-            if ([self respondsToSelector:sBiFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sBiFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
-            if ([self respondsToSelector:sGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sGeJu withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
-            if ([self respondsToSelector:sFangFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sFangFa withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
-            if ([self respondsToSelector:sQiZheng]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sQiZheng withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
-            if ([self respondsToSelector:sSanGong]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sSanGong withObject:nil]); }); [NSThread sleepForTimeInterval:0.4]; }
-            dispatch_async(dispatch_get_main_queue(), ^{
-                LogMessage(EchoLogTypeInfo, @"[盘面] 整合所有信息...");
+            
+            // 【核心重构】在触发前设置任务类型
+            
+            g_currentPopupTaskType = @"BiFa";
+            SEL sBiFa = NSSelectorFromString(@"顯示法訣總覽");
+            if ([self respondsToSelector:sBiFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sBiFa withObject:nil]); }); }
+
+            g_currentPopupTaskType = @"GeJu";
+            SEL sGeJu = NSSelectorFromString(@"顯示格局總覽");
+            if ([self respondsToSelector:sGeJu]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sGeJu withObject:nil]); }); }
+
+            g_currentPopupTaskType = @"FangFa";
+            SEL sFangFa = NSSelectorFromString(@"顯示方法總覽");
+            if ([self respondsToSelector:sFangFa]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sFangFa withObject:nil]); }); }
+
+            // 对于七政和三宫时，它们有独立的类名，不需要任务类型
+            g_currentPopupTaskType = nil; 
+            SEL sQiZheng = NSSelectorFromString(@"顯示七政信息WithSender:");
+            if ([self respondsToSelector:sQiZheng]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sQiZheng withObject:nil]); }); }
+
+            SEL sSanGong = NSSelectorFromString(@"顯示三宮時信息WithSender:");
+            if ([self respondsToSelector:sSanGong]) { dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:sSanGong withObject:nil]); }); }
+            
+            // 使用延迟确保所有异步的无痕提取都已完成
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 NSArray *keysToClean = @[@"毕法要诀", @"格局要览", @"解析方法"]; NSArray *trash = @[@"通类门→\n", @"通类门→", @"通類門→\n", @"通類門→"];
                 for (NSString *key in keysToClean) {
                     NSString *value = g_extractedData[key];
@@ -1627,6 +1687,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
