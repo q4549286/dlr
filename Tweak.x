@@ -2614,11 +2614,109 @@ currentY += ((coreButtons.count + 1) / 2) * 56;
             }];
             break;
         }
-        case kButtonTag_NianMing: { [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        case kButtonTag_BiFa: { [self extractSpecificPopupWithSelectorName:@"顯示法訣總覽" taskName:@"毕法要诀" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"毕法要诀"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        case kButtonTag_GeJu: { [self extractSpecificPopupWithSelectorName:@"顯示格局總覽" taskName:@"格局要览" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"格局要览"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        case kButtonTag_FangFa: { [self extractSpecificPopupWithSelectorName:@"顯示方法總覽" taskName:@"解析方法" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"解析方法"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        default: break;
+    case kButtonTag_BiFa: {
+        // 1. 我们需要先用 Flex 找到“毕法”弹窗的 ViewController 类名
+        // 假设类名是 "六壬大占.法诀总览视图"
+        // 2. 然后我们需要改造 S1 提取逻辑，让它能识别 "BiFa" 这个新类型
+        // 这比较复杂，我们换一种更直接的、类似九宗门的调用方式
+        
+        // 我们假设毕法弹窗也是通过一个 selector 触发的，并且其内部直接 present
+        // 这是一个模仿九宗门调用方式的简化版，用于测试
+        LogMessage(EchoLogTypeTask, @"[测试] 正在使用九宗门方式调用“毕法要诀”...");
+        g_s1_isExtracting = YES;
+        g_s1_currentTaskType = @"JiuZongMen"; // 暂时借用 JiuZongMen 的类型
+        g_s1_shouldIncludeXiangJie = YES;
+        g_s1_completion_handler = ^(NSString *result) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
+                
+                // 【关键】这里需要对返回结果做一下处理，因为它可能是按九宗门的格式来的
+                // 暂时我们先直接用，看看能不能提取到东西
+                reportData[@"毕法要诀"] = result; 
+                
+                NSString *finalReport = formatFinalReport(reportData);
+                g_lastGeneratedReport = [finalReport copy];
+                [strongSelf presentAIActionSheetWithReport:finalReport];
+                
+                // 清理状态
+                g_s1_isExtracting = NO;
+                g_s1_currentTaskType = nil;
+                g_s1_completion_handler = nil;
+            });
+        };
+        
+        SEL selector = NSSelectorFromString(@"顯示法訣總覽");
+        if ([self respondsToSelector:selector]) {
+            SUPPRESS_LEAK_WARNING([self performSelector:selector]);
+        } else {
+            LogMessage(EchoLogError, @"[错误] 找不到 '顯示法訣總覽' 方法。");
+            g_s1_isExtracting = NO; // 别忘了失败时也要清理状态
+        }
+        break;
+    }
+    
+    // 【测试修改】
+    case kButtonTag_GeJu: {
+        LogMessage(EchoLogTypeTask, @"[测试] 正在使用九宗门方式调用“格局要览”...");
+        g_s1_isExtracting = YES;
+        g_s1_currentTaskType = @"JiuZongMen"; // 借用类型
+        g_s1_shouldIncludeXiangJie = YES;
+        g_s1_completion_handler = ^(NSString *result) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
+                reportData[@"格局要览"] = result;
+                NSString *finalReport = formatFinalReport(reportData);
+                g_lastGeneratedReport = [finalReport copy];
+                [strongSelf presentAIActionSheetWithReport:finalReport];
+                g_s1_isExtracting = NO;
+                g_s1_currentTaskType = nil;
+                g_s1_completion_handler = nil;
+            });
+        };
+        
+        SEL selector = NSSelectorFromString(@"顯示格局總覽");
+        if ([self respondsToSelector:selector]) {
+            SUPPRESS_LEAK_WARNING([self performSelector:selector]);
+        } else {
+            LogMessage(EchoLogError, @"[错误] 找不到 '顯示格局總覽' 方法。");
+            g_s1_isExtracting = NO;
+        }
+        break;
+    }
+
+    // 【测试修改】
+    case kButtonTag_FangFa: {
+        LogMessage(EchoLogTypeTask, @"[测试] 正在使用九宗门方式调用“解析方法”...");
+        g_s1_isExtracting = YES;
+        g_s1_currentTaskType = @"JiuZongMen"; // 借用类型
+        g_s1_shouldIncludeXiangJie = YES;
+        g_s1_completion_handler = ^(NSString *result) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
+                reportData[@"解析方法"] = result;
+                NSString *finalReport = formatFinalReport(reportData);
+                g_lastGeneratedReport = [finalReport copy];
+                [strongSelf presentAIActionSheetWithReport:finalReport];
+                g_s1_isExtracting = NO;
+                g_s1_currentTaskType = nil;
+                g_s1_completion_handler = nil;
+            });
+        };
+        
+        SEL selector = NSSelectorFromString(@"顯示方法總覽");
+        if ([self respondsToSelector:selector]) {
+            SUPPRESS_LEAK_WARNING([self performSelector:selector]);
+        } else {
+            LogMessage(EchoLogError, @"[错误] 找不到 '顯示方法總覽' 方法。");
+            g_s1_isExtracting = NO;
+        }
+        break;
     }
 }
 %new
@@ -3371,6 +3469,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
