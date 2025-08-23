@@ -599,17 +599,22 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
      if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         
         // --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
-        if ([vcClassName containsString:@"格局總覽視圖"]) {
-            LogMessage(EchoLogTypeInfo, @"[捕获] 拦截到 格局總覽視圖, 当前任务: %@", g_currentPopupTaskType);
+       if ([vcClassName containsString:@"格局總覽視圖"]) {
+            LogMessage(EchoLogTypeInfo, @"[捕获] 拦截到延迟加载弹窗, 当前任务: %@", g_currentPopupTaskType);
             
-            // 【核心修正】使用 dispatch_async 延迟执行，给视图足够的时间来布局
-            dispatch_async(dispatch_get_main_queue(), ^{
+            // 【核心修正】采用“伪无痕”模式来处理延迟加载
+            
+            // 1. 将弹窗设为透明，并取消动画
+            vcToPresent.view.alpha = 0.0f;
+            animated = NO;
+            
+            // 2. 创建一个新的 completion block，我们的提取逻辑将在这里执行
+            void (^extractionCompletion)(void) = ^{
+                // 这个 block 会在弹窗完全显示（虽然是透明的）后执行，此时内容已加载
                 
-                // 1. 手动触发视图加载和布局（如果需要）
-                // [vcToPresent loadViewIfNeeded]; // 这通常由 vcToPresent.view 隐式调用
-                UIView *contentView = vcToPresent.view; // 这一步已经确保视图被加载
+                UIView *contentView = vcToPresent.view;
                 
-                // 2. 100% 复刻原始脚本的提取逻辑
+                // 3. 使用被验证过的、正确的提取逻辑
                 NSMutableArray *textParts = [NSMutableArray array];
                 NSMutableArray *allStackViews = [NSMutableArray array];
                 FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
@@ -632,9 +637,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                         for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
                             if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
                                 UILabel *descLabel = (UILabel *)arrangedSubviews[i];
-                                if (descLabel.text) {
-                                    [description appendString:descLabel.text];
-                                }
+                                if (descLabel.text) { [description appendString:descLabel.text]; }
                             }
                         }
                         NSString *cleanDescription = [[description stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -649,19 +652,23 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
                 if ([g_currentPopupTaskType isEqualToString:@"BiFa"]) {
                     g_extractedData[@"毕法要诀"] = finalContent;
-                    LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [毕法要诀], 内容长度: %lu", (unsigned long)finalContent.length);
+                    LogMessage(EchoLogTypeSuccess, @"[捕获] 成功解析 [毕法要诀], 内容长度: %lu", (unsigned long)finalContent.length);
                 } else if ([g_currentPopupTaskType isEqualToString:@"GeJu"]) {
                     g_extractedData[@"格局要览"] = finalContent;
-                    LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [格局要览], 内容长度: %lu", (unsigned long)finalContent.length);
+                    LogMessage(EchoLogTypeSuccess, @"[捕获] 成功解析 [格局要览], 内容长度: %lu", (unsigned long)finalContent.length);
                 } else if ([g_currentPopupTaskType isEqualToString:@"FangFa"]) {
                     g_extractedData[@"解析方法"] = finalContent;
-                    LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [解析方法], 内容长度: %lu", (unsigned long)finalContent.length);
+                    LogMessage(EchoLogTypeSuccess, @"[捕获] 成功解析 [解析方法], 内容长度: %lu", (unsigned long)finalContent.length);
                 }
                 g_currentPopupTaskType = nil;
-            });
 
-            // 3. 立即返回，阻止弹窗显示
-            return;
+                // 4. 提取完毕，立刻销毁这个透明的弹窗
+                [vcToPresent dismissViewControllerAnimated:NO completion:completion]; // 如果原始调用有 completion，也一并执行
+            };
+            
+            // 5. 调用原始的 present 方法，但传入我们自己的 completion block
+            Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion);
+            return; // 我们的拦截任务到此结束
         }
         
         // --- 拦截 七政四余 ---
@@ -1622,6 +1629,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
