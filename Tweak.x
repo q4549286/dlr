@@ -340,39 +340,93 @@ static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL,
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
 
-void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSString *taskName, NSString *result, void(^completionBlock)(NSString*)) { [UIPasteboard generalPasteboard].string = result ?: @""; LogMessage(EchoLogTypeSuccess, @"[推演课盘] %@ -> 推演完毕", taskName); if (completionBlock) { completionBlock(result); } };
-        if (completionBlock) { completionBlock(result); }
+    void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSString *taskName, NSString *result, void(^completionBlock)(NSString*)) {
+        [UIPasteboard generalPasteboard].string = result ?: @"";
+        LogMessage(EchoLogTypeSuccess, @"[推演课盘] %@ -> 推演完毕", taskName);
+        if (completionBlock) {
+            completionBlock(result);
+        }
     };
-    void (^delayedExtraction)(void(^)()) = ^(void(^extractionLogic)()) { dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), extractionLogic); };
+    
+    void (^delayedExtraction)(void(^)()) = ^(void(^extractionLogic)()) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), extractionLogic);
+    };
 
     if (g_isExtractingJiuZongMen_NP && [vcClassName containsString:@"課體概覽視圖"]) {
-        g_isExtractingJiuZongMen_NP = NO; delayedExtraction(^{ NSString *result = extractFromJiuZongMenPopup(vcToPresent.view); handleExtraction(@"九宗门", result, g_jiuZongMen_completion_NP); g_jiuZongMen_completion_NP = nil; });
+        g_isExtractingJiuZongMen_NP = NO;
+        delayedExtraction(^{
+            NSString *result = extractFromJiuZongMenPopup(vcToPresent.view);
+            handleExtraction(@"九宗门", result, g_jiuZongMen_completion_NP);
+            g_jiuZongMen_completion_NP = nil;
+        });
         return;
     }
     else if ([vcClassName containsString:@"格局總覽視圖"]) {
-        if (g_isExtractingBiFa_NP) { g_isExtractingBiFa_NP = NO; delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"毕法要诀", result, g_biFa_completion_NP); g_biFa_completion_NP = nil; }); return; }
-        else if (g_isExtractingGeJu_NP) { g_isExtractingGeJu_NP = NO; delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"格局要览", result, g_geJu_completion_NP); g_geJu_completion_NP = nil; }); return; }
-        else if (g_isExtractingFangFa_NP) { g_isExtractingFangFa_NP = NO; delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"解析方法", result, g_fangFa_completion_NP); g_fangFa_completion_NP = nil; }); return; }
+        if (g_isExtractingBiFa_NP) {
+            g_isExtractingBiFa_NP = NO;
+            delayedExtraction(^{
+                NSString *result = extractFromComplexTableViewPopup(vcToPresent.view);
+                handleExtraction(@"毕法要诀", result, g_biFa_completion_NP);
+                g_biFa_completion_NP = nil;
+            });
+            return;
+        } else if (g_isExtractingGeJu_NP) {
+            g_isExtractingGeJu_NP = NO;
+            delayedExtraction(^{
+                NSString *result = extractFromComplexTableViewPopup(vcToPresent.view);
+                handleExtraction(@"格局要览", result, g_geJu_completion_NP);
+                g_geJu_completion_NP = nil;
+            });
+            return;
+        } else if (g_isExtractingFangFa_NP) {
+            g_isExtractingFangFa_NP = NO;
+            delayedExtraction(^{
+                NSString *result = extractFromComplexTableViewPopup(vcToPresent.view);
+                handleExtraction(@"解析方法", result, g_fangFa_completion_NP);
+                g_fangFa_completion_NP = nil;
+            });
+            return;
+        }
     }
     else if (g_isExtractingQiZheng_NP && [vcClassName containsString:@"七政"]) {
-        g_isExtractingQiZheng_NP = NO; delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"七政四余", result, g_qiZheng_completion_NP); g_qiZheng_completion_NP = nil; });
+        g_isExtractingQiZheng_NP = NO;
+        delayedExtraction(^{
+            NSString *result = extractFromComplexTableViewPopup(vcToPresent.view);
+            handleExtraction(@"七政四余", result, g_qiZheng_completion_NP);
+            g_qiZheng_completion_NP = nil;
+        });
         return;
     }
     else if (g_isExtractingSanGong_NP && [vcClassName containsString:@"三宮時信息視圖"]) {
-        g_isExtractingSanGong_NP = NO; delayedExtraction(^{ NSString *result = extractFromComplexTableViewPopup(vcToPresent.view); handleExtraction(@"三宫时信息", result, g_sanGong_completion_NP); g_sanGong_completion_NP = nil; });
+        g_isExtractingSanGong_NP = NO;
+        delayedExtraction(^{
+            NSString *result = extractFromComplexTableViewPopup(vcToPresent.view);
+            handleExtraction(@"三宫时信息", result, g_sanGong_completion_NP);
+            g_sanGong_completion_NP = nil;
+        });
         return;
     }
     if (g_isExtractingTimeInfo) {
         UIViewController *contentVC = [vcToPresent isKindOfClass:[UINavigationController class]] ? ((UINavigationController *)vcToPresent).viewControllers.firstObject : vcToPresent;
         if (contentVC && [NSStringFromClass([contentVC class]) containsString:@"時間選擇視圖"]) {
-            g_isExtractingTimeInfo = NO; vcToPresent.view.alpha = 0.0f; animated = NO;
+            g_isExtractingTimeInfo = NO;
+            vcToPresent.view.alpha = 0.0f;
+            animated = NO;
             void (^extractionCompletion)(void) = ^{
-                if (completion) { completion(); }
-                NSMutableArray *textViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UITextView class], contentVC.view, textViews);
+                if (completion) {
+                    completion();
+                }
+                NSMutableArray *textViews = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UITextView class], contentVC.view, textViews);
                 NSString *timeBlockText = (textViews.count > 0) ? ((UITextView *)textViews.firstObject).text : @"[时间提取失败]";
-                if (g_extractedData) { g_extractedData[@"时间块"] = timeBlockText; LogMessage(EchoLogTypeSuccess, @"[推演课盘] 时间参数 -> 推演完毕"); }
+                if (g_extractedData) {
+                    g_extractedData[@"时间块"] = timeBlockText;
+                    LogMessage(EchoLogTypeSuccess, @"[推演课盘] 时间参数 -> 推演完毕");
+                }
                 [vcToPresent dismissViewControllerAnimated:NO completion:nil];
-            }; Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion); return;
+            };
+            Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion);
+            return;
         }
     }
     if (g_s1_isExtracting) {
@@ -384,15 +438,26 @@ void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSStrin
                 dispatch_async(dispatch_get_main_queue(), ^{ [self processKeTiWorkQueue_S1]; });
             } else if ([g_s1_currentTaskType isEqualToString:@"JiuZongMen"]) {
                 LogMessage(EchoLogTypeSuccess, @"[推演课盘] 九宗门 -> 整体结构推演完毕");
-                if (g_s1_completion_handler) { g_s1_completion_handler(extractedText); }
-            } return;
+                if (g_s1_completion_handler) {
+                    g_s1_completion_handler(extractedText);
+                }
+            }
+            return;
         }
     }
     else if (g_s2_isExtractingKeChuanDetail) {
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
-            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending; if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending; return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
-            NSMutableArray<NSString *> *textParts = [NSMutableArray array]; for (UILabel *label in allLabels) { if (label.text.length > 0) [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]]; }
+            NSMutableArray *allLabels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
+                if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+                return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+            }];
+            NSMutableArray<NSString *> *textParts = [NSMutableArray array];
+            for (UILabel *label in allLabels) {
+                if (label.text.length > 0) [textParts addObject:[label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
+            }
             [g_s2_capturedKeChuanDetailArray addObject:[textParts componentsJoinedByString:@"\n"]];
             LogMessage(EchoLogTypeInfo, @"[推演课盘] 课传流注 -> 第 %lu 爻推演中...", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
             dispatch_async(dispatch_get_main_queue(), ^{ [self processKeChuanQueue_Truth_S2]; });
@@ -403,16 +468,28 @@ void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSStrin
         if ([vcToPresent isKindOfClass:[UIAlertController class]]) {
             UIAlertController *alert = (UIAlertController *)vcToPresent;
             UIAlertAction *targetAction = nil;
-            for (UIAlertAction *action in alert.actions) { if ([action.title isEqualToString:g_currentItemToExtract]) { targetAction = action; break; } }
+            for (UIAlertAction *action in alert.actions) {
+                if ([action.title isEqualToString:g_currentItemToExtract]) {
+                    targetAction = action;
+                    break;
+                }
+            }
             if (targetAction) {
-                id handler = [targetAction valueForKey:@"handler"]; if (handler) { ((void (^)(UIAlertAction *))handler)(targetAction); }
+                id handler = [targetAction valueForKey:@"handler"];
+                if (handler) {
+                    ((void (^)(UIAlertAction *))handler)(targetAction);
+                }
                 return;
             }
         }
         if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
-            NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
+            NSMutableArray *allLabels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
             [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
-            NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in allLabels) { if (label.text.length > 0) { [textParts addObject:label.text]; } }
+            NSMutableArray *textParts = [NSMutableArray array];
+            for (UILabel *label in allLabels) {
+                if (label.text.length > 0) { [textParts addObject:label.text]; }
+            }
             [g_capturedZhaiYaoArray addObject:[[textParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
             LogMessage(EchoLogTypeSuccess, @"[推演课盘] 行年 -> 摘要推演完毕");
             return;
@@ -1152,5 +1229,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v15.0 (推演升级版) 已加载。");
     }
 }
+
 
 
