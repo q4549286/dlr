@@ -486,6 +486,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
     frontmostWindow = [UIApplication sharedApplication].keyWindow; \
     _Pragma("clang diagnostic pop") \
     } return frontmostWindow; }
+static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 
 // =========================================================================
 // 2. 接口声明、UI微调与核心Hook
@@ -1590,3 +1591,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.2 (Final No-Flash) 已加载。");
     }
 }
+
