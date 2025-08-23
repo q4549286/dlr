@@ -2952,7 +2952,8 @@ int availableApps = 0;
                 if(g_s1_completion_handler){ g_s1_completion_handler(errorMessage); g_s1_completion_handler = nil; }
                 g_s1_isExtracting = NO;
             }
-        } else {
+        } 
+else {
              // 未知任务类型的处理
             NSString *errorMessage = [NSString stringWithFormat:@"[错误] 未知的S1任务类型: %@", taskType];
             LogMessage(EchoLogError, @"%@", errorMessage);
@@ -2960,7 +2961,7 @@ int availableApps = 0;
             g_s1_isExtracting = NO;
         }
     }
-}
+
 %new
 - (void)processKeTiWorkQueue_S1 {
     if (g_s1_keTi_workQueue.count == 0) {
@@ -3455,6 +3456,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
