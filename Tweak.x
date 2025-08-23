@@ -729,8 +729,75 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 // =========================================================================
 // 4. S1 提取函数定义
 // =========================================================================
-static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) { if (!rootView) return @"[错误: 根视图为空]"; NSMutableString *finalResult = [NSMutableString string]; NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews); if (stackViews.count > 0) { UIStackView *mainStackView = stackViews.firstObject; NSMutableArray *blocks = [NSMutableArray array]; NSMutableDictionary *currentBlock = nil; for (UIView *subview in mainStackView.arrangedSubviews) { if (![subview isKindOfClass:[UILabel class]]) continue; UILabel *label = (UILabel *)subview; NSString *text = label.text; if (!text || text.length == 0) continue; BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0; if (isTitle) { if (currentBlock) [blocks addObject:currentBlock]; currentBlock = [NSMutableDictionary dictionaryWithDictionary:@{@"title": text, @"content": [NSMutableString string]}]; } else { if (currentBlock) { NSMutableString *content = currentBlock[@"content"]; if (content.length > 0) [content appendString:@"\n"]; [content appendString:text]; } } } if (currentBlock) [blocks addObject:currentBlock]; for (NSDictionary *block in blocks) { NSString *title = block[@"title"]; NSString *content = [block[@"content"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; if (content.length > 0) { [finalResult appendFormat:@"%@\n%@\n\n", title, content]; } else { [finalResult appendFormat:@"%@\n\n", title]; } } } if (includeXiangJie) { Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView"); if (tableViewClass) { NSMutableArray *tableViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(tableViewClass, rootView, tableViews); if (tableViews.count > 0) { NSMutableArray *xiangJieLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], tableViews.firstObject, xiangJieLabels); if (xiangJieLabels.count > 0) { [finalResult appendString:@"// 详解内容\n\n"]; for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) { UILabel *titleLabel = xiangJieLabels[i]; if (i + 1 >= xiangJieLabels.count && [titleLabel.text isEqualToString:@"详解"]) continue; if (i + 1 < xiangJieLabels.count) { [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, ((UILabel*)xiangJieLabels[i+1]).text]; } else { [finalResult appendFormat:@"%@→\n\n", titleLabel.text]; } } } } } } return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; }
-
+// =========================================================================
+// 4. S1 提取函数定义
+// =========================================================================
+static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
+    if (!rootView) return @"[错误: 根视图为空]";
+    NSMutableString *finalResult = [NSMutableString string];
+    NSMutableArray *stackViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
+    
+    if (stackViews.count > 0) {
+        UIStackView *mainStackView = stackViews.firstObject;
+        NSMutableArray *blocks = [NSMutableArray array];
+        NSMutableDictionary *currentBlock = nil;
+        for (UIView *subview in mainStackView.arrangedSubviews) {
+            if (![subview isKindOfClass:[UILabel class]]) continue;
+            UILabel *label = (UILabel *)subview;
+            NSString *text = label.text;
+            if (!text || text.length == 0) continue;
+            BOOL isTitle = (label.font.fontDescriptor.symbolicTraits & UIFontDescriptorTraitBold) != 0;
+            if (isTitle) {
+                if (currentBlock) [blocks addObject:currentBlock];
+                currentBlock = [NSMutableDictionary dictionaryWithDictionary:@{@"title": text, @"content": [NSMutableString string]}];
+            } else {
+                if (currentBlock) {
+                    NSMutableString *content = currentBlock[@"content"];
+                    if (content.length > 0) [content appendString:@"\n"];
+                    [content appendString:text];
+                }
+            }
+        }
+        if (currentBlock) [blocks addObject:currentBlock];
+        
+        for (NSDictionary *block in blocks) {
+            NSString *title = block[@"title"];
+            NSString *content = [block[@"content"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (content.length > 0) {
+                [finalResult appendFormat:@"%@\n%@\n\n", title, content];
+            } else {
+                [finalResult appendFormat:@"%@\n\n", title];
+            }
+        }
+    }
+    
+    if (includeXiangJie) {
+        Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
+        if (tableViewClass) {
+            NSMutableArray *tableViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive(tableViewClass, rootView, tableViews);
+            if (tableViews.count > 0) {
+                NSMutableArray *xiangJieLabels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], tableViews.firstObject, xiangJieLabels);
+                if (xiangJieLabels.count > 0) {
+                    [finalResult appendString:@"// 详解内容\n\n"];
+                    for (NSUInteger i = 0; i < xiangJieLabels.count; i += 2) {
+                        UILabel *titleLabel = xiangJieLabels[i];
+                        if (i + 1 >= xiangJieLabels.count && [titleLabel.text isEqualToString:@"详解"]) continue;
+                        if (i + 1 < xiangJieLabels.count) {
+                            [finalResult appendFormat:@"%@→%@\n\n", titleLabel.text, ((UILabel*)xiangJieLabels[i+1]).text];
+                        } else {
+                            [finalResult appendFormat:@"%@→\n\n", titleLabel.text];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
 // =========================================================================
 // 5. 构造函数
 // =========================================================================
@@ -740,5 +807,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo推演引擎] v15.2 (Fusion Final) 已加载。");
     }
 }
+
 
 
