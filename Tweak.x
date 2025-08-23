@@ -165,8 +165,15 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     if (keTiFull.length > 0) { [report appendString:@"// 3.1. 课体范式\n"]; for (NSString *block in [keTiFull componentsSeparatedByString:@"\n\n"]) { if (block.length > 0) { [report appendFormat:@"- %@\n\n", [block stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; } } }
     NSString *jiuZongMenFull = reportData[@"九宗门_详"] ?: reportData[@"九宗门_简"];
     if (jiuZongMenFull.length > 0) { jiuZongMenFull = [[jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]; [report appendString:@"// 3.2. 九宗门\n"]; [report appendFormat:@"- %@\n\n", [jiuZongMenFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; }
-    NSString *biFa = reportData[@"毕法要诀"]; if (biFa.length > 0) { [report appendString:@"// 3.3. 毕法要诀\n"]; for (NSString *entry in [biFa componentsSeparatedByString:@"\n"]) { NSArray *parts = [entry componentsSeparatedByString:@"→"]; if (parts.count >= 2) { [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], parts[1]]; } } [report appendString:@"\n"]; }
-    NSString *geJu = reportData[@"格局要览"]; if (geJu.length > 0) { [report appendString:@"// 3.4. 特定格局\n"]; for (NSString *entry in [geJu componentsSeparatedByString:@"\n"]) { NSArray *parts = [entry componentsSeparatedByString:@"→"]; if (parts.count >= 2) { [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], parts[1]]; } } [report appendString:@"\n"]; }
+    NSString *biFa = reportData[@"毕法要诀"]; if (biFa.length > 0) { [report appendString:@"// 3.3. 毕法要诀\n"]; // 处理特定格局
+for (NSString *entry in geJuEntries) {
+    NSArray *parts = [entry componentsSeparatedByString:@"→"];
+    if (parts.count >= 2) { [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], parts[1]]; }
+}
+    NSString *geJu = reportData[@"格局要览"]; if (geJu.length > 0) { [report appendString:@"// 3.4. 特定格局\n"]; for (NSString *entry in geJuEntries) {
+    NSArray *parts = [entry componentsSeparatedByString:@"→"];
+    if (parts.count >= 2) { [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], parts[1]]; }
+}
     NSMutableString *yaoWeiContent = [NSMutableString string];
     NSString *fangFaFull = reportData[@"解析方法"];
     if (fangFaFull.length > 0) {
@@ -248,7 +255,6 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
 
 #pragma mark - No-Popup Extraction Logic
 // 用于毕法、格局、方法、七政、三宫时的复杂 TableView 弹窗 (强制提取隐藏内容)
-// 用于毕法、格局、方法、七政、三宫时的复杂 TableView 弹窗 (强制提取隐藏内容)
 static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
     Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
     if (!tableViewClass) { return @"错误: 找不到 IntrinsicTableView 类"; }
@@ -274,31 +280,53 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
                     FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
                     
                     if (labelsInCell.count > 0) {
-                        [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
+                        [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){
+                            if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
+                            if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
+                            return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
+                        }];
                         
-                        // **核心修正逻辑**
-                        // 第一个 Label 是标题
-                        NSString *title = [labelsInCell.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                        // **最终修正逻辑 v4**
+                        NSMutableArray<UILabel *> *titleLabels = [NSMutableArray array];
+                        NSMutableArray<UILabel *> *descriptionLabels = [NSMutableArray array];
                         
-                        // 剩下的所有 Label 都是描述内容
-                        NSMutableString *description = [NSMutableString string];
-                        if (labelsInCell.count > 1) {
-                            for (NSUInteger i = 1; i < labelsInCell.count; i++) {
-                                NSString *labelText = labelsInCell[i].text;
-                                if (labelText.length > 0) {
-                                    [description appendString:labelText];
+                        if (labelsInCell.count > 0) {
+                            CGFloat firstLineY = roundf(labelsInCell.firstObject.frame.origin.y);
+                            for (UILabel *label in labelsInCell) {
+                                if (fabs(roundf(label.frame.origin.y) - firstLineY) < 10.0) {
+                                    [titleLabels addObject:label];
+                                } else {
+                                    [descriptionLabels addObject:label];
                                 }
                             }
                         }
                         
-                        // 拼接成 "标题→内容" 格式
-                        NSString *finalEntry = [NSString stringWithFormat:@"%@→%@", title, [description stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                        NSMutableString *titleString = [NSMutableString string];
+                        for (UILabel *label in titleLabels) {
+                            [titleString appendFormat:@"%@\t", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                        }
+                        
+                        // **核心修正**：用换行符 `\n` 拼接多行描述
+                        NSMutableString *descriptionString = [NSMutableString string];
+                        for (UILabel *label in descriptionLabels) {
+                            if (label.text.length > 0) {
+                                // 在每行描述前加上换行和缩进，除了第一行
+                                if (descriptionString.length > 0) {
+                                    [descriptionString appendString:@"\n  "];
+                                }
+                                [descriptionString appendString:[label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                            }
+                        }
+                        
+                        NSString *finalEntry = [NSString stringWithFormat:@"%@→%@",
+                            [titleString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndTabulationCharacterSet]],
+                            descriptionString // 现在它可能包含 \n
+                        ];
                         [allEntries addObject:finalEntry];
                     }
                 }
             }
         }
-        // 用单个换行符连接所有条目
         return [allEntries componentsJoinedByString:@"\n"];
     }
     return @"错误: 未在弹窗中找到 TableView";
@@ -1229,6 +1257,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v15.0 (推演升级版) 已加载。");
     }
 }
+
 
 
 
