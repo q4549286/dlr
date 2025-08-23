@@ -597,86 +597,77 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     
     // ================== 基础盘面复合任务拦截 ==================
-    if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
-        UIView *contentView = vcToPresent.view; // 统一预加载视图
+     if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         
-       // --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
-                // --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
+        // --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
         if ([vcClassName containsString:@"格局總覽視圖"]) {
-            LogMessage(EchoLogTypeInfo, @"[捕获] 拦截到 格局總覽視圖, 当前任务: %@", g_currentPopupTaskType);
+            UIView *contentView = vcToPresent.view;
             
-            Class geJuUnitClass = NSClassFromString(@"六壬大占.格局單元");
-            if (!geJuUnitClass) {
-                LogMessage(EchoLogError, @"[错误] 找不到'格局單元'类!");
-                return;
-            }
-            NSMutableArray *unitCells = [NSMutableArray array];
-            FindSubviewsOfClassRecursive(geJuUnitClass, contentView, unitCells);
-            
-            [unitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-                return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
-            }];
-            
+            // 【最终方案】直接查找所有的 UIStackView 并解析其 arrangedSubviews
             NSMutableArray *textParts = [NSMutableArray array];
-            for (UIView *cell in unitCells) {
-                NSMutableArray *labels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], cell, labels);
-                
-                // 【关键假设】假设标题和内容是单元格内的前两个UILabel
-                if (labels.count >= 2) {
-                    // 按x坐标排序，确保拿到的是左边的标题和右边的内容
-                    [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){
-                        return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
-                    }];
+            NSMutableArray *allStackViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
 
-                    UILabel *titleLabel = labels[0];
-                    UILabel *contentLabel = labels[1];
-                    
-                    // 【语法修正】将 . 改为 []
+            for (UIStackView *stackView in allStackViews) {
+                // 我们要找的是水平排列(axis=0)且包含两个UILabel的StackView
+                // arrangedSubviews 是 UIStackView 的一个属性，可以直接访问
+                NSArray *arrangedSubviews = [stackView arrangedSubviews];
+                
+                if (arrangedSubviews.count == 2 && 
+                    [arrangedSubviews[0] isKindOfClass:[UILabel class]] && 
+                    [arrangedSubviews[1] isKindOfClass:[UILabel class]]) {
+                        
+                    UILabel *titleLabel = (UILabel *)arrangedSubviews[0];
+                    UILabel *descLabel = (UILabel *)arrangedSubviews[1];
+
                     NSString *title = [titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    NSString *content = [contentLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    
-                    // 防止内容为空时出错
+                    NSString *desc = [descLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+                    // 确保不因nil导致崩溃
                     title = title ?: @"";
-                    content = content ?: @"";
-                    
-                    [textParts addObject:[NSString stringWithFormat:@"%@→%@", title, content]];
+                    desc = desc ?: @"";
+
+                    [textParts addObject:[NSString stringWithFormat:@"%@→%@", title, desc]];
                 }
             }
-            NSString *finalContent = [textParts componentsJoinedByString:@"\n"];
+            
+            NSString *content = [textParts componentsJoinedByString:@"\n"];
+            
+            // 根据全局任务类型，将结果存入 g_extractedData
+            if (g_currentItemToExtract) {
+                // 清理可能存在的垃圾条目，比如"通类门→"
+                content = [content stringByReplacingOccurrencesOfString:@"通类门→" withString:@""];
+                content = [content stringByReplacingOccurrencesOfString:@"通類門→" withString:@""];
+                content = [content stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]];
 
-            if ([g_currentPopupTaskType isEqualToString:@"BiFa"]) {
-                g_extractedData[@"毕法要诀"] = finalContent;
-                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [毕法要诀]");
-            } else if ([g_currentPopupTaskType isEqualToString:@"GeJu"]) {
-                g_extractedData[@"格局要览"] = finalContent;
-                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [格局要览]");
-            } else if ([g_currentPopupTaskType isEqualToString:@"FangFa"]) {
-                g_extractedData[@"解析方法"] = finalContent;
-                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [解析方法]");
+                g_extractedData[g_currentItemToExtract] = content;
+                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [%@] 内容", g_currentItemToExtract);
             }
-            g_currentPopupTaskType = nil;
-            return;
+            return; // 拦截成功，阻止呈现
         }
         
         // --- 拦截 七政四余 ---
         if ([vcClassName containsString:@"七政信息視圖"]) {
+            // (此部分逻辑已验证无误，保持不变)
+            UIView *contentView = vcToPresent.view;
             NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
             [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
             NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in allLabels) { if (label.text.length > 0) [textParts addObject:label.text]; }
             g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
             LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析弹窗 [七政四余]");
-            return; // 拦截成功，阻止呈现
+            return;
         }
         
         // --- 拦截 三宫时信息 ---
         if ([vcClassName containsString:@"三宮時信息視圖"]) {
+            // (此部分逻辑已验证无误，保持不变)
+            UIView *contentView = vcToPresent.view;
             NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
             [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
             NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in allLabels) { if (label.text.length > 0) { [textParts addObject:label.text]; } }
             g_extractedData[@"三宫时信息"] = [textParts componentsJoinedByString:@"\n"];
             LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析弹窗 [三宫时信息]");
-            return; // 拦截成功，阻止呈现
+            return;
         }
     }
     
@@ -1613,6 +1604,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
