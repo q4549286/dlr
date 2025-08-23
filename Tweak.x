@@ -2378,7 +2378,118 @@ else if (g_isExtractingNianming && g_currentItemToExtract) {
             return;
         }
     }
-    else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
+    else if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {    // ====== 无感弹窗尝试（先行，不 present）======
+    do {
+        // 只做一次，识别到就直接return；未识别则继续走你原来的透明present逻辑
+        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+
+        // 强制加载view，但不显示
+        UIView *contentView = vcToPresent.view;
+
+        // 推断标题（与你旧逻辑一致）
+        NSString *title = vcToPresent.title ?: @"";
+        if (title.length == 0) {
+            NSMutableArray *labels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], contentView, labels);
+            if (labels.count > 0) {
+                [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                    if (roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending;
+                    if (roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending;
+                    return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)];
+                }];
+                UILabel *firstLabel = labels.firstObject;
+                if (firstLabel && firstLabel.frame.origin.y < 100) {
+                    title = firstLabel.text ?: @"";
+                }
+            }
+        }
+
+        // ========== 七政四余 ==========
+        if ([vcClassName containsString:@"七政"]) {
+            NSMutableArray *allLabels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
+            }];
+            NSMutableArray *textParts = [NSMutableArray array];
+            for (UILabel *label in allLabels) {
+                if (label.text.length > 0) {
+                    [textParts addObject: [label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
+                }
+            }
+            g_extractedData[@"七政四余"] = [textParts componentsJoinedByString:@"\n"];
+            LogMessage(EchoLogTypeSuccess, @"[无感] 捕获『七政四余』完成。");
+            return; // 关键：不 present，直接返回
+        }
+
+        // ========== 三宫时信息 ==========
+        if ([vcClassName containsString:@"三宮時信息視圖"]) {
+            NSMutableArray *allLabels = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
+            [allLabels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) {
+                return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)];
+            }];
+            NSMutableArray *textParts = [NSMutableArray array];
+            for (UILabel *label in allLabels) {
+                if (label.text.length > 0) {
+                    [textParts addObject: [label.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
+                }
+            }
+            g_extractedData[@"三宫时信息"] = [textParts componentsJoinedByString:@"\n"];
+            LogMessage(EchoLogTypeSuccess, @"[无感] 捕获『三宫时信息』完成。");
+            return;
+        }
+
+        // ========== 毕法 / 格局 / 方法（标题识别）==========
+        if ([title containsString:@"法诀"] || [title containsString:@"法訣"]
+            || [title containsString:@"毕法"]
+            || [title containsString:@"格局"]
+            || [title containsString:@"方法"]) {
+
+            // 复用你现有的栈视图提取思路：优先查 UIStackView；没有就全局扫 UILabel
+            NSMutableArray *textParts = [NSMutableArray array];
+
+            NSMutableArray *stackViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
+            if (stackViews.count > 0) {
+                UIStackView *stackView = stackViews.firstObject;
+                for (UIView *sv in stackView.arrangedSubviews) {
+                    if ([sv isKindOfClass:[UILabel class]]) {
+                        NSString *t = ((UILabel *)sv).text ?: @"";
+                        if (t.length > 0) {
+                            [textParts addObject:[t stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
+                        }
+                    }
+                }
+            } else {
+                NSMutableArray *labels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], contentView, labels);
+                for (UILabel *l in labels) {
+                    if (l.text.length > 0) {
+                        [textParts addObject:[l.text stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
+                    }
+                }
+            }
+
+            NSString *content = [[textParts componentsJoinedByString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+            if ([title containsString:@"方法"]) {
+                g_extractedData[@"解析方法"] = content;
+                LogMessage(EchoLogTypeSuccess, @"[无感] 捕获『解析方法』完成。");
+            } else if ([title containsString:@"格局"]) {
+                g_extractedData[@"格局要览"] = content;
+                LogMessage(EchoLogTypeSuccess, @"[无感] 捕获『格局要览』完成。");
+            } else { // 法诀/毕法统一进“毕法要诀”
+                g_extractedData[@"毕法要诀"] = content;
+                LogMessage(EchoLogTypeSuccess, @"[无感] 捕获『毕法要诀』完成。");
+            }
+            return;
+        }
+
+        // 未识别：不做处理，落回旧逻辑（透明 present + dismiss）
+    } while (0);
+    // ====== 无感弹窗尝试结束 ======
+
         vcToPresent.view.alpha = 0.0f; animated = NO;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             NSString *title = vcToPresent.title ?: @"";
@@ -3344,6 +3455,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
