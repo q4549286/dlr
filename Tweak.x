@@ -552,10 +552,10 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 // =========================================================================
-//            【 V6 - 最终精确打击版 】 Tweak_presentViewController
+//            【 V7 - 最终可编译修复版 】 Tweak_presentViewController
 // =========================================================================
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static void Tweak_presentViewController(id self, SEL, UIViewController *vcToPresent, BOOL animated, void (^)(void)) {
+static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
 
     // 【最优先】检查我们的“信使”是否携带了任务
     if (g_currentPopupKey) {
@@ -1088,9 +1088,11 @@ int availableApps = 0;
         ]];
 
         // 定义一个递归处理函数
-        __block void (^processNextTask)(void);
-        processNextTask = [^{
-            if (popupTasks.count == 0) {
+        __block void (^processNextTaskBlock)(void);
+        __weak __typeof(self) weakSelf = self;
+        processNextTaskBlock = [^{
+            __strong __typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf || popupTasks.count == 0) {
                 // 所有任务完成，执行最后的回调
                 dispatch_async(dispatch_get_main_queue(), ^{
                     LogMessage(EchoLogTypeInfo, @"[盘面] 所有弹窗信息整合完毕。");
@@ -1110,10 +1112,10 @@ int availableApps = 0;
             NSString *key = task[@"key"];
             SEL selector = NSSelectorFromString(task[@"selector"]);
 
-            if ([self respondsToSelector:selector]) {
+            if ([strongSelf respondsToSelector:selector]) {
                 // 设置信使，然后触发
                 g_currentPopupKey = key;
-                dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]); });
+                dispatch_sync(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([strongSelf performSelector:selector withObject:nil]); });
 
                 // 轮询检查信使是否被清空（任务是否完成）
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -1125,16 +1127,16 @@ int availableApps = 0;
                         LogMessage(EchoLogTypeWarning, @"[盘面] 解析 %@ 超时", g_currentPopupKey);
                         g_currentPopupKey = nil; // 超时也要清空信使
                     }
-                    processNextTask(); // 处理下一个任务
+                    processNextTaskBlock(); // 处理下一个任务
                 });
             } else {
                 LogMessage(EchoLogTypeWarning, @"[盘面] 找不到选择器 %@, 跳过。", task[@"selector"]);
-                processNextTask(); // 直接处理下一个任务
+                processNextTaskBlock(); // 直接处理下一个任务
             }
         } copy];
 
         // 启动任务队列
-        processNextTask();
+        processNextTaskBlock();
     }];
 }
 %new
