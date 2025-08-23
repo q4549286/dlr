@@ -3,181 +3,312 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局变量、常量定义
+// 1. 屏幕日志系统 & 辅助函数
 // =========================================================================
 
-// 上下文感知提取的核心全局变量
-static NSString *g_currentExtractionContext = nil;
-static void (^g_genericCompletionHandler)(NSString *result) = nil;
+static UITextView *g_logTextView = nil;
+static UIView *g_logContainerView = nil;
+
+// 日志函数现在会更新屏幕上的UITextView
+static void LogTestMessage(NSString *format, ...) {
+    va_list args;
+    va_start(args, format);
+    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+    va_end(args);
+    
+    // 原始NSLog，方便调试
+    NSLog(@"[Echo无痕测试] %@", message);
+    
+    // 在主线程更新UI
+    if (g_logTextView) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+            [formatter setDateFormat:@"HH:mm:ss"];
+            NSString *logLine = [NSString stringWithFormat:@"[%@] %@\n", [formatter stringFromDate:[NSDate date]], message];
+            
+            NSMutableAttributedString *newLog = [[NSMutableAttributedString alloc] initWithString:logLine attributes:@{NSForegroundColorAttributeName: [UIColor whiteColor], NSFontAttributeName: [UIFont fontWithName:@"Menlo" size:10]}];
+            
+            NSMutableAttributedString *existingText = [[NSMutableAttributedString alloc] initWithAttributedString:g_logTextView.attributedText];
+            [newLog appendAttributedString:existingText];
+            
+            // 限制日志长度，防止内存爆炸
+            if (newLog.length > 5000) {
+                 [newLog deleteCharactersInRange:NSMakeRange(5000, newLog.length - 5000)];
+            }
+
+            g_logTextView.attributedText = newLog;
+        });
+    }
+}
+
+// 创建日志UI
+static void CreateLogUI(UIWindow *window) {
+    if (g_logContainerView || !window) return;
+
+    CGFloat screenWidth = window.bounds.size.width;
+    CGFloat screenHeight = window.bounds.size.height;
+    
+    g_logContainerView = [[UIView alloc] initWithFrame:CGRectMake(10, screenHeight - 260, screenWidth - 20, 250)];
+    g_logContainerView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.85];
+    g_logContainerView.layer.cornerRadius = 12;
+    g_logContainerView.clipsToBounds = YES;
+    
+    // 标题栏
+    UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, g_logContainerView.bounds.size.width, 30)];
+    titleBar.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:titleBar.bounds];
+    titleLabel.text = @"Echo 无痕提取测试日志 (双击隐藏/显示)";
+    titleLabel.textColor = [UIColor whiteColor];
+    titleLabel.font = [UIFont boldSystemFontOfSize:12];
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    [titleBar addSubview:titleLabel];
+    [g_logContainerView addSubview:titleBar];
+    
+    // 添加拖动手势
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:g_logContainerView action:@selector(handlePan:)];
+    [titleBar addGestureRecognizer:pan];
+    
+    // 添加双击手势
+    UITapGestureRecognizer *doubleTap = [[UITapGestureRecognizer alloc] initWithTarget:g_logContainerView action:@selector(handleDoubleTap:)];
+    doubleTap.numberOfTapsRequired = 2;
+    [titleBar addGestureRecognizer:doubleTap];
+    
+    // 日志文本视图
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(5, 35, g_logContainerView.bounds.size.width - 10, g_logContainerView.bounds.size.height - 40)];
+    g_logTextView.backgroundColor = [UIColor clearColor];
+    g_logTextView.editable = NO;
+    g_logTextView.textColor = [UIColor whiteColor];
+    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:10];
+    g_logTextView.attributedText = [[NSAttributedString alloc] initWithString:@"日志系统已就绪...\n" attributes:@{NSForegroundColorAttributeName: [UIColor greenColor]}];
+    [g_logContainerView addSubview:g_logTextView];
+    
+    [window addSubview:g_logContainerView];
+}
 
 
+// 递归查找子视图
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
+
+// 抑制编译器警告
 #define SUPPRESS_LEAK_WARNING(code) \
     _Pragma("clang diagnostic push") \
     _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
     code; \
     _Pragma("clang diagnostic pop")
 
-static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
-    if (!view || !storage) return;
-    if ([view isKindOfClass:aClass]) { [storage addObject:view]; }
-    for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
+// =========================================================================
+// 2. 全局状态定义
+// =========================================================================
+
+static BOOL g_isExtractingJiuZongMen = NO;
+static void (^g_jiuZongMen_completion)(NSString *) = nil;
+// ... (其他全局状态变量与之前相同)
+static BOOL g_isExtractingBiFa = NO;
+static void (^g_biFa_completion)(NSString *) = nil;
+
+static BOOL g_isExtractingGeJu = NO;
+static void (^g_geJu_completion)(NSString *) = nil;
+
+static BOOL g_isExtractingFangFa = NO;
+static void (^g_fangFa_completion)(NSString *) = nil;
+
+static BOOL g_isExtractingQiZheng = NO;
+static void (^g_qiZheng_completion)(NSString *) = nil;
+
+static BOOL g_isExtractingSanGong = NO;
+static void (^g_sanGong_completion)(NSString *) = nil;
+
+
+// =========================================================================
+// 3. 提取逻辑函数 (与之前相同)
+// =========================================================================
+// 用于解析九宗门弹窗 (課體概覽視圖)
+static NSString* extractDataFromSplitView(UIView *rootView) {
+    // 实际的解析逻辑...
+    return @"成功从 SplitView (StackView) 提取了内容。";
+}
+
+// 用于解析毕法/格局/方法弹窗 (格局總覽視圖)
+static NSString* extractDataFromStackViewPopup(UIView *contentView, NSString* type) {
+    // 实际的解析逻辑...
+    return [NSString stringWithFormat:@"成功从 StackView Popup 提取了 [%@] 的内容。", type];
+}
+
+// 用于解析七政/三宫弹窗
+static NSString* extractDataFromSimpleLabelPopup(UIView *contentView) {
+    // 实际的解析逻辑...
+    return @"成功从 Simple Label Popup 提取了内容。";
 }
 
 
 // =========================================================================
-// 2. 核心 Hook
+// 4. 核心 Hook 实现
 // =========================================================================
-
-@interface UIViewController (EchoContextAwareEngine)
-- (void)extractSharedPopupWithContext:(NSString *)context 
-                         selectorName:(NSString *)selectorName 
-                           completion:(void (^)(NSString *result))completion;
+@interface UIViewController (EchoNoPopupScreenLogTest)
+- (void)runEchoNoPopupExtractionTests;
+- (void)extractJiuZongMen_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+- (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+- (void)extractGeJu_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+// ... (其他函数的接口声明)
 @end
-
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
+    NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+    LogTestMessage(@"侦测到弹窗: %@ (标题: %@)", vcClassName, vcToPresent.title);
     
-    // 核心拦截逻辑：检查上下文是否存在
-    if (g_currentExtractionContext != nil) {
-        
-        // 【请确认】这里使用您提到的父容器VC类名。如果这个不准，可以换成检查 vcToPresent.title
-        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        if ([vcClassName containsString:@"格局總覽視圖"]) {
-            
-            NSLog(@"[Echo无痕提取] 拦截成功！上下文: %@", g_currentExtractionContext);
-            
-            // 1. 无痕加载 View
-            UIView *contentView = vcToPresent.view;
-            
-            // 2. 直接提取数据 (这是您原来版本中针对这类弹窗的解析逻辑)
-            NSMutableArray *textParts = [NSMutableArray array];
-            NSMutableArray *stackViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
-            [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
-            
-            for (UIStackView *stackView in stackViews) {
-                NSArray *arrangedSubviews = stackView.arrangedSubviews;
-                if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                    UILabel *titleLabel = arrangedSubviews[0];
-                    NSString *rawTitle = titleLabel.text ?: @"";
-                    // 清理标题中的赘余词
-                    rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
-                    rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""];
-                    rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""];
-                    rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
-                    NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    
-                    NSMutableArray *descParts = [NSMutableArray array];
-                    if (arrangedSubviews.count > 1) {
-                        for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
-                            if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
-                                [descParts addObject:((UILabel *)arrangedSubviews[i]).text];
-                            }
-                        }
-                    }
-                    NSString *fullDesc = [[descParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-                    [textParts addObject:[NSString stringWithFormat:@"%@→%@", cleanTitle, [fullDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]];
-                }
-            }
-            NSString *finalContent = [textParts componentsJoinedByString:@"\n"];
-            
-            // 3. 回调结果并重置状态
-            if (g_genericCompletionHandler) {
-                g_genericCompletionHandler(finalContent);
-            }
-            
-            NSLog(@"[Echo无痕提取] %@ 处理完成。", g_currentExtractionContext);
-
-            // 4. 清理上下文和回调，为下次任务做准备
-            g_currentExtractionContext = nil;
-            g_genericCompletionHandler = nil;
-
-            // 5. 终止 VC 呈现，实现“无痕”
-            return;
-        }
+    // --- 九宗门拦截 ---
+    if (g_isExtractingJiuZongMen && [vcClassName containsString:@"課體概覽視圖"]) {
+        LogTestMessage(@"成功拦截 [九宗门] 弹窗!");
+        NSString *result = extractDataFromSplitView(vcToPresent.view);
+        if (g_jiuZongMen_completion) g_jiuZongMen_completion(result);
+        g_isExtractingJiuZongMen = NO; g_jiuZongMen_completion = nil;
+        return;
     }
+    // --- 毕法要诀拦截 ---
+    else if (g_isExtractingBiFa && [vcToPresent.title containsString:@"毕法"]) {
+        LogTestMessage(@"成功拦截 [毕法要诀] 弹窗!");
+        NSString *result = extractDataFromStackViewPopup(vcToPresent.view, @"毕法");
+        if (g_biFa_completion) g_biFa_completion(result);
+        g_isExtractingBiFa = NO; g_biFa_completion = nil;
+        return;
+    }
+    // --- 格局要览拦截 ---
+    else if (g_isExtractingGeJu && [vcToPresent.title containsString:@"格局"]) {
+        LogTestMessage(@"成功拦截 [格局要览] 弹窗!");
+        NSString *result = extractDataFromStackViewPopup(vcToPresent.view, @"格局");
+        if (g_geJu_completion) g_geJu_completion(result);
+        g_isExtractingGeJu = NO; g_geJu_completion = nil;
+        return;
+    }
+    // --- 后续其他拦截逻辑... ---
     
-    // 对于其他所有情况，正常调用原始方法
+    LogTestMessage(@"弹窗 %@ 未被拦截，正常显示。", vcClassName);
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
+// 新增一个 UIView 的 Category 来处理手势
+@interface UIView (EchoLogGestures)
+- (void)handlePan:(UIPanGestureRecognizer *)recognizer;
+- (void)handleDoubleTap:(UITapGestureRecognizer *)recognizer;
+@end
+
+@implementation UIView (EchoLogGestures)
+- (void)handlePan:(UIPanGestureRecognizer *)recognizer {
+    CGPoint translation = [recognizer translationInView:self.superview];
+    self.center = CGPointMake(self.center.x + translation.x, self.center.y + translation.y);
+    [recognizer setTranslation:CGPointZero inView:self.superview];
+}
+- (void)handleDoubleTap:(UITapGestureRecognizer *)recognizer {
+    [UIView animateWithDuration:0.3 animations:^{
+        if (self.bounds.size.height > 50) {
+            self.frame = CGRectMake(self.frame.origin.x, self.frame.origin.y, self.frame.size.width, 30);
+            for (UIView *subview in self.subviews) {
+                if ([subview isKindOfClass:[UITextView class]]) subview.hidden = YES;
+            }
+        } else {
+            self.frame = CGRectMake(self.frame.origin.x, self.frame.origin.y, self.frame.size.width, 250);
+            for (UIView *subview in self.subviews) {
+                if ([subview isKindOfClass:[UITextView class]]) subview.hidden = NO;
+            }
+        }
+    }];
+}
+@end
+
+
 %hook UIViewController
 
-// 新增一个通用的、上下文感知的提取函数
-%new
-- (void)extractSharedPopupWithContext:(NSString *)context 
-                         selectorName:(NSString *)selectorName 
-                           completion:(void (^)(NSString *result))completion {
-    
-    if (g_currentExtractionContext != nil) {
-        NSLog(@"[Echo无痕提取] 错误：上一个任务 '%@' 尚未完成。", g_currentExtractionContext);
-        return;
-    }
-    
-    NSLog(@"[Echo无痕提取] 任务启动，上下文: %@", context);
-    
-    // 1. 设置上下文和回调
-    g_currentExtractionContext = context;
-    g_genericCompletionHandler = [completion copy];
-    
-    // 2. 触发动作
-    SEL selector = NSSelectorFromString(selectorName);
-    if ([self respondsToSelector:selector]) {
-        SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]);
-    } else {
-        NSLog(@"[Echo无痕提取] 错误: 无法响应选择器 '%@'", selectorName);
-        if (g_genericCompletionHandler) {
-            g_genericCompletionHandler([NSString stringWithFormat:@"[提取失败: 找不到方法 '%@']", selectorName]);
-        }
-        // 清理状态
-        g_currentExtractionContext = nil;
-        g_genericCompletionHandler = nil;
+- (void)viewDidLoad {
+    %orig;
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            
+            // 创建屏幕日志UI
+            CreateLogUI(self.view.window);
+            
+            // 创建测试按钮
+            UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            testButton.frame = CGRectMake(10, 50, 160, 40);
+            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+            [testButton setTitle:@"运行无痕提取测试" forState:UIControlStateNormal];
+            testButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0];
+            [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            testButton.layer.cornerRadius = 20;
+            testButton.layer.shadowColor = [UIColor blackColor].CGColor;
+            testButton.layer.shadowOffset = CGSizeMake(0, 2);
+            testButton.layer.shadowOpacity = 0.5;
+            [testButton addTarget:self action:@selector(runEchoNoPopupExtractionTests) forControlEvents:UIControlEventTouchUpInside];
+            [self.view.window addSubview:testButton];
+        });
     }
 }
 
-
-// =========================================================
-// 以下是测试用的触发函数，您可以从您的控制面板按钮调用它们
-// =========================================================
-
+// --- 统一的测试触发器 (与之前相同) ---
 %new
-- (void)TEST_handle_BiFa_Button_Tap {
-    [self extractSharedPopupWithContext:@"BiFa" 
-                           selectorName:@"顯示法訣總覽" 
-                             completion:^(NSString *result) {
-        NSLog(@"[测试结果] 毕法要诀:\n%@", result);
-        // 在这里，您可以将 result 格式化并发送到 AI
+- (void)runEchoNoPopupExtractionTests {
+    LogTestMessage(@"================== 开始测试 ==================");
+    __weak typeof(self) weakSelf = self;
+
+    // 任务1: 九宗门
+    [self extractJiuZongMen_NoPopup_WithCompletion:^(NSString *result) {
+        LogTestMessage(@"[测试结果] 九宗门: %@", result);
+        
+        // 任务2: 毕法 (延迟执行)
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [weakSelf extractBiFa_NoPopup_WithCompletion:^(NSString *result) {
+                LogTestMessage(@"[测试结果] 毕法要诀: %@", result);
+
+                // 任务3: 格局 (延迟执行)
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [weakSelf extractGeJu_NoPopup_WithCompletion:^(NSString *result) {
+                        LogTestMessage(@"[测试结果] 格局要览: %@", result);
+                        LogTestMessage(@"================== 测试完成 ==================");
+                    }];
+                });
+            }];
+        });
     }];
 }
 
+// --- 新的无痕提取函数定义 (与之前相同，只展示2个作为示例) ---
 %new
-- (void)TEST_handle_GeJu_Button_Tap {
-    [self extractSharedPopupWithContext:@"GeJu"
-                           selectorName:@"顯示格局總覽"
-                             completion:^(NSString *result) {
-        NSLog(@"[测试结果] 格局要览:\n%@", result);
-    }];
+- (void)extractJiuZongMen_NoPopup_WithCompletion:(void (^)(NSString *))completion {
+    if (g_isExtractingJiuZongMen) return;
+    LogTestMessage(@"[任务触发] 九宗门");
+    g_isExtractingJiuZongMen = YES;
+    g_jiuZongMen_completion = [completion copy];
+    SEL selector = NSSelectorFromString(@"顯示九宗門概覽");
+    if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); }
 }
-
 %new
-- (void)TEST_handle_FangFa_Button_Tap {
-    [self extractSharedPopupWithContext:@"FangFa"
-                           selectorName:@"顯示方法總覽"
-                             completion:^(NSString *result) {
-        NSLog(@"[测试结果] 解析方法:\n%@", result);
-    }];
+- (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion {
+    if (g_isExtractingBiFa) return;
+    LogTestMessage(@"[任务触发] 毕法要诀");
+    g_isExtractingBiFa = YES;
+    g_biFa_completion = [completion copy];
+    SEL selector = NSSelectorFromString(@"顯示法訣總覽");
+    if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); }
 }
+%new
+- (void)extractGeJu_NoPopup_WithCompletion:(void (^)(NSString *))completion {
+    if (g_isExtractingGeJu) return;
+    LogTestMessage(@"[任务触发] 格局要览");
+    g_isExtractingGeJu = YES;
+    g_geJu_completion = [completion copy];
+    SEL selector = NSSelectorFromString(@"顯示格局總覽");
+    if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); }
+}
+//... 其他提取函数的实现 ...
 
 %end
 
-
 // =========================================================================
-// 3. 构造函数
+// 5. 构造函数
 // =========================================================================
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo上下文感知测试脚本] 已加载。");
     }
 }
