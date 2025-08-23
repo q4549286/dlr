@@ -66,9 +66,11 @@ static BOOL g_isExtractingSanGong = NO; static void (^g_sanGong_completion)(NSSt
 // =========================================================================
 // 3. 提取逻辑函数
 // =========================================================================
+// V2 - 新增一个异步提取函数，用于处理可展开的TableView
 static void extractExpandableTableViewData(UIView *contentView, void(^completion)(NSString *result)) {
     Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView") ?: [UITableView class];
     NSMutableArray *tableViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews);
+    
     if (tableViews.count == 0) { LogTestMessage(@"错误：在可展开提取器中未找到TableView。"); if(completion) completion(@"[提取失败]"); return; }
 
     UITableView *tableView = tableViews.firstObject;
@@ -81,17 +83,24 @@ static void extractExpandableTableViewData(UIView *contentView, void(^completion
 
     __block NSMutableString *finalResult = [NSMutableString string];
     __block NSInteger currentRow = 0;
+    
+    // <<< 关键修正开始 >>>
     __block void (^processNextRow)();
+    __weak __block void (^weak_processNextRow)();
 
-    processNextRow = [^{
-        if (currentRow >= totalRows) {
+    processNextRow = ^{
+        __strong __block void (^strong_processNextRow)() = weak_processNextRow;
+        if (currentRow >= totalRows || !strong_processNextRow) {
             if (completion) completion([finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
             return;
         }
+
         NSIndexPath *indexPath = [NSIndexPath indexPathForRow:currentRow inSection:0];
+        
         if (delegate && [delegate respondsToSelector:@selector(tableView:didSelectRowAtIndexPath:)]) {
             [delegate tableView:tableView didSelectRowAtIndexPath:indexPath];
         }
+
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
             if (!cell && [tableView.dataSource respondsToSelector:@selector(tableView:cellForRowAtIndexPath:)]) {
@@ -105,10 +114,13 @@ static void extractExpandableTableViewData(UIView *contentView, void(^completion
                 [finalResult appendFormat:@"%@\n\n", [cellTexts componentsJoinedByString:@"\n"]];
             }
             currentRow++;
-            processNextRow();
+            strong_processNextRow(); // 调用临时的强引用
         });
-    } copy];
+    };
+    
+    weak_processNextRow = processNextRow;
     processNextRow();
+    // <<< 关键修正结束 >>>
 }
 
 static NSString* extractJiuZongMenData(UIView *contentView) {
@@ -279,3 +291,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
     }
 }
+
