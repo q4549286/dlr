@@ -596,78 +596,71 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if ([g_currentItemToExtract isEqualToString:@"格局方法"] && [vcClassName containsString:@"年命格局視圖"]) { /* ... */ return; }
     }
     
-    // ================== 基础盘面/精准分析 拦截 ==================
-    if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
+     if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         
         // --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
         if ([vcClassName containsString:@"格局總覽視圖"]) {
             LogMessage(EchoLogTypeInfo, @"[捕获] 拦截到 格局總覽視圖, 当前任务: %@", g_currentPopupTaskType);
             
-            UIView *contentView = vcToPresent.view;
-            
-            // 【最终修正】100% 复刻并优化原始脚本的成功逻辑
-            NSMutableArray *textParts = [NSMutableArray array];
-            
-            // 1. 先找到所有 UIStackView
-            NSMutableArray *allStackViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
+            // 【核心修正】使用 dispatch_async 延迟执行，给视图足够的时间来布局
+            dispatch_async(dispatch_get_main_queue(), ^{
+                
+                // 1. 手动触发视图加载和布局（如果需要）
+                // [vcToPresent loadViewIfNeeded]; // 这通常由 vcToPresent.view 隐式调用
+                UIView *contentView = vcToPresent.view; // 这一步已经确保视图被加载
+                
+                // 2. 100% 复刻原始脚本的提取逻辑
+                NSMutableArray *textParts = [NSMutableArray array];
+                NSMutableArray *allStackViews = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
+                [allStackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+                    return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
+                }];
 
-            // 2. 按Y坐标排序，保证顺序
-            [allStackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
-                return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
-            }];
-
-            // 3. 遍历所有找到的 StackView，只处理包含 UILabel 的那些
-            for (UIStackView *stackView in allStackViews) {
-                NSArray *arrangedSubviews = stackView.arrangedSubviews;
-
-                // 【关键过滤】这是原始脚本的核心。只处理那些其子视图是 UILabel 的 StackView。
-                // 这能自动过滤掉外层的、不包含文本的布局容器 StackView。
-                if (arrangedSubviews.count > 0 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                    
-                    // 第一个 UILabel 是标题
-                    UILabel *titleLabel = (UILabel *)arrangedSubviews[0];
-                    NSString *rawTitle = titleLabel.text ?: @"";
-                    rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
-                    rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""];
-                    rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""];
-                    rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
-                    NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    
-                    // 拼接剩余所有 UILabel 作为内容
-                    NSMutableString *description = [NSMutableString string];
-                    for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
-                        if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
-                            UILabel *descLabel = (UILabel *)arrangedSubviews[i];
-                            if (descLabel.text) {
-                                // 使用原始脚本的拼接方式，保留换行符，最后统一处理
-                                [description appendString:descLabel.text]; 
+                for (UIStackView *stackView in allStackViews) {
+                    NSArray *arrangedSubviews = stackView.arrangedSubviews;
+                    if (arrangedSubviews.count > 0 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
+                        UILabel *titleLabel = (UILabel *)arrangedSubviews[0];
+                        NSString *rawTitle = titleLabel.text ?: @"";
+                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""];
+                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""];
+                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""];
+                        rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
+                        NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                        
+                        NSMutableString *description = [NSMutableString string];
+                        for (NSUInteger i = 1; i < arrangedSubviews.count; i++) {
+                            if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) {
+                                UILabel *descLabel = (UILabel *)arrangedSubviews[i];
+                                if (descLabel.text) {
+                                    [description appendString:descLabel.text];
+                                }
                             }
                         }
-                    }
-                    // 将多行内容合并为一行，用空格分隔
-                    NSString *cleanDescription = [[description stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    
-                    // 【关键过滤】过滤掉空的或者只有通用标题的条目
-                    if (cleanTitle.length > 0 && ![cleanTitle isEqualToString:@"通类门"]) {
-                        [textParts addObject:[NSString stringWithFormat:@"%@→%@", cleanTitle, cleanDescription]];
+                        NSString *cleanDescription = [[description stringByReplacingOccurrencesOfString:@"\n" withString:@" "] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                        
+                        if (cleanTitle.length > 0 && ![cleanTitle isEqualToString:@"通类门"]) {
+                            [textParts addObject:[NSString stringWithFormat:@"%@→%@", cleanTitle, cleanDescription]];
+                        }
                     }
                 }
-            }
-            
-            NSString *finalContent = [textParts componentsJoinedByString:@"\n"];
+                
+                NSString *finalContent = [textParts componentsJoinedByString:@"\n"];
 
-            if ([g_currentPopupTaskType isEqualToString:@"BiFa"]) {
-                g_extractedData[@"毕法要诀"] = finalContent;
-                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [毕法要诀], 内容长度: %lu", (unsigned long)finalContent.length);
-            } else if ([g_currentPopupTaskType isEqualToString:@"GeJu"]) {
-                g_extractedData[@"格局要览"] = finalContent;
-                LogMessage(EchoLogTypeSuccess, @"[捕愈] 成功无痕解析 [格局要览], 内容长度: %lu", (unsigned long)finalContent.length);
-            } else if ([g_currentPopupTaskType isEqualToString:@"FangFa"]) {
-                g_extractedData[@"解析方法"] = finalContent;
-                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [解析方法], 内容长度: %lu", (unsigned long)finalContent.length);
-            }
-            g_currentPopupTaskType = nil;
+                if ([g_currentPopupTaskType isEqualToString:@"BiFa"]) {
+                    g_extractedData[@"毕法要诀"] = finalContent;
+                    LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [毕法要诀], 内容长度: %lu", (unsigned long)finalContent.length);
+                } else if ([g_currentPopupTaskType isEqualToString:@"GeJu"]) {
+                    g_extractedData[@"格局要览"] = finalContent;
+                    LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [格局要览], 内容长度: %lu", (unsigned long)finalContent.length);
+                } else if ([g_currentPopupTaskType isEqualToString:@"FangFa"]) {
+                    g_extractedData[@"解析方法"] = finalContent;
+                    LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [解析方法], 内容长度: %lu", (unsigned long)finalContent.length);
+                }
+                g_currentPopupTaskType = nil;
+            });
+
+            // 3. 立即返回，阻止弹窗显示
             return;
         }
         
@@ -1629,6 +1622,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
