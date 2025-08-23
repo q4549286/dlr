@@ -248,31 +248,60 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
 
 #pragma mark - No-Popup Extraction Logic
 // 用于毕法、格局、方法、七政、三宫时的复杂 TableView 弹窗 (强制提取隐藏内容)
+// 用于毕法、格局、方法、七政、三宫时的复杂 TableView 弹窗 (强制提取隐藏内容)
 static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
     Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
     if (!tableViewClass) { return @"错误: 找不到 IntrinsicTableView 类"; }
+    
     NSMutableArray *tableViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews);
+    
     if (tableViews.count > 0) {
-        UITableView *tableView = tableViews.firstObject; id<UITableViewDataSource> dataSource = tableView.dataSource; if (!dataSource) { return @"错误: TableView 没有 dataSource"; }
+        UITableView *tableView = tableViews.firstObject;
+        id<UITableViewDataSource> dataSource = tableView.dataSource;
+        if (!dataSource) { return @"错误: TableView 没有 dataSource"; }
+
         NSMutableArray<NSString *> *allEntries = [NSMutableArray array];
         NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
+
         for (NSInteger section = 0; section < sections; section++) {
             NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
             for (NSInteger row = 0; row < rows; row++) {
                 NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
                 UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
+
                 if (cell) {
-                    NSMutableArray<UILabel *> *labelsInCell = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
+                    NSMutableArray<UILabel *> *labelsInCell = [NSMutableArray array];
+                    FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
+                    
                     if (labelsInCell.count > 0) {
                         [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
-                        NSMutableString *fullEntryText = [NSMutableString string];
-                        for (UILabel *label in labelsInCell) { if (label.text.length > 0) { [fullEntryText appendFormat:@"%@\n", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; } }
-                        [allEntries addObject:[fullEntryText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                        
+                        // **核心修正逻辑**
+                        // 第一个 Label 是标题
+                        NSString *title = [labelsInCell.firstObject.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                        
+                        // 剩下的所有 Label 都是描述内容
+                        NSMutableString *description = [NSMutableString string];
+                        if (labelsInCell.count > 1) {
+                            for (NSUInteger i = 1; i < labelsInCell.count; i++) {
+                                NSString *labelText = labelsInCell[i].text;
+                                if (labelText.length > 0) {
+                                    [description appendString:labelText];
+                                }
+                            }
+                        }
+                        
+                        // 拼接成 "标题→内容" 格式
+                        NSString *finalEntry = [NSString stringWithFormat:@"%@→%@", title, [description stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                        [allEntries addObject:finalEntry];
                     }
                 }
             }
-        } return [allEntries componentsJoinedByString:@"\n\n"];
-    } return @"错误: 未在弹窗中找到 TableView";
+        }
+        // 用单个换行符连接所有条目
+        return [allEntries componentsJoinedByString:@"\n"];
+    }
+    return @"错误: 未在弹窗中找到 TableView";
 }
 
 // 用于九宗门的弹窗
@@ -311,8 +340,7 @@ static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL,
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
 
-    void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSString *taskName, NSString *result, void(^completionBlock)(NSString*)) {
-        LogMessage(EchoLogTypeSuccess, @"[推演课盘] %@ -> 推演完毕 (共 %lu 字符)", taskName, (unsigned long)(result.length));
+void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSString *taskName, NSString *result, void(^completionBlock)(NSString*)) { [UIPasteboard generalPasteboard].string = result ?: @""; LogMessage(EchoLogTypeSuccess, @"[推演课盘] %@ -> 推演完毕", taskName); if (completionBlock) { completionBlock(result); } };
         if (completionBlock) { completionBlock(result); }
     };
     void (^delayedExtraction)(void(^)()) = ^(void(^extractionLogic)()) { dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), extractionLogic); };
@@ -1124,4 +1152,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v15.0 (推演升级版) 已加载。");
     }
 }
+
 
