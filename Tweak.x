@@ -360,20 +360,17 @@ static NSString* extractFromJiuZongMenPopup(UIView *contentView) {
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^)(void)) {
+static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
 
-    // 统一的回调处理器
     void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSString *taskName, NSString *result, void(^completionBlock)(NSString*)) {
         LogMessage(EchoLogTypeSuccess, @"[推演引擎] 成功推演 [%@] (共 %lu 字符)", taskName, (unsigned long)(result.length));
         if (completionBlock) { completionBlock(result); }
     };
-    // 统一的延迟执行器
     void (^delayedExtraction)(void(^)()) = ^(void(^extractionLogic)()) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), extractionLogic);
     };
 
-    // 毕法、格局、方法、七政、三宫时统一拦截逻辑
     if (g_isExtractingBiFa || g_isExtractingGeJu || g_isExtractingFangFa || g_isExtractingQiZheng || g_isExtractingSanGong) {
         NSString *taskName = nil;
         void(^completionBlock)(NSString*) = nil;
@@ -401,14 +398,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 NSString *result = extractionLogic(vcToPresent.view);
                 handleExtraction(taskName, result, completionBlock);
             });
-            return; // 核心：阻止弹窗呈现
+            return;
         }
     }
     
-    // S1: 课体/九宗门
     if (g_s1_isExtracting && [vcClassName containsString:@"課體概覽視圖"]) {
         UIView *contentView = vcToPresent.view;
-        NSString *extractedText = extractDataFromSplitView_S1(contentView, g_s1_shouldIncludeXiangJie);
+        NSString *extractedText = extractFromJiuZongMenPopup(contentView); // 使用九宗门专用函数
         if ([g_s1_currentTaskType isEqualToString:@"KeTi"]) {
             [g_s1_keTi_resultsArray addObject:extractedText];
             LogMessage(EchoLogTypeSuccess, @"[推演引擎] 成功推演“课体范式”第 %lu 项...", (unsigned long)g_s1_keTi_resultsArray.count);
@@ -420,7 +416,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
     
-    // S2: 课传流注
     if (g_s2_isExtractingKeChuanDetail && ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"])) {
         UIView *contentView = vcToPresent.view;
         NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
@@ -433,9 +428,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
     
-    // 行年参数
     if (g_isExtractingNianming && g_currentItemToExtract) {
-        if ([vcToPresent isKindOfClass:[UIAlertController class]]) { Original_presentViewController(self, _cmd, vcToPresent, animated, completion); return; }
+        if ([vcToPresent isKindOfClass:[UIAlertController class]]) {
+             // UIAlertController 必须被呈现才能触发action handler，所以这里调用原始方法
+            Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
+            return;
+        }
         if ([g_currentItemToExtract isEqualToString:@"年命摘要"] && [vcClassName containsString:@"年命摘要視圖"]) {
             UIView *contentView = vcToPresent.view; NSMutableArray *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
             [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) { return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; }];
@@ -454,7 +452,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
     }
     
-    // 时间块
     if (g_isExtractingTimeInfo) {
         UIViewController *contentVC = ([vcToPresent isKindOfClass:[UINavigationController class]]) ? ((UINavigationController *)vcToPresent).viewControllers.firstObject : vcToPresent;
         if (contentVC && [NSStringFromClass([contentVC class]) containsString:@"時間選擇視圖"]) {
@@ -463,7 +460,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 if (completion) { completion(); }
                 UIView *targetView = contentVC.view; NSMutableArray *textViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UITextView class], targetView, textViews);
                 NSString *timeBlockText = (textViews.count > 0) ? ((UITextView *)textViews.firstObject).text : @"[时间推演失败]";
-                if (g_extractedData) { g_extractedData[@"时间块"] = timeBlockText; LogMessage(EchoLogTypeSuccess, @"[推演引擎] 成功推演时间参数。"); }
+                g_extractedData[@"时间块"] = timeBlockText; 
+                LogMessage(EchoLogTypeSuccess, @"[推演引擎] 成功推演时间参数。");
                 [vcToPresent dismissViewControllerAnimated:NO completion:nil];
             };
             Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion);
@@ -471,7 +469,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
     }
     
-    // 如果没有任何逻辑匹配，则调用原始方法
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 %hook UIViewController
@@ -714,3 +711,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo推演引擎] v15.1 (Fusion Final) 已加载。");
     }
 }
+
