@@ -64,6 +64,7 @@ static NSString *g_currentItemToExtract = nil;
 static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 static NSString *g_lastGeneratedReport = nil;
+static NSString *g_currentPopupTaskType = nil;
 
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES;
@@ -599,29 +600,53 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (g_extractedData && ![vcToPresent isKindOfClass:[UIAlertController class]]) {
         UIView *contentView = vcToPresent.view; // 统一预加载视图
         
-        // --- 拦截 毕法 / 格局 / 方法 ---
+       // --- 拦截 毕法 / 格局 / 方法 (共用 格局總覽視圖) ---
         if ([vcClassName containsString:@"格局總覽視圖"]) {
-            NSString *title = vcToPresent.title; // 此时 title 应该已经加载
+            LogMessage(EchoLogTypeInfo, @"[捕获] 拦截到 格局總覽視圖, 当前任务: %@", g_currentPopupTaskType);
+            
+            // 1. 查找所有 "格局單元" 实例
+            Class geJuUnitClass = NSClassFromString(@"六壬大占.格局單元");
+            if (!geJuUnitClass) {
+                LogMessage(EchoLogError, @"[错误] 找不到'格局單元'类!");
+                return;
+            }
+            NSMutableArray *unitCells = [NSMutableArray array];
+            FindSubviewsOfClassRecursive(geJuUnitClass, contentView, unitCells);
+            
+            // 2. 按Y坐标排序，确保顺序正确
+            [unitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) {
+                return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)];
+            }];
+            
+            // 3. 遍历每个单元，提取内部的UILabel文本
             NSMutableArray *textParts = [NSMutableArray array];
-            NSMutableArray *stackViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UIStackView class], contentView, stackViews);
-            [stackViews sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.y) compare:@(v2.frame.origin.y)]; }];
-            for (UIStackView *stackView in stackViews) {
-                NSArray *arrangedSubviews = stackView.arrangedSubviews;
-                if (arrangedSubviews.count >= 1 && [arrangedSubviews[0] isKindOfClass:[UILabel class]]) {
-                    UILabel *titleLabel = arrangedSubviews[0]; NSString *rawTitle = titleLabel.text ?: @""; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 毕法" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 法诀" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 格局" withString:@""]; rawTitle = [rawTitle stringByReplacingOccurrencesOfString:@" 方法" withString:@""];
-                    NSString *cleanTitle = [rawTitle stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    NSMutableArray *descParts = [NSMutableArray array]; if (arrangedSubviews.count > 1) { for (NSUInteger i = 1; i < arrangedSubviews.count; i++) { if ([arrangedSubviews[i] isKindOfClass:[UILabel class]]) { [descParts addObject:((UILabel *)arrangedSubviews[i]).text]; } } }
-                    NSString *fullDesc = [[descParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "];
-                    [textParts addObject:[NSString stringWithFormat:@"%@→%@", cleanTitle, [fullDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]];
+            for (UIView *cell in unitCells) {
+                NSMutableArray *labels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], cell, labels);
+                if (labels.count >= 2) {
+                    // 假设第一个是标题，第二个是内容
+                    UILabel *titleLabel = labels[0];
+                    UILabel *contentLabel = labels[1];
+                    NSString *title = [titleLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet.whitespaceAndNewlineCharacterSet]];
+                    NSString *content = [contentLabel.text stringByTrimmingCharactersInSet:[NSCharacterSet.whitespaceAndNewlineCharacterSet]];
+                    [textParts addObject:[NSString stringWithFormat:@"%@→%@", title, content]];
                 }
             }
-            NSString *content = [textParts componentsJoinedByString:@"\n"];
-            // 根据触发时的 title 来判断存到哪里
-            if ([title containsString:@"方法"]) g_extractedData[@"解析方法"] = content;
-            else if ([title containsString:@"格局"]) g_extractedData[@"格局要览"] = content;
-            else g_extractedData[@"毕法要诀"] = content; // 默认或包含“毕法”
-            LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析弹窗 [%@]", title);
-            return; // 拦截成功，阻止呈现
+            NSString *finalContent = [textParts componentsJoinedByString:@"\n"];
+
+            // 4. 根据任务类型，存入正确的字典键
+            if ([g_currentPopupTaskType isEqualToString:@"BiFa"]) {
+                g_extractedData[@"毕法要诀"] = finalContent;
+                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [毕法要诀]");
+            } else if ([g_currentPopupTaskType isEqualToString:@"GeJu"]) {
+                g_extractedData[@"格局要览"] = finalContent;
+                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [格局要览]");
+            } else if ([g_currentPopupTaskType isEqualToString:@"FangFa"]) {
+                g_extractedData[@"解析方法"] = finalContent;
+                LogMessage(EchoLogTypeSuccess, @"[捕获] 成功无痕解析 [解析方法]");
+            }
+            g_currentPopupTaskType = nil; // 重置任务类型
+            return; // 拦截成功
         }
         
         // --- 拦截 七政四余 ---
@@ -816,9 +841,15 @@ currentY += ((coreButtons.count + 1) / 2) * 56;
             break;
         }
         case kButtonTag_NianMing: { [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        case kButtonTag_BiFa: { [self extractSpecificPopupWithSelectorName:@"顯示法訣總覽" taskName:@"毕法要诀" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"毕法要诀"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        case kButtonTag_GeJu: { [self extractSpecificPopupWithSelectorName:@"顯示格局總覽" taskName:@"格局要览" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"格局要览"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        case kButtonTag_FangFa: { [self extractSpecificPopupWithSelectorName:@"顯示方法總覽" taskName:@"解析方法" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"解析方法"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
+                case kButtonTag_BiFa: {
+            g_currentPopupTaskType = @"BiFa"; // << 设置任务类型
+            [self extractSpecificPopupWithSelectorName:@"顯示法訣總覽" taskName:@"毕法要诀" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"毕法要诀"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
+          case kButtonTag_GeJu: {
+            g_currentPopupTaskType = @"GeJu"; // << 设置任务类型
+            [self extractSpecificPopupWithSelectorName:@"顯示格局總覽" taskName:@"格局要览" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"格局要览"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
+        case kButtonTag_FangFa: {
+            g_currentPopupTaskType = @"FangFa"; // << 设置任务类型
+            [self extractSpecificPopupWithSelectorName:@"顯示方法總覽" taskName:@"解析方法" completion:^(NSString *result) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"解析方法"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
         default: break;
     }
 }
@@ -1572,6 +1603,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
         NSLog(@"[Echo解析引擎] v14.1 (ShenSha Final) 已加载。");
     }
 }
+
 
 
 
