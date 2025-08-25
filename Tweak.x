@@ -1818,8 +1818,7 @@ return       @"# v92.0 · 终局版 · 完整Prompt\n"
        @"\n"
        @"**系统已完成最终锁定，版本号v92.0 · 终局版。系统现已进化为具备定量分析潜力的全息裁决引擎，所有分析模块均已升级至最新版本，逻辑闭环，算法严谨。所有分析深度服务于指认的精准，所有逻辑严密服务于断语的肯定与可信度。**\n"
        @"\n"
-       @"**请准备接收包含所有细节的标准化课盘，我将执行全新架构下的专业深度分析！**\n"
-\n";}
+       @"**请准备接收包含所有细节的标准化课盘，我将执行全新架构下的专业深度分析！**\n";}
 
 
 static NSString* generateStructuredReport(NSDictionary *reportData) {
@@ -3504,6 +3503,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
