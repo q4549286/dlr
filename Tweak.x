@@ -1,4 +1,3 @@
-
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
@@ -46,7 +45,6 @@ static const NSInteger kButtonTag_AIPromptToggle    = 996;
 #pragma mark - Global State & Flags
 static UIView *g_mainControlPanelView = nil;
 static UITextView *g_logTextView = nil;
-static UITextField *g_questionInputField = nil; // << 新增: 问题输入框
 static BOOL g_s1_isExtracting = NO;
 static NSString *g_s1_currentTaskType = nil;
 static BOOL g_s1_shouldIncludeXiangJie = NO;
@@ -70,6 +68,8 @@ static NSString *g_lastGeneratedReport = nil;
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES;
 static BOOL g_isExtractingTimeInfo = NO;
+static UITextView *g_questionTextView = nil;
+static BOOL g_isAdvancedSectionExpanded = NO;
 
 
 #define SafeString(str) (str ?: @"")
@@ -362,8 +362,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-
-
 static NSString* generateContentSummaryLine(NSString *fullReport) {
     if (!fullReport || fullReport.length == 0) return @"";
     NSDictionary *keywordMap = @{ 
@@ -394,7 +392,14 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
     NSString *headerPrompt = g_shouldIncludeAIPromptHeader ? getAIPromptHeader() : @"";
     NSString *structuredReport = generateStructuredReport(reportData);
     NSString *summaryLine = generateContentSummaryLine(structuredReport);
-    NSString *footerText = @"\n\n// 请综合以上所有提供的课盘信息，进行全面且深入的分析，并回答以下问题。\n// 问题：";
+    
+    // << 核心优化 >>: 自动从全局 UITextView 获取用户问题
+    NSString *userQuestion = @"";
+    if (g_questionTextView && g_questionTextView.text.length > 0 && ![g_questionTextView.text isEqualToString:@"选填：输入您想问的具体问题"]) {
+        userQuestion = g_questionTextView.text;
+    }
+    NSString *footerText = [NSString stringWithFormat:@"\n\n// 请综合以上所有提供的课盘信息，进行全面且深入的分析，并回答以下问题。\n// 问题：%@", userQuestion];
+
     if (headerPrompt.length > 0) {
         return [NSString stringWithFormat:@"%@%@\n%@%@", headerPrompt, structuredReport, summaryLine, footerText];
     } else {
@@ -444,7 +449,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 // 2. 接口声明、UI微调与核心Hook
 // =========================================================================
 
-@interface UIViewController (EchoAnalysisEngine)
+@interface UIViewController (EchoAnalysisEngine) <UITextViewDelegate>
 - (void)createOrShowMainControlPanel;
 - (void)showProgressHUD:(NSString *)text;
 - (void)updateProgressHUD:(NSString *)text;
@@ -676,6 +681,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     else if (g_isExtractingNianming) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+
         if ([vcToPresent isKindOfClass:[UIAlertController class]]) {
             UIAlertController *alert = (UIAlertController *)vcToPresent;
             UIAlertAction *targetAction = nil;
@@ -714,6 +720,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 if (stackViews.count > 0) {
                     UIStackView *mainStackView = stackViews.firstObject;
                     NSMutableArray<NSString *> *allTextParts = [NSMutableArray array];
+
                     for (UIView *subview in mainStackView.arrangedSubviews) {
                         if ([subview isKindOfClass:[UILabel class]]) {
                             NSString *text = ((UILabel *)subview).text;
@@ -928,53 +935,35 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)createOrShowMainControlPanel {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
     if (g_mainControlPanelView && g_mainControlPanelView.superview) {
-        [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) {
-            [g_mainControlPanelView removeFromSuperview];
-            g_mainControlPanelView = nil;
-            g_logTextView = nil;
-            g_questionInputField = nil;
-        }];
+        [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) { [g_mainControlPanelView removeFromSuperview]; g_mainControlPanelView = nil; g_logTextView = nil; g_questionTextView = nil; }];
         return;
     }
     g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds];
     g_mainControlPanelView.tag = kEchoMainPanelTag;
     g_mainControlPanelView.backgroundColor = [UIColor clearColor];
-    if (@available(iOS 8.0, *)) {
-        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
-        blurView.frame = g_mainControlPanelView.bounds;
-        [g_mainControlPanelView addSubview:blurView];
-    } else { g_mainControlPanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9]; }
-    
+    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
+    blurView.frame = g_mainControlPanelView.bounds;
+    [g_mainControlPanelView addSubview:blurView];
     UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)];
     contentView.clipsToBounds = YES;
     [g_mainControlPanelView addSubview:contentView];
-
+    
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 大六壬推衍 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v16.0" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v18.0" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
-    titleLabel.attributedText = titleString;
-    titleLabel.textAlignment = NSTextAlignmentCenter;
+    titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
     [contentView addSubview:titleLabel];
-
-    CGFloat bottomButtonsHeight = 40;
-    CGFloat logViewHeight = 120;
-    CGFloat questionFieldHeight = 44;
-    CGFloat verticalPadding = 10;
-    CGFloat fixedBottomAreaHeight = bottomButtonsHeight + verticalPadding + logViewHeight + verticalPadding + questionFieldHeight + verticalPadding;
-
-    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 60, contentView.bounds.size.width, contentView.bounds.size.height - 60 - fixedBottomAreaHeight)];
+    
+    CGFloat bottomAreaHeight = 50, logViewHeight = 100, logAndBottomPadding = 10;
+    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 60, contentView.bounds.size.width, contentView.bounds.size.height - logViewHeight - bottomAreaHeight - logAndBottomPadding - 60)];
+    scrollView.tag = 112233;
     [contentView addSubview:scrollView];
     
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; [btn setTitle:title forState:UIControlStateNormal]; [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) { UIImage *icon = [UIImage systemImageNamed:iconName]; [btn setImage:icon forState:UIControlStateNormal];
-             #pragma clang diagnostic push
-             #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8); btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
-             #pragma clang diagnostic pop
-        }
+        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) { UIImage *icon = [UIImage systemImageNamed:iconName]; [btn setImage:icon forState:UIControlStateNormal]; btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8); btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0); }
         btn.tag = tag; btn.backgroundColor = color;
         [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
         [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
@@ -983,11 +972,26 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return btn;
     };
     UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { UILabel *label = [[UILabel alloc] init]; label.text = title; label.font = [UIFont boldSystemFontOfSize:16]; label.textColor = [UIColor lightGrayColor]; return label; };
-    CGFloat currentY = 10; CGFloat padding = 15.0; CGFloat contentWidth = scrollView.bounds.size.width;
+    
+    CGFloat currentY = 10, padding = 15.0, contentWidth = scrollView.bounds.size.width;
+
     UIButton *promptButton = createButton(@"AI Prompt: 开启", @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
     promptButton.selected = YES; promptButton.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 44);
     [scrollView addSubview:promptButton];
-    currentY += 44 + 25;
+    currentY += 44 + 10;
+    
+    g_questionTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, currentY, contentWidth - 2 * padding, 110)];
+    g_questionTextView.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
+    g_questionTextView.layer.cornerRadius = 12;
+    g_questionTextView.textColor = [UIColor lightGrayColor];
+    g_questionTextView.font = [UIFont systemFontOfSize:14];
+    g_questionTextView.textContainerInset = UIEdgeInsetsMake(10, 10, 10, 10);
+    g_questionTextView.text = @"选填：输入您想问的具体问题";
+    g_questionTextView.delegate = (id<UITextViewDelegate>)self;
+    [self addDoneButtonToKeyboardForTextView:g_questionTextView];
+    [scrollView addSubview:g_questionTextView];
+    currentY += 110 + 25;
+
     UILabel *sec1Title = createSectionTitle(@"课盘总览");
     sec1Title.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 22); [scrollView addSubview:sec1Title];
     currentY += 22 + 10;
@@ -997,105 +1001,139 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIButton *deepButton = createButton(@"深度课盘", @"square.stack.3d.up.fill", kButtonTag_DeepDiveReport, ECHO_COLOR_MAIN_BLUE);
     deepButton.frame = CGRectMake(padding * 2 + btnWidth, currentY, btnWidth, 48); [scrollView addSubview:deepButton];
     currentY += 48 + 25;
+
     UILabel *sec2Title = createSectionTitle(@"专项推衍");
     sec2Title.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 22); [scrollView addSubview:sec2Title];
     currentY += 22 + 10;
-    NSArray *coreButtons = @[ 
-        @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)}, 
-        @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)}, 
-        @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)},
-        @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)},
-        @{@"title": @"神煞系统", @"icon": @"shield.lefthalf.filled", @"tag": @(kButtonTag_ShenSha)}
-    ];
+    NSArray *coreButtons = @[ @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)}, @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)}, @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)}, @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)}, @{@"title": @"神煞系统", @"icon": @"shield.lefthalf.filled", @"tag": @(kButtonTag_ShenSha)} ];
     for (int i = 0; i < coreButtons.count; i++) {
-        NSDictionary *config = coreButtons[i];
-        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
+        NSDictionary *config = coreButtons[i]; UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
         btn.frame = CGRectMake(padding + (i % 2) * (btnWidth + padding), currentY + (i / 2) * 56, btnWidth, 46);
         [scrollView addSubview:btn];
     }
-    currentY += ((coreButtons.count + 1) / 2) * 56; 
-    UILabel *sec3Title = createSectionTitle(@"格局资料");
-    sec3Title.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 22); [scrollView addSubview:sec3Title];
+    currentY += ((coreButtons.count + 1) / 2) * 56;
+
+    UIButton *advancedToggleBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    advancedToggleBtn.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 22);
+    [advancedToggleBtn setTitle:@"高级功能 ▼" forState:UIControlStateNormal];
+    advancedToggleBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+    advancedToggleBtn.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+    [advancedToggleBtn setTitleColor:[UIColor lightGrayColor] forState:UIControlStateNormal];
+    advancedToggleBtn.tag = 8888;
+    [advancedToggleBtn addTarget:self action:@selector(handleAdvancedToggle:) forControlEvents:UIControlEventTouchUpInside];
+    [scrollView addSubview:advancedToggleBtn];
     currentY += 22 + 10;
+
+    UIView *advancedContainer = [[UIView alloc] initWithFrame:CGRectMake(0, currentY, contentWidth, 46)];
+    advancedContainer.tag = 8889;
+    advancedContainer.clipsToBounds = YES;
+    advancedContainer.alpha = 0;
+    [scrollView addSubview:advancedContainer];
+    
     CGFloat smallBtnWidth = (contentWidth - 4 * padding) / 3.0;
     NSArray *auxButtons = @[ @{@"title": @"毕法要诀", @"icon": @"book.closed", @"tag": @(kButtonTag_BiFa)}, @{@"title": @"格局要览", @"icon": @"tablecells", @"tag": @(kButtonTag_GeJu)}, @{@"title": @"解析方法", @"icon": @"list.number", @"tag": @(kButtonTag_FangFa)} ];
     for (int i = 0; i < auxButtons.count; i++) {
-        NSDictionary *config = auxButtons[i];
-        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
-        btn.frame = CGRectMake(padding + i * (smallBtnWidth + padding), currentY, smallBtnWidth, 46); [scrollView addSubview:btn];
+        NSDictionary *config = auxButtons[i]; UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
+        btn.frame = CGRectMake(padding + i * (smallBtnWidth + padding), 0, smallBtnWidth, 46);
+        [advancedContainer addSubview:btn];
     }
-    currentY += 46 + padding;
+    
     scrollView.contentSize = CGSizeMake(contentWidth, currentY);
-
-    // 问题输入框
-    g_questionInputField = [[UITextField alloc] initWithFrame:CGRectMake(0, contentView.bounds.size.height - fixedBottomAreaHeight + verticalPadding, contentView.bounds.size.width, questionFieldHeight)];
-    g_questionInputField.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.8];
-    g_questionInputField.textColor = [UIColor whiteColor];
-    g_questionInputField.layer.cornerRadius = 8;
-    g_questionInputField.font = [UIFont systemFontOfSize:14];
-    g_questionInputField.returnKeyType = UIReturnKeyDone;
-    NSAttributedString *placeholder = [[NSAttributedString alloc] initWithString:@"在此输入具体问题，将自动附加到报告末尾" attributes:@{NSForegroundColorAttributeName: [UIColor colorWithWhite:0.6 alpha:1.0]}];
-    g_questionInputField.attributedPlaceholder = placeholder;
-    g_questionInputField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 15, 0)];
-    g_questionInputField.leftViewMode = UITextFieldViewModeAlways;
-    [contentView addSubview:g_questionInputField];
-
-    // 日志区
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, contentView.bounds.size.height - fixedBottomAreaHeight + questionFieldHeight + verticalPadding * 2, contentView.bounds.size.width, logViewHeight)];
-    g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
-    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
-    g_logTextView.editable = NO;
-    g_logTextView.layer.cornerRadius = 8;
+    
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, contentView.bounds.size.height - logViewHeight - bottomAreaHeight - logAndBottomPadding, contentView.bounds.size.width, logViewHeight)];
+    g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12]; g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8;
     NSMutableAttributedString *initLog = [[NSMutableAttributedString alloc] initWithString:@"[推衍核心]：就绪。\n"];
     [initLog addAttribute:NSForegroundColorAttributeName value:[UIColor whiteColor] range:NSMakeRange(0, initLog.length)];
     [initLog addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, initLog.length)];
-    g_logTextView.attributedText = initLog;
-    [contentView addSubview:g_logTextView];
-
-    // 底部操作按钮
+    g_logTextView.attributedText = initLog; [contentView addSubview:g_logTextView];
+    
     CGFloat bottomBtnWidth = (contentView.bounds.size.width - 3 * padding) / 2;
     UIButton *closeButton = createButton(@"关闭", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
-    closeButton.frame = CGRectMake(padding, contentView.bounds.size.height - bottomButtonsHeight - verticalPadding, bottomBtnWidth, bottomButtonsHeight);
-    [contentView addSubview:closeButton];
+    closeButton.frame = CGRectMake(padding, contentView.bounds.size.height - bottomAreaHeight, bottomBtnWidth, 40); [contentView addSubview:closeButton];
     UIButton *sendLastReportButton = createButton(@"发送课盘", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
-    sendLastReportButton.frame = CGRectMake(padding * 2 + bottomBtnWidth, contentView.bounds.size.height - bottomButtonsHeight - verticalPadding, bottomBtnWidth, bottomButtonsHeight);
-    [contentView addSubview:sendLastReportButton];
-    
-    g_mainControlPanelView.alpha = 0;
-    [keyWindow addSubview:g_mainControlPanelView];
+    sendLastReportButton.frame = CGRectMake(padding * 2 + bottomBtnWidth, contentView.bounds.size.height - bottomAreaHeight, bottomBtnWidth, 40); [contentView addSubview:sendLastReportButton];
+
+    g_mainControlPanelView.alpha = 0; [keyWindow addSubview:g_mainControlPanelView];
     [UIView animateWithDuration:0.4 animations:^{ g_mainControlPanelView.alpha = 1.0; }];
 }
+
+%new
+- (void)handleAdvancedToggle:(UIButton *)sender {
+    g_isAdvancedSectionExpanded = !g_isAdvancedSectionExpanded;
+    
+    UIScrollView *scrollView = (UIScrollView *)[sender.superview viewWithTag:112233];
+    UIView *container = [sender.superview viewWithTag:8889];
+    if (!scrollView || !container) return;
+    
+    CGFloat containerHeight = 46.0;
+    
+    [UIView animateWithDuration:0.3 animations:^{
+        if (g_isAdvancedSectionExpanded) {
+            [sender setTitle:@"高级功能 ▲" forState:UIControlStateNormal];
+            container.alpha = 1.0;
+            CGRect frame = container.frame;
+            frame.size.height = containerHeight;
+            container.frame = frame;
+            scrollView.contentSize = CGSizeMake(scrollView.contentSize.width, scrollView.contentSize.height + containerHeight + 10);
+        } else {
+            [sender setTitle:@"高级功能 ▼" forState:UIControlStateNormal];
+            container.alpha = 0.0;
+            CGRect frame = container.frame;
+            frame.size.height = 0;
+            container.frame = frame;
+            scrollView.contentSize = CGSizeMake(scrollView.contentSize.width, scrollView.contentSize.height - containerHeight - 10);
+        }
+    }];
+}
+
+%new
+- (void)textViewDidBeginEditing:(UITextView *)textView {
+    if ([textView.text isEqualToString:@"选填：输入您想问的具体问题"]) {
+        textView.text = @"";
+        textView.textColor = [UIColor whiteColor];
+    }
+}
+
+%new
+- (void)textViewDidEndEditing:(UITextView *)textView {
+    if ([textView.text isEqualToString:@""]) {
+        textView.text = @"选填：输入您想问的具体问题";
+        textView.textColor = [UIColor lightGrayColor];
+    }
+}
+
+%new
+- (void)addDoneButtonToKeyboardForTextView:(UITextView *)textView {
+    UIToolbar* keyboardToolbar = [[UIToolbar alloc] init];
+    [keyboardToolbar sizeToFit];
+    UIBarButtonItem *flexBarButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil];
+    UIBarButtonItem *doneBarButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(doneButtonTapped)];
+    keyboardToolbar.items = @[flexBarButton, doneBarButton];
+    textView.inputAccessoryView = keyboardToolbar;
+}
+
+%new
+- (void)doneButtonTapped {
+    [g_questionTextView resignFirstResponder];
+}
+
 %new
 - (void)buttonTouchDown:(UIButton *)sender { [UIView animateWithDuration:0.1 animations:^{ sender.alpha = 0.7; }]; }
 %new
 - (void)buttonTouchUp:(UIButton *)sender { [UIView animateWithDuration:0.1 animations:^{ sender.alpha = 1.0; }]; }
 %new
 - (void)handleMasterButtonTap:(UIButton *)sender {
-    if (!sender) { if (g_mainControlPanelView) { [self createOrShowMainControlPanel]; } return; }
+    if (!sender) { if (g_mainControlPanelView) { [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) { [g_mainControlPanelView removeFromSuperview]; g_mainControlPanelView = nil; g_logTextView = nil; g_questionTextView = nil; }]; } return; }
     if (g_s1_isExtracting || g_s2_isExtractingKeChuanDetail || g_isExtractingNianming || g_extractedData) { if (sender.tag != kButtonTag_ClosePanel) { LogMessage(EchoLogError, @"[错误] 当前有推衍任务正在进行，请稍候。"); return; } }
     __weak typeof(self) weakSelf = self;
     switch (sender.tag) {
         case kButtonTag_AIPromptToggle: { sender.selected = !sender.selected; g_shouldIncludeAIPromptHeader = sender.selected; NSString *status = g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"; [sender setTitle:[NSString stringWithFormat:@"AI Prompt: %@", status] forState:UIControlStateNormal]; sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; LogMessage(EchoLogTypeInfo, @"[设置] AI Prompt 已 %@。", status); break; }
         case kButtonTag_ClosePanel: [self handleMasterButtonTap:nil]; break;
-        case kButtonTag_SendLastReportToAI: {
-            NSString *lastReport = g_lastGeneratedReport;
-            if (lastReport && lastReport.length > 0) {
-                NSString *reportToSend = [lastReport copy];
-                NSString *userQuestion = g_questionInputField.text ?: @"";
-                if (userQuestion.length > 0 && ![reportToSend hasSuffix:userQuestion]) {
-                    reportToSend = [reportToSend stringByAppendingString:userQuestion];
-                }
-                [self presentAIActionSheetWithReport:reportToSend];
-            } else {
-                LogMessage(EchoLogTypeWarning, @"课盘缓存为空，请先推衍。");
-                [self showEchoNotificationWithTitle:@"操作无效" message:@"尚未生成任何课盘。"];
-            }
-            break;
-        }
+        case kButtonTag_SendLastReportToAI: { NSString *lastReport = g_lastGeneratedReport; if (lastReport && lastReport.length > 0) { [self presentAIActionSheetWithReport:lastReport]; } else { LogMessage(EchoLogTypeWarning, @"课盘缓存为空，请先推衍。"); [self showEchoNotificationWithTitle:@"操作无效" message:@"尚未生成任何课盘。"]; } break; }
         case kButtonTag_StandardReport: [self executeSimpleExtraction]; break;
         case kButtonTag_DeepDiveReport: [self executeCompositeExtraction]; break;
-        case kButtonTag_KeTi: { [self startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课体范式_详"] = result; NSString *finalReport = formatFinalReport(reportData); NSString *reportToSend = [finalReport copy]; NSString *userQuestion = g_questionInputField.text ?: @""; if (userQuestion.length > 0) { reportToSend = [reportToSend stringByAppendingString:userQuestion]; } g_lastGeneratedReport = [reportToSend copy]; [strongSelf presentAIActionSheetWithReport:reportToSend]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
-        case kButtonTag_JiuZongMen: { [self startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"九宗门_详"] = result; NSString *finalReport = formatFinalReport(reportData); NSString *reportToSend = [finalReport copy]; NSString *userQuestion = g_questionInputField.text ?: @""; if (userQuestion.length > 0) { reportToSend = [reportToSend stringByAppendingString:userQuestion]; } g_lastGeneratedReport = [reportToSend copy]; [strongSelf presentAIActionSheetWithReport:reportToSend]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
+        case kButtonTag_KeTi: { [self startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课体范式_详"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
+        case kButtonTag_JiuZongMen: { [self startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"九宗门_详"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
         case kButtonTag_KeChuan: [self startExtraction_Truth_S2_WithCompletion:nil]; break;
         case kButtonTag_ShenSha: {
             [self showProgressHUD:@"正在推衍神煞系统..."];
@@ -1106,21 +1144,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                     reportData[@"神煞详情"] = shenShaResult;
                     NSString *finalReport = formatFinalReport(reportData);
-                    NSString *reportToSend = [finalReport copy]; NSString *userQuestion = g_questionInputField.text ?: @""; if (userQuestion.length > 0) { reportToSend = [reportToSend stringByAppendingString:userQuestion]; } g_lastGeneratedReport = [reportToSend copy];
-                    [strongSelf presentAIActionSheetWithReport:reportToSend];
+                    g_lastGeneratedReport = [finalReport copy];
+                    [strongSelf presentAIActionSheetWithReport:finalReport];
                 }
             }];
             break;
         }
-        case kButtonTag_NianMing: { [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); NSString *reportToSend = [finalReport copy]; NSString *userQuestion = g_questionInputField.text ?: @""; if (userQuestion.length > 0) { reportToSend = [reportToSend stringByAppendingString:userQuestion]; } g_lastGeneratedReport = [reportToSend copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:reportToSend]; }]; break; }
+        case kButtonTag_NianMing: { [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
         case kButtonTag_BiFa: {
             [self showProgressHUD:@"正在参详: 毕法要诀"];
             [self extractBiFa_NoPopup_WithCompletion:^(NSString *result) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"毕法要诀"] = result;
-                NSString *finalReport = formatFinalReport(reportData);
-                NSString *reportToSend = [finalReport copy]; NSString *userQuestion = g_questionInputField.text ?: @""; if (userQuestion.length > 0) { reportToSend = [reportToSend stringByAppendingString:userQuestion]; } g_lastGeneratedReport = [reportToSend copy];
-                [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:reportToSend];
+                NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
+                [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
         }
@@ -1129,9 +1166,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [self extractGeJu_NoPopup_WithCompletion:^(NSString *result) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"格局要览"] = result;
-                NSString *finalReport = formatFinalReport(reportData);
-                NSString *reportToSend = [finalReport copy]; NSString *userQuestion = g_questionInputField.text ?: @""; if (userQuestion.length > 0) { reportToSend = [reportToSend stringByAppendingString:userQuestion]; } g_lastGeneratedReport = [reportToSend copy];
-                [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:reportToSend];
+                NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
+                [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
         }
@@ -1140,9 +1176,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [self extractFangFa_NoPopup_WithCompletion:^(NSString *result) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"解析方法"] = result;
-                NSString *finalReport = formatFinalReport(reportData);
-                NSString *reportToSend = [finalReport copy]; NSString *userQuestion = g_questionInputField.text ?: @""; if (userQuestion.length > 0) { reportToSend = [reportToSend stringByAppendingString:userQuestion]; } g_lastGeneratedReport = [reportToSend copy];
-                [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:reportToSend];
+                NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
+                [strongSelf hideProgressHUD]; [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
         }
@@ -1454,9 +1489,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             __strong typeof(weakSelf) strongSelf5 = weakSelf; if (!strongSelf5) return;
                             LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成标准课盘...");
                             NSString *finalReport = formatFinalReport(reportData);
-                            NSString *reportToSend = [finalReport copy]; NSString *userQuestion = g_questionInputField.text ?: @""; if (userQuestion.length > 0) { reportToSend = [reportToSend stringByAppendingString:userQuestion]; } g_lastGeneratedReport = [reportToSend copy];
+                            g_lastGeneratedReport = [finalReport copy];
                             [strongSelf5 hideProgressHUD];
-                            [strongSelf5 presentAIActionSheetWithReport:reportToSend];
+                            [strongSelf5 presentAIActionSheetWithReport:finalReport];
                             LogMessage(EchoLogTypeTask, @"[完成] “标准课盘”推衍任务已完成。");
                             g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil;
                             LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
@@ -1505,9 +1540,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                                 __strong typeof(weakSelf) strongSelf6 = weakSelf; if (!strongSelf6) return;
                                 LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成深度课盘...");
                                 NSString *finalReport = formatFinalReport(reportData);
-                                NSString *reportToSend = [finalReport copy]; NSString *userQuestion = g_questionInputField.text ?: @""; if (userQuestion.length > 0) { reportToSend = [reportToSend stringByAppendingString:userQuestion]; } g_lastGeneratedReport = [reportToSend copy];
+                                g_lastGeneratedReport = [finalReport copy];
                                 [strongSelf6 hideProgressHUD];
-                                [strongSelf6 presentAIActionSheetWithReport:reportToSend];
+                                [strongSelf6 presentAIActionSheetWithReport:finalReport];
                                 LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部完成。");
                                 g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil; g_s2_finalResultFromKeChuan = nil;
                                 LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
@@ -1576,9 +1611,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 if (!g_s2_keChuan_completion_handler) {
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
-                    NSString *finalReport = formatFinalReport(reportData);
-                    NSString *reportToSend = [finalReport copy]; NSString *userQuestion = g_questionInputField.text ?: @""; if (userQuestion.length > 0) { reportToSend = [reportToSend stringByAppendingString:userQuestion]; } g_lastGeneratedReport = [reportToSend copy];
-                    [self presentAIActionSheetWithReport:reportToSend];
+                    NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
+                    [self presentAIActionSheetWithReport:finalReport];
                 }
             } else { g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]"; LogMessage(EchoLogError, @"%@", g_s2_finalResultFromKeChuan); }
         }
@@ -1755,7 +1789,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo推衍课盘] v16.0 已加载。");
+        NSLog(@"[Echo推衍课盘] v18.0 已加载。");
     }
 }
 
