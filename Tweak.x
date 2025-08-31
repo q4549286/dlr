@@ -840,7 +840,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             controlButton.tag = kEchoControlButtonTag;
             [controlButton setTitle:@"推衍课盘" forState:UIControlStateNormal];
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
+            controlButton.backgroundColor = ECHO_COLOR_PRIMARY;
             [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             controlButton.layer.cornerRadius = 18;
             controlButton.layer.shadowColor = [UIColor blackColor].CGColor;
@@ -1014,7 +1014,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
         UIImage *icon = [UIImage systemImageNamed:iconName];
         [btn setImage:icon forState:UIControlStateNormal];
-        btn.imageEdgeInsets = UIEdgeInsetsMake(0, -4, 0, 0);
+        // 删除这一行，或者用这个替代
+btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+btn.contentEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
+
     }
     btn.titleLabel.font = ECHO_FONT_BUTTON;
     [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -1040,8 +1043,11 @@ NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] init
 [titleString addAttributes:@{NSFontAttributeName: ECHO_FONT_TITLE, NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
 NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v28.3" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
 [titleString appendAttributedString:versionString];
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    [contentView addSubview:titleLabel];
+UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
+titleLabel.attributedText = titleString;
+titleLabel.textAlignment = NSTextAlignmentCenter;
+[contentView addSubview:titleLabel];
+
     currentY += 30 + 20;
 
     UIButton *promptButton = createButton(@"AI Prompt: 开启", @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
@@ -1997,6 +2003,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
