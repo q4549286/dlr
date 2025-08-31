@@ -31,20 +31,41 @@ static const NSInteger kButtonTag_ClosePanel        = 998;
 static const NSInteger kButtonTag_SendLastReportToAI = 997;
 static const NSInteger kButtonTag_AIPromptToggle    = 996;
 
-// Colors
-#define ECHO_COLOR_MAIN_BLUE        [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
-#define ECHO_COLOR_MAIN_TEAL        [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
-#define ECHO_COLOR_AUX_GREY         [UIColor colorWithWhite:0.3 alpha:1.0]
-#define ECHO_COLOR_ACTION_CLOSE     [UIColor colorWithWhite:0.25 alpha:1.0]
-#define ECHO_COLOR_ACTION_AI        [UIColor colorWithRed:0.22 green:0.59 blue:0.85 alpha:1.0]
-#define ECHO_COLOR_SUCCESS          [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
-#define ECHO_COLOR_PROMPT_ON        [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0]
+// 现代化颜色系统
+#define ECHO_COLOR_PRIMARY          [UIColor colorWithRed:0.0 green:0.48 blue:0.98 alpha:1.0]
+#define ECHO_COLOR_SECONDARY        [UIColor colorWithRed:0.20 green:0.78 blue:0.35 alpha:1.0]
+#define ECHO_COLOR_ACCENT           [UIColor colorWithRed:1.0 green:0.58 blue:0.0 alpha:1.0]
+#define ECHO_COLOR_SURFACE          [UIColor colorWithRed:0.17 green:0.17 blue:0.18 alpha:1.0]
+#define ECHO_COLOR_SURFACE_VARIANT  [UIColor colorWithRed:0.22 green:0.22 blue:0.23 alpha:1.0]
+
+// 保持原有的功能色
+#define ECHO_COLOR_SUCCESS          [UIColor colorWithRed:0.20 green:0.78 blue:0.35 alpha:1.0]
+#define ECHO_COLOR_ACTION_AI        [UIColor colorWithRed:0.0 green:0.48 blue:0.98 alpha:1.0]
+#define ECHO_COLOR_ACTION_CLOSE     [UIColor colorWithRed:0.25 green:0.25 blue:0.25 alpha:1.0]
+#define ECHO_COLOR_PROMPT_ON        [UIColor colorWithRed:0.20 green:0.78 blue:0.35 alpha:1.0]
 #define ECHO_COLOR_LOG_TASK         [UIColor whiteColor]
 #define ECHO_COLOR_LOG_INFO         [UIColor lightGrayColor]
-#define ECHO_COLOR_LOG_WARN         [UIColor orangeColor]
-#define ECHO_COLOR_LOG_ERROR        [UIColor redColor]
-#define ECHO_COLOR_BACKGROUND_DARK  [UIColor colorWithWhite:0.15 alpha:1.0]
-#define ECHO_COLOR_CARD_BG          [UIColor colorWithWhite:0.2 alpha:1.0]
+#define ECHO_COLOR_LOG_WARN         [UIColor colorWithRed:1.0 green:0.58 blue:0.0 alpha:1.0]
+#define ECHO_COLOR_LOG_ERROR        [UIColor colorWithRed:0.96 green:0.26 blue:0.21 alpha:1.0]
+#define ECHO_COLOR_BACKGROUND_DARK  [UIColor colorWithRed:0.11 green:0.11 blue:0.12 alpha:1.0]
+#define ECHO_COLOR_CARD_BG          ECHO_COLOR_SURFACE
+
+// 添加新的常量
+#define ECHO_SPACING_SMALL          8.0
+#define ECHO_SPACING_MEDIUM         16.0
+#define ECHO_SPACING_LARGE          24.0
+#define ECHO_CORNER_RADIUS_SMALL    8.0
+#define ECHO_CORNER_RADIUS_MEDIUM   12.0
+#define ECHO_CORNER_RADIUS_LARGE    16.0
+#define ECHO_SHADOW_OPACITY         0.1
+#define ECHO_SHADOW_RADIUS          8.0
+#define ECHO_SHADOW_OFFSET          CGSizeMake(0, 2)
+
+// 字体常量
+#define ECHO_FONT_TITLE             [UIFont systemFontOfSize:22 weight:UIFontWeightBold]
+#define ECHO_FONT_BUTTON            [UIFont systemFontOfSize:15 weight:UIFontWeightMedium]
+#define ECHO_FONT_SECTION           [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold]
+
 
 
 #pragma mark - Global State & Flags
@@ -967,43 +988,58 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat padding = 15.0;
     
     // --- Reusable Element Creators ---
-    UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-        btn.backgroundColor = color;
-        btn.tag = tag;
-        [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
-        [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
-        [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
-        btn.layer.cornerRadius = 12;
+   UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+    btn.backgroundColor = color;
+    btn.tag = tag;
+    
+    // 添加现代化样式
+    btn.layer.cornerRadius = ECHO_CORNER_RADIUS_MEDIUM;
+    btn.layer.shadowColor = [UIColor blackColor].CGColor;
+    btn.layer.shadowOffset = ECHO_SHADOW_OFFSET;
+    btn.layer.shadowOpacity = ECHO_SHADOW_OPACITY;
+    btn.layer.shadowRadius = ECHO_SHADOW_RADIUS;
+    
+    // 为辅助按钮添加边框
+    if ([color isEqual:ECHO_COLOR_SURFACE_VARIANT] || color == ECHO_COLOR_SURFACE_VARIANT) {
+        btn.layer.borderWidth = 0.5;
+        btn.layer.borderColor = [UIColor colorWithWhite:0.4 alpha:1.0].CGColor;
+    }
+    
+    [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+    [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
+    [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
 
-        [btn setTitle:[NSString stringWithFormat:@" %@", title] forState:UIControlStateNormal];
-        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
-            [btn setImage:[UIImage systemImageNamed:iconName] forState:UIControlStateNormal];
-        }
-        btn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
-        [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        btn.tintColor = [UIColor whiteColor];
-        
-        return btn;
-    };
-    UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { 
-        UILabel *label = [[UILabel alloc] init];
-        label.text = title; 
-        label.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold]; 
-        label.textColor = [UIColor lightGrayColor]; 
-        return label; 
-    };
+    [btn setTitle:[NSString stringWithFormat:@" %@", title] forState:UIControlStateNormal];
+    if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
+        UIImage *icon = [UIImage systemImageNamed:iconName];
+        [btn setImage:icon forState:UIControlStateNormal];
+        btn.imageEdgeInsets = UIEdgeInsetsMake(0, -4, 0, 0);
+    }
+    btn.titleLabel.font = ECHO_FONT_BUTTON;
+    [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    btn.tintColor = [UIColor whiteColor];
+    
+    return btn;
+};
+
+UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { 
+    UILabel *label = [[UILabel alloc] init];
+    label.text = title; 
+    label.font = ECHO_FONT_SECTION; 
+    label.textColor = [UIColor lightGrayColor]; 
+    return label; 
+};
+
     
     // --- Layout Starts ---
     CGFloat currentY = 15.0;
     
     // --- Fixed Header ---
-    NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 大六壬推衍 "];
-    [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v28.3" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
-    [titleString appendAttributedString:versionString];
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
-    titleLabel.attributedText = titleString;
+NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 大六壬推衍 "];
+[titleString addAttributes:@{NSFontAttributeName: ECHO_FONT_TITLE, NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
+NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v28.3" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+[titleString appendAttributedString:versionString];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [contentView addSubview:titleLabel];
     currentY += 30 + 20;
@@ -1013,17 +1049,19 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [contentView addSubview:promptButton];
     currentY += 44 + 10;
     
-    UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
-    textViewContainer.backgroundColor = ECHO_COLOR_CARD_BG;
-    textViewContainer.layer.cornerRadius = 12;
-    [contentView addSubview:textViewContainer];
-    
-    g_questionTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, 0, textViewContainer.bounds.size.width - 2*padding - 40, 110)];
-    g_questionTextView.backgroundColor = [UIColor clearColor];
-    g_questionTextView.textColor = [UIColor lightGrayColor];
-    g_questionTextView.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
-    g_questionTextView.textContainerInset = UIEdgeInsetsMake(10, 0, 10, 0);
-    g_questionTextView.text = @"选填：输入您想问的具体问题";
+UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
+textViewContainer.backgroundColor = ECHO_COLOR_SURFACE;
+textViewContainer.layer.cornerRadius = ECHO_CORNER_RADIUS_MEDIUM;
+textViewContainer.layer.borderWidth = 1.0;
+textViewContainer.layer.borderColor = [UIColor colorWithWhite:0.3 alpha:1.0].CGColor;
+[contentView addSubview:textViewContainer];
+
+g_questionTextView = [[UITextView alloc] initWithFrame:CGRectMake(ECHO_SPACING_MEDIUM, 0, textViewContainer.bounds.size.width - 2*ECHO_SPACING_MEDIUM - 40, 110)];
+g_questionTextView.backgroundColor = [UIColor clearColor];
+g_questionTextView.textColor = [UIColor lightGrayColor];
+g_questionTextView.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
+g_questionTextView.textContainerInset = UIEdgeInsetsMake(ECHO_SPACING_MEDIUM, 0, ECHO_SPACING_MEDIUM, 0);
+    g_questionTextView.text = @"选填:输入您想问的具体问题,越具体越好";
     g_questionTextView.delegate = (id<UITextViewDelegate>)self;
     g_questionTextView.returnKeyType = UIReturnKeyDone;
     [textViewContainer addSubview:g_questionTextView];
@@ -1051,11 +1089,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     // << FIX: Use a specific width for buttons inside cards >>
     CGFloat cardBtnWidth = (card1.bounds.size.width - 3*padding) / 2.0;
-    UIButton *stdButton = createButton(@"标准课盘", @"doc.text", kButtonTag_StandardReport, ECHO_COLOR_MAIN_TEAL);
-    stdButton.frame = CGRectMake(padding, card1InnerY, cardBtnWidth, 48);
+UIButton *stdButton = createButton(@"标准课盘", @"doc.text", kButtonTag_StandardReport, ECHO_COLOR_PRIMARY);
+stdButton.frame = CGRectMake(padding, card1InnerY, cardBtnWidth, 48);
     [card1 addSubview:stdButton];
-    UIButton *deepButton = createButton(@"深度课盘", @"square.stack.3d.up.fill", kButtonTag_DeepDiveReport, ECHO_COLOR_MAIN_BLUE);
-    deepButton.frame = CGRectMake(padding + cardBtnWidth + padding, card1InnerY, cardBtnWidth, 48);
+UIButton *deepButton = createButton(@"深度课盘", @"square.stack.3d.up.fill", kButtonTag_DeepDiveReport, ECHO_COLOR_SECONDARY);
+deepButton.frame = CGRectMake(padding + cardBtnWidth + padding, card1InnerY, cardBtnWidth, 48);
     [card1 addSubview:deepButton];
     card1InnerY += 48 + 15;
     card1.frame = CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, card1InnerY);
@@ -1084,7 +1122,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     ];
     for (int i = 0; i < allToolButtons.count; i++) {
         NSDictionary *config = allToolButtons[i];
-        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
+        UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_SURFACE_VARIANT);
         btn.frame = CGRectMake(padding + (i % 2) * (cardBtnWidth + padding), card2InnerY + (i / 2) * 56, cardBtnWidth, 46);
         [card2 addSubview:btn];
     }
@@ -1102,11 +1140,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat logViewHeight = bottomButtonsY - logViewY - bottomAreaPadding;
 
     g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, logViewY, contentView.bounds.size.width - 2*padding, logViewHeight)];
-    g_logTextView.backgroundColor = ECHO_COLOR_CARD_BG;
-    g_logTextView.layer.cornerRadius = 12;
-    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
-    g_logTextView.editable = NO;
-    g_logTextView.textContainerInset = UIEdgeInsetsMake(10, 10, 10, 10);
+g_logTextView.backgroundColor = ECHO_COLOR_SURFACE;
+g_logTextView.layer.cornerRadius = ECHO_CORNER_RADIUS_MEDIUM;
+g_logTextView.layer.borderWidth = 1.0;
+g_logTextView.layer.borderColor = [UIColor colorWithWhite:0.25 alpha:1.0].CGColor;
+g_logTextView.font = [UIFont fontWithName:@"SF Mono" size:11] ?: [UIFont systemFontOfSize:11];
+g_logTextView.textContainerInset = UIEdgeInsetsMake(ECHO_SPACING_MEDIUM, ECHO_SPACING_MEDIUM, ECHO_SPACING_MEDIUM, ECHO_SPACING_MEDIUM);
     NSMutableAttributedString *initLog = [[NSMutableAttributedString alloc] initWithString:@"[推衍核心]：就绪。\n"];
     [initLog addAttribute:NSForegroundColorAttributeName value:[UIColor whiteColor] range:NSMakeRange(0, initLog.length)];
     [initLog addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, initLog.length)];
@@ -1123,13 +1162,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [contentView addSubview:sendLastReportButton];
 
     // --- Finalize Panel Animation ---
-    g_mainControlPanelView.alpha = 0;
-    g_mainControlPanelView.transform = CGAffineTransformMakeScale(1.05, 1.05);
-    [keyWindow addSubview:g_mainControlPanelView];
-    [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.2 options:UIViewAnimationOptionCurveEaseInOut animations:^{
-        g_mainControlPanelView.alpha = 1.0;
-        g_mainControlPanelView.transform = CGAffineTransformIdentity;
-    } completion:nil];
+g_mainControlPanelView.alpha = 0;
+g_mainControlPanelView.transform = CGAffineTransformMakeScale(0.9, 0.9);
+[keyWindow addSubview:g_mainControlPanelView];
+[UIView animateWithDuration:0.6 delay:0 usingSpringWithDamping:0.75 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
+    g_mainControlPanelView.alpha = 1.0;
+    g_mainControlPanelView.transform = CGAffineTransformIdentity;
+} completion:nil];
 }
 
 %new
@@ -1169,18 +1208,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 %new
 - (void)buttonTouchDown:(UIButton *)sender { 
-    [UIView animateWithDuration:0.15 animations:^{
-        sender.transform = CGAffineTransformMakeScale(0.95, 0.95);
+    [UIView animateWithDuration:0.1 delay:0 usingSpringWithDamping:1.0 initialSpringVelocity:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        sender.transform = CGAffineTransformMakeScale(0.96, 0.96);
         sender.alpha = 0.8;
-    }];
+    } completion:nil];
 }
+
 %new
 - (void)buttonTouchUp:(UIButton *)sender { 
-    [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.5 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+    [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.6 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:^{
         sender.transform = CGAffineTransformIdentity;
         sender.alpha = 1.0;
     } completion:nil];
 }
+
 
 %new
 - (void)setInteractionBlocked:(BOOL)blocked {
@@ -1239,7 +1280,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [g_questionTextView resignFirstResponder];
             break;
         }
-        case kButtonTag_AIPromptToggle: { sender.selected = !sender.selected; g_shouldIncludeAIPromptHeader = sender.selected; NSString *status = g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"; NSString *title = [NSString stringWithFormat:@"AI Prompt: %@", status]; [sender setAttributedTitle:nil forState:UIControlStateNormal]; [sender setTitle:title forState:UIControlStateNormal]; sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; LogMessage(EchoLogTypeInfo, @"[设置] AI Prompt 已 %@。", status); break; }
+        case kButtonTag_AIPromptToggle: { sender.selected = !sender.selected; g_shouldIncludeAIPromptHeader = sender.selected; NSString *status = g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"; NSString *title = [NSString stringWithFormat:@"AI Prompt: %@", status]; [sender setAttributedTitle:nil forState:UIControlStateNormal]; [sender setTitle:title forState:UIControlStateNormal]; sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SURFACE_VARIANT; LogMessage(EchoLogTypeInfo, @"[设置] AI Prompt 已 %@。", status); break; }
         case kButtonTag_ClosePanel: [self createOrShowMainControlPanel]; break;
         case kButtonTag_SendLastReportToAI: { NSString *lastReport = g_lastGeneratedReport; if (lastReport && lastReport.length > 0) { [self presentAIActionSheetWithReport:lastReport]; } else { LogMessage(EchoLogTypeWarning, @"课盘缓存为空，请先推衍。"); [self showEchoNotificationWithTitle:@"操作无效" message:@"尚未生成任何课盘。"]; } break; }
         case kButtonTag_StandardReport: [self executeSimpleExtraction]; break;
@@ -1395,9 +1436,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (@available(iOS 11.0, *)) { topPadding = keyWindow.safeAreaInsets.top; }
     topPadding = topPadding > 0 ? topPadding : 20;
     CGFloat bannerWidth = keyWindow.bounds.size.width - 32;
-    UIView *bannerView = [[UIView alloc] initWithFrame:CGRectMake(16, -100, bannerWidth, 60)];
-    bannerView.layer.cornerRadius = 12;
-    bannerView.clipsToBounds = YES;
+UIView *bannerView = [[UIView alloc] initWithFrame:CGRectMake(16, -100, bannerWidth, 60)];
+bannerView.layer.cornerRadius = ECHO_CORNER_RADIUS_LARGE;
+bannerView.clipsToBounds = NO;  // 改为 NO 以显示阴影
+
+// 添加阴影效果
+bannerView.layer.shadowColor = [UIColor blackColor].CGColor;
+bannerView.layer.shadowOffset = CGSizeMake(0, 4);
+bannerView.layer.shadowOpacity = 0.2;
+bannerView.layer.shadowRadius = 12;
+
+// 添加微妙的边框
+bannerView.layer.borderWidth = 0.5;
+bannerView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.1].CGColor;
+
     UIVisualEffectView *blurEffectView = nil;
     if (@available(iOS 8.0, *)) {
         blurEffectView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleProminent]];
@@ -1945,6 +1997,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
