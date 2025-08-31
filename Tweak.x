@@ -1016,8 +1016,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [btn setImage:icon forState:UIControlStateNormal];
         // 删除这一行，或者用这个替代
 btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+// 删除这行，或者用下面的代码替换
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 btn.contentEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
-
+#pragma clang diagnostic pop
     }
     btn.titleLabel.font = ECHO_FONT_BUTTON;
     [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -2003,6 +2006,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
