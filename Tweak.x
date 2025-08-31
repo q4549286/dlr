@@ -1122,8 +1122,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_logTextView.backgroundColor = ECHO_COLOR_BACKGROUND_DARK;
     g_logTextView.layer.cornerRadius = 12; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
     g_logTextView.editable = NO; g_logTextView.textContainerInset = UIEdgeInsetsMake(10, 10, 10, 10);
-    g_logTextView.attributedText = initLog;
-    [contentView addSubview:g_logTextView];
+// << FIX: Add the missing definition for initLog >>
+NSMutableAttributedString *initLog = [[NSMutableAttributedString alloc] initWithString:@"[推衍核心]：就绪。\n"];
+[initLog addAttribute:NSForegroundColorAttributeName value:[UIColor whiteColor] range:NSMakeRange(0, initLog.length)];
+[initLog addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, initLog.length)];
+
+g_logTextView.attributedText = initLog;
+[contentView addSubview:g_logTextView];
     
     CGFloat bottomBtnWidth = (contentInnerWidth - padding) / 2.0;
     UIButton *closeButton = createButton(@"关闭", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
@@ -1958,6 +1963,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
