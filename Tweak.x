@@ -1078,7 +1078,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     card2InnerY += 22 + 15;
     
     NSArray *allToolButtons = @[
-        @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)},
+        @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @()},
         @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
         @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)},
         @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)},
@@ -1249,8 +1249,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         case kButtonTag_StandardReport: [self executeSimpleExtraction]; break;
         case kButtonTag_DeepDiveReport: [self executeCompositeExtraction]; break;
         // ... (The rest of the cases for specific extractions)
-        case kButtonTag_KeTi: { [self setInteractionBlocked:YES]; [self startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课体范式_详"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
-        case kButtonTag_JiuZongMen: { [self setInteractionBlocked:YES]; [self startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"九宗门_详"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
+        case kButtonTag_KeTi: { [self setInteractionBlocked:YES]; [self startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课体范式_详"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"]; [strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
+        case kButtonTag_JiuZongMen: { [self setInteractionBlocked:YES]; [self startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"九宗门_详"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"]; [strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
         case kButtonTag_KeChuan: [self startExtraction_Truth_S2_WithCompletion:nil]; break;
         case kButtonTag_ShenSha: {
             [self setInteractionBlocked:YES];
@@ -1262,12 +1262,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     reportData[@"神煞详情"] = shenShaResult;
                     NSString *finalReport = formatFinalReport(reportData);
                     g_lastGeneratedReport = [finalReport copy];
-                    [strongSelf presentAIActionSheetWithReport:finalReport];
+                    [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"]; [strongSelf presentAIActionSheetWithReport:finalReport];
                 }
             }];
             break;
         }
-        case kButtonTag_NianMing: { [self setInteractionBlocked:YES]; [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
+        case kButtonTag_NianMing: { [self setInteractionBlocked:YES]; [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"]; [strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
         case kButtonTag_BiFa: {
             [self setInteractionBlocked:YES];
             [self extractBiFa_NoPopup_WithCompletion:^(NSString *result) {
@@ -1275,7 +1275,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 [strongSelf setInteractionBlocked:NO];
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"毕法要诀"] = result;
                 NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
-                [strongSelf presentAIActionSheetWithReport:finalReport];
+                [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"]; [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
         }
@@ -1286,7 +1286,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 [strongSelf setInteractionBlocked:NO];
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"格局要览"] = result;
                 NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
-                [strongSelf presentAIActionSheetWithReport:finalReport];
+                [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"]; [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
         }
@@ -1297,7 +1297,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 [strongSelf setInteractionBlocked:NO];
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"解析方法"] = result;
                 NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
-                [strongSelf presentAIActionSheetWithReport:finalReport];
+                [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"]; [strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
         }
@@ -1611,9 +1611,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成标准课盘...");
                             NSString *finalReport = formatFinalReport(reportData);
                             g_lastGeneratedReport = [finalReport copy];
-                            [strongSelf5 hideProgressHUD];
-                            [strongSelf5 presentAIActionSheetWithReport:finalReport];
-                            LogMessage(EchoLogTypeTask, @"[完成] “标准课盘”推衍任务已完成。");
+[strongSelf5 hideProgressHUD];
+[strongSelf5 showEchoNotificationWithTitle:@"标准课盘推衍完成" message:@"已生成并复制到剪贴板"];
+[strongSelf5 presentAIActionSheetWithReport:finalReport];
+LogMessage(EchoLogTypeTask, @"[完成] “标准课盘”推衍任务已完成。");
                             g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil;
                             LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
                         });
@@ -1662,9 +1663,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                                 LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成深度课盘...");
                                 NSString *finalReport = formatFinalReport(reportData);
                                 g_lastGeneratedReport = [finalReport copy];
-                                [strongSelf6 hideProgressHUD];
-                                [strongSelf6 presentAIActionSheetWithReport:finalReport];
-                                LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部完成。");
+[strongSelf6 hideProgressHUD];
+[strongSelf6 showEchoNotificationWithTitle:@"深度课盘推衍完成" message:@"已生成并复制到剪贴板"];
+[strongSelf6 presentAIActionSheetWithReport:finalReport];
+LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部完成。");
                                 g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil; g_s2_finalResultFromKeChuan = nil;
                                 LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
                             });
@@ -1949,6 +1951,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
