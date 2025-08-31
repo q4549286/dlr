@@ -399,7 +399,7 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
     NSString *summaryLine = generateContentSummaryLine(structuredReport);
     
     NSString *userQuestion = @"";
-    if (g_questionTextView && g_questionTextView.text.length > 0 && ![g_questionTextView.text isEqualToString:@"选填：输入您想问的具体问题"]) {
+    if (g_questionTextView && g_questionTextView.text.length > 0 && ![g_questionTextView.text isEqualToString:@"输入问什么，越具体越好"]) {
         userQuestion = g_questionTextView.text;
     }
     NSString *footerText = [NSString stringWithFormat:@"\n\n// 请综合以上所有提供的课盘信息，进行全面且深入的分析，并回答以下问题。\n// 问题：%@", userQuestion];
@@ -1945,6 +1945,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
