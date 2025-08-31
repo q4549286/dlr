@@ -1032,7 +1032,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat upperContentHeight = (44+10) + (110+20) + (0.5+20);
     CGFloat card1Height = 15 + 22 + 10 + 48 + 15;
     CGFloat advancedCardHeight = 15 + 22 + 15 + (4 * 56) - 10 + 5;
-    CGFloat totalScrollableContentHeight = upperContentHeight + card1Height + 20 + advancedCardHeight;
     CGFloat fixedBottomAreaHeight = bottomButtonsHeight + bottomAreaPadding + logTopPadding;
 
     CGFloat scrollViewHeight = contentView.bounds.size.height - scrollY - fixedBottomAreaHeight;
@@ -1974,6 +1973,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
