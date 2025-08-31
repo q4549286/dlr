@@ -966,8 +966,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
     CGFloat padding = 15.0;
     CGFloat contentInnerWidth = contentView.bounds.size.width - 2 * padding;
-    CGFloat btnWidth = (contentInnerWidth - 2*padding - padding) / 2.0;
-    
+    CGFloat btnWidth = (contentInnerWidth - padding) / 2.0;    
     // --- Reusable Element Creators ---
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -1113,12 +1112,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_logTextView.attributedText = initLog;
     [contentView addSubview:g_logTextView];
 
-    UIButton *closeButton = createButton(@"关闭", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
-    closeButton.frame = CGRectMake(padding, bottomButtonsY, btnWidth, bottomButtonsHeight);
-    [contentView addSubview:closeButton];
-    UIButton *sendLastReportButton = createButton(@"发送课盘", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
-    sendLastReportButton.frame = CGRectMake(padding + btnWidth + padding, bottomButtonsY, btnWidth, bottomButtonsHeight);
-    [contentView addSubview:sendLastReportButton];
+// Re-calculate bottom button width based on the main contentView, not inner width
+CGFloat bottomBtnWidth = (contentView.bounds.size.width - 3 * padding) / 2.0;
+
+UIButton *closeButton = createButton(@"关闭", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
+closeButton.frame = CGRectMake(padding, bottomButtonsY, bottomBtnWidth, bottomButtonsHeight);
+[contentView addSubview:closeButton];
+
+UIButton *sendLastReportButton = createButton(@"发送课盘", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
+sendLastReportButton.frame = CGRectMake(padding + bottomBtnWidth + padding, bottomButtonsY, bottomBtnWidth, bottomButtonsHeight);
+[contentView addSubview:sendLastReportButton];
 
     // --- Finalize Panel Animation ---
     g_mainControlPanelView.alpha = 0;
@@ -1943,6 +1946,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
