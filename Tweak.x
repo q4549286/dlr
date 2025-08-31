@@ -486,7 +486,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)addDoneButtonToKeyboardForTextView:(UITextView *)textView;
 - (void)doneButtonTapped;
 @end
-@end
 
 %hook UILabel
 - (void)setText:(NSString *)text { 
@@ -1841,4 +1840,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
