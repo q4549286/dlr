@@ -1029,10 +1029,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_questionTextView.returnKeyType = UIReturnKeyDone;
     [textViewContainer addSubview:g_questionTextView];
 
-    g_clearInputButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    if (@available(iOS 13.0, *)) { [g_clearInputButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal]; }
-    g_clearInputButton.frame = CGRectMake(contentInnerWidth - padding - 25, 10, 25, 25);
-    g_clearInputButton.tintColor = [UIColor grayColor];
+g_clearInputButton = [UIButton buttonWithType:UIButtonTypeSystem];
+if (@available(iOS 13.0, *)) {
+    // << FIX: Use configuration to match font size >>
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:14.0 weight:UIFontWeightRegular];
+    UIImage *icon = [UIImage systemImageNamed:@"xmark.circle.fill" withConfiguration:config];
+    [g_clearInputButton setImage:icon forState:UIControlStateNormal];
+}
+g_clearInputButton.frame = CGRectMake(textViewContainer.bounds.size.width - padding - 25, 10, 25, 25);
+g_clearInputButton.tintColor = [UIColor grayColor];
+// ...
     g_clearInputButton.tag = kButtonTag_ClearInput;
     g_clearInputButton.alpha = 0;
     [g_clearInputButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
@@ -1946,6 +1952,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
