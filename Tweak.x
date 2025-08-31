@@ -940,7 +940,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 
 // =========================================================================
-// ↓↓↓ 使用下面这个全新的 V23.0 版本，替换掉您现有的 createOrShowMainControlPanel 函数 ↓↓↓
+// ↓↓↓ 使用下面这个修正后的 V23.1 版本，替换掉您现有的 createOrShowMainControlPanel 函数 ↓↓↓
 // =========================================================================
 %new
 - (void)createOrShowMainControlPanel {
@@ -965,6 +965,33 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat padding = 15.0;
     CGFloat contentInnerWidth = contentView.bounds.size.width - 2 * padding;
     
+    // << FIX: Move block definitions to the top, before any calls >>
+    // --- Reusable Element Creators ---
+    UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; [btn setTitle:title forState:UIControlStateNormal]; [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) { 
+            UIImage *icon = [UIImage systemImageNamed:iconName]; 
+            [btn setImage:icon forState:UIControlStateNormal];
+             #pragma clang diagnostic push
+             #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8); 
+            btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
+             #pragma clang diagnostic pop
+        }
+        btn.tag = tag; btn.backgroundColor = color;
+        [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+        [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
+        [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
+        btn.tintColor = [UIColor whiteColor]; btn.titleLabel.font = [UIFont boldSystemFontOfSize:15]; btn.titleLabel.adjustsFontSizeToFitWidth = YES; btn.titleLabel.minimumScaleFactor = 0.8; btn.layer.cornerRadius = 12;
+        return btn;
+    };
+    UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { UILabel *label = [[UILabel alloc] init]; label.text = title; label.font = [UIFont boldSystemFontOfSize:16]; label.textColor = [UIColor lightGrayColor]; return label; };
+    UIView* (^createSeparator)(CGFloat width) = ^(CGFloat width) {
+        UIView *sep = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 0.5)];
+        sep.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.15];
+        return sep;
+    };
+
     // --- Fixed Bottom Area ---
     CGFloat bottomButtonsHeight = 40, bottomAreaPadding = 10;
     CGFloat logViewHeight = 100, logTopPadding = 15;
@@ -990,39 +1017,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, contentView.bounds.size.width, g_logTextView.frame.origin.y - logTopPadding)];
     [contentView addSubview:scrollView];
     
-    // --- Reusable Element Creators ---
-    UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) { /* ... 和原来一样 ... */ 
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; [btn setTitle:title forState:UIControlStateNormal]; [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) { 
-            UIImage *icon = [UIImage systemImageNamed:iconName]; 
-            [btn setImage:icon forState:UIControlStateNormal];
-             #pragma clang diagnostic push
-             #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8); 
-            btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
-             #pragma clang diagnostic pop
-        }
-        btn.tag = tag; btn.backgroundColor = color;
-        [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
-        [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
-        [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
-        btn.tintColor = [UIColor whiteColor]; btn.titleLabel.font = [UIFont boldSystemFontOfSize:15]; btn.titleLabel.adjustsFontSizeToFitWidth = YES; btn.titleLabel.minimumScaleFactor = 0.8; btn.layer.cornerRadius = 12;
-        return btn;
-    };
-    UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { UILabel *label = [[UILabel alloc] init]; label.text = title; label.font = [UIFont boldSystemFontOfSize:16]; label.textColor = [UIColor lightGrayColor]; return label; };
-    UIView* (^createSeparator)(CGFloat width) = ^(CGFloat width) {
-        UIView *sep = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 0.5)];
-        sep.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.15];
-        return sep;
-    };
-
     // --- ScrollView Content ---
     CGFloat currentY = 15.0;
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, 0, contentInnerWidth, 30)];
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 大六壬推衍 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v23.0" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v23.1" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
     [scrollView addSubview:titleLabel];
@@ -1048,7 +1049,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UILabel *sec1Title = createSectionTitle(@"课盘总览");
     sec1Title.frame = CGRectMake(padding, currentY, contentInnerWidth, 22); [scrollView addSubview:sec1Title];
     currentY += 22 + 10;
-    CGFloat btnWidth = (contentInnerWidth - padding) / 2.0;
+    btnWidth = (contentInnerWidth - padding) / 2.0;
     UIButton *stdButton = createButton(@"标准课盘", @"doc.text", kButtonTag_StandardReport, ECHO_COLOR_MAIN_TEAL);
     stdButton.frame = CGRectMake(padding, currentY, btnWidth, 48); [scrollView addSubview:stdButton];
     UIButton *deepButton = createButton(@"深度课盘", @"square.stack.3d.up.fill", kButtonTag_DeepDiveReport, ECHO_COLOR_MAIN_BLUE);
@@ -1105,7 +1106,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         btn.frame = CGRectMake(i * (smallBtnWidth + padding), toolBtnY, smallBtnWidth, 46);
         [advancedContainer addSubview:btn];
     }
-    toolBtnY += 46;
     
     scrollView.contentSize = CGSizeMake(contentView.bounds.size.width, currentY);
 
@@ -1118,7 +1118,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 // =========================================================================
-// ↓↓↓ 使用下面这个全新的 V23.0 版本，替换掉您现有的 handleAdvancedToggle 函数 ↓↓↓
+// ↓↓↓ 使用下面这个修正后的 V23.1 版本，替换掉您现有的 handleAdvancedToggle 函数 ↓↓↓
 // =========================================================================
 %new
 - (void)handleAdvancedToggle:(UITapGestureRecognizer *)sender {
@@ -1130,30 +1130,30 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIView *container = [scrollView viewWithTag:8889];
     if (!scrollView || !container || !chevron) return;
     
-    // Calculate total height of all buttons inside the container
-    CGFloat专项推衍Height = ((5 + 1) / 2) * 56.0;
-    CGFloat高级功能Height = 46.0;
-    CGFloat totalContentHeight = 专项推衍Height + 高级功能Height;
+    // << FIX: Use standard English variable names >>
+    CGFloat specialToolsHeight = ((5 + 1) / 2) * 56.0;
+    CGFloat advancedToolsHeight = 46.0;
+    CGFloat totalContentHeight = specialToolsHeight + advancedToolsHeight;
 
     [UIView animateWithDuration:0.3 animations:^{
+        CGRect containerFrame = container.frame;
+        CGSize scrollContentSize = scrollView.contentSize;
+        
         if (g_isAdvancedSectionExpanded) {
             if (@available(iOS 13.0, *)) { chevron.image = [UIImage systemImageNamed:@"chevron.up"]; }
             
-            CGRect frame = container.frame;
-            frame.size.height = totalContentHeight;
-            container.frame = frame;
-            
-            scrollView.contentSize = CGSizeMake(scrollView.contentSize.width, scrollView.contentSize.height + totalContentHeight);
+            containerFrame.size.height = totalContentHeight;
+            scrollContentSize.height += totalContentHeight;
 
         } else {
             if (@available(iOS 13.0, *)) { chevron.image = [UIImage systemImageNamed:@"chevron.down"]; }
             
-            CGRect frame = container.frame;
-            frame.size.height = 0;
-            container.frame = frame;
-
-            scrollView.contentSize = CGSizeMake(scrollView.contentSize.width, scrollView.contentSize.height - totalContentHeight);
+            containerFrame.size.height = 0;
+            scrollContentSize.height -= totalContentHeight;
         }
+        
+        container.frame = containerFrame;
+        scrollView.contentSize = scrollContentSize;
     }];
 }
 
@@ -1894,6 +1894,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
