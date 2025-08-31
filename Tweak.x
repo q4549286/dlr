@@ -1128,50 +1128,55 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 // ↓↓↓ 使用下面这个全新的 V21.0 版本，替换掉您现有的 handleAdvancedToggle 函数 ↓↓↓
 // =========================================================================
 %new
-- (void)handleAdvancedToggle:(UIButton *)sender {
+- (void)handleAdvancedToggle:(UITapGestureRecognizer *)sender {
     g_isAdvancedSectionExpanded = !g_isAdvancedSectionExpanded;
     
-    UIView *contentView = sender.superview.superview;
-    UIScrollView *scrollView = (UIScrollView *)[contentView viewWithTag:112233];
-    UIView *container = [scrollView viewWithTag:8889];
-    if (!contentView || !scrollView || !container) return;
+    UIView *headerView = sender.view;
+    UIImageView *chevron = (UIImageView *)[headerView viewWithTag:8888];
+    if (!g_mainControlPanelView || !g_advancedButtonsContainer || !chevron || !g_logTextView) return;
     
-    CGFloat containerContentHeight = 46.0;
-    CGFloat advancedSectionHeightChange = containerContentHeight + 10; // button height + top padding
-    
-    [UIView animateWithDuration:0.3 animations:^{
-        CGRect scrollFrame = scrollView.frame;
-        CGRect logFrame = g_logTextView.frame;
+    UIView *contentView = g_mainControlPanelView.subviews.firstObject.subviews.firstObject;
+
+    CGFloat advancedSectionHeightChange = 46.0 + 10.0; // container height + top padding
+
+    [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+        CGRect panelFrame = g_mainControlPanelView.frame;
+        CGRect contentFrame = contentView.frame;
         
         if (g_isAdvancedSectionExpanded) {
-            if (@available(iOS 13.0, *)) { [sender setImage:[UIImage systemImageNamed:@"chevron.up"] forState:UIControlStateNormal]; }
+            if (@available(iOS 13.0, *)) { chevron.image = [UIImage systemImageNamed:@"chevron.up"]; }
+            g_advancedButtonsContainer.hidden = NO;
             
-            scrollFrame.size.height += advancedSectionHeightChange;
-            logFrame.origin.y += advancedSectionHeightChange;
-            
-            CGRect containerFrame = container.frame;
-            containerFrame.size.height = containerContentHeight;
-            container.frame = containerFrame;
+            panelFrame.size.height += advancedSectionHeightChange;
+            panelFrame.origin.y -= advancedSectionHeightChange / 2.0;
+            contentFrame.size.height += advancedSectionHeightChange;
         } else {
-            if (@available(iOS 13.0, *)) { [sender setImage:[UIImage systemImageNamed:@"chevron.down"] forState:UIControlStateNormal]; }
-
-            scrollFrame.size.height -= advancedSectionHeightChange;
-            logFrame.origin.y -= advancedSectionHeightChange;
-
-            CGRect containerFrame = container.frame;
-            containerFrame.size.height = 0;
-            container.frame = containerFrame;
+            if (@available(iOS 13.0, *)) { chevron.image = [UIImage systemImageNamed:@"chevron.down"]; }
+            
+            panelFrame.size.height -= advancedSectionHeightChange;
+            panelFrame.origin.y += advancedSectionHeightChange / 2.0;
+            contentFrame.size.height -= advancedSectionHeightChange;
         }
         
-        scrollView.frame = scrollFrame;
-        g_logTextView.frame = logFrame;
+        g_mainControlPanelView.frame = panelFrame;
+        contentView.frame = contentFrame;
+        g_mainControlPanelView.subviews.firstObject.frame = g_mainControlPanelView.bounds; // Update blur view
+        
+        // Reposition views below the advanced section
+        CGFloat newLogY = g_advancedButtonsContainer.frame.origin.y + (g_isAdvancedSectionExpanded ? advancedSectionHeightChange : 0);
+        g_logTextView.frame = CGRectMake(g_logTextView.frame.origin.x, newLogY + 15, g_logTextView.frame.size.width, g_logTextView.frame.size.height);
         
         for(UIView *subview in contentView.subviews) {
             if (subview.tag == kButtonTag_ClosePanel || subview.tag == kButtonTag_SendLastReportToAI) {
                 CGRect btnFrame = subview.frame;
-                btnFrame.origin.y = logFrame.origin.y + logFrame.size.height + 10;
+                btnFrame.origin.y = g_logTextView.frame.origin.y + g_logTextView.frame.size.height + 10;
                 subview.frame = btnFrame;
             }
+        }
+        
+    } completion:^(BOOL finished) {
+        if (!g_isAdvancedSectionExpanded) {
+            g_advancedButtonsContainer.hidden = YES;
         }
     }];
 }
@@ -1913,5 +1918,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
