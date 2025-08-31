@@ -942,7 +942,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 
 // =========================================================================
-// ↓↓↓ 使用下面这个最终修正的 V27.2 版本，替换掉您现有的 createOrShowMainControlPanel 函数 ↓↓↓
+// ↓↓↓ 使用下面这个最终修正的 V27.3 版本，替换掉您现有的 createOrShowMainControlPanel 函数 ↓↓↓
 // =========================================================================
 %new
 - (void)createOrShowMainControlPanel {
@@ -997,7 +997,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // --- Fixed Header ---
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 大六壬推衍 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v27.2" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v27.3" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, 15, contentInnerWidth, 30)];
     titleLabel.attributedText = titleString;
@@ -1006,13 +1006,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     // --- Layout Constants ---
     CGFloat majorPadding = 20.0;
-
-    // --- Fixed Bottom Area ---
     CGFloat bottomButtonsHeight = 40;
     CGFloat bottomAreaPadding = 10;
-    CGFloat logTopPadding = 15;
-    CGFloat minLogHeight = 80;
-    CGFloat bottomAreaTotalHeight = bottomButtonsHeight + bottomAreaPadding + logTopPadding + minLogHeight;
 
     // --- Scrollable Middle Area ---
     CGFloat scrollY = titleLabel.frame.origin.y + titleLabel.frame.size.height + majorPadding;
@@ -1064,7 +1059,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [card1 addSubview:sec1Title];
     card1InnerY += 22 + 10;
     
-    // << FIX: Corrected btnWidth calculation >>
     CGFloat btnWidth = (contentInnerWidth - 2*padding - padding) / 2.0;
     UIButton *stdButton = createButton(@"标准课盘", @"doc.text", kButtonTag_StandardReport, ECHO_COLOR_MAIN_TEAL);
     stdButton.frame = CGRectMake(padding, card1InnerY, btnWidth, 48);
@@ -1110,14 +1104,19 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // --- Dynamic Log View & Fixed Bottom Buttons ---
     CGFloat logViewAndBottomButtonsTotalHeight = contentView.bounds.size.height - scrollY;
     CGFloat bottomButtonsTotalHeight = bottomButtonsHeight + bottomAreaPadding;
-    CGFloat dynamicLogHeight = logViewAndBottomButtonsTotalHeight - currentY - bottomButtonsTotalHeight;
-    
+    CGFloat dynamicLogHeight = logViewAndBottomButtonsTotalHeight - (currentY - scrollY) - bottomButtonsTotalHeight;
+    dynamicLogHeight = MAX(60, dynamicLogHeight); // Ensure minimum height
+
     g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, currentY, contentInnerWidth, dynamicLogHeight)];
     g_logTextView.backgroundColor = ECHO_COLOR_CARD_BG;
     g_logTextView.layer.cornerRadius = 12;
     g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
     g_logTextView.editable = NO;
     g_logTextView.textContainerInset = UIEdgeInsetsMake(10, 10, 10, 10);
+    // << FIX: Define initLog here >>
+    NSMutableAttributedString *initLog = [[NSMutableAttributedString alloc] initWithString:@"[推衍核心]：就绪。\n"];
+    [initLog addAttribute:NSForegroundColorAttributeName value:[UIColor whiteColor] range:NSMakeRange(0, initLog.length)];
+    [initLog addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, initLog.length)];
     g_logTextView.attributedText = initLog;
     [scrollView addSubview:g_logTextView];
     currentY += dynamicLogHeight + bottomAreaPadding;
@@ -1955,6 +1954,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
