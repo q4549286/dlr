@@ -947,6 +947,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 // =========================================================================
 // ↓↓↓ 使用下面这个最终精修的 V25.2 版本，替换掉您现有的 createOrShowMainControlPanel 函数 ↓↓↓
 // =========================================================================
+// =========================================================================
+// ↓↓↓ 使用下面这个最终修正的 V25.3 版本，替换掉您现有的 createOrShowMainControlPanel 函数 ↓↓↓
+// =========================================================================
 %new
 - (void)createOrShowMainControlPanel {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
@@ -983,7 +986,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         UIFont *font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
         NSMutableAttributedString *attrTitle = [[NSMutableAttributedString alloc] initWithString:[NSString stringWithFormat:@" %@", title]];
         if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) { 
-            // << FIX: Use UIImageSymbolConfiguration for perfect alignment and style >>
             UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithFont:font];
             UIImage *icon = [UIImage systemImageNamed:iconName withConfiguration:config];
             NSTextAttachment *attachment = [[NSTextAttachment alloc] init];
@@ -993,7 +995,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [attrTitle addAttributes:@{
             NSFontAttributeName: font,
             NSForegroundColorAttributeName: [UIColor whiteColor],
-            NSBaselineOffsetAttributeName: @(1) // Minor vertical alignment tweak
+            NSBaselineOffsetAttributeName: @(1)
         } range:NSMakeRange(0, attrTitle.length)];
         [btn setAttributedTitle:attrTitle forState:UIControlStateNormal];
         
@@ -1015,7 +1017,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // --- Fixed Header ---
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 大六壬推衍 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v25.2" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v25.3" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, 15, contentInnerWidth, 30)];
     titleLabel.attributedText = titleString;
@@ -1024,18 +1026,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     // --- Scrollable Middle Area ---
     CGFloat scrollY = titleLabel.frame.origin.y + titleLabel.frame.size.height + 20;
-    CGFloat bottomButtonsHeight = 40, bottomAreaPadding = 10;
-    CGFloat logTopPadding = 15;
+    CGFloat bottomButtonsHeight = 40, bottomAreaPadding = 10, logTopPadding = 15;
     
-    // Calculate the total height of all fixed-size elements to determine the scroll view height
-    CGFloat fixedContentHeight = (44+10) + (110+20) + (0.5+20) + (112.5) + 20; // AI btn, input, sep, card1, padding
-    CGFloat advancedCardHeight = 15 + 22 + 15 + (4 * 56) - 10 + 15; // Calculated height of the advanced card
-    CGFloat totalStaticHeight = scrollY + fixedContentHeight + advancedCardHeight + logTopPadding + bottomButtonsHeight + bottomAreaPadding;
-    
-    CGFloat dynamicLogHeight = contentView.bounds.size.height - totalStaticHeight;
-    CGFloat finalLogHeight = MAX(60, dynamicLogHeight); // Ensure log has a minimum height
-    
-    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, scrollY, contentView.bounds.size.width, contentView.bounds.size.height - scrollY - finalLogHeight - bottomButtonsHeight - bottomAreaPadding - logTopPadding)];
+    // Calculate the total height of all non-log elements to determine the log view's dynamic height
+    CGFloat upperContentHeight = (44+10) + (110+20) + (0.5+20);
+    CGFloat card1Height = 15 + 22 + 10 + 48 + 15;
+    CGFloat advancedCardHeight = 15 + 22 + 15 + (4 * 56) - 10 + 5;
+    CGFloat totalScrollableContentHeight = upperContentHeight + card1Height + 20 + advancedCardHeight;
+    CGFloat fixedBottomAreaHeight = bottomButtonsHeight + bottomAreaPadding + logTopPadding;
+
+    CGFloat scrollViewHeight = contentView.bounds.size.height - scrollY - fixedBottomAreaHeight;
+
+    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, scrollY, contentView.bounds.size.width, scrollViewHeight)];
     [contentView addSubview:scrollView];
     
     // --- ScrollView Content ---
@@ -1061,26 +1063,19 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [textViewContainer addSubview:g_questionTextView];
 
     g_clearInputButton = [UIButton buttonWithType:UIButtonTypeSystem];
-if (@available(iOS 13.0, *)) {
-    // << FIX: Use UIImageSymbolConfiguration to match font size >>
-    CGFloat iconPointSize = 14.0; // Match the text view's font size
-    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:iconPointSize weight:UIImageSymbolWeightRegular];
-    UIImage *icon = [UIImage systemImageNamed:@"xmark.circle.fill" withConfiguration:config];
-    [g_clearInputButton setImage:icon forState:UIControlStateNormal];
-}
-// Adjust frame to better center the smaller icon
-g_clearInputButton.frame = CGRectMake(contentInnerWidth - 35, (110 - 25)/2.0, 25, 25); 
-g_clearInputButton.tintColor = [UIColor grayColor];
-g_clearInputButton.tag = kButtonTag_ClearInput;
-g_clearInputButton.alpha = 0;
-[g_clearInputButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
-[textViewContainer addSubview:g_clearInputButton];
+    if (@available(iOS 13.0, *)) { [g_clearInputButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal]; }
+    g_clearInputButton.frame = CGRectMake(contentInnerWidth - 35, 10, 25, 25);
+    g_clearInputButton.tintColor = [UIColor grayColor];
+    g_clearInputButton.tag = kButtonTag_ClearInput;
+    g_clearInputButton.alpha = 0;
+    [g_clearInputButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+    [textViewContainer addSubview:g_clearInputButton];
     currentY += 110 + 20;
 
     UIView *sep1 = createSeparator(contentInnerWidth); sep1.frame = CGRectOffset(sep1.frame, padding, currentY); [scrollView addSubview:sep1];
     currentY += sep1.frame.size.height + 20;
 
-    UIView *card1 = [[UIView alloc] initWithFrame:CGRectZero];
+    UIView *card1 = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentInnerWidth, card1Height)];
     card1.backgroundColor = ECHO_COLOR_CARD_BG;
     card1.layer.cornerRadius = 12;
     [scrollView addSubview:card1];
@@ -1094,11 +1089,9 @@ g_clearInputButton.alpha = 0;
     stdButton.frame = CGRectMake(padding, card1InnerY, btnWidth, 48); [card1 addSubview:stdButton];
     UIButton *deepButton = createButton(@"深度课盘", @"square.stack.3d.up.fill", kButtonTag_DeepDiveReport, ECHO_COLOR_MAIN_BLUE);
     deepButton.frame = CGRectMake(padding + btnWidth + padding, card1InnerY, btnWidth, 48); [card1 addSubview:deepButton];
-    card1InnerY += 48 + 15;
-    card1.frame = CGRectMake(padding, currentY, contentInnerWidth, card1InnerY);
     currentY += card1.frame.size.height + 20;
     
-    UIView *card2 = [[UIView alloc] initWithFrame:CGRectZero];
+    UIView *card2 = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentInnerWidth, advancedCardHeight)];
     card2.backgroundColor = ECHO_COLOR_CARD_BG;
     card2.layer.cornerRadius = 12;
     [scrollView addSubview:card2];
@@ -1107,10 +1100,7 @@ g_clearInputButton.alpha = 0;
     UILabel *sec2Title = createSectionTitle(@"高级功能区");
     sec2Title.frame = CGRectMake(padding, card2InnerY, contentInnerWidth - 2*padding, 22); [card2 addSubview:sec2Title];
     card2InnerY += 22 + 15;
-
-    // << FIX: Removed the separator from inside the card >>
     
-    // << FIX: Add icons back to all tool buttons >>
     NSArray *allToolButtons = @[
         @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)},
         @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
@@ -1127,27 +1117,35 @@ g_clearInputButton.alpha = 0;
         btn.frame = CGRectMake(padding + (i % 2) * (btnWidth + padding), card2InnerY + (i / 2) * 56, btnWidth, 46);
         [card2 addSubview:btn];
     }
-    card2InnerY += ((allToolButtons.count + 1) / 2) * 56 - 10 + 5;
-    card2.frame = CGRectMake(padding, currentY, contentInnerWidth, card2InnerY);
     currentY += card2.frame.size.height;
     
     scrollView.contentSize = CGSizeMake(contentView.bounds.size.width, currentY);
+    
+    // --- Finalize Log View and Bottom Buttons (which are outside the scroll view) ---
+    CGFloat dynamicLogY = scrollView.frame.origin.y + scrollView.frame.size.height + logTopPadding;
+    CGFloat dynamicLogHeight = contentView.bounds.size.height - dynamicLogY - bottomButtonsHeight - bottomAreaPadding;
 
-    // --- Fixed Bottom Area ---
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, scrollView.frame.origin.y + scrollView.frame.size.height + logTopPadding, contentInnerWidth, finalLogHeight)];
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, dynamicLogY, contentInnerWidth, dynamicLogHeight)];
     g_logTextView.backgroundColor = ECHO_COLOR_BACKGROUND_DARK;
     g_logTextView.layer.cornerRadius = 12;
     g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
     g_logTextView.editable = NO;
     g_logTextView.textContainerInset = UIEdgeInsetsMake(10, 10, 10, 10);
+    
+    // << FIX: Define initLog before using it >>
+    NSMutableAttributedString *initLog = [[NSMutableAttributedString alloc] initWithString:@"[推衍核心]：就绪。\n"];
+    [initLog addAttribute:NSForegroundColorAttributeName value:[UIColor whiteColor] range:NSMakeRange(0, initLog.length)];
+    [initLog addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, initLog.length)];
     g_logTextView.attributedText = initLog;
     [contentView addSubview:g_logTextView];
     
+    // << FIX: Define bottom buttons before using them >>
     CGFloat bottomBtnWidth = (contentInnerWidth - padding) / 2.0;
-    closeButton = createButton(@"关闭", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
+    UIButton *closeButton = createButton(@"关闭", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
     closeButton.frame = CGRectMake(padding, g_logTextView.frame.origin.y + g_logTextView.frame.size.height + bottomAreaPadding, bottomBtnWidth, bottomButtonsHeight);
     [contentView addSubview:closeButton];
-    sendLastReportButton = createButton(@"发送课盘", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
+    
+    UIButton *sendLastReportButton = createButton(@"发送课盘", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
     sendLastReportButton.frame = CGRectMake(padding + bottomBtnWidth + padding, g_logTextView.frame.origin.y + g_logTextView.frame.size.height + bottomAreaPadding, bottomBtnWidth, bottomButtonsHeight);
     [contentView addSubview:sendLastReportButton];
 
@@ -1976,6 +1974,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
