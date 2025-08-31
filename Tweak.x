@@ -29,22 +29,23 @@ static const NSInteger kButtonTag_SendLastReportToAI = 997;
 static const NSInteger kButtonTag_AIPromptToggle    = 996;
 
 // Colors
-#define ECHO_COLOR_MAIN_BLUE    [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
-#define ECHO_COLOR_MAIN_TEAL    [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
-#define ECHO_COLOR_AUX_GREY     [UIColor colorWithWhite:0.3 alpha:1.0]
-#define ECHO_COLOR_ACTION_CLOSE [UIColor colorWithWhite:0.25 alpha:1.0]
-#define ECHO_COLOR_ACTION_AI    [UIColor colorWithRed:0.22 green:0.59 blue:0.85 alpha:1.0]
-#define ECHO_COLOR_SUCCESS      [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
-#define ECHO_COLOR_PROMPT_ON    [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0]
-#define ECHO_COLOR_LOG_TASK     [UIColor whiteColor]
-#define ECHO_COLOR_LOG_INFO     [UIColor lightGrayColor]
-#define ECHO_COLOR_LOG_WARN     [UIColor orangeColor]
-#define ECHO_COLOR_LOG_ERROR    [UIColor redColor]
-
+#define ECHO_COLOR_MAIN_BLUE        [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
+#define ECHO_COLOR_MAIN_TEAL        [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
+#define ECHO_COLOR_AUX_GREY         [UIColor colorWithWhite:0.3 alpha:1.0]
+#define ECHO_COLOR_ACTION_CLOSE     [UIColor colorWithWhite:0.25 alpha:1.0]
+#define ECHO_COLOR_ACTION_AI        [UIColor colorWithRed:0.22 green:0.59 blue:0.85 alpha:1.0]
+#define ECHO_COLOR_SUCCESS          [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
+#define ECHO_COLOR_PROMPT_ON        [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0]
+#define ECHO_COLOR_LOG_TASK         [UIColor whiteColor]
+#define ECHO_COLOR_LOG_INFO         [UIColor lightGrayColor]
+#define ECHO_COLOR_LOG_WARN         [UIColor orangeColor]
+#define ECHO_COLOR_LOG_ERROR        [UIColor redColor]
+#define ECHO_COLOR_BACKGROUND_DARK  [UIColor colorWithWhite:0.15 alpha:1.0] // New: For consistent backgrounds
 
 #pragma mark - Global State & Flags
 static UIView *g_mainControlPanelView = nil;
 static UITextView *g_logTextView = nil;
+// ... (所有 g_s1, g_s2 等状态变量保持不变)
 static BOOL g_s1_isExtracting = NO;
 static NSString *g_s1_currentTaskType = nil;
 static BOOL g_s1_shouldIncludeXiangJie = NO;
@@ -81,6 +82,7 @@ static BOOL g_isAdvancedSectionExpanded = NO;
     _Pragma("clang diagnostic pop")
 
 #pragma mark - AI Report Generation
+// ... (getAIPromptHeader, generateStructuredReport, generateContentSummaryLine 函数保持不变)
 static NSString *getAIPromptHeader() {
 return          @"## I/O 标准化协议 V16.0\n"
          
@@ -393,7 +395,6 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
     NSString *structuredReport = generateStructuredReport(reportData);
     NSString *summaryLine = generateContentSummaryLine(structuredReport);
     
-    // << 核心优化 >>: 自动从全局 UITextView 获取用户问题
     NSString *userQuestion = @"";
     if (g_questionTextView && g_questionTextView.text.length > 0 && ![g_questionTextView.text isEqualToString:@"选填：输入您想问的具体问题"]) {
         userQuestion = g_questionTextView.text;
@@ -407,7 +408,9 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
     }
 }
 
+
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeTask, EchoLogTypeSuccess, EchoLogTypeWarning, EchoLogError };
+// ... (LogMessage, FindSubviewsOfClassRecursive, GetFrontmostWindow 函数保持不变)
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     if (!g_logTextView) return;
     va_list args;
@@ -445,6 +448,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
     _Pragma("clang diagnostic pop") \
     } return frontmostWindow; }
 
+
 // =========================================================================
 // 2. 接口声明、UI微调与核心Hook
 // =========================================================================
@@ -481,12 +485,10 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractFangFa_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
-// << 新增下面的声明 >>
 - (void)handleAdvancedToggle:(UIButton *)sender;
-- (void)addDoneButtonToKeyboardForTextView:(UITextView *)textView;
-- (void)doneButtonTapped;
 @end
 
+// ... (%hook UILabel, Tweak_presentViewController, etc. 保持不变)
 %hook UILabel
 - (void)setText:(NSString *)text { 
     if (!text) { %orig(text); return; } 
@@ -798,6 +800,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
+
 %hook UIViewController
 
 - (void)viewDidLoad {
@@ -828,6 +831,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
+// ... (所有数据提取的核心函数，如 extractNianmingInfoWithCompletion 等，保持不变)
 %new
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
     LogMessage(EchoLogTypeTask, @"[任务启动] 参详行年参数...");
@@ -935,6 +939,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]); }
 }
 
+
+// MARK: - UI Creation & Interaction
 %new
 - (void)createOrShowMainControlPanel {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
@@ -948,35 +954,40 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
     blurView.frame = g_mainControlPanelView.bounds;
     [g_mainControlPanelView addSubview:blurView];
+    
     UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 60, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 80)];
     contentView.clipsToBounds = YES;
     [g_mainControlPanelView addSubview:contentView];
     
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 大六壬推衍 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:22], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v18.0" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v19.0" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, contentView.bounds.size.width, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
     [contentView addSubview:titleLabel];
-    
-    CGFloat bottomAreaHeight = 50, logViewHeight = 100, logAndBottomPadding = 10;
-    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 60, contentView.bounds.size.width, contentView.bounds.size.height - logViewHeight - bottomAreaHeight - logAndBottomPadding - 60)];
+
+    CGFloat bottomButtonsHeight = 40, bottomAreaPadding = 10;
+    CGFloat logViewHeight = 100, logAndBottomPadding = 10;
+    CGFloat totalBottomHeight = logViewHeight + logAndBottomPadding + bottomButtonsHeight + bottomAreaPadding;
+
+    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 60, contentView.bounds.size.width, contentView.bounds.size.height - totalBottomHeight - 60)];
     scrollView.tag = 112233;
     [contentView addSubview:scrollView];
     
+    // --- Reusable Element Creators ---
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
-    UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; [btn setTitle:title forState:UIControlStateNormal]; [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) { 
-        UIImage *icon = [UIImage systemImageNamed:iconName]; 
-        [btn setImage:icon forState:UIControlStateNormal];
-         #pragma clang diagnostic push
-         #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8); 
-        btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
-         #pragma clang diagnostic pop
-    }
-    btn.tag = tag; btn.backgroundColor = color;
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; [btn setTitle:title forState:UIControlStateNormal]; [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) { 
+            UIImage *icon = [UIImage systemImageNamed:iconName]; 
+            [btn setImage:icon forState:UIControlStateNormal];
+             #pragma clang diagnostic push
+             #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8); 
+            btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
+             #pragma clang diagnostic pop
+        }
+        btn.tag = tag; btn.backgroundColor = color;
         [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
         [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
         [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
@@ -984,7 +995,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return btn;
     };
     UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { UILabel *label = [[UILabel alloc] init]; label.text = title; label.font = [UIFont boldSystemFontOfSize:16]; label.textColor = [UIColor lightGrayColor]; return label; };
-    
+    UIView* (^createSeparator)(CGFloat) = ^(CGFloat yPos) {
+        UIView *sep = [[UIView alloc] initWithFrame:CGRectMake(15, yPos, contentView.bounds.size.width - 30, 0.5)];
+        sep.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.15];
+        return sep;
+    };
+
+    // --- ScrollView Content ---
     CGFloat currentY = 10, padding = 15.0, contentWidth = scrollView.bounds.size.width;
 
     UIButton *promptButton = createButton(@"AI Prompt: 开启", @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
@@ -993,16 +1010,19 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     currentY += 44 + 10;
     
     g_questionTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, currentY, contentWidth - 2 * padding, 110)];
-    g_questionTextView.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
+    g_questionTextView.backgroundColor = ECHO_COLOR_BACKGROUND_DARK;
     g_questionTextView.layer.cornerRadius = 12;
     g_questionTextView.textColor = [UIColor lightGrayColor];
     g_questionTextView.font = [UIFont systemFontOfSize:14];
     g_questionTextView.textContainerInset = UIEdgeInsetsMake(10, 10, 10, 10);
     g_questionTextView.text = @"选填：输入您想问的具体问题";
     g_questionTextView.delegate = (id<UITextViewDelegate>)self;
-    [self addDoneButtonToKeyboardForTextView:g_questionTextView];
+    g_questionTextView.returnKeyType = UIReturnKeyDone;
     [scrollView addSubview:g_questionTextView];
-    currentY += 110 + 25;
+    currentY += 110 + 20;
+
+    [scrollView addSubview:createSeparator(currentY)];
+    currentY += 20;
 
     UILabel *sec1Title = createSectionTitle(@"课盘总览");
     sec1Title.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 22); [scrollView addSubview:sec1Title];
@@ -1012,7 +1032,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     stdButton.frame = CGRectMake(padding, currentY, btnWidth, 48); [scrollView addSubview:stdButton];
     UIButton *deepButton = createButton(@"深度课盘", @"square.stack.3d.up.fill", kButtonTag_DeepDiveReport, ECHO_COLOR_MAIN_BLUE);
     deepButton.frame = CGRectMake(padding * 2 + btnWidth, currentY, btnWidth, 48); [scrollView addSubview:deepButton];
-    currentY += 48 + 25;
+    currentY += 48 + 20;
+
+    [scrollView addSubview:createSeparator(currentY)];
+    currentY += 20;
 
     UILabel *sec2Title = createSectionTitle(@"专项推衍");
     sec2Title.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 22); [scrollView addSubview:sec2Title];
@@ -1023,23 +1046,30 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         btn.frame = CGRectMake(padding + (i % 2) * (btnWidth + padding), currentY + (i / 2) * 56, btnWidth, 46);
         [scrollView addSubview:btn];
     }
-    currentY += ((coreButtons.count + 1) / 2) * 56;
+    currentY += ((coreButtons.count + 1) / 2) * 56 + 10;
+    
+    [scrollView addSubview:createSeparator(currentY)];
+    currentY += 20;
 
     UIButton *advancedToggleBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     advancedToggleBtn.frame = CGRectMake(padding, currentY, contentWidth - 2 * padding, 22);
-    [advancedToggleBtn setTitle:@"高级功能 ▼" forState:UIControlStateNormal];
     advancedToggleBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
     advancedToggleBtn.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     [advancedToggleBtn setTitleColor:[UIColor lightGrayColor] forState:UIControlStateNormal];
+    [advancedToggleBtn setTitle:@"高级功能" forState:UIControlStateNormal];
+    if (@available(iOS 13.0, *)) {
+        [advancedToggleBtn setImage:[UIImage systemImageNamed:@"chevron.down"] forState:UIControlStateNormal];
+        advancedToggleBtn.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+        advancedToggleBtn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, - (contentWidth - 2*padding - 100));
+    }
     advancedToggleBtn.tag = 8888;
     [advancedToggleBtn addTarget:self action:@selector(handleAdvancedToggle:) forControlEvents:UIControlEventTouchUpInside];
     [scrollView addSubview:advancedToggleBtn];
     currentY += 22 + 10;
 
-    UIView *advancedContainer = [[UIView alloc] initWithFrame:CGRectMake(0, currentY, contentWidth, 46)];
+    UIView *advancedContainer = [[UIView alloc] initWithFrame:CGRectMake(0, currentY, contentWidth, 0)];
     advancedContainer.tag = 8889;
     advancedContainer.clipsToBounds = YES;
-    advancedContainer.alpha = 0;
     [scrollView addSubview:advancedContainer];
     
     CGFloat smallBtnWidth = (contentWidth - 4 * padding) / 3.0;
@@ -1052,18 +1082,25 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     scrollView.contentSize = CGSizeMake(contentWidth, currentY);
     
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, contentView.bounds.size.height - logViewHeight - bottomAreaHeight - logAndBottomPadding, contentView.bounds.size.width, logViewHeight)];
-    g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7]; g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12]; g_logTextView.editable = NO; g_logTextView.layer.cornerRadius = 8;
+    // --- Fixed Bottom Area ---
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(0, scrollView.frame.origin.y + scrollView.frame.size.height + logAndBottomPadding, contentView.bounds.size.width, logViewHeight)];
+    g_logTextView.backgroundColor = ECHO_COLOR_BACKGROUND_DARK;
+    g_logTextView.layer.cornerRadius = 12;
+    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
+    g_logTextView.editable = NO;
+    g_logTextView.textContainerInset = UIEdgeInsetsMake(10, 10, 10, 10);
     NSMutableAttributedString *initLog = [[NSMutableAttributedString alloc] initWithString:@"[推衍核心]：就绪。\n"];
     [initLog addAttribute:NSForegroundColorAttributeName value:[UIColor whiteColor] range:NSMakeRange(0, initLog.length)];
     [initLog addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, initLog.length)];
-    g_logTextView.attributedText = initLog; [contentView addSubview:g_logTextView];
+    g_logTextView.attributedText = initLog;
+    [contentView addSubview:g_logTextView];
     
+    CGFloat bottomBtnY = g_logTextView.frame.origin.y + g_logTextView.frame.size.height + bottomAreaPadding;
     CGFloat bottomBtnWidth = (contentView.bounds.size.width - 3 * padding) / 2;
     UIButton *closeButton = createButton(@"关闭", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
-    closeButton.frame = CGRectMake(padding, contentView.bounds.size.height - bottomAreaHeight, bottomBtnWidth, 40); [contentView addSubview:closeButton];
+    closeButton.frame = CGRectMake(padding, bottomBtnY, bottomBtnWidth, bottomButtonsHeight); [contentView addSubview:closeButton];
     UIButton *sendLastReportButton = createButton(@"发送课盘", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
-    sendLastReportButton.frame = CGRectMake(padding * 2 + bottomBtnWidth, contentView.bounds.size.height - bottomAreaHeight, bottomBtnWidth, 40); [contentView addSubview:sendLastReportButton];
+    sendLastReportButton.frame = CGRectMake(padding * 2 + bottomBtnWidth, bottomBtnY, bottomBtnWidth, bottomButtonsHeight); [contentView addSubview:sendLastReportButton];
 
     g_mainControlPanelView.alpha = 0; [keyWindow addSubview:g_mainControlPanelView];
     [UIView animateWithDuration:0.4 animations:^{ g_mainControlPanelView.alpha = 1.0; }];
@@ -1073,27 +1110,47 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)handleAdvancedToggle:(UIButton *)sender {
     g_isAdvancedSectionExpanded = !g_isAdvancedSectionExpanded;
     
-    UIScrollView *scrollView = (UIScrollView *)[sender.superview viewWithTag:112233];
-    UIView *container = [sender.superview viewWithTag:8889];
-    if (!scrollView || !container) return;
+    UIView *contentView = sender.superview.superview;
+    UIScrollView *scrollView = (UIScrollView *)[contentView viewWithTag:112233];
+    UIView *container = [scrollView viewWithTag:8889];
+    if (!contentView || !scrollView || !container) return;
     
-    CGFloat containerHeight = 46.0;
+    CGFloat containerContentHeight = 46.0;
+    CGFloat advancedSectionHeightChange = containerContentHeight + 10; // button height + top padding
     
     [UIView animateWithDuration:0.3 animations:^{
+        CGRect scrollFrame = scrollView.frame;
+        CGRect logFrame = g_logTextView.frame;
+        
         if (g_isAdvancedSectionExpanded) {
-            [sender setTitle:@"高级功能 ▲" forState:UIControlStateNormal];
-            container.alpha = 1.0;
-            CGRect frame = container.frame;
-            frame.size.height = containerHeight;
-            container.frame = frame;
-            scrollView.contentSize = CGSizeMake(scrollView.contentSize.width, scrollView.contentSize.height + containerHeight + 10);
+            if (@available(iOS 13.0, *)) { [sender setImage:[UIImage systemImageNamed:@"chevron.up"] forState:UIControlStateNormal]; }
+            
+            scrollFrame.size.height += advancedSectionHeightChange;
+            logFrame.origin.y += advancedSectionHeightChange;
+            
+            CGRect containerFrame = container.frame;
+            containerFrame.size.height = containerContentHeight;
+            container.frame = containerFrame;
         } else {
-            [sender setTitle:@"高级功能 ▼" forState:UIControlStateNormal];
-            container.alpha = 0.0;
-            CGRect frame = container.frame;
-            frame.size.height = 0;
-            container.frame = frame;
-            scrollView.contentSize = CGSizeMake(scrollView.contentSize.width, scrollView.contentSize.height - containerHeight - 10);
+            if (@available(iOS 13.0, *)) { [sender setImage:[UIImage systemImageNamed:@"chevron.down"] forState:UIControlStateNormal]; }
+
+            scrollFrame.size.height -= advancedSectionHeightChange;
+            logFrame.origin.y -= advancedSectionHeightChange;
+
+            CGRect containerFrame = container.frame;
+            containerFrame.size.height = 0;
+            container.frame = containerFrame;
+        }
+        
+        scrollView.frame = scrollFrame;
+        g_logTextView.frame = logFrame;
+        
+        for(UIView *subview in contentView.subviews) {
+            if (subview.tag == kButtonTag_ClosePanel || subview.tag == kButtonTag_SendLastReportToAI) {
+                CGRect btnFrame = subview.frame;
+                btnFrame.origin.y = logFrame.origin.y + logFrame.size.height + 10;
+                subview.frame = btnFrame;
+            }
         }
     }];
 }
@@ -1115,20 +1172,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 %new
-- (void)addDoneButtonToKeyboardForTextView:(UITextView *)textView {
-    UIToolbar* keyboardToolbar = [[UIToolbar alloc] init];
-    [keyboardToolbar sizeToFit];
-    UIBarButtonItem *flexBarButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil];
-    UIBarButtonItem *doneBarButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(doneButtonTapped)];
-    keyboardToolbar.items = @[flexBarButton, doneBarButton];
-    textView.inputAccessoryView = keyboardToolbar;
+- (BOOL)textView:(UITextView *)textView shouldChangeTextInRange:(NSRange)range replacementText:(NSString *)text {
+    if ([text isEqualToString:@"\n"]) {
+        [textView resignFirstResponder];
+        return NO;
+    }
+    return YES;
 }
 
-%new
-- (void)doneButtonTapped {
-    [g_questionTextView resignFirstResponder];
-}
-
+// ... (其余所有函数，如 buttonTouchDown, handleMasterButtonTap, presentAIActionSheet, showProgressHUD 等，保持不变)
 %new
 - (void)buttonTouchDown:(UIButton *)sender { [UIView animateWithDuration:0.1 animations:^{ sender.alpha = 0.7; }]; }
 %new
@@ -1801,7 +1853,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo推衍课盘] v18.0 已加载。");
+        NSLog(@"[Echo推衍课盘] v19.0 已加载。");
     }
 }
 
@@ -1840,5 +1892,3 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-
-
