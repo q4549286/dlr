@@ -966,25 +966,32 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat padding = 15.0;
     
     // --- Reusable Element Creators ---
-    UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-        btn.backgroundColor = color;
-        btn.tag = tag;
-        [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
-        [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
-        [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
-        btn.layer.cornerRadius = 12;
+ UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+    btn.backgroundColor = color;
+    btn.tag = tag;
+    [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+    [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
+    [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
+    btn.layer.cornerRadius = 12;
 
-        [btn setTitle:[NSString stringWithFormat:@" %@", title] forState:UIControlStateNormal];
-        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
-            [btn setImage:[UIImage systemImageNamed:iconName] forState:UIControlStateNormal];
-        }
-        btn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
-        [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        btn.tintColor = [UIColor whiteColor];
-        
-        return btn;
-    };
+    // << FIX: Use traditional insets for perfect icon and title alignment >>
+    [btn setTitle:title forState:UIControlStateNormal];
+    if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
+        [btn setImage:[UIImage systemImageNamed:iconName] forState:UIControlStateNormal];
+        // Move title to the right, image to the left
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, -8);
+        btn.imageEdgeInsets = UIEdgeInsetsMake(0, -8, 0, 8);
+        #pragma clang diagnostic pop
+    }
+    btn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    btn.tintColor = [UIColor whiteColor];
+    
+    return btn;
+};
     UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) { 
         UILabel *label = [[UILabel alloc] init];
         label.text = title; 
@@ -1942,6 +1949,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
