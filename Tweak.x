@@ -1058,10 +1058,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [advancedToggleBtn setTitleColor:[UIColor lightGrayColor] forState:UIControlStateNormal];
     [advancedToggleBtn setTitle:@"高级功能" forState:UIControlStateNormal];
     if (@available(iOS 13.0, *)) {
-        [advancedToggleBtn setImage:[UIImage systemImageNamed:@"chevron.down"] forState:UIControlStateNormal];
-        advancedToggleBtn.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
-        advancedToggleBtn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, - (contentWidth - 2*padding - 100));
-    }
+    [advancedToggleBtn setImage:[UIImage systemImageNamed:@"chevron.down"] forState:UIControlStateNormal];
+    advancedToggleBtn.semanticContentAttribute = UISemanticContentAttributeForceRightToLeft;
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    advancedToggleBtn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, - (contentWidth - 2*padding - 100));
+    #pragma clang diagnostic pop
+}
     advancedToggleBtn.tag = 8888;
     [advancedToggleBtn addTarget:self action:@selector(handleAdvancedToggle:) forControlEvents:UIControlEventTouchUpInside];
     [scrollView addSubview:advancedToggleBtn];
@@ -1892,3 +1895,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
