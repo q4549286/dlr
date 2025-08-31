@@ -1078,7 +1078,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     card2InnerY += 22 + 15;
     
     NSArray *allToolButtons = @[
-        @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @()},
+    @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)}
         @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
         @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)},
         @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)},
@@ -1951,6 +1951,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
