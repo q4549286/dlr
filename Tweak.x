@@ -1046,11 +1046,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIView *sep1 = createSeparator(contentInnerWidth); sep1.frame = CGRectOffset(sep1.frame, padding, currentY); [scrollView addSubview:sep1];
     currentY += sep1.frame.size.height + 20;
 
-    UILabel *sec1Title = createSectionTitle(@"课盘总览");
-    sec1Title.frame = CGRectMake(padding, currentY, contentInnerWidth, 22); [scrollView addSubview:sec1Title];
-    currentY += 22 + 10;
-    btnWidth = (contentInnerWidth - padding) / 2.0;
-    UIButton *stdButton = createButton(@"标准课盘", @"doc.text", kButtonTag_StandardReport, ECHO_COLOR_MAIN_TEAL);
+   UILabel *sec1Title = createSectionTitle(@"课盘总览");
+sec1Title.frame = CGRectMake(padding, currentY, contentInnerWidth, 22); [scrollView addSubview:sec1Title];
+currentY += 22 + 10;
+CGFloat btnWidth = (contentInnerWidth - padding) / 2.0; // << FIX: 加上 CGFloat 声明
+UIButton *stdButton = createButton(@"标准课盘", @"doc.text", kButtonTag_StandardReport, ECHO_COLOR_MAIN_TEAL);
     stdButton.frame = CGRectMake(padding, currentY, btnWidth, 48); [scrollView addSubview:stdButton];
     UIButton *deepButton = createButton(@"深度课盘", @"square.stack.3d.up.fill", kButtonTag_DeepDiveReport, ECHO_COLOR_MAIN_BLUE);
     deepButton.frame = CGRectMake(padding + btnWidth + padding, currentY, btnWidth, 48); [scrollView addSubview:deepButton];
@@ -1894,6 +1894,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
