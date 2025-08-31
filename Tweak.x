@@ -1061,13 +1061,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [textViewContainer addSubview:g_questionTextView];
 
     g_clearInputButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    if (@available(iOS 13.0, *)) { [g_clearInputButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal]; }
-    g_clearInputButton.frame = CGRectMake(contentInnerWidth - 35, 10, 25, 25);
-    g_clearInputButton.tintColor = [UIColor grayColor];
-    g_clearInputButton.tag = kButtonTag_ClearInput;
-    g_clearInputButton.alpha = 0;
-    [g_clearInputButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
-    [textViewContainer addSubview:g_clearInputButton];
+if (@available(iOS 13.0, *)) {
+    // << FIX: Use UIImageSymbolConfiguration to match font size >>
+    CGFloat iconPointSize = 14.0; // Match the text view's font size
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:iconPointSize weight:UIImageSymbolWeightRegular];
+    UIImage *icon = [UIImage systemImageNamed:@"xmark.circle.fill" withConfiguration:config];
+    [g_clearInputButton setImage:icon forState:UIControlStateNormal];
+}
+// Adjust frame to better center the smaller icon
+g_clearInputButton.frame = CGRectMake(contentInnerWidth - 35, (110 - 25)/2.0, 25, 25); 
+g_clearInputButton.tintColor = [UIColor grayColor];
+g_clearInputButton.tag = kButtonTag_ClearInput;
+g_clearInputButton.alpha = 0;
+[g_clearInputButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+[textViewContainer addSubview:g_clearInputButton];
     currentY += 110 + 20;
 
     UIView *sep1 = createSeparator(contentInnerWidth); sep1.frame = CGRectOffset(sep1.frame, padding, currentY); [scrollView addSubview:sep1];
@@ -1969,6 +1976,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
