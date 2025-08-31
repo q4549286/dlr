@@ -942,7 +942,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 
 // =========================================================================
-// ↓↓↓ 使用下面这个最终对齐修正的 V28.2 版本，替换掉您现有的 createOrShowMainControlPanel 函数 ↓↓↓
+// ↓↓↓ 使用下面这个最终对齐修正的 V28.3 版本，替换掉您现有的 createOrShowMainControlPanel 函数 ↓↓↓
 // =========================================================================
 %new
 - (void)createOrShowMainControlPanel {
@@ -965,8 +965,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [g_mainControlPanelView addSubview:contentView];
 
     CGFloat padding = 15.0;
-    // << FIX: Calculate ONE definitive button width for all 2-column layouts >>
-    CGFloat btnWidth = (contentView.bounds.size.width - 3 * padding) / 2.0;
     
     // --- Reusable Element Creators ---
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
@@ -1002,7 +1000,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // --- Fixed Header ---
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 大六壬推衍 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v28.2" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v28.3" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString;
@@ -1051,11 +1049,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [card1 addSubview:sec1Title];
     card1InnerY += 22 + 10;
     
+    // << FIX: Use a specific width for buttons inside cards >>
+    CGFloat cardBtnWidth = (card1.bounds.size.width - 3*padding) / 2.0;
     UIButton *stdButton = createButton(@"标准课盘", @"doc.text", kButtonTag_StandardReport, ECHO_COLOR_MAIN_TEAL);
-    stdButton.frame = CGRectMake(padding, card1InnerY, btnWidth, 48);
+    stdButton.frame = CGRectMake(padding, card1InnerY, cardBtnWidth, 48);
     [card1 addSubview:stdButton];
     UIButton *deepButton = createButton(@"深度课盘", @"square.stack.3d.up.fill", kButtonTag_DeepDiveReport, ECHO_COLOR_MAIN_BLUE);
-    deepButton.frame = CGRectMake(padding + btnWidth + padding, card1InnerY, btnWidth, 48);
+    deepButton.frame = CGRectMake(padding + cardBtnWidth + padding, card1InnerY, cardBtnWidth, 48);
     [card1 addSubview:deepButton];
     card1InnerY += 48 + 15;
     card1.frame = CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, card1InnerY);
@@ -1085,7 +1085,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     for (int i = 0; i < allToolButtons.count; i++) {
         NSDictionary *config = allToolButtons[i];
         UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
-        btn.frame = CGRectMake(padding + (i % 2) * (btnWidth + padding), card2InnerY + (i / 2) * 56, btnWidth, 46);
+        btn.frame = CGRectMake(padding + (i % 2) * (cardBtnWidth + padding), card2InnerY + (i / 2) * 56, cardBtnWidth, 46);
         [card2 addSubview:btn];
     }
     card2InnerY += ((allToolButtons.count + 1) / 2) * 56 + 5;
@@ -1095,7 +1095,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     // --- Intelligent Log View & Fixed Bottom Buttons ---
     CGFloat bottomButtonsHeight = 40;
     CGFloat bottomAreaPadding = 10;
-    CGFloat logTopPadding = 20; // Increased padding for better separation
+    CGFloat logTopPadding = 20;
     CGFloat bottomButtonsY = contentView.bounds.size.height - bottomButtonsHeight - bottomAreaPadding;
 
     CGFloat logViewY = currentY + logTopPadding;
@@ -1113,11 +1113,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     g_logTextView.attributedText = initLog;
     [contentView addSubview:g_logTextView];
 
+    // << FIX: Use a specific width for the bottom buttons >>
+    CGFloat bottomBtnWidth = (contentView.bounds.size.width - 2*padding - padding) / 2.0;
     UIButton *closeButton = createButton(@"关闭", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
-    closeButton.frame = CGRectMake(padding, bottomButtonsY, btnWidth, bottomButtonsHeight);
+    closeButton.frame = CGRectMake(padding, bottomButtonsY, bottomBtnWidth, bottomButtonsHeight);
     [contentView addSubview:closeButton];
     UIButton *sendLastReportButton = createButton(@"发送课盘", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
-    sendLastReportButton.frame = CGRectMake(padding + btnWidth + padding, bottomButtonsY, btnWidth, bottomButtonsHeight);
+    sendLastReportButton.frame = CGRectMake(padding + bottomBtnWidth + padding, bottomButtonsY, bottomBtnWidth, bottomButtonsHeight);
     [contentView addSubview:sendLastReportButton];
 
     // --- Finalize Panel Animation ---
@@ -1943,6 +1945,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
