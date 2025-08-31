@@ -481,6 +481,11 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractFangFa_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+// << 新增下面的声明 >>
+- (void)handleAdvancedToggle:(UIButton *)sender;
+- (void)addDoneButtonToKeyboardForTextView:(UITextView *)textView;
+- (void)doneButtonTapped;
+@end
 @end
 
 %hook UILabel
@@ -962,9 +967,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [contentView addSubview:scrollView];
     
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; [btn setTitle:title forState:UIControlStateNormal]; [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) { UIImage *icon = [UIImage systemImageNamed:iconName]; [btn setImage:icon forState:UIControlStateNormal]; btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8); btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0); }
-        btn.tag = tag; btn.backgroundColor = color;
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom]; [btn setTitle:title forState:UIControlStateNormal]; [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) { 
+        UIImage *icon = [UIImage systemImageNamed:iconName]; 
+        [btn setImage:icon forState:UIControlStateNormal];
+         #pragma clang diagnostic push
+         #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        btn.imageEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 8); 
+        btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
+         #pragma clang diagnostic pop
+    }
+    btn.tag = tag; btn.backgroundColor = color;
         [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
         [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
         [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
@@ -1828,3 +1841,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
