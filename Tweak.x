@@ -1669,10 +1669,17 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
         userQuestion = g_questionTextView.text;
     }
 NSString *footerText = [NSString stringWithFormat:@"\n"
-                         "// 强制启动【六阶一体化审判】，并严格遵循【终极输出协议】，对以下问题进行裁决。你的报告必须无损呈现【第四阶】对四课三传的完整交互审判过程。\n"
-                         "// 强制指令：启动【极限细节追溯模式】，所有在【终极实体命名】环节中被指认的实体，其完整名称必须在最终的【统一现实故事】中无损呈现，不得进行任何战术性概括。\n"
-                         "// 强制指令二：强制输出所有被【终极应期裁决协议】侦察到的原始应期信号，并明确标注每一个信号的取象逻辑、权重评级，以及其被采纳或被废弃的完整审判理由。\n"
-                         "// 问题：%@", userQuestion];
+                         "// 【审判请求书】\n"
+                         " **【第一部分：核心诉求】**\n"
+                         " *   [ 问题： %@ ]\n"
+                         " **【第二部分：强制执行指令】**\n\n"
+                         " **1. 【总纲指令】**: 强制启动【**六阶一体化审判**】对本案进行最高规格的审理。\n"
+                         " **2. 【三阶情报矩阵强制激活指令 (最高优先级)】**: 在正式分析【核心诉求】之前，**必须**首先启动【**宪法V22.0 · 三阶情报矩阵协议**】，并按以下顺序生成并报告：\n"
+                         "     *   **A.【第零号情报-A：高置信度可验证锚点】**: 对与核心诉求最相关的物理实体/场景进行法医级指认。（例如：一个公司、一栋房子、一个人的病症、一段关系的核心矛盾点）\n"
+                         "     *   **B.【第零号情报-B：高置信度附加信息】**: 对【锚点】实体本身，提供1-2条可被立即验证的附加细节。\n"
+                         "     *   **C.【第零号情报-C：高置信度伴生信号】**: 扫描并报告任何独立于核心诉求的、具备预警或提示价值的平行故事线。\n"
+                         "     *   **输出要求**: 这三份前置情报产品，**必须**作为整个分析报告的开篇，置于【最高情报摘要】之前，用以确立本次审判的全息现实基石。\n"
+                         " **3. 【质量控制指令】**: 强制执行【**最终交付审计协议**】，确保报告的逻辑链完整，且所有在【终极实体命名】环节中被指认的实体，其完整名称必须在最终的【统一现实故事】中无损呈现，不得进行任何战术性概括。", userQuestion];
 
     if (headerPrompt.length > 0) {
         return [NSString stringWithFormat:@"%@%@\n%@%@", headerPrompt, structuredReport, summaryLine, footerText];
@@ -3221,6 +3228,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
