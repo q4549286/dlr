@@ -87,11 +87,7 @@ static UIButton *g_clearInputButton = nil;
     _Pragma("clang diagnostic pop")
 
 #pragma mark - AI Report Generation
-static NSString *getAIPromptHeader() {
-    // This is no longer used in the final report footer.
-    // It's kept here in case you want to restore it, but the new footer is more aligned with our goals.
-    return @"";
-}
+
 
 // ==========================================================================================
 // vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv CODE REVIEW vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
@@ -1918,4 +1914,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
