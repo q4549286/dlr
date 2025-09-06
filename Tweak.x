@@ -132,7 +132,7 @@ static NSString* purifyKeChuanDetail(NSString *rawKeChuanDetail) {
     if (!rawKeChuanDetail || rawKeChuanDetail.length == 0) return @"";
 
     NSMutableString *purifiedReport = [NSMutableString string];
-    NSRegularExpression *objectRegex = [NSRegularExpression regularExpressionWithPattern:@"- 对象: ([^\n]+)\n((?:.|\n)*?)(?=(?:- 对象:|\Z))" options:NSRegularExpressionDotMatchesLineSeparators error:nil];
+    NSRegularExpression *objectRegex = [NSRegularExpression regularExpressionWithPattern:@"- 对象: ([^\n]+)\n((?:.|\n)*?)(?=(?:- 对象:|\\Z))" options:NSRegularExpressionDotMatchesLineSeparators error:nil];
     NSArray<NSTextCheckingResult *> *matches = [objectRegex matchesInString:rawKeChuanDetail options:0 range:NSMakeRange(0, rawKeChuanDetail.length)];
 
     for (NSTextCheckingResult *match in matches) {
@@ -1918,3 +1918,4 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
