@@ -2358,12 +2358,12 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
 NSString *footerText = [NSString stringWithFormat:@"\n\n"
                          "//=======================================================\n"
                          "// 【首席六壬情报分析师 · 终极宪法】\n"
-                         "// 【情报任务书：%@】\n"
+                         "// 【情报任务书：[自动生成任务编号]】\n"
                          "//=======================================================\n\n"
                          "//-------------------【第一部分：核心情报需求】-------------------\n\n"
                          "//**【1. 核心问题 (用户原始输入)】**\n"
                          "// %@\n\n"
-                         "//**【2. 强制性本体论追溯指令 (V37.0)】**\n"
+                         "//**【2. 强制性本体论追溯指令】**\n"
                          "// (系统必须执行，此为S级优先任务)\n"
                          "// 指令：\n"
                          "// 1. **【核心实体识别】**: 对【核心问题】进行语义分析，识别出其中的【核心实体】（例如：“钱”、“关系”、“工作”等）。\n\n"
@@ -2404,7 +2404,6 @@ NSString *footerText = [NSString stringWithFormat:@"\n\n"
                          "//=======================================================\n"
                          "// 【任务已立案，宪法已激活，分析程序启动。】\n"
                          "//=======================================================\n",
-                         taskID,
                          userQuestion];
 
 
@@ -3956,6 +3955,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
