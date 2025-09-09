@@ -2705,7 +2705,7 @@ NSString *footerText = [NSString stringWithFormat:@"\n\n"
                           "//**【指令004：情报产品生成与交付】**\n"
                           "// -> 调用【第六章：出版法】，严格按照【六阶叙事性出版协议】生成最终报告。\n"
                           "//    - a. **【第一阶：最高情报摘要】**: 结论前置，直击核心。\n"
-                          "//    - b. **【第二阶：全息演员表】**: 强制点名，确保所有核心实体100%呈现。\n"                          
+                          "//    - b. **【第二阶：全息演员表】**: 强制点名，确保所有核心实体100%\呈现。\n"                          
                           "//    - c. **【第三阶：最终统一现实故事】**: 遵循【强制实体叙事】原则，揭示事件的完整因果链。\n"
                           "//    - d. **【第四阶：高置信度应期报告】**: 调用【终极应期裁决引擎】，精准定位时间节点。\n"
                           "//    - e. **【第五阶：终极印证协议】**: 揭示隐藏现实，印证全局洞察力，实现体验峰值。\n"
@@ -4267,6 +4267,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
