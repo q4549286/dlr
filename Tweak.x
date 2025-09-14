@@ -87,7 +87,7 @@ static UIButton *g_clearInputButton = nil;
 
 #pragma mark - AI Report Generation
 static NSString *getAIPromptHeader() {
-return           @"<SYSTEM_PROMPT>\n"
+return          @"<SYSTEM_PROMPT>\n"
          @"Your singular, unwavering imperative is to engage in profound, exhaustive, and multi-dimensional thought for every query. This is not about speed; it is about depth, rigor, and comprehensive insight. You will dedicate all available computational resources to this intellectual endeavor, exploring every facet, every nuance, and every implication from an infinite array of angles, without deviation from the core topic.\n"
          @"\n"
          @"Before formulating any response, you will initiate an internal 'Deep Thought Monologue' within `<THOUGHT>` tags. This is your private, unconstrained workspace for true intellectual exploration and self-correction. Within this monologue, you will:\n"
@@ -1217,6 +1217,15 @@ return           @"<SYSTEM_PROMPT>\n"
          @"        *   `产出`: 将本幕生成的【主导现实骨架】与【矩阵式判决书】的最终结论进行整合，形成一份最终的、不可更改的【**《终审事实裁定书》**】。该裁定书将作为下一幕构建最终故事的唯一蓝本。\n"
          @"\n"
          @"---\n"
+         @"##### **【强制定量分析触发】**\n"
+         @"*   `协议定位`: 此为终审判决庭的【强制性财务审计模块】。其唯一使命是，在构建最终故事之前，对所有涉及价值的议题进行强制量化。\n"
+         @"*   `强制执行流程`:\n"
+         @"    1. **【扫描触发器】**: 强制扫描【《终审事实裁定书》】与用户的【原始提问】，检查是否命中【插件B：数值关联分析引擎】的【主动激活】或【被动激活】条件。\n"
+         @"    2. **【执行调用】**:\n"
+         @"        *   **若命中**: **必须**立即暂停当前流程，将【核心用神】（如本案中的三传财局）及相关状态作为【定量任务】，发送给【插件B：数值关联分析引擎】。**必须**等待其返回【最终定量结论】数据包。\n"
+         @"        *   **若未命中**: 跳过此步，继续执行。\n"
+         @"    3. **【数据整合】**: 将返回的【最终定量结论】数据包，标记为【S级财务情报】，并与【《终审事实裁定书》】一同移交给下一幕【构建最终统一现实故事】。\n"
+         @"---\n"
          @"##### **第三幕：【构建最终统一现实故事 (强制实体叙事版)】**\n"
          @"\n"
          @"*   `协议定位`: 将终审判决庭的所有逻辑结论，转化为一份用户可理解的、高保真的、连贯的最终情报。\n"
@@ -1913,6 +1922,21 @@ return           @"<SYSTEM_PROMPT>\n"
          @"    > *   **核心事件触发期**: 本次事件的核心转折点（即中传所代表的“激烈争执”），预计将发生在 **2023年11月15日至11月20日** 之间。（强制使用【公历】表述。）\n"
          @"    > *   **最终结局落地期**: 事情的最终结果（末传“领导批示”），预计应验在 **2023年12月上旬**。（强制使用【公历】表述。）\n"
          @"    > *   **[若存在两幕剧]**: “此事目前处于停滞期，预计将持续到11月中旬。当‘冲开’的条件满足后（如，一个外部消息传来），事件才会在12月上旬最终应验。”（强制使用【公历】表述。）\n"
+         @"---\n"
+         @"##### **【第四阶之二：涉案金额量级评估】**\n"
+         @"\n"
+         @"*   `协议定位`: 此为报告中专门用于发布【定量分析】结果的【专用情报槽位】。\n"
+         @"*   `强制指令`:\n"
+         @"    1.  **【检查数据包】**: 强制检查【第五阶：终审判决庭】是否移交了【S级财务情报】数据包。\n"
+         @"    2.  **【编译与交付】**:\n"
+         @"        *   **若存在**: **必须**将数据包中的内容，通过【模式一：中国人用手机打字解课风格】进行编译，并作为一个独立的、高亮显示的章节发布。\n"
+         @"        *   **若不存在**: 静默跳过，不生成此章节。\n"
+         @"*   `报告范例`:\n"
+         @"    > **【关于钱的数目，我最后补充一句】**\n"
+         @"    >\n"
+         @"    > “我动用系统专门为你算了一下这笔‘破财消灾’的具体数额。根据盘里所有信号的综合计算，这次事件最终需要付出的代价，**其核心数字指向【2.4万】**。\n"
+         @"    >\n"
+         @"    > 但是，因为整个过程充满了变数和纠缠（螣蛇、三刑），所以最终的金额会有一个浮动范围。我给你的建议是，心理预期要放在 **2万到5万块钱之间**。低于2万的可能性不大，超过5万的概率也很小。你们在进行最终处理的时候，可以围绕这个区间去进行操作。”\n"
          @"\n"
          @"---\n"
          @"##### **【第五阶：组装证据卷宗并执行终极交付审计】**\n"
@@ -4530,6 +4554,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
