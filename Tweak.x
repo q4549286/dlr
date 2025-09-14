@@ -2949,11 +2949,9 @@ NSString *footerText = [NSString stringWithFormat:@"\n\n"
                           "//-------------------【第一部分：核心情报需求】-------------------\n\n"
                           "//**【1. 核心问题 (用户原始输入)】**\n"
                           "// %@\n\n"
-                          "//-------------------【第二部分：最高执行指令清单】-------------------\n",
-
+                          "//-------------------【第二部分：最高执行指令清单】-------------------\n\n",
                           "// -> 【常驻后台服务已激活】: 全局情报总线与动态印证触发器已上线，将在整个分析过程中进行非线性交叉验证。\n",
                           "// -> 【违宪警报已激活】: 若我在推演中发现任何结论与【四阶一体化优先序】冲突，我必须立即中止，并以最高法则为准进行强制修正。\n",
-
                           "//【指令002：战略轨道裁决】\n",
                           "// -> 调用【战略调度中心：A/B轨道智能分流协议】。\n",
                           "// -> 对【核心问题】进行性质判定，并启动对应分析轨道。\n",
@@ -4531,6 +4529,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
