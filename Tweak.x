@@ -2242,7 +2242,6 @@ return         @"<SYSTEM_PROMPT>\n"
         @"    >         *   `六亲`: 妻财\n"
         @"    >         *   `天将`: **天乙贵人 (格局核心)**\n"
         @"    >     *   **2. 法医级状态报告**:\n"
-        @"    >         *   `旺相休囚`: **【死】** (在巳月，金处于死地，能量耗尽)\n"
         @"    >         *   `S级状态标签`: [月将]\n"
         @"    >         *   `落宫及长生`: **临地盘【亥】宫，为【绝】地。** (证据来源：标准化课盘原文 `亥宫(绝): 酉(貴人)`)\n"
         @"    >         *   `空亡`: 无\n"
@@ -2255,7 +2254,6 @@ return         @"<SYSTEM_PROMPT>\n"
         @"    >         *   `地支`: 亥\n"
         @"    >         *   `六亲 (对日干)`: 官鬼\n"
         @"    >     *   **2. 法医级状态报告**:\n"
-        @"    >         *   `旺相休囚`: **【囚】** (在巳月，水处于囚地，能量被禁锢)\n"
         @"    >         *   `S级状态标签`: [旬奇] [日马] [日德]\n"
         @"    >         *   `落宫及长生 (对日干)`: **临地盘【亥】宫，为【养】地。** (证据来源：标准化课盘原文 `丑宫(养): 亥(朱雀)`)\n"
         @"    >         *   `空亡`: **坐空** (证据来源：标准化课盘原文 `中传-地支(亥)` 详解：`空 : 坐空得冲 为官鬼坐空...`)\n"
@@ -4751,6 +4749,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
