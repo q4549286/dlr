@@ -3096,7 +3096,9 @@ NSString *footerText = [NSString stringWithFormat:@"\n\n"
                           "//        - 强制、完整、不可跳跃地启动【第三章：战略法】及后续所有章节的完整流程。\n\n"
                           "//【指令003：启动B轨道 · 全景推演模式】\n"
                           "// (若指令002裁决为B轨道，则此指令自动生效)\n"
-                          "// -> 启动【第三章：战略法 · 六阶一体化审判框架】，严格按照以下不可跳跃的流程执行：\n"
+                          "// -> 启动【第三章：战略法 · 六阶一体化审判框架】，严格按照以下不可跳跃的、逻辑递进的流程执行：\n"
+                          "//    - 【序幕：核心矛盾聚焦与象意通道选择协议】: 锁定核心矛盾，选择专属象意通道，发布最高分析指令。\n"
+                          "//    - 【零阶协议：最高任务书与初始假说设定】: 将用户主观信息降级为“待审假说”，建立“证据优先”授权。\n"
                           "//    - 【第一阶：时空总纲审判】: 生成【总纲报告】，定义战场的宇宙背景与物理定律。\n"
                           "//    - 【第二阶：战略资源评估】: 对格局、神煞、天命进行盘点，并在此阶段【静默执行】所有格局的内部司法预审。\n"
                           "//    - 【第三阶：静态战场测绘】: 调用【统一节点审判引擎】，生成【《静态战场态势报告》】。\n"
@@ -4661,6 +4663,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
