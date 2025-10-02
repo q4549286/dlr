@@ -3019,7 +3019,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     @"key": @"行年参数", 
     @"title": @"模块二：【天命系统】 - A级情报", 
     @"content": SafeString(reportData[@"行年参数"]),
-    @"prefix": @"// 协议定位：此模块为【天命级】情报的唯一入口，其权限高于所有其他分析性模块。\n// 核心指令：本模块的结论将作为【第一序位：天命法则】的唯一依据，拥有对整个事态最终性质的最高定义权。\n"
+    @"prefix": @"// 协议定位：此模块为【天命级】情报的唯一入口，其权限高于所有其他分析性模块。\n// 核心指令：本模块的结论将作为【第二序位：天命法则】的唯一依据，拥有对整个事态最终性质的最高定义权。\n"
 },@{
     @"key": @"神煞详情", 
     @"title": @"神煞系统", 
@@ -3030,7 +3030,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     @"key": @"辅助系统", 
     @"title": @"模块五：【辅助系统】 - B级情报", 
     @"content": @"COMPOSITE_SECTION_PLACEHOLDER",
-    @"prefix": @"// 协议定位：此模块提供宏观背景信息。\n// 核心指令：其内容主要用于【第零阶：时空总纲审判】，为事件定性提供辅助参考，不直接参与核心的生克推演。\n"
+    @"prefix": @"// 协议定位：此模块提供宏观背景信息。\n// 核心指令：其内容主要用于【第一阶：时空总纲审判】，为事件定性提供辅助参考，不直接参与核心的生克推演。\n"
 }
     ];
 
@@ -4751,6 +4751,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
