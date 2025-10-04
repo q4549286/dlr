@@ -684,9 +684,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 else if (g_s2_isExtractingKeChuanDetail) {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-    if ([vcClassName containsSt// V2 REPLACEMENT BLOCK - START
-else if (g_s2_isExtractingKeChuanDetail) {
-    NSString *vcClassName = NSStringFromClass([vcToPresent class]);
     if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
         UIView *contentView = vcToPresent.view;
         
@@ -2012,6 +2009,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
