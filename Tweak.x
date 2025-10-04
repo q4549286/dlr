@@ -684,134 +684,73 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 else if (g_s2_isExtractingKeChuanDetail) {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+    if ([vcClassName containsSt// V2 REPLACEMENT BLOCK - START
+else if (g_s2_isExtractingKeChuanDetail) {
+    NSString *vcClassName = NSStringFromClass([vcToPresent class]);
     if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
         UIView *contentView = vcToPresent.view;
         
-        // 1. 创建一个数组来存储所有提取到的文本元素及其位置
-        NSMutableArray<NSDictionary *> *allTextElements = [NSMutableArray array];
-
-        // 2. 提取所有 UILabel，无论它们在哪里
-        NSMutableArray<UILabel *> *allLabels = [NSMutableArray array];
-        FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
-
-        // 3. 查找 TableView，并标记出在 TableView 内部的 Label
-        UITableView *theTableView = nil;
-        Class tableViewClass = NSClassFromString(@"六壬大占.IntrinsicTableView");
-        if (tableViewClass) {
-            NSMutableArray *tableViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive(tableViewClass, contentView, tableViews);
-            if (tableViews.count > 0) {
-                theTableView = tableViews.firstObject;
-            }
-        }
+        // V2 提取逻辑: 基于主 StackView 的结构化解析
+        NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
         
-        // 4. 遍历所有找到的UILabel，将它们添加到我们的元素数组中
-        for (UILabel *label in allLabels) {
-            if (!label.text || label.text.length == 0) continue;
+        // 1. 寻找主容器 UIStackView
+        NSMutableArray *allStackViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
 
-            // 将 label 的坐标转换到 contentView 的坐标系，以保证排序准确
-            CGRect globalFrame = [label.superview convertRect:label.frame toView:contentView];
+        if (allStackViews.count > 0) {
+            UIStackView *mainStackView = allStackViews.firstObject; // 通常第一个就是最外层的
             
-            // 判断此 Label 是否在 TableView 内部
-            BOOL isInTableView = NO;
-            if (theTableView) {
-                CGRect tableViewFrameInContentView = [theTableView.superview convertRect:theTableView.frame toView:contentView];
-                if (CGRectContainsPoint(tableViewFrameInContentView, globalFrame.origin)) {
-                    // 更精确的判断：看它的父视图链上是否有 UITableViewCell
-                     UIView *superview = label.superview;
-                     while (superview && superview != contentView) {
-                         if ([superview isKindOfClass:[UITableViewCell class]]) {
-                             isInTableView = YES;
-                             break;
-                         }
-                         superview = superview.superview;
-                     }
-                }
-            }
-
-            // 如果不在 TableView 内，或者根本就没有 TableView，就作为一个独立的文本元素添加
-            if (!isInTableView) {
-                [allTextElements addObject:@{
-                    @"text": [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]],
-                    @"y": @(globalFrame.origin.y),
-                    @"x": @(globalFrame.origin.x)
-                }];
-            }
-        }
-
-        // 5. 如果存在 TableView，专门处理它内部的内容
-        if (theTableView) {
-            id<UITableViewDataSource> dataSource = theTableView.dataSource;
-            if (dataSource) {
-                NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:theTableView] : 1;
-                for (NSInteger section = 0; section < sections; section++) {
-                    NSInteger rows = [dataSource tableView:theTableView numberOfRowsInSection:section];
-                    for (NSInteger row = 0; row < rows; row++) {
-                        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
-                        UITableViewCell *cell = [dataSource tableView:theTableView cellForRowAtIndexPath:indexPath];
-                        if (cell) {
-                            NSMutableArray<UILabel *> *labelsInCell = [NSMutableArray array];
-                            FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
-                            
-                            // 对 Cell 内的 Label 按从左到右排序
-                            [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){
-                                return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
-                            }];
-
-                            // 智能拼接Cell内容
-                            NSMutableString *cellText = [NSMutableString string];
-                            if (labelsInCell.count > 1 && labelsInCell[0].frame.size.width < 100) { // 启发式判断：第一个label很短，可能是标题
-                                [cellText appendFormat:@"%@: %@", labelsInCell[0].text, labelsInCell[1].text];
-                                for (NSUInteger i = 2; i < labelsInCell.count; i++) {
-                                    [cellText appendFormat:@" %@", labelsInCell[i].text];
-                                }
-                            } else { // 否则，直接拼接
-                                for (UILabel *l in labelsInCell) {
-                                    if (l.text.length > 0) [cellText appendFormat:@"%@ ", l.text];
+            // 2. 遍历 StackView 的所有子视图 (arrangedSubviews 保证了视觉顺序)
+            for (UIView *subview in mainStackView.arrangedSubviews) {
+                if ([subview isKindOfClass:[UILabel class]]) {
+                    // 如果子视图是简单的 Label，直接取文本
+                    NSString *text = ((UILabel *)subview).text;
+                    if (text && text.length > 0) {
+                        [finalTextParts addObject:text];
+                    }
+                } 
+                else if ([subview isKindOfClass:NSClassFromString(@"六壬大占.IntrinsicTableView")]) {
+                    // 如果子视图是那个特殊的 TableView，使用旧的 TableView 解析逻辑
+                    UITableView *tableView = (UITableView *)subview;
+                    id<UITableViewDataSource> dataSource = tableView.dataSource;
+                    if (dataSource) {
+                        NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
+                        for (NSInteger section = 0; section < sections; section++) {
+                            NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
+                            for (NSInteger row = 0; row < rows; row++) {
+                                NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
+                                UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
+                                if (cell) {
+                                    NSMutableArray *labelsInCell = [NSMutableArray array];
+                                    FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
+                                    [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
+                                    NSMutableArray<NSString *> *cellTextParts = [NSMutableArray array];
+                                    for(UILabel *l in labelsInCell) { if(l.text.length > 0) [cellTextParts addObject:l.text]; }
+                                    NSString *fullCellText = [cellTextParts componentsJoinedByString:@" "];
+                                    [finalTextParts addObject:fullCellText];
                                 }
                             }
-                            
-                            NSString *finalCellText = [cellText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                            CGRect cellFrameInContentView = [theTableView convertRect:cell.frame toView:contentView];
-                            
-                            [allTextElements addObject:@{
-                                @"text": finalCellText,
-                                @"y": @(cellFrameInContentView.origin.y),
-                                @"x": @(cellFrameInContentView.origin.x) // 保留x用于可能的未来debug
-                            }];
                         }
                     }
                 }
+                // (可以再加 else if 来处理 UITextView 等其他未来可能出现的控件)
             }
+        } else {
+            // 如果找不到 StackView，做一个降级提示
+            LogMessage(EchoLogError, @"[课传V2] 提取失败: 未找到主 UIStackView 容器。");
+            [finalTextParts addObject:@"[提取失败: 视图结构已更改，未找到StackView]"];
         }
-        
-        // 6. 对所有收集到的文本元素，按垂直位置(y)进行最终排序
-        [allTextElements sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-            return [obj1[@"y"] compare:obj2[@"y"]];
-        }];
 
-        // 7. 组合成最终的字符串
-        NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
-        for (NSDictionary *element in allTextElements) {
-            [finalTextParts addObject:element[@"text"]];
-        }
-        
-        // 将所有部分用换行符连接起来，得到完整的内容
-        NSString *fullExtractedText = [finalTextParts componentsJoinedByString:@"\n"];
-        
-        // 存入结果数组
-        [g_s2_capturedKeChuanDetailArray addObject:fullExtractedText];
-        
-        LogMessage(EchoLogTypeSuccess, @"[课传] 成功参详流注内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
-        
-        // 继续处理下一个任务
+        // 3. 组合结果并继续下一个任务
+        [g_s2_capturedKeChuanDetailArray addObject:[finalTextParts componentsJoinedByString:@"\n"]];
+        LogMessage(EchoLogTypeSuccess, @"[课传V2] 成功参详流注内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
         dispatch_async(dispatch_get_main_queue(), ^{
             [self processKeChuanQueue_Truth_S2];
         });
-        
         return;
     }
 }
+// V2 REPLACEMENT BLOCK - END
     else if (g_isExtractingNianming) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
 
@@ -2073,6 +2012,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
