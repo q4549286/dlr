@@ -5451,14 +5451,192 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
     LogMessage(EchoLogTypeInfo, @"[课传] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_s2_keChuanWorkQueue.count);
     [self processKeChuanQueue_Truth_S2];
 }
+// =========================================================================
+// ↓↓↓ 全新的课传流注后置解析器 ↓↓↓
+// =========================================================================
+#pragma mark - KeChuan Detail Post-Processor
+
+// 一个辅助函数，用于从句子中提取特定关键词后的内容
+static NSString* extractValueAfterKeyword(NSString *line, NSString *keyword) {
+    NSRange keywordRange = [line rangeOfString:keyword];
+    if (keywordRange.location == NSNotFound) return nil;
+    
+    NSString *value = [line substringFromIndex:keywordRange.location + keywordRange.length];
+    return [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
+/**
+ @brief 将从App中提取的“课传流注”原始文本块，解析成结构化的键值对格式。
+ @param rawText 单个对象（如“初传 - 地支(寅)”）的完整描述文本。
+ @return 格式化后的字符串，带有缩进和清晰的标签。
+*/
+static NSString* parseKeChuanDetailBlock(NSString *rawText) {
+    if (!rawText || rawText.length == 0) return @"";
+
+    NSMutableString *structuredResult = [NSMutableString string];
+    NSArray<NSString *> *lines = [rawText componentsSeparatedByString:@"\n"];
+    NSMutableArray<NSString *> *processedLines = [NSMutableArray array]; // 用于标记已处理的行
+
+    // --- 阶段一：处理位于开头的特殊复合信息 ---
+    if (lines.count > 0) {
+        NSString *firstLine = [lines[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        
+        // 1. 解析旺衰 (e.g., "得四时旺气。")
+        NSRegularExpression *wangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"得四时(.)气" options:0 error:nil];
+        NSTextCheckingResult *wangshuaiMatch = [wangshuaiRegex firstMatchInString:firstLine options:0 range:NSMakeRange(0, firstLine.length)];
+        if (wangshuaiMatch) {
+            NSString *status = [firstLine substringWithRange:[wangshuaiMatch rangeAtIndex:1]];
+            [structuredResult appendFormat:@"  - 旺衰: %@\n", status];
+            [processedLines addObject:firstLine];
+        }
+
+        // 2. 解析长生状态 (e.g., "临申为绝之地。")
+        NSRegularExpression *changshengRegex = [NSRegularExpression regularExpressionWithPattern:@"临(.)为(.+之地)" options:0 error:nil];
+        NSTextCheckingResult *changshengMatch = [changshengRegex firstMatchInString:firstLine options:0 range:NSMakeRange(0, firstLine.length)];
+        if (changshengMatch) {
+            NSString *location = [firstLine substringWithRange:[changshengMatch rangeAtIndex:1]];
+            NSString *status = [firstLine substringWithRange:[changshengMatch rangeAtIndex:2]];
+            [structuredResult appendFormat:@"  - 长生: 临%@为%@\n", location, status];
+            [processedLines addObject:firstLine];
+        }
+        
+        // 3. 解析乘将关系 (e.g., "乘天后受其生。")
+        NSRegularExpression *chengjiangRegex = [NSRegularExpression regularExpressionWithPattern:@"乘(.+?)(受其.|为内战|能生之)" options:0 error:nil];
+        NSTextCheckingResult *chengjiangMatch = [chengjiangRegex firstMatchInString:firstLine options:0 range:NSMakeRange(0, firstLine.length)];
+        if (chengjiangMatch) {
+            NSString *tianJiang = [firstLine substringWithRange:[chengjiangMatch rangeAtIndex:1]];
+            NSString *relation = [firstLine substringWithRange:[chengjiangMatch rangeAtIndex:2]];
+            [structuredResult appendFormat:@"  - 乘将关系: 乘%@%@\n", tianJiang, relation];
+            [processedLines addObject:firstLine];
+        }
+        
+        // 针对天将的特殊开头解析
+        // e.g., "乘寅在初传、在末传、在辰阴，得四时旺气，天后能生寅。"
+        if ([firstLine containsString:@"乘"] && [firstLine containsString:@"在"]) {
+             [structuredResult appendFormat:@"  - 状态: %@\n", firstLine];
+             [processedLines addObject:firstLine];
+        }
+        
+        // 针对天将的临宫状态
+        // e.g., "临申(空亡)，得四时囚气。此曰修容..."
+        NSRegularExpression *lingongRegex = [NSRegularExpression regularExpressionWithPattern:@"临(.)\\((.*?)\\),.*此曰(.*?)," options:0 error:nil];
+        NSTextCheckingResult *lingongMatch = [lingongRegex firstMatchInString:firstLine options:0 range:NSMakeRange(0, firstLine.length)];
+        if (lingongMatch) {
+            NSString *location = [firstLine substringWithRange:[lingongMatch rangeAtIndex:1]];
+            NSString *status = [lingongMatch rangeAtIndex:2].location != NSNotFound ? [firstLine substringWithRange:[lingongMatch rangeAtIndex:2]] : @"";
+            NSString *term = [firstLine substringWithRange:[lingongMatch rangeAtIndex:3]];
+            [structuredResult appendFormat:@"  - 临宫状态: 临%@%@曰%@\n", location, status.length > 0 ? [NSString stringWithFormat:@"(%@)", status] : @"", term];
+            [processedLines addObject:firstLine];
+        }
+    }
+    
+    // --- 阶段二：处理结构较固定的键值对信息 ---
+    NSDictionary<NSString *, NSString *> *keywordMap = @{
+        @"德 :": @"德", @"空 :": @"空", @"合 :": @"合", @"刑 :": @"刑", @"冲 :": @"冲", @"害 :": @"害", @"破 :": @"破",
+        @"阳神为": @"阳神", @"阴神为": @"阴神",
+        @"于日": @"特殊交互(对日)", @"于辰": @"特殊交互(对辰)",
+    };
+    
+    BOOL inZaxiang = NO;
+    for (int i = 0; i < lines.count; ++i) {
+        NSString *line = [lines[i] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        if (line.length == 0 || [processedLines containsObject:line]) continue;
+
+        // 特殊处理：遁干 (跨越多行)
+        if ([line hasPrefix:@"遁干"]) {
+            NSString *dunGanLine = [line stringByReplacingOccurrencesOfString:@"遁干" withString:@""];
+            dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"初建: "];
+            dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"复建:" withString:@" 复建: "];
+            
+            NSMutableString *formattedDunGan = [[dunGanLine stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] mutableCopy];
+
+            // 查找后续的解释行来补充六亲关系
+            NSString *relation1 = @"";
+            if (i + 1 < lines.count && [lines[i+1] containsString:@"为日之"]) {
+                NSRange r = [lines[i+1] rangeOfString:@"为日之"];
+                relation1 = [[lines[i+1] substringFromIndex:r.location + r.length] componentsSeparatedByString:@"。"].firstObject;
+            }
+            NSString *relation2 = @"";
+            if (i + 2 < lines.count && [lines[i+2] containsString:@"为日之"]) {
+                NSRange r = [lines[i+2] rangeOfString:@"为日之"];
+                relation2 = [[lines[i+2] substringFromIndex:r.location + r.length] componentsSeparatedByString:@"。"].firstObject;
+            }
+            
+            // 尝试将关系插入
+            if (relation1.length > 0) {
+                NSRange firstPartEnd = [formattedDunGan rangeOfString:@"复建:"];
+                if (firstPartEnd.location != NSNotFound) {
+                    [formattedDunGan insertString:[NSString stringWithFormat:@"(%@),", relation1] atIndex:firstPartEnd.location - 1];
+                }
+            }
+            if (relation2.length > 0) {
+                 [formattedDunGan appendFormat:@"(%@)", relation2];
+            }
+            
+            [structuredResult appendFormat:@"  - 遁干: %@\n", formattedDunGan];
+            [processedLines addObject:line];
+            if (i + 1 < lines.count) [processedLines addObject:[lines[i+1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+            if (i + 2 < lines.count) [processedLines addObject:[lines[i+2] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+            continue;
+        }
+
+        // 处理“杂象”标题
+        if ([line isEqualToString:@"杂象"]) {
+            inZaxiang = YES;
+            [structuredResult appendString:@"  - 杂象:\n"];
+            [processedLines addObject:line];
+            continue;
+        }
+        
+        // 如果在杂象部分，所有内容都缩进
+        if (inZaxiang) {
+            [structuredResult appendFormat:@"    - %@\n", line];
+            [processedLines addObject:line];
+            continue;
+        }
+        
+        // 处理其他普通键值对
+        BOOL matched = NO;
+        for (NSString *keyword in keywordMap.allKeys) {
+            if ([line hasPrefix:keyword]) {
+                NSString *value = extractValueAfterKeyword(line, keyword);
+                NSString *label = keywordMap[keyword];
+                [structuredResult appendFormat:@"  - %@: %@\n", label, value];
+                [processedLines addObject:line];
+                matched = YES;
+                break;
+            }
+        }
+    }
+    
+    // 移除末尾多余的换行符
+    while ([structuredResult hasSuffix:@"\n"]) {
+        [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)];
+    }
+
+    return structuredResult;
+}
 %new
 - (void)processKeChuanQueue_Truth_S2 {
     if (!g_s2_isExtractingKeChuanDetail || g_s2_keChuanWorkQueue.count == 0) {
         if (g_s2_isExtractingKeChuanDetail) {
             LogMessage(EchoLogTypeTask, @"[完成] “课传流注”全部推衍完毕。");
-            NSMutableString *resultStr = [NSMutableString string];
-            if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) {
-                for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) { [resultStr appendFormat:@"- 对象: %@\n  %@\n\n", g_s2_keChuanTitleQueue[i], [g_s2_capturedKeChuanDetailArray[i] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]]; }
+            // 这是修改后的代码
+NSMutableString *resultStr = [NSMutableString string];
+if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) {
+    for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) {
+        // 获取原始文本块
+        NSString *rawBlock = g_s2_capturedKeChuanDetailArray[i];
+        
+        // 调用新的解析器进行结构化处理
+        NSString *structuredBlock = parseKeChuanDetailBlock(rawBlock);
+        
+        // 组合最终结果
+        [resultStr appendFormat:@"- 对象: %@\n%@\n\n", g_s2_keChuanTitleQueue[i], structuredBlock];
+    }
+    g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    // ... 后续代码保持不变
+}
                 g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 if (!g_s2_keChuan_completion_handler) {
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
@@ -5679,6 +5857,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
