@@ -4965,9 +4965,8 @@ else if (g_s2_isExtractingKeChuanDetail) {
     return [components componentsJoinedByString:@" "];
 }
 
-// 这是解析器的核心函数，负责将单个“对象”的文本块进行结构化
 - (NSString *)_echo_parseAndFormatDetailBlock:(NSString *)rawBlockText withTitle:(NSString *)title {
-    // [这里是原来的一大堆代码]
+    return @"DIAGNOSTIC_TEST_PASSED"; // 只保留这一行，其他全部删除
 }
 %new
 - (void)handleMasterButtonTap:(UIButton *)sender {
@@ -5721,6 +5720,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
