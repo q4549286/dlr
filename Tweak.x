@@ -4978,6 +4978,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new // 或者 %implementation 也可以，%new 更简洁
 // 这是为 UIViewController 类添加我们全新的方法
 
+// =========================================================================
+// ↓↓↓↓↓↓ 【第一步】将以下所有新代码，完整复制到您的脚本中 ↓↓↓↓↓↓
+// =========================================================================
+
 #pragma mark - Echo v3.0 Parser Engine
 
 // 这是辅助函数，专门用来清理和格式化“遁干”这一行特殊数据
@@ -4990,9 +4994,115 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     return [components componentsJoinedByString:@" "];
 }
 
+// 这是解析器的核心函数，负责将单个“对象”的文本块进行结构化
 - (NSString *)_echo_parseAndFormatDetailBlock:(NSString *)rawBlockText withTitle:(NSString *)title {
-    return @"DIAGNOSTIC_TEST_PASSED"; // 只保留这一行，其他全部删除
+    if (!rawBlockText || rawBlockText.length == 0) {
+        return @"";
+    }
+
+    NSMutableDictionary *parsedData = [NSMutableDictionary dictionary];
+    NSArray *lines = [rawBlockText componentsSeparatedByString:@"\n"];
+    
+    // 1. 定义我们关心的所有“关键字”。解析器将根据这些关键字来提取信息。
+    NSDictionary *knownKeys = @{
+        @"遁干": @"遁干",
+        @"德": @"德", @"空": @"空", @"合": @"合", @"刑": @"刑", @"冲": @"冲", @"害": @"害", @"破": @"破",
+        @"于日": @"特殊交互", @"于辰": @"特殊交互",
+        @"阳神": @"阳神", @"阴神": @"阴神", @"杂象": @"杂象"
+    };
+    
+    BOOL foundFirstKey = NO;
+
+    // 2. 逐行扫描和解析
+    for (NSString *line in lines) {
+        NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (trimmedLine.length == 0) continue;
+
+        NSString *foundKey = nil;
+        NSString *extractedValue = nil;
+        
+        // 优先处理那些没有明确关键字的“基础描述”行
+        if (!foundFirstKey) {
+            if ([trimmedLine containsString:@"得四时"]) { // 提取旺衰
+                NSRange range = [trimmedLine rangeOfString:@"气"];
+                if (range.location != NSNotFound && range.location > 0) {
+                    parsedData[@"旺衰"] = [trimmedLine substringWithRange:NSMakeRange(range.location - 1, 1)];
+                }
+            }
+            if ([trimmedLine containsString:@"临"]) { // 提取长生
+                 if (!parsedData[@"长生"]) parsedData[@"长生"] = trimmedLine;
+            }
+            if ([trimmedLine containsString:@"乘"]) { // 提取与天将的关系
+                 if (!parsedData[@"乘将关系"]) parsedData[@"乘将关系"] = trimmedLine;
+            }
+            if ([trimmedLine hasPrefix:@"天后"] || [trimmedLine hasPrefix:@"朱雀"] || [trimmedLine hasPrefix:@"青龙"]){ // 天将描述行
+                if ([trimmedLine containsString:@"昼将"]) parsedData[@"将阶"] = @"昼将";
+                if ([trimmedLine containsString:@"夜将"]) parsedData[@"将阶"] = @"夜将";
+            }
+        }
+        
+        // 尝试匹配我们定义的关键字
+        for (NSString *key in knownKeys.allKeys) {
+            NSString *pattern1 = [key stringByAppendingString:@" :"]; // 模式: "德 :"
+            NSString *pattern2 = [key stringByAppendingString:@" "];  // 模式: "遁干 "
+
+            if ([trimmedLine hasPrefix:pattern1]) {
+                foundKey = key;
+                extractedValue = [[trimmedLine substringFromIndex:pattern1.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+                break;
+            } else if ([trimmedLine hasPrefix:pattern2]) {
+                // 确保不是一个更长的单词的一部分
+                 if (trimmedLine.length > key.length && [[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:[trimmedLine characterAtIndex:key.length]]) {
+                    foundKey = key;
+                    extractedValue = [[trimmedLine substringFromIndex:key.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+                    break;
+                 }
+            }
+        }
+
+        if (foundKey) {
+            foundFirstKey = YES;
+            NSString *standardKey = knownKeys[foundKey];
+            
+            // 特殊处理
+            if ([standardKey isEqualToString:@"遁干"]) {
+                extractedValue = [self _echo_postProcessDunganLine:extractedValue];
+            }
+            
+            // 如果一个Key出现多次 (如“特殊交互”)，则将它们合并
+            if (parsedData[standardKey]) {
+                NSString *existingValue = parsedData[standardKey];
+                parsedData[standardKey] = [NSString stringWithFormat:@"%@ | %@", existingValue, extractedValue];
+            } else {
+                parsedData[standardKey] = extractedValue;
+            }
+        }
+        // 找到第一个关键字后，所有不匹配的行都会被当作“噪音”忽略掉
+    }
+    
+    // 3. 按照V3.0规范的顺序，格式化输出
+    NSMutableString *formattedOutput = [NSMutableString string];
+    [formattedOutput appendFormat:@"- 对象: %@\n", title];
+
+    NSArray *outputOrder = @[@"旺衰", @"长生", @"乘将关系", @"将阶", @"临宫状态", @"遁干", @"德", @"空", @"合", @"刑", @"冲", @"害", @"破", @"特殊交互", @"阳神", @"阴神", @"杂象"];
+
+    for (NSString *key in outputOrder) {
+        if (parsedData[key]) {
+            [formattedOutput appendFormat:@"  - %@: %@\n", key, parsedData[key]];
+        }
+    }
+    
+    // 如果字典为空，说明是个简单的对象，直接返回原始文本
+    if (parsedData.allKeys.count == 0) {
+        return [NSString stringWithFormat:@"- 对象: %@\n  - 原始信息: %@", title, rawBlockText];
+    }
+    
+    return [formattedOutput stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
+// =========================================================================
+// ↑↑↑↑↑↑ 【第一步】复制到这里结束 ↑↑↑↑↑↑
+// =========================================================================
 %new
 - (void)handleMasterButtonTap:(UIButton *)sender {
     [self buttonTouchUp:sender]; // Ensure button animates back up
@@ -5745,6 +5855,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
