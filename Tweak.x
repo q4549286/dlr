@@ -5454,6 +5454,9 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 // =========================================================================
 // ↓↓↓ 全新的课传流注后置解析器 ↓↓↓
 // =========================================================================
+// =========================================================================
+// ↓↓↓ The Corrected `parseKeChuanDetailBlock` Function (v1.2) ↓↓↓
+// =========================================================================
 #pragma mark - KeChuan Detail Post-Processor
 
 // 一个辅助函数，用于从句子中提取特定关键词后的内容
@@ -5884,6 +5887,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
