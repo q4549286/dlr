@@ -3790,7 +3790,7 @@ static NSString* extractValueAfterKeyword(NSString *line, NSString *keyword) {
     return [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 // =========================================================================
-// ↓↓↓ 全新的行年参数后置解析器 (v2.2 - 超精准解析) ↓↓↓
+// ↓↓↓ 全新的行年参数后置解析器 (v2.3 - 最终正则优化) ↓↓↓
 // =========================================================================
 #pragma mark - Nianming Detail Post-Processor
 
@@ -3830,23 +3830,24 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
         
         [structuredResult appendFormat:@"\n  // %@\n", title];
         
-        // --- v2.2 精细化解析核心信息 ---
+        // --- v2.3 最终正则优化 ---
+        // 匹配模式: (描述文本) (行年/本命)在(干支)，其临(干支)乘(干支)将乘(天将):
         NSRegularExpression *coreInfoRegex = [NSRegularExpression 
-            regularExpressionWithPattern:@"(.*?)(在|年)(.{2,}).*?临(.{1,2})乘(.{1,2})将乘(.*?):" 
+            regularExpressionWithPattern:@"(.*?)(行年|本命)在(.{2,})，其临(.{1,2})乘(.{1,2})将乘(.*?):" 
             options:0 error:nil];
         NSTextCheckingResult *coreInfoMatch = [coreInfoRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
         
         if (coreInfoMatch) {
-            NSString *subject      = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:1]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            NSString *subjectDesc  = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:1]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             NSString *subjectDiZhi = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:3]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             NSString *linGong      = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:4]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             NSString *cheng        = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:5]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             NSString *tianJiang    = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:6]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
             if ([title isEqualToString:@"行年信息"]) {
-                [structuredResult appendFormat:@"  - 行年: %@ (%@)\n", subject, subjectDiZhi];
+                [structuredResult appendFormat:@"  - 行年: %@ (%@)\n", subjectDesc, subjectDiZhi];
             } else {
-                 [structuredResult appendFormat:@"  - 本命: %@ (%@)\n", subject, subjectDiZhi];
+                 [structuredResult appendFormat:@"  - 本命: %@ (%@)\n", subjectDesc, subjectDiZhi];
             }
             [structuredResult appendFormat:@"  - 临宫: %@\n", linGong];
             [structuredResult appendFormat:@"  - 乘: %@\n", cheng];
@@ -3860,7 +3861,7 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
             [structuredResult appendFormat:@"  - 长生: %@\n", [partText substringWithRange:[changshengMatch rangeAtIndex:1]]];
         }
         
-        // --- v2.2 精准提取乘将关系描述 ---
+        // 提取乘将关系描述
         NSRegularExpression *tianjiangDescRegex = [NSRegularExpression regularExpressionWithPattern:@"其上神乘.*?为(.*?)[。|\\s]([^\\(]*?与发用之关系|[^\\(]*?所值神煞|$)" options:0 error:nil];
         NSTextCheckingResult *tianjiangDescMatch = [tianjiangDescRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
         if (tianjiangDescMatch) {
@@ -6181,6 +6182,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
