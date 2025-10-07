@@ -3781,156 +3781,101 @@ return            @"<SYSTEM_PROMPT>\n"
 // ↓↓↓ 使用这个完整、顺序调整后的版本替换您现有的函数 ↓↓↓
 // =========================================================================
 // =========================================================================
-// ↓↓↓ 全新的行年参数后置解析器 (v2.1 - 精细化解析) ↓↓↓
+// ↓↓↓ 全新的行年参数后置解析器 (v2.2 - 再次精细化) ↓↓↓
 // =========================================================================
-static NSString* parseNianmingBlock(NSString *rawParamBlock);
 #pragma mark - Nianming Detail Post-Processor
 
-/**
- @brief 将从App中提取的“行年参数”原始文本块，解析成结构化的键值对格式。
- @param rawParamBlock 单个参数（如“- 参数 1 ...”）的完整描述文本。
- @return 格式化后的字符串，带有缩进和清晰的标签。
-*/
 static NSString* parseNianmingBlock(NSString *rawParamBlock) {
     if (!rawParamBlock || rawParamBlock.length == 0) return @"";
-
     NSMutableString *structuredResult = [NSMutableString string];
-    
-    // 1. 分离摘要和格局
-    NSString *summaryText = @"";
-    NSString *gejuText = @"";
-    NSRange summaryRange = [rawParamBlock rangeOfString:@"摘要:"];
-    NSRange gejuRange = [rawParamBlock rangeOfString:@"格局:"];
-
+    NSString *summaryText = @"", *gejuText = @"";
+    NSRange summaryRange = [rawParamBlock rangeOfString:@"摘要:"], gejuRange = [rawParamBlock rangeOfString:@"格局:"];
     if (summaryRange.location != NSNotFound && gejuRange.location != NSNotFound) {
         summaryText = [rawParamBlock substringWithRange:NSMakeRange(summaryRange.location + summaryRange.length, gejuRange.location - (summaryRange.location + summaryRange.length))];
         gejuText = [rawParamBlock substringFromIndex:gejuRange.location + gejuRange.length];
     } else if (summaryRange.location != NSNotFound) {
         summaryText = [rawParamBlock substringFromIndex:summaryRange.location + summaryRange.length];
     }
-    
     summaryText = [summaryText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     gejuText = [gejuText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-    // 2. 解析摘要部分 (行年 和 本命)
+    
     NSArray *parts = [summaryText componentsSeparatedByString:@"本命在"];
-    NSString *xingNianPart = parts.count > 0 ? parts[0] : @"";
-    NSString *benMingPart = parts.count > 1 ? [NSString stringWithFormat:@"本命在%@", parts[1]] : @"";
+    NSString *xingNianPart = parts.count > 0 ? parts[0] : @"", *benMingPart = parts.count > 1 ? [NSString stringWithFormat:@"本命在%@", parts[1]] : @"";
 
     void (^parseDetailPart)(NSString*, NSString*) = ^(NSString *title, NSString *partText) {
         if (partText.length == 0) return;
-        
         [structuredResult appendFormat:@"\n  // %@\n", title];
-        
-        // --- v2.1 精细化解析核心信息 ---
-        // 匹配模式: (描述) (干支) (年份) (行年/本命在...) (干支)，其临(干支)乘(干支)将乘(天将):
-        NSRegularExpression *coreInfoRegex = [NSRegularExpression 
-            regularExpressionWithPattern:@"(.*?)在(.{2,}).*?临(.{1,2})乘(.{1,2})将乘(.*?):" 
-            options:0 error:nil];
+
+        // --- v2.2 更精确的核心信息匹配 ---
+        NSRegularExpression *coreInfoRegex = [NSRegularExpression regularExpressionWithPattern:@"(.*?在.{2,}).*?临(.{1,2})乘(.{1,2})将乘(.*?):" options:0 error:nil];
         NSTextCheckingResult *coreInfoMatch = [coreInfoRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
-        
         if (coreInfoMatch) {
             NSString *subject      = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:1]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            NSString *subjectDiZhi = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:2]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             NSString *linGong      = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:3]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             NSString *cheng        = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:4]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             NSString *tianJiang    = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:5]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-            // 区分标题
-            if ([title isEqualToString:@"行年信息"]) {
-                [structuredResult appendFormat:@"  - 行年: %@ (%@)\n", subject, subjectDiZhi];
-            } else {
-                 [structuredResult appendFormat:@"  - 本命: %@ (%@)\n", subject, subjectDiZhi];
-            }
+            [structuredResult appendFormat:@"  - %@\n", [title isEqualToString:@"行年信息"] ? [@"行年: " stringByAppendingString:subject] : [@"本命: " stringByAppendingString:subject]];
             [structuredResult appendFormat:@"  - 临宫: %@\n", linGong];
             [structuredResult appendFormat:@"  - 乘: %@\n", cheng];
             [structuredResult appendFormat:@"  - 将: %@\n", tianJiang];
         }
 
-        // 提取长生状态: 临X宫为X之地
-        NSRegularExpression *changshengRegex = [NSRegularExpression regularExpressionWithPattern:@"临(.)宫为(.+之地)" options:0 error:nil];
+        NSRegularExpression *changshengRegex = [NSRegularExpression regularExpressionWithPattern:@"临.宫为(.+之地)" options:0 error:nil];
         NSTextCheckingResult *changshengMatch = [changshengRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
-        if (changshengMatch) {
-            //NSString *location = [partText substringWithRange:[changshengMatch rangeAtIndex:1]];
-            NSString *status = [partText substringWithRange:[changshengMatch rangeAtIndex:2]];
-            [structuredResult appendFormat:@"  - 长生: %@\n", status];
-        }
-        
-        // 提取上神和天将的关系与描述
-        NSRegularExpression *tianjiangDescRegex = [NSRegularExpression regularExpressionWithPattern:@"其上神乘(.+?)为(.*?)[，|。](.*)" options:0 error:nil];
+        if (changshengMatch) [structuredResult appendFormat:@"  - 长生: %@\n", [partText substringWithRange:[changshengMatch rangeAtIndex:1]]];
+
+        // --- v2.2 更精确的乘将关系匹配 ---
+        NSRegularExpression *tianjiangDescRegex = [NSRegularExpression regularExpressionWithPattern:@"其上神乘.*?为(.*?)[，|。]" options:0 error:nil];
         NSTextCheckingResult *tianjiangDescMatch = [tianjiangDescRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
         if (tianjiangDescMatch) {
-            //NSString *tianJiangName = [partText substringWithRange:[tianjiangDescMatch rangeAtIndex:1]];
-            NSString *relation = [partText substringWithRange:[tianjiangDescMatch rangeAtIndex:2]];
-            NSString *desc = [partText substringWithRange:[tianjiangDescMatch rangeAtIndex:3]];
-            [structuredResult appendFormat:@"  - 乘将关系: 为%@ (%@)\n", relation, [desc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+            NSString *relationAndDesc = [partText substringWithRange:[tianjiangDescMatch rangeAtIndex:1]];
+            NSRange relationEndRange = [relationAndDesc rangeOfString:@"("];
+            if (relationEndRange.location == NSNotFound) relationEndRange = [relationAndDesc rangeOfString:@" 与发用之关系:"];
+            if (relationEndRange.location != NSNotFound) relationAndDesc = [relationAndDesc substringToIndex:relationEndRange.location];
+            [structuredResult appendFormat:@"  - 乘将关系: 为%@\n", [relationAndDesc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
         }
-        
-        // 提取与发用的关系
+
         NSRange fayongRange = [partText rangeOfString:@"与发用之关系:"];
         if (fayongRange.location != NSNotFound) {
             NSString *fayongText = [partText substringFromIndex:fayongRange.location + fayongRange.length];
             NSRange shenshaRange = [fayongText rangeOfString:@"所值神煞:"];
-            if (shenshaRange.location != NSNotFound) {
-                fayongText = [fayongText substringToIndex:shenshaRange.location];
-            }
+            if (shenshaRange.location != NSNotFound) fayongText = [fayongText substringToIndex:shenshaRange.location];
             [structuredResult appendFormat:@"  - 发用关系: %@\n", [fayongText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
         }
 
-        // 提取神煞信息
         NSRange shenshaRange = [partText rangeOfString:@"所值神煞:"];
         if (shenshaRange.location != NSNotFound) {
             NSString *shenshaText = [[partText substringFromIndex:shenshaRange.location + shenshaRange.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (shenshaText.length > 0) {
-                 [structuredResult appendString:@"  - 所值神煞:\n"];
-                 // 按 "值" 分割神煞
-                 NSArray *shenshas = [shenshaText componentsSeparatedByString:@"值"];
-                 for (NSString *ss in shenshas) {
-                     if (ss.length > 0) {
-                         [structuredResult appendFormat:@"    - 值%@\n", [ss stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-                     }
-                 }
+                [structuredResult appendString:@"  - 所值神煞:\n"];
+                NSArray *shenshas = [shenshaText componentsSeparatedByString:@"值"];
+                for (NSString *ss in shenshas) if (ss.length > 0) [structuredResult appendFormat:@"    - 值%@\n", [ss stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             }
         }
     };
-    
     parseDetailPart(@"行年信息", xingNianPart);
     parseDetailPart(@"本命信息", benMingPart);
 
-    // 3. 解析格局部分 (条件化输出)
     if (gejuText.length > 0) {
-        // 先检查是否有实质性格局内容，而不是只有描述性文字
         BOOL hasRealGeju = NO;
         NSArray *gejuParts = [gejuText componentsSeparatedByString:@"|"];
         NSMutableString *formattedGeju = [NSMutableString string];
-        
         for (NSString *part in gejuParts) {
             NSString *trimmedPart = [part stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (trimmedPart.length == 0) continue;
-
-            // 如果格局内容不是单纯的描述，就认为它是有效格局
-            if (![trimmedPart containsString:@"年生"] && ![trimmedPart containsString:@"行年在"] && ![trimmedPart containsString:@"本命在"]) {
-                hasRealGeju = YES;
-            }
-            
-            // 特殊处理带解释的格局
+            if (![trimmedPart containsString:@"年生"] && ![trimmedPart containsString:@"行年在"] && ![trimmedPart containsString:@"本命在"]) hasRealGeju = YES;
             NSRange reasonRange = [trimmedPart rangeOfString:@"因"];
             if (reasonRange.location != NSNotFound) {
-                NSString *gejuName = [[trimmedPart substringToIndex:reasonRange.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-                NSString *reason = [trimmedPart substringFromIndex:reasonRange.location];
-                [formattedGeju appendFormat:@"  - %@ (%@)\n", gejuName, reason];
+                [formattedGeju appendFormat:@"  - %@ (%@)\n", [[trimmedPart substringToIndex:reasonRange.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], [trimmedPart substringFromIndex:reasonRange.location]];
             } else {
                 [formattedGeju appendFormat:@"  - %@\n", trimmedPart];
             }
         }
-        
-        // 只有在检测到真正格局时才输出
         if (hasRealGeju) {
             [structuredResult appendString:@"\n  // 格局要点\n"];
             [structuredResult appendString:formattedGeju];
         }
     }
-    
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 static NSString* generateStructuredReport(NSDictionary *reportData) {
@@ -5840,27 +5785,22 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         }
         
         // 针对天将的临宫状态 (e.g., "临申(空亡)，...此曰修容...")
-        NSRegularExpression *lingongRegex = [NSRegularExpression regularExpressionWithPattern:@"临(.)(\\([^)]*\\))?.*此曰(.*?)(，|,|。)" options:0 error:nil];
-        NSTextCheckingResult *lingongMatch = [lingongRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
-        if (lingongMatch && [structuredResult rangeOfString:@"临宫状态:"].location == NSNotFound) { // 只提取一次
+        NSRegularExpression *lingongRegex1 = [NSRegularExpression regularExpressionWithPattern:@"临(.)(\\([^)]*\\))?.*此曰(.*?)(，|,|。)" options:0 error:nil];
+        // 模式2: 临X，...此曰Y... (没有括号状态)
+        NSRegularExpression *lingongRegex2 = [NSRegularExpression regularExpressionWithPattern:@"临(.).*此曰(.*?)(，|,|。)" options:0 error:nil];
+        NSTextCheckingResult *lingongMatch = [lingongRegex1 firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
+        if (!lingongMatch) lingongMatch = [lingongRegex2 firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
+        if (lingongMatch && [structuredResult rangeOfString:@"临宫状态:"].location == NSNotFound) {
             NSString *location = [trimmedLine substringWithRange:[lingongMatch rangeAtIndex:1]];
-            NSString *status = [lingongMatch rangeAtIndex:2].location != NSNotFound ? [trimmedLine substringWithRange:[lingongMatch rangeAtIndex:2]] : @"";
-            NSString *term = [trimmedLine substringWithRange:[lingongMatch rangeAtIndex:3]];
+            NSString *status = ([lingongMatch numberOfRanges] > 2 && [lingongMatch rangeAtIndex:2].location != NSNotFound) ? [trimmedLine substringWithRange:[lingongMatch rangeAtIndex:2]] : @"";
+            NSString *term = [trimmedLine substringWithRange:[lingongMatch rangeAtIndex:lingongMatch.numberOfRanges - 2]];
             [structuredResult appendFormat:@"  - 临宫状态: 临%@%@曰%@\n", location, status, term];
         }
         
-        if (lineHandled) {
-             [processedLines addObject:trimmedLine];
-        }
+        if (lineHandled) [processedLines addObject:trimmedLine];
     }
     
-    // --- 阶段二：处理结构较固定的键值对信息 ---
-    NSDictionary<NSString *, NSString *> *keywordMap = @{
-        @"遁干": @"遁干", // 遁干比较特殊，单独处理
-        @"德 :": @"德", @"空 :": @"空", @"合 :": @"合", @"刑 :": @"刑", @"冲 :": @"冲", @"害 :": @"害", @"破 :": @"破",
-        @"阳神为": @"阳神", @"阴神为": @"阴神",
-        @"于日": @"特殊交互(对日)", @"于辰": @"特殊交互(对辰)",
-    };
+    NSDictionary<NSString *, NSString *> *keywordMap = @{@"遁干": @"遁干",@"德 :": @"德", @"空 :": @"空", @"合 :": @"合", @"刑 :": @"刑", @"冲 :": @"冲", @"害 :": @"害", @"破 :": @"破",@"阳神为": @"阳神", @"阴神为": @"阴神",@"于日": @"特殊交互(对日)", @"于辰": @"特殊交互(对辰)"};
     
     BOOL inZaxiang = NO;
     for (int i = 0; i < lines.count; ++i) {
@@ -6202,6 +6142,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
