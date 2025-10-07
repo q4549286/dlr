@@ -4317,7 +4317,10 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
     return @"错误: 未在弹窗中找到 TableView";
 }
 
-static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
+// =========================================================================
+// ↓↓↓↓↓↓ 【最终修正】用这个新函数，完整替换掉您脚本中旧的同名函数 ↓↓↓↓↓↓
+// =========================================================================
+
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     if (g_isExtractingTimeInfo) {
@@ -4358,59 +4361,77 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
     }
-else if (g_s2_isExtractingKeChuanDetail) {
-    NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-    if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-        UIView *contentView = vcToPresent.view;
-        
-        // 旧的 V2 提取逻辑... (这部分保持不变)
-        NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
-        NSMutableArray *allStackViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
-        if (allStackViews.count > 0) {
-            // ... (您原有的从 StackView 提取文本的逻辑) ...
-            // (这段很长，保持原样，直到提取出所有文本部分)
-             UIStackView *mainStackView = allStackViews.firstObject; 
-            for (UIView *subview in mainStackView.arrangedSubviews) {
-                if ([subview isKindOfClass:[UILabel class]]) {
-                    NSString *text = ((UILabel *)subview).text;
-                    if (text && text.length > 0) { [finalTextParts addObject:text]; }
-                } 
-                else if ([subview isKindOfClass:NSClassFromString(@"六壬大占.IntrinsicTableView")]) {
-                    // ... (您原有的 TableView 解析逻辑) ...
+    // ======================【MODIFIED BLOCK START】======================
+    // 这是我们修改的核心部分。旧的逻辑被替换为调用我们新的解析器。
+    else if (g_s2_isExtractingKeChuanDetail) {
+        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
+            UIView *contentView = vcToPresent.view;
+            
+            // 1. 沿用您现有的、可靠的文本提取逻辑
+            NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
+            NSMutableArray *allStackViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
+            if (allStackViews.count > 0) {
+                 UIStackView *mainStackView = allStackViews.firstObject; 
+                for (UIView *subview in mainStackView.arrangedSubviews) {
+                    if ([subview isKindOfClass:[UILabel class]]) {
+                        NSString *text = ((UILabel *)subview).text;
+                        if (text && text.length > 0) { [finalTextParts addObject:text]; }
+                    } 
+                    else if ([subview isKindOfClass:NSClassFromString(@"六壬大占.IntrinsicTableView")]) {
+                        UITableView *tableView = (UITableView *)subview;
+                        id<UITableViewDataSource> dataSource = tableView.dataSource;
+                        if (dataSource) {
+                            NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
+                            for (NSInteger section = 0; section < sections; section++) {
+                                NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
+                                for (NSInteger row = 0; row < rows; row++) {
+                                    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
+                                    UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
+                                    if (cell) {
+                                        NSMutableArray *labelsInCell = [NSMutableArray array];
+                                        FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
+                                        [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
+                                        NSMutableArray<NSString *> *cellTextParts = [NSMutableArray array];
+                                        for(UILabel *l in labelsInCell) { if(l.text.length > 0) [cellTextParts addObject:l.text]; }
+                                        NSString *fullCellText = [cellTextParts componentsJoinedByString:@" "];
+                                        [finalTextParts addObject:fullCellText];
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+            } else {
+                LogMessage(EchoLogError, @"[课传V3] 提取失败: 未找到主 UIStackView 容器。");
+                [finalTextParts addObject:@"[提取失败: 视图结构已更改，未找到StackView]"];
             }
-        } else {
-            LogMessage(EchoLogError, @"[课传V2] 提取失败: 未找到主 UIStackView 容器。");
-            [finalTextParts addObject:@"[提取失败: 视图结构已更改，未找到StackView]"];
-        }
-        
-        // ======================【核心修改点】======================
-        // 1. 将提取出的所有文本部分组合成一个原始文本块
-        NSString *rawDetailText = [finalTextParts componentsJoinedByString:@"\n"];
-        
-        // 2. 获取当前正在处理的对象的标题
-        NSString *title = @"未知对象";
-        if (g_s2_capturedKeChuanDetailArray.count < g_s2_keChuanTitleQueue.count) {
-            title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
-        }
+            
+            // 2. 将提取的文本组合成原始块
+            NSString *rawDetailText = [finalTextParts componentsJoinedByString:@"\n"];
+            
+            // 3. 获取当前对象的标题
+            NSString *title = @"未知对象";
+            if (g_s2_capturedKeChuanDetailArray.count < g_s2_keChuanTitleQueue.count) {
+                title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
+            }
 
-        // 3. 调用我们的新解析器进行“翻译”
-        NSString *structuredText = [self _echo_parseAndFormatDetailBlock:rawDetailText withTitle:title];
+            // 4. 【关键调用】调用我们新增的解析器函数进行“翻译”
+            NSString *structuredText = [self _echo_parseAndFormatDetailBlock:rawDetailText withTitle:title];
 
-        // 4. 将“翻译”后的结构化文本存入结果数组
-        [g_s2_capturedKeChuanDetailArray addObject:structuredText];
-        // =============================================================
-        
-        LogMessage(EchoLogTypeSuccess, @"[课传V3] 成功参详并格式化流注内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self processKeChuanQueue_Truth_S2];
-        });
-        return; // 别忘了 return
+            // 5. 将“翻译”后的结构化文本存入结果数组
+            [g_s2_capturedKeChuanDetailArray addObject:structuredText];
+            
+            LogMessage(EchoLogTypeSuccess, @"[课传V3] 成功参详并格式化流注内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self processKeChuanQueue_Truth_S2];
+            });
+            return;
+        }
     }
-}
-// V2 REPLACEMENT BLOCK - END
+    // =======================【MODIFIED BLOCK END】=======================
     else if (g_isExtractingNianming) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
 
@@ -4525,6 +4546,10 @@ else if (g_s2_isExtractingKeChuanDetail) {
     
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
+
+// =========================================================================
+// ↑↑↑↑↑↑ 【最终修正】替换到这里结束 ↑↑↑↑↑↑
+// =========================================================================
 
 
 %hook UIViewController
@@ -5720,6 +5745,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
