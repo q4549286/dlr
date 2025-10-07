@@ -3778,8 +3778,17 @@ return            @"<SYSTEM_PROMPT>\n"
 
 
 // =========================================================================
-// ↓↓↓ 使用这个完整、顺序调整后的版本替换您现有的函数 ↓↓↓
+// ↓↓↓ 把这个辅助函数粘贴在这里 ↓↓↓
 // =========================================================================
+
+// 一个辅助函数，用于从句子中提取特定关键词后的内容
+static NSString* extractValueAfterKeyword(NSString *line, NSString *keyword) {
+    NSRange keywordRange = [line rangeOfString:keyword];
+    if (keywordRange.location == NSNotFound) return nil;
+    
+    NSString *value = [line substringFromIndex:keywordRange.location + keywordRange.length];
+    return [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
 // =========================================================================
 // ↓↓↓ 全新的行年参数后置解析器 (v2.2 - 超精准解析) ↓↓↓
 // =========================================================================
@@ -6172,6 +6181,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
