@@ -5610,7 +5610,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         if (changshengMatch && [structuredResult rangeOfString:@"长生:"].location == NSNotFound) { // 只提取一次
             NSString *location = [trimmedLine substringWithRange:[changshengMatch rangeAtIndex:1]];
             NSString *status = [trimmedLine substringWithRange:[changshengMatch rangeAtIndex:2]];
-            [structuredResult appendFormat:@"  - 长生: 临%@为%@\n", location, status];
+            [structuredResult appendFormat:@"  - 十二长生: 临%@为%@\n", location, status];
         }
         
         // 3. 解析乘将关系 (e.g., "乘天后受其生")
@@ -5992,6 +5992,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
