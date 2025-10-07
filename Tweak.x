@@ -4187,7 +4187,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 // 2. 接口声明、UI微调与核心Hook
 // =========================================================================
 
-// ======================【第一步：用此完整版本替换旧的 @interface】======================
 @interface UIViewController (EchoAnalysisEngine) <UITextViewDelegate>
 - (void)createOrShowMainControlPanel;
 - (void)showProgressHUD:(NSString *)text;
@@ -4221,12 +4220,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)setInteractionBlocked:(BOOL)blocked;
-
-// --- 解析器函数声明 ---
-- (NSString *)_echo_parseAndFormatDetailBlock:(NSString *)rawBlockText withTitle:(NSString *)title;
-- (NSString *)_echo_postProcessDunganLine:(NSString *)dunganLine;
 @end
-// =========================================================================================
 
 %hook UILabel
 - (void)setText:(NSString *)text { 
@@ -4317,46 +4311,8 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
     return @"错误: 未在弹窗中找到 TableView";
 }
 
-// =========================================================================
-// ↓↓↓↓↓↓ 【最终修正】用这个新函数，完整替换掉您脚本中旧的同名函数 ↓↓↓↓↓↓
-// =========================================================================
-
+static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
-    if (!rootView) return @"[错误: 根视图为空]";
-    
-    NSMutableArray *stackViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
-    
-    if (stackViews.count == 0) {
-        return @"[错误: 未在课体范式弹窗中找到 UIStackView]";
-    }
-    
-    UIStackView *mainStackView = stackViews.firstObject;
-    NSMutableString *finalResult = [NSMutableString string];
-    
-    for (UIView *subview in mainStackView.arrangedSubviews) {
-        if ([subview isKindOfClass:[UILabel class]]) {
-            UILabel *label = (UILabel *)subview;
-            NSString *text = [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            
-            if (!text || text.length == 0) continue;
-            
-            if ([text isEqualToString:@"详解"]) {
-                break;
-            }
-            
-            [finalResult appendFormat:@"%@\n", text];
-        }
-    }
-    
-    NSString *cleanedResult = [finalResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
-    while ([cleanedResult containsString:@"\n\n\n"]) {
-        cleanedResult = [cleanedResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
-    }
-    
-    return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-}
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     if (g_isExtractingTimeInfo) {
         UIViewController *contentVC = nil;
@@ -4396,77 +4352,72 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
     }
-    // ======================【MODIFIED BLOCK START】======================
-    // 这是我们修改的核心部分。旧的逻辑被替换为调用我们新的解析器。
-    else if (g_s2_isExtractingKeChuanDetail) {
-        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
-            UIView *contentView = vcToPresent.view;
+else if (g_s2_isExtractingKeChuanDetail) {
+    NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+    if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
+        UIView *contentView = vcToPresent.view;
+        
+        // V2 提取逻辑: 基于主 StackView 的结构化解析
+        NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
+        
+        // 1. 寻找主容器 UIStackView
+        NSMutableArray *allStackViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
+
+        if (allStackViews.count > 0) {
+            UIStackView *mainStackView = allStackViews.firstObject; // 通常第一个就是最外层的
             
-            // 1. 沿用您现有的、可靠的文本提取逻辑
-            NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
-            NSMutableArray *allStackViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
-            if (allStackViews.count > 0) {
-                 UIStackView *mainStackView = allStackViews.firstObject; 
-                for (UIView *subview in mainStackView.arrangedSubviews) {
-                    if ([subview isKindOfClass:[UILabel class]]) {
-                        NSString *text = ((UILabel *)subview).text;
-                        if (text && text.length > 0) { [finalTextParts addObject:text]; }
-                    } 
-                    else if ([subview isKindOfClass:NSClassFromString(@"六壬大占.IntrinsicTableView")]) {
-                        UITableView *tableView = (UITableView *)subview;
-                        id<UITableViewDataSource> dataSource = tableView.dataSource;
-                        if (dataSource) {
-                            NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
-                            for (NSInteger section = 0; section < sections; section++) {
-                                NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
-                                for (NSInteger row = 0; row < rows; row++) {
-                                    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
-                                    UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
-                                    if (cell) {
-                                        NSMutableArray *labelsInCell = [NSMutableArray array];
-                                        FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
-                                        [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
-                                        NSMutableArray<NSString *> *cellTextParts = [NSMutableArray array];
-                                        for(UILabel *l in labelsInCell) { if(l.text.length > 0) [cellTextParts addObject:l.text]; }
-                                        NSString *fullCellText = [cellTextParts componentsJoinedByString:@" "];
-                                        [finalTextParts addObject:fullCellText];
-                                    }
+            // 2. 遍历 StackView 的所有子视图 (arrangedSubviews 保证了视觉顺序)
+            for (UIView *subview in mainStackView.arrangedSubviews) {
+                if ([subview isKindOfClass:[UILabel class]]) {
+                    // 如果子视图是简单的 Label，直接取文本
+                    NSString *text = ((UILabel *)subview).text;
+                    if (text && text.length > 0) {
+                        [finalTextParts addObject:text];
+                    }
+                } 
+                else if ([subview isKindOfClass:NSClassFromString(@"六壬大占.IntrinsicTableView")]) {
+                    // 如果子视图是那个特殊的 TableView，使用旧的 TableView 解析逻辑
+                    UITableView *tableView = (UITableView *)subview;
+                    id<UITableViewDataSource> dataSource = tableView.dataSource;
+                    if (dataSource) {
+                        NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
+                        for (NSInteger section = 0; section < sections; section++) {
+                            NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:section];
+                            for (NSInteger row = 0; row < rows; row++) {
+                                NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:section];
+                                UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:indexPath];
+                                if (cell) {
+                                    NSMutableArray *labelsInCell = [NSMutableArray array];
+                                    FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labelsInCell);
+                                    [labelsInCell sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
+                                    NSMutableArray<NSString *> *cellTextParts = [NSMutableArray array];
+                                    for(UILabel *l in labelsInCell) { if(l.text.length > 0) [cellTextParts addObject:l.text]; }
+                                    NSString *fullCellText = [cellTextParts componentsJoinedByString:@" "];
+                                    [finalTextParts addObject:fullCellText];
                                 }
                             }
                         }
                     }
                 }
-            } else {
-                LogMessage(EchoLogError, @"[课传V3] 提取失败: 未找到主 UIStackView 容器。");
-                [finalTextParts addObject:@"[提取失败: 视图结构已更改，未找到StackView]"];
+                // (可以再加 else if 来处理 UITextView 等其他未来可能出现的控件)
             }
-            
-            // 2. 将提取的文本组合成原始块
-            NSString *rawDetailText = [finalTextParts componentsJoinedByString:@"\n"];
-            
-            // 3. 获取当前对象的标题
-            NSString *title = @"未知对象";
-            if (g_s2_capturedKeChuanDetailArray.count < g_s2_keChuanTitleQueue.count) {
-                title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
-            }
-
-            // 4. 【关键调用】调用我们新增的解析器函数进行“翻译”
-            NSString *structuredText = [self _echo_parseAndFormatDetailBlock:rawDetailText withTitle:title];
-
-            // 5. 将“翻译”后的结构化文本存入结果数组
-            [g_s2_capturedKeChuanDetailArray addObject:structuredText];
-            
-            LogMessage(EchoLogTypeSuccess, @"[课传V3] 成功参详并格式化流注内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
-            
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self processKeChuanQueue_Truth_S2];
-            });
-            return;
+        } else {
+            // 如果找不到 StackView，做一个降级提示
+            LogMessage(EchoLogError, @"[课传V2] 提取失败: 未找到主 UIStackView 容器。");
+            [finalTextParts addObject:@"[提取失败: 视图结构已更改，未找到StackView]"];
         }
+
+        // 3. 组合结果并继续下一个任务
+        [g_s2_capturedKeChuanDetailArray addObject:[finalTextParts componentsJoinedByString:@"\n"]];
+        LogMessage(EchoLogTypeSuccess, @"[课传V2] 成功参详流注内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self processKeChuanQueue_Truth_S2];
+        });
+        return;
     }
-    // =======================【MODIFIED BLOCK END】=======================
+}
+// V2 REPLACEMENT BLOCK - END
     else if (g_isExtractingNianming) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
 
@@ -4581,10 +4532,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
-
-// =========================================================================
-// ↑↑↑↑↑↑ 【最终修正】替换到这里结束 ↑↑↑↑↑↑
-// =========================================================================
 
 
 %hook UIViewController
@@ -5008,136 +4955,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }];
     }
 }
-// ======================【第二步：将以下所有代码，粘贴到 %hook UIViewController ... %end 块的外部下方】======================
 
-%new // 或者 %implementation 也可以，%new 更简洁
-// 这是为 UIViewController 类添加我们全新的方法
-
-// =========================================================================
-// ↓↓↓↓↓↓ 【第一步】将以下所有新代码，完整复制到您的脚本中 ↓↓↓↓↓↓
-// =========================================================================
-
-#pragma mark - Echo v3.0 Parser Engine
-
-// 这是辅助函数，专门用来清理和格式化“遁干”这一行特殊数据
-- (NSString *)_echo_postProcessDunganLine:(NSString *)dunganLine {
-    // 原始输入可能像这样: "初建: 戊   复建: 甲"
-    // 我们要把它清理成: "初建: 戊, 复建: 甲"
-    NSCharacterSet *whitespace = [NSCharacterSet whitespaceCharacterSet];
-    NSArray *components = [dunganLine componentsSeparatedByCharactersInSet:whitespace];
-    components = [components filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self <> ''"]];
-    return [components componentsJoinedByString:@" "];
-}
-
-// 这是解析器的核心函数，负责将单个“对象”的文本块进行结构化
-- (NSString *)_echo_parseAndFormatDetailBlock:(NSString *)rawBlockText withTitle:(NSString *)title {
-    if (!rawBlockText || rawBlockText.length == 0) {
-        return @"";
-    }
-
-    NSMutableDictionary *parsedData = [NSMutableDictionary dictionary];
-    NSArray *lines = [rawBlockText componentsSeparatedByString:@"\n"];
-    
-    // 1. 定义我们关心的所有“关键字”。解析器将根据这些关键字来提取信息。
-    NSDictionary *knownKeys = @{
-        @"遁干": @"遁干",
-        @"德": @"德", @"空": @"空", @"合": @"合", @"刑": @"刑", @"冲": @"冲", @"害": @"害", @"破": @"破",
-        @"于日": @"特殊交互", @"于辰": @"特殊交互",
-        @"阳神": @"阳神", @"阴神": @"阴神", @"杂象": @"杂象"
-    };
-    
-    BOOL foundFirstKey = NO;
-
-    // 2. 逐行扫描和解析
-    for (NSString *line in lines) {
-        NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (trimmedLine.length == 0) continue;
-
-        NSString *foundKey = nil;
-        NSString *extractedValue = nil;
-        
-        // 优先处理那些没有明确关键字的“基础描述”行
-        if (!foundFirstKey) {
-            if ([trimmedLine containsString:@"得四时"]) { // 提取旺衰
-                NSRange range = [trimmedLine rangeOfString:@"气"];
-                if (range.location != NSNotFound && range.location > 0) {
-                    parsedData[@"旺衰"] = [trimmedLine substringWithRange:NSMakeRange(range.location - 1, 1)];
-                }
-            }
-            if ([trimmedLine containsString:@"临"]) { // 提取长生
-                 if (!parsedData[@"长生"]) parsedData[@"长生"] = trimmedLine;
-            }
-            if ([trimmedLine containsString:@"乘"]) { // 提取与天将的关系
-                 if (!parsedData[@"乘将关系"]) parsedData[@"乘将关系"] = trimmedLine;
-            }
-            if ([trimmedLine hasPrefix:@"天后"] || [trimmedLine hasPrefix:@"朱雀"] || [trimmedLine hasPrefix:@"青龙"]){ // 天将描述行
-                if ([trimmedLine containsString:@"昼将"]) parsedData[@"将阶"] = @"昼将";
-                if ([trimmedLine containsString:@"夜将"]) parsedData[@"将阶"] = @"夜将";
-            }
-        }
-        
-        // 尝试匹配我们定义的关键字
-        for (NSString *key in knownKeys.allKeys) {
-            NSString *pattern1 = [key stringByAppendingString:@" :"]; // 模式: "德 :"
-            NSString *pattern2 = [key stringByAppendingString:@" "];  // 模式: "遁干 "
-
-            if ([trimmedLine hasPrefix:pattern1]) {
-                foundKey = key;
-                extractedValue = [[trimmedLine substringFromIndex:pattern1.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-                break;
-            } else if ([trimmedLine hasPrefix:pattern2]) {
-                // 确保不是一个更长的单词的一部分
-                 if (trimmedLine.length > key.length && [[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:[trimmedLine characterAtIndex:key.length]]) {
-                    foundKey = key;
-                    extractedValue = [[trimmedLine substringFromIndex:key.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-                    break;
-                 }
-            }
-        }
-
-        if (foundKey) {
-            foundFirstKey = YES;
-            NSString *standardKey = knownKeys[foundKey];
-            
-            // 特殊处理
-            if ([standardKey isEqualToString:@"遁干"]) {
-                extractedValue = [self _echo_postProcessDunganLine:extractedValue];
-            }
-            
-            // 如果一个Key出现多次 (如“特殊交互”)，则将它们合并
-            if (parsedData[standardKey]) {
-                NSString *existingValue = parsedData[standardKey];
-                parsedData[standardKey] = [NSString stringWithFormat:@"%@ | %@", existingValue, extractedValue];
-            } else {
-                parsedData[standardKey] = extractedValue;
-            }
-        }
-        // 找到第一个关键字后，所有不匹配的行都会被当作“噪音”忽略掉
-    }
-    
-    // 3. 按照V3.0规范的顺序，格式化输出
-    NSMutableString *formattedOutput = [NSMutableString string];
-    [formattedOutput appendFormat:@"- 对象: %@\n", title];
-
-    NSArray *outputOrder = @[@"旺衰", @"长生", @"乘将关系", @"将阶", @"临宫状态", @"遁干", @"德", @"空", @"合", @"刑", @"冲", @"害", @"破", @"特殊交互", @"阳神", @"阴神", @"杂象"];
-
-    for (NSString *key in outputOrder) {
-        if (parsedData[key]) {
-            [formattedOutput appendFormat:@"  - %@: %@\n", key, parsedData[key]];
-        }
-    }
-    
-    // 如果字典为空，说明是个简单的对象，直接返回原始文本
-    if (parsedData.allKeys.count == 0) {
-        return [NSString stringWithFormat:@"- 对象: %@\n  - 原始信息: %@", title, rawBlockText];
-    }
-    
-    return [formattedOutput stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-}
-
-// =========================================================================
-// ↑↑↑↑↑↑ 【第一步】复制到这里结束 ↑↑↑↑↑↑
-// =========================================================================
 %new
 - (void)handleMasterButtonTap:(UIButton *)sender {
     [self buttonTouchUp:sender]; // Ensure button animates back up
@@ -5633,63 +5451,34 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
     LogMessage(EchoLogTypeInfo, @"[课传] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_s2_keChuanWorkQueue.count);
     [self processKeChuanQueue_Truth_S2];
 }
-%new // 确保这是 %new 或者已经存在于 %implementation 中
+%new
 - (void)processKeChuanQueue_Truth_S2 {
     if (!g_s2_isExtractingKeChuanDetail || g_s2_keChuanWorkQueue.count == 0) {
         if (g_s2_isExtractingKeChuanDetail) {
             LogMessage(EchoLogTypeTask, @"[完成] “课传流注”全部推衍完毕。");
             NSMutableString *resultStr = [NSMutableString string];
-
-            // ======================【核心修改点 2/2】======================
-            // 这里我们不再直接拼接原始文本，而是拼接由解析器格式化后的文本。
-            if (g_s2_capturedKeChuanDetailArray.count > 0) {
-                 resultStr = [[g_s2_capturedKeChuanDetailArray componentsJoinedByString:@"\n\n"] mutableCopy];
-            }
-            // =============================================================
-
-            g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            if (!g_s2_keChuan_completion_handler) {
-                NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
-                reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
-                NSString *finalReport = formatFinalReport(reportData);
-                g_lastGeneratedReport = [finalReport copy];
-                [self presentAIActionSheetWithReport:finalReport];
-            }
+            if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) {
+                for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) { [resultStr appendFormat:@"- 对象: %@\n  %@\n\n", g_s2_keChuanTitleQueue[i], [g_s2_capturedKeChuanDetailArray[i] stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "]]; }
+                g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                if (!g_s2_keChuan_completion_handler) {
+                    NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
+                    NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
+                    [self presentAIActionSheetWithReport:finalReport];
+                }
+            } else { g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]"; LogMessage(EchoLogError, @"%@", g_s2_finalResultFromKeChuan); }
         }
-        g_s2_isExtractingKeChuanDetail = NO;
-        g_s2_capturedKeChuanDetailArray = nil;
-        g_s2_keChuanWorkQueue = nil;
-        g_s2_keChuanTitleQueue = nil;
+        g_s2_isExtractingKeChuanDetail = NO; g_s2_capturedKeChuanDetailArray = nil; g_s2_keChuanWorkQueue = nil; g_s2_keChuanTitleQueue = nil;
         [self hideProgressHUD];
-        if (g_s2_keChuan_completion_handler) {
-            g_s2_keChuan_completion_handler();
-            g_s2_keChuan_completion_handler = nil;
-        }
+        if (g_s2_keChuan_completion_handler) { g_s2_keChuan_completion_handler(); g_s2_keChuan_completion_handler = nil; }
         return;
     }
-
-    NSMutableDictionary *task = g_s2_keChuanWorkQueue.firstObject;
-    [g_s2_keChuanWorkQueue removeObjectAtIndex:0];
-    
+    NSMutableDictionary *task = g_s2_keChuanWorkQueue.firstObject; [g_s2_keChuanWorkQueue removeObjectAtIndex:0];
     NSString *title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
     LogMessage(EchoLogTypeInfo, @"[课传] 正在参详: %@", title);
     [self updateProgressHUD:[NSString stringWithFormat:@"推演课传: %lu/%lu", (unsigned long)g_s2_capturedKeChuanDetailArray.count + 1, (unsigned long)g_s2_keChuanTitleQueue.count]];
-    
     SEL action = [task[@"taskType"] isEqualToString:@"tianJiang"] ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳摘要WithSender:");
-    
-    if ([self respondsToSelector:action]) {
-        SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]);
-    } else {
-        LogMessage(EchoLogError, @"[错误] 方法 %@ 不存在。", NSStringFromSelector(action));
-        
-        // ======================【核心修改点 1/2】======================
-        // 以前是直接添加错误信息，现在我们让解析器来处理
-        NSString *formattedError = [self _echo_parseAndFormatDetailBlock:@"[解析失败: 方法不存在]" withTitle:title];
-        [g_s2_capturedKeChuanDetailArray addObject:formattedError];
-        // =============================================================
-        
-        [self processKeChuanQueue_Truth_S2];
-    }
+    if ([self respondsToSelector:action]) { SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]); } 
+    else { LogMessage(EchoLogError, @"[错误] 方法 %@ 不存在。", NSStringFromSelector(action)); [g_s2_capturedKeChuanDetailArray addObject:@"[解析失败: 方法不存在]"]; [self processKeChuanQueue_Truth_S2]; }
 }
 %new
 - (NSString *)_echo_extractSiKeInfo {
@@ -5855,16 +5644,41 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
     }
 }
 
-
-
-
-
-
-
-
-
-
-
+static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
+    if (!rootView) return @"[错误: 根视图为空]";
+    
+    NSMutableArray *stackViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
+    
+    if (stackViews.count == 0) {
+        return @"[错误: 未在课体范式弹窗中找到 UIStackView]";
+    }
+    
+    UIStackView *mainStackView = stackViews.firstObject;
+    NSMutableString *finalResult = [NSMutableString string];
+    
+    for (UIView *subview in mainStackView.arrangedSubviews) {
+        if ([subview isKindOfClass:[UILabel class]]) {
+            UILabel *label = (UILabel *)subview;
+            NSString *text = [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            
+            if (!text || text.length == 0) continue;
+            
+            if ([text isEqualToString:@"详解"]) {
+                break;
+            }
+            
+            [finalResult appendFormat:@"%@\n", text];
+        }
+    }
+    
+    NSString *cleanedResult = [finalResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
+    while ([cleanedResult containsString:@"\n\n\n"]) {
+        cleanedResult = [cleanedResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
+    }
+    
+    return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
 
 
 
