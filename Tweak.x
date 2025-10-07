@@ -5717,8 +5717,20 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 }
 
 // =========================================================================
-// ↓↓↓ 全新的课传流注后置解析器 (v1.5 - 全模式增强) - 完整版 ↓↓↓
+// ↓↓↓ 全新的课传流注后置解析器 (v1.5 - 真正完整版) ↓↓↓
 // =========================================================================
+
+// --- 辅助函数定义 ---
+// 必须在使用它的函数之前定义
+static NSString* extractValueAfterKeyword(NSString *line, NSString *keyword) {
+    NSRange keywordRange = [line rangeOfString:keyword];
+    if (keywordRange.location == NSNotFound) return nil;
+    
+    NSString *value = [line substringFromIndex:keywordRange.location + keywordRange.length];
+    return [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
+
 #pragma mark - KeChuan Detail Post-Processor
 
 static NSString* parseKeChuanDetailBlock(NSString *rawText) {
@@ -5816,7 +5828,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
 
         // 特殊处理：遁干 (现在更灵活)
         if ([line hasPrefix:@"遁干"]) {
-            NSString *dunGanLine = extractValueAfterKeyword(line, @"遁干");
+            NSString *dunGanLine = extractValueAfterKeyword(line, @"遁干"); // 此处调用
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"初建: "];
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"复建:" withString:@" 复建: "];
             NSArray *components = [dunGanLine componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
@@ -5852,7 +5864,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         // 处理其他普通键值对
         for (NSString *keyword in keywordMap.allKeys) {
             if ([line hasPrefix:keyword]) {
-                NSString *value = extractValueAfterKeyword(line, keyword);
+                NSString *value = extractValueAfterKeyword(line, keyword); // 此处调用
                 NSString *label = keywordMap[keyword];
                 value = [value stringByReplacingOccurrencesOfString:@"此为.+值四时.气。" withString:@"" options:NSRegularExpressionSearch range:NSMakeRange(0, value.length)];
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -6141,6 +6153,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
