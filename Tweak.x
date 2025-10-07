@@ -3782,22 +3782,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     __block NSInteger sectionCounter = 4;
 
     // vvvvvvvvvvvvvv 日干十二长生数据与计算引擎 v3.2 vvvvvvvvvvvvvvvvvv
-    NSDictionary *tianGanToWuxing = @{ @"甲": @"木", @"乙": @"木", @"丙": @"火", @"丁": @"火", @"戊": @"土", @"己": @"土", @"庚": @"金", @"辛": @"金", @"壬": @"水", @"癸": @"水" };
-    NSArray *changShengStates = @[@"长生", @"沐浴", @"冠带", @"临官(禄)", @"羊刃", @"衰", @"病", @"死", @"墓", @"绝", @"胎神", @"养"];
-    NSDictionary *wuxingChangShengStart = @{ @"木":@"亥", @"火":@"寅", @"金":@"巳", @"水":@"申", @"土":@"申" };
-    NSArray *dizhiOrder = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
-    NSDictionary* (^generateRiGanChangShengMap)(NSString*) = ^NSDictionary*(NSString *riGan) {
-        if (!riGan || riGan.length == 0 || !tianGanToWuxing[riGan]) return @{};
-        NSString *wuxing = tianGanToWuxing[riGan];
-        NSString *startDiZhi = wuxingChangShengStart[wuxing];
-        if (!startDiZhi) return @{};
-        NSUInteger startIndex = [dizhiOrder indexOfObject:startDiZhi];
-        NSMutableDictionary *map = [NSMutableDictionary dictionary];
-        for (int i = 0; i < 12; i++) {
-            map[dizhiOrder[(startIndex + i) % 12]] = changShengStates[i];
-        }
-        return [map copy];
-    };
     // ^^^^^^^^^^^^^^^^ 日干十二长生数据与计算引擎 v3.2 ^^^^^^^^^^^^^^^^^^^^^
 
     // 板块一：基础盘元
@@ -5695,6 +5679,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
