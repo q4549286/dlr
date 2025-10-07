@@ -5616,10 +5616,16 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"初建: "];
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"复建:" withString:@" 复建: "];
             
+// THIS IS THE NEW, CORRECTED CODE
             // 将多个空格合并为一个
-            dunGanLine = [[dunGanLine componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]
-                filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"self <> ''"]]
-                componentsJoinedByString:@" "];
+            NSArray *components = [dunGanLine componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+            NSMutableArray *filteredComponents = [NSMutableArray array];
+            for (NSString *component in components) {
+                if (component.length > 0) {
+                    [filteredComponents addObject:component];
+                }
+            }
+            dunGanLine = [filteredComponents componentsJoinedByString:@" "];
             
             [structuredResult appendFormat:@"  - 遁干: %@\n", dunGanLine];
             [processedLines addObject:line];
@@ -5938,6 +5944,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
