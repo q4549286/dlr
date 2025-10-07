@@ -172,25 +172,25 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // 板块二：核心盘架
     [report appendString:@"// 2. 核心盘架\n"];
     NSString *tianDiPanText = reportData[@"天地盘"];
-    if (tianDiPanText) {
-        NSMutableString *formattedTianDiPan = [NSMutableString string];
-        [formattedTianDiPan appendString:@"// 2.1. 天地盘 (附十二长生落宫状态)\n"];
-        NSDictionary *riGanChangShengMap = generateRiGanChangShengMap(riGan);
-        NSArray *tianDiPanLines = [tianDiPanText componentsSeparatedByString:@"\n"];
-        for (NSString *line in tianDiPanLines) {
-            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s*(\\S)宫:\\s*(.*)" options:0 error:nil];
-            NSTextCheckingResult *match = [regex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
-            if (match && [match numberOfRanges] == 3) {
-                NSString *diPanGong = [line substringWithRange:[match rangeAtIndex:1]];
-                NSString *tianPanContent = [line substringWithRange:[match rangeAtIndex:2]];
-                NSString *changShengState = riGanChangShengMap[diPanGong] ?: @"状态未知";
-                [formattedTianDiPan appendFormat:@"- %@宫(%@): %@\n", diPanGong, changShengState, tianPanContent];
-            } else {
-                [formattedTianDiPan appendFormat:@"%@\n", line];
-            }
+  if (tianDiPanText) {
+    NSMutableString *formattedTianDiPan = [NSMutableString string];
+    [formattedTianDiPan appendString:@"// 2.1. 天地盘\n"]; // 标题已修改
+    // NSDictionary *riGanChangShengMap = generateRiGanChangShengMap(riGan); // 这行可以安全地删除或注释掉
+    NSArray *tianDiPanLines = [tianDiPanText componentsSeparatedByString:@"\n"];
+    for (NSString *line in tianDiPanLines) {
+        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s*(\\S)宫:\\s*(.*)" options:0 error:nil];
+        NSTextCheckingResult *match = [regex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
+        if (match && [match numberOfRanges] == 3) {
+            NSString *diPanGong = [line substringWithRange:[match rangeAtIndex:1]];
+            NSString *tianPanContent = [line substringWithRange:[match rangeAtIndex:2]];
+            // 不再获取 changShengState
+            [formattedTianDiPan appendFormat:@"- %@宫: %@\n", diPanGong, tianPanContent]; // 输出格式已修改
+        } else {
+            [formattedTianDiPan appendFormat:@"%@\n", line];
         }
-        [report appendFormat:@"%@\n", [formattedTianDiPan stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
     }
+    [report appendFormat:@"%@\n", [formattedTianDiPan stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+}
     NSString *siKeText = reportData[@"四课"];
     NSString *sanChuanText = reportData[@"三传"];
     if (siKeText) [report appendFormat:@"\n// 2.2. 四课\n%@\n\n", siKeText];
@@ -2009,6 +2009,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
