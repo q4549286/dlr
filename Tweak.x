@@ -5718,12 +5718,14 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
         NSArray *keDefs = @[
             // Ivar名             // 想要的标题        // 点击后的类型 (diZhi/tianJiang)
             // --- 第一课 ---
+            @{@"ivar": @"日",       @"title": @"第一课 - 下神",  @"type": @"diZhi"},      // <-- 新增：对应旧代码的第一课下神
             @{@"ivar": @"日上",     @"title": @"日上",         @"type": @"diZhi"},
             @{@"ivar": @"日上天將", @"title": @"日上 - 天将",  @"type": @"tianJiang"},
             // --- 第二课 ---
             @{@"ivar": @"日陰",     @"title": @"日阴",         @"type": @"diZhi"},
             @{@"ivar": @"日陰天將", @"title": @"日阴 - 天将",  @"type": @"tianJiang"},
             // --- 第三课 ---
+            @{@"ivar": @"辰",       @"title": @"第三课 - 下神",  @"type": @"diZhi"}, 
             @{@"ivar": @"辰上",     @"title": @"辰上",         @"type": @"diZhi"},
             @{@"ivar": @"辰上天將", @"title": @"辰上 - 天将",  @"type": @"tianJiang"},
             // --- 第四课 ---
@@ -6182,6 +6184,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
