@@ -5406,57 +5406,114 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
     }];
 }
 
+// =========================================================================
+// ↓↓↓ 替换为这个完整的新版本 (v2.0) ↓↓↓
+// =========================================================================
 %new
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion {
     if (g_s2_isExtractingKeChuanDetail) { LogMessage(EchoLogError, @"[错误] 课传推演任务已在进行中。"); return; }
     LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“课传流注”...");
     [self showProgressHUD:@"正在推演课传流注..."];
     g_s2_isExtractingKeChuanDetail = YES; g_s2_keChuan_completion_handler = [completion copy]; g_s2_capturedKeChuanDetailArray = [NSMutableArray array]; g_s2_keChuanWorkQueue = [NSMutableArray array]; g_s2_keChuanTitleQueue = [NSMutableArray array];
+    
+    // 获取核心容器
     Ivar keChuanContainerIvar = class_getInstanceVariable([self class], "課傳");
     if (!keChuanContainerIvar) { LogMessage(EchoLogError, @"[错误] 无法定位核心组件'課傳'。"); g_s2_isExtractingKeChuanDetail = NO; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); [self hideProgressHUD]; return; }
     id keChuanContainer = object_getIvar(self, keChuanContainerIvar);
     if (!keChuanContainer) { LogMessage(EchoLogError, @"[错误] 核心组件'課傳'未初始化。"); g_s2_isExtractingKeChuanDetail = NO; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); [self hideProgressHUD]; return; }
+    
+    // 1. 处理三传
     Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖");
     NSMutableArray *sanChuanResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, (UIView *)keChuanContainer, sanChuanResults);
     if (sanChuanResults.count > 0) {
         UIView *sanChuanContainer = sanChuanResults.firstObject;
-        const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL}; NSString *rowTitles[] = {@"初传", @"中传", @"末传"};
+        const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL}; 
+        NSString *rowTitles[] = {@"初传", @"中传", @"末传"};
         for (int i = 0; ivarNames[i] != NULL; ++i) {
             Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarNames[i]); if (!ivar) continue;
             UIView *chuanView = object_getIvar(sanChuanContainer, ivar); if (!chuanView) continue;
             NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], chuanView, labels);
             [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
             if(labels.count >= 2) {
-                UILabel *dizhiLabel = labels[labels.count-2]; UILabel *tianjiangLabel = labels[labels.count-1];
-                if (dizhiLabel.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"taskType": @"diZhi"} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]]; }
-                if (tianjiangLabel.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"taskType": @"tianJiang"} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]]; }
+                UILabel *dizhiLabel = labels[labels.count-2]; 
+                UILabel *tianjiangLabel = labels[labels.count-1];
+                // 添加地支任务
+                if (dizhiLabel.gestureRecognizers.count > 0) { 
+                    [g_s2_keChuanWorkQueue addObject:[@{@"gesture": dizhiLabel.gestureRecognizers.firstObject, @"taskType": @"diZhi"} mutableCopy]]; 
+                    [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]]; 
+                }
+                // 添加天将任务
+                if (tianjiangLabel.gestureRecognizers.count > 0) { 
+                    [g_s2_keChuanWorkQueue addObject:[@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject, @"taskType": @"tianJiang"} mutableCopy]]; 
+                    [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]]; 
+                }
             }
         }
     }
+
+    // 2. 处理四课
     Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖");
     NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, (UIView *)keChuanContainer, siKeResults);
     if (siKeResults.count > 0) {
         UIView *siKeContainer = siKeResults.firstObject;
-        NSDictionary *keDefs[] = { @{@"t": @"第一课", @"x": @"日", @"s": @"日上", @"j": @"日上天將"}, @{@"t": @"第二课", @"x": @"日上", @"s": @"日陰", @"j": @"日陰天將"}, @{@"t": @"第三课", @"x": @"辰", @"s": @"辰上", @"j": @"辰上天將"}, @{@"t": @"第四课", @"x": @"辰上", @"s": @"辰陰", @"j": @"辰陰天將"}};
+        // 定义四课的Ivar名称和我们想要的最终标题
+        NSDictionary *keDefs[] = { 
+            // Ivar名             // 想要的标题        // 点击后的类型 (diZhi/tianJiang)
+            // --- 第一课 ---
+            // @{@"ivar": @"日",       @"title": @"日干",         @"type": @"diZhi"},      // <<-- 过滤掉
+            @{@"ivar": @"日上",     @"title": @"日上",         @"type": @"diZhi"},      // <<-- 重命名
+            @{@"ivar": @"日上天將", @"title": @"日上 - 天将",  @"type": @"tianJiang"},
+            // --- 第二课 ---
+            // @{@"ivar": @"日上",     @"title": @"日上(下神)",   @"type": @"diZhi"},      // <<-- 过滤掉
+            @{@"ivar": @"日陰",     @"title": @"日阴",         @"type": @"diZhi"},      // <<-- 重命名
+            @{@"ivar": @"日陰天將", @"title": @"日阴 - 天将",  @"type": @"tianJiang"},
+            // --- 第三课 ---
+            // @{@"ivar": @"辰",       @"title": @"支辰",         @"type": @"diZhi"},      // <<-- 过滤掉
+            @{@"ivar": @"辰上",     @"title": @"辰上",         @"type": @"diZhi"},      // <<-- 重命名
+            @{@"ivar": @"辰上天將", @"title": @"辰上 - 天将",  @"type": @"tianJiang"},
+            // --- 第四课 ---
+            // @{@"ivar": @"辰上",     @"title": @"辰上(下神)",   @"type": @"diZhi"},      // <<-- 过滤掉
+            @{@"ivar": @"辰陰",     @"title": @"辰阴",         @"type": @"diZhi"},      // <<-- 重命名
+            @{@"ivar": @"辰陰天將", @"title": @"辰阴 - 天将",  @"type": @"tianJiang"},
+        };
+        
+        // 辅助Block，用于添加任务到队列
         void (^addTask)(const char*, NSString*, NSString*) = ^(const char* iName, NSString* fTitle, NSString* tType) {
-            if (!iName) return; Ivar ivar = class_getInstanceVariable(siKeContainerClass, iName);
+            if (!iName) return; 
+            Ivar ivar = class_getInstanceVariable(siKeContainerClass, iName);
             if (ivar) {
                 UILabel *label = (UILabel *)object_getIvar(siKeContainer, ivar);
-                if (label.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": label.gestureRecognizers.firstObject, @"taskType": tType} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ (%@)", fTitle, label.text]]; }
+                if (label && label.gestureRecognizers.count > 0) { 
+                    [g_s2_keChuanWorkQueue addObject:[@{@"gesture": label.gestureRecognizers.firstObject, @"taskType": tType} mutableCopy]]; 
+                    // 如果标题是天将，则添加括号和内容
+                    if ([fTitle containsString:@"天将"]) {
+                         [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@(%@)", fTitle, label.text]]; 
+                    } else { // 否则，直接用新标题和括号内容
+                         [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ (%@)", fTitle, label.text]]; 
+                    }
+                }
             }
         };
-        for (int i = 0; i < 4; ++i) { NSDictionary *d = keDefs[i]; addTask([d[@"x"] UTF8String], [NSString stringWithFormat:@"%@ - 下神", d[@"t"]], @"diZhi"); addTask([d[@"s"] UTF8String], [NSString stringWithFormat:@"%@ - 上神", d[@"t"]], @"diZhi"); addTask([d[@"j"] UTF8String], [NSString stringWithFormat:@"%@ - 天将", d[@"t"]], @"tianJiang"); }
+        
+        // 遍历定义好的任务，添加到队列
+        for (NSDictionary *def in keDefs) {
+             addTask([def[@"ivar"] UTF8String], def[@"title"], def[@"type"]);
+        }
     }
-    if (g_s2_keChuanWorkQueue.count == 0) { LogMessage(EchoLogTypeWarning, @"[课传] 任务队列为空，未找到可交互元素。"); g_s2_isExtractingKeChuanDetail = NO; [self hideProgressHUD]; g_s2_finalResultFromKeChuan = @""; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); return; }
+    
+    // 检查队列并开始处理
+    if (g_s2_keChuanWorkQueue.count == 0) { 
+        LogMessage(EchoLogTypeWarning, @"[课传] 任务队列为空，未找到可交互元素。"); 
+        g_s2_isExtractingKeChuanDetail = NO; 
+        [self hideProgressHUD]; 
+        g_s2_finalResultFromKeChuan = @""; 
+        if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); 
+        return; 
+    }
+    
     LogMessage(EchoLogTypeInfo, @"[课传] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_s2_keChuanWorkQueue.count);
     [self processKeChuanQueue_Truth_S2];
 }
-// =========================================================================
-// ↓↓↓ 全新的课传流注后置解析器 ↓↓↓
-// =========================================================================
-// =========================================================================
-// ↓↓↓ The Corrected `parseKeChuanDetailBlock` Function (v1.2) ↓↓↓
-// =========================================================================
 #pragma mark - KeChuan Detail Post-Processor
 
 // 一个辅助函数，用于从句子中提取特定关键词后的内容
@@ -5887,6 +5944,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
