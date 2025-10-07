@@ -4322,6 +4322,41 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
 // =========================================================================
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
+static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
+    if (!rootView) return @"[错误: 根视图为空]";
+    
+    NSMutableArray *stackViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
+    
+    if (stackViews.count == 0) {
+        return @"[错误: 未在课体范式弹窗中找到 UIStackView]";
+    }
+    
+    UIStackView *mainStackView = stackViews.firstObject;
+    NSMutableString *finalResult = [NSMutableString string];
+    
+    for (UIView *subview in mainStackView.arrangedSubviews) {
+        if ([subview isKindOfClass:[UILabel class]]) {
+            UILabel *label = (UILabel *)subview;
+            NSString *text = [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            
+            if (!text || text.length == 0) continue;
+            
+            if ([text isEqualToString:@"详解"]) {
+                break;
+            }
+            
+            [finalResult appendFormat:@"%@\n", text];
+        }
+    }
+    
+    NSString *cleanedResult = [finalResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
+    while ([cleanedResult containsString:@"\n\n\n"]) {
+        cleanedResult = [cleanedResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
+    }
+    
+    return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     if (g_isExtractingTimeInfo) {
         UIViewController *contentVC = nil;
@@ -5820,41 +5855,8 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
     }
 }
 
-static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
-    if (!rootView) return @"[错误: 根视图为空]";
-    
-    NSMutableArray *stackViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
-    
-    if (stackViews.count == 0) {
-        return @"[错误: 未在课体范式弹窗中找到 UIStackView]";
-    }
-    
-    UIStackView *mainStackView = stackViews.firstObject;
-    NSMutableString *finalResult = [NSMutableString string];
-    
-    for (UIView *subview in mainStackView.arrangedSubviews) {
-        if ([subview isKindOfClass:[UILabel class]]) {
-            UILabel *label = (UILabel *)subview;
-            NSString *text = [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            
-            if (!text || text.length == 0) continue;
-            
-            if ([text isEqualToString:@"详解"]) {
-                break;
-            }
-            
-            [finalResult appendFormat:@"%@\n", text];
-        }
-    }
-    
-    NSString *cleanedResult = [finalResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
-    while ([cleanedResult containsString:@"\n\n\n"]) {
-        cleanedResult = [cleanedResult stringByReplacingOccurrencesOfString:@"\n\n\n" withString:@"\n\n"];
-    }
-    
-    return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-}
+
+
 
 
 
