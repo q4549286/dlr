@@ -5409,6 +5409,9 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 // =========================================================================
 // ↓↓↓ 替换为这个完整的新版本 (v2.0) ↓↓↓
 // =========================================================================
+// =========================================================================
+// ↓↓↓ Replace with this complete new version (v2.1 - NSArray fix) ↓↓↓
+// =========================================================================
 %new
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion {
     if (g_s2_isExtractingKeChuanDetail) { LogMessage(EchoLogError, @"[错误] 课传推演任务已在进行中。"); return; }
@@ -5456,26 +5459,22 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
     NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, (UIView *)keChuanContainer, siKeResults);
     if (siKeResults.count > 0) {
         UIView *siKeContainer = siKeResults.firstObject;
-        // 定义四课的Ivar名称和我们想要的最终标题
-        NSDictionary *keDefs[] = { 
+        // 定义四课的Ivar名称和我们想要的最终标题 (Corrected to NSArray)
+        NSArray *keDefs = @[
             // Ivar名             // 想要的标题        // 点击后的类型 (diZhi/tianJiang)
             // --- 第一课 ---
-            // @{@"ivar": @"日",       @"title": @"日干",         @"type": @"diZhi"},      // <<-- 过滤掉
-            @{@"ivar": @"日上",     @"title": @"日上",         @"type": @"diZhi"},      // <<-- 重命名
+            @{@"ivar": @"日上",     @"title": @"日上",         @"type": @"diZhi"},
             @{@"ivar": @"日上天將", @"title": @"日上 - 天将",  @"type": @"tianJiang"},
             // --- 第二课 ---
-            // @{@"ivar": @"日上",     @"title": @"日上(下神)",   @"type": @"diZhi"},      // <<-- 过滤掉
-            @{@"ivar": @"日陰",     @"title": @"日阴",         @"type": @"diZhi"},      // <<-- 重命名
+            @{@"ivar": @"日陰",     @"title": @"日阴",         @"type": @"diZhi"},
             @{@"ivar": @"日陰天將", @"title": @"日阴 - 天将",  @"type": @"tianJiang"},
             // --- 第三课 ---
-            // @{@"ivar": @"辰",       @"title": @"支辰",         @"type": @"diZhi"},      // <<-- 过滤掉
-            @{@"ivar": @"辰上",     @"title": @"辰上",         @"type": @"diZhi"},      // <<-- 重命名
+            @{@"ivar": @"辰上",     @"title": @"辰上",         @"type": @"diZhi"},
             @{@"ivar": @"辰上天將", @"title": @"辰上 - 天将",  @"type": @"tianJiang"},
             // --- 第四课 ---
-            // @{@"ivar": @"辰上",     @"title": @"辰上(下神)",   @"type": @"diZhi"},      // <<-- 过滤掉
-            @{@"ivar": @"辰陰",     @"title": @"辰阴",         @"type": @"diZhi"},      // <<-- 重命名
+            @{@"ivar": @"辰陰",     @"title": @"辰阴",         @"type": @"diZhi"},
             @{@"ivar": @"辰陰天將", @"title": @"辰阴 - 天将",  @"type": @"tianJiang"},
-        };
+        ];
         
         // 辅助Block，用于添加任务到队列
         void (^addTask)(const char*, NSString*, NSString*) = ^(const char* iName, NSString* fTitle, NSString* tType) {
@@ -5495,7 +5494,7 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
             }
         };
         
-        // 遍历定义好的任务，添加到队列
+        // 遍历定义好的任务，添加到队列 (Now works correctly)
         for (NSDictionary *def in keDefs) {
              addTask([def[@"ivar"] UTF8String], def[@"title"], def[@"type"]);
         }
@@ -5944,6 +5943,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
