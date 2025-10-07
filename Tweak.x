@@ -3778,6 +3778,9 @@ return            @"<SYSTEM_PROMPT>\n"
 
 
 // =========================================================================
+// ↓↓↓ 使用这个完整、顺序调整后的版本替换您现有的函数 ↓↓↓
+// =========================================================================
+// =========================================================================
 // ↓↓↓ 全新的行年参数后置解析器 (v2.2 - 超精准解析) ↓↓↓
 // =========================================================================
 #pragma mark - Nianming Detail Post-Processor
@@ -3918,7 +3921,6 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
     
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
     __block NSInteger sectionCounter = 4; // 动态板块计数器从4开始
@@ -5823,9 +5825,8 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
     }
     
     // --- 阶段二：处理剩余的键值对信息 ---
-    // (其余代码与之前的v1.4版本相同)
     NSDictionary<NSString *, NSString *> *keywordMap = @{
-        @"遁干": @"遁干",
+        @"遁干": @"遁干", // 遁干比较特殊，单独处理
         @"德 :": @"德", @"空 :": @"空", @"合 :": @"合", @"刑 :": @"刑", @"冲 :": @"冲", @"害 :": @"害", @"破 :": @"破",
         @"阳神为": @"阳神", @"阴神为": @"阴神",
         @"于日": @"特殊交互(对日)", @"于辰": @"特殊交互(对辰)",
@@ -5834,23 +5835,35 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
     BOOL inZaxiang = NO;
     for (int i = 0; i < lines.count; ++i) {
         NSString *line = [lines[i] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-        if (line.length == 0 || [processedLines containsObject:line] || [line containsString:@"昼将"] || [line containsString:@"夜将"]) continue;
+        if (line.length == 0 || [processedLines containsObject:line]) continue;
 
+        // 特殊处理：遁干 (现在更灵活)
         if ([line hasPrefix:@"遁干"]) {
             NSString *dunGanLine = extractValueAfterKeyword(line, @"遁干");
+            // 格式化，确保冒号后有空格
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"初建: "];
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"复建:" withString:@" 复建: "];
             
+// THIS IS THE NEW, CORRECTED CODE
+            // 将多个空格合并为一个
             NSArray *components = [dunGanLine componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             NSMutableArray *filteredComponents = [NSMutableArray array];
-            for (NSString *component in components) { if (component.length > 0) { [filteredComponents addObject:component]; } }
+            for (NSString *component in components) {
+                if (component.length > 0) {
+                    [filteredComponents addObject:component];
+                }
+            }
             dunGanLine = [filteredComponents componentsJoinedByString:@" "];
             
             [structuredResult appendFormat:@"  - 遁干: %@\n", dunGanLine];
             [processedLines addObject:line];
+            // 遁干的解释行不再需要，因为六亲关系已在括号里
+            if (i + 1 < lines.count && [[lines[i+1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] hasPrefix:@"一、"]) [processedLines addObject:[lines[i+1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+            if (i + 2 < lines.count && [[lines[i+2] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] hasPrefix:@"二、"]) [processedLines addObject:[lines[i+2] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
             continue;
         }
 
+        // 处理“杂象”标题
         if ([line isEqualToString:@"杂象"]) {
             inZaxiang = YES;
             [structuredResult appendString:@"  - 杂象:\n"];
@@ -5858,37 +5871,31 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
             continue;
         }
         
+        // 如果在杂象部分，所有内容都缩进
         if (inZaxiang) {
             [structuredResult appendFormat:@"    - %@\n", line];
             [processedLines addObject:line];
             continue;
         }
         
-        BOOL keywordMatched = NO;
+        // 处理其他普通键值对
         for (NSString *keyword in keywordMap.allKeys) {
             if ([line hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(line, keyword);
                 NSString *label = keywordMap[keyword];
                 
+                // 清理掉可能重复的旺衰信息
                 value = [value stringByReplacingOccurrencesOfString:@"此为.+值四时.气。" withString:@"" options:NSRegularExpressionSearch range:NSMakeRange(0, value.length)];
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
                 [structuredResult appendFormat:@"  - %@: %@\n", label, value];
                 [processedLines addObject:line];
-                keywordMatched = YES;
                 break;
             }
         }
-        
-        // 如果上面都没匹配上，且不是天将的通用描述，就保留为原始行
-        if (!keywordMatched && ![line containsString:@"在天事"] && ![line containsString:@"主"] && ![line containsString:@"其戾则"]) {
-             // 可能是被遗漏的短句乘将关系
-             if ([line hasPrefix:@"乘"] && [line containsString:@"为"] && [structuredResult rangeOfString:@"乘将关系:"].location == NSNotFound) {
-                  [structuredResult appendFormat:@"  - 乘将关系: %@\n", line];
-             }
-        }
     }
     
+    // 移除末尾多余的换行符
     while ([structuredResult hasSuffix:@"\n\n"]) {
         [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)];
     }
