@@ -5603,7 +5603,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
                 NSString *label = keywordMap[keyword];
                 [structuredResult appendFormat:@"  - %@: %@\n", label, value];
                 [processedLines addObject:line];
-                matched = YES;
                 break;
             }
         }
@@ -5886,6 +5885,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
