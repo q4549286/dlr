@@ -5596,7 +5596,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         }
         
         // 处理其他普通键值对
-        BOOL matched = NO;
         for (NSString *keyword in keywordMap.allKeys) {
             if ([line hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(line, keyword);
@@ -5885,6 +5884,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
