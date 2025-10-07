@@ -5620,6 +5620,7 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 // =========================================================================
 // ↓↓↓ 全新的行年参数后置解析器 (v2.1 - 精细化解析) ↓↓↓
 // =========================================================================
+static NSString* parseNianmingBlock(NSString *rawParamBlock);
 #pragma mark - Nianming Detail Post-Processor
 
 /**
@@ -6200,6 +6201,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
