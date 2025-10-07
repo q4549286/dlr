@@ -4187,6 +4187,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 // 2. 接口声明、UI微调与核心Hook
 // =========================================================================
 
+// ======================【第一步：用此完整版本替换旧的 @interface】======================
 @interface UIViewController (EchoAnalysisEngine) <UITextViewDelegate>
 - (void)createOrShowMainControlPanel;
 - (void)showProgressHUD:(NSString *)text;
@@ -4220,9 +4221,12 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)setInteractionBlocked:(BOOL)blocked;
+
+// --- 解析器函数声明 ---
 - (NSString *)_echo_parseAndFormatDetailBlock:(NSString *)rawBlockText withTitle:(NSString *)title;
 - (NSString *)_echo_postProcessDunganLine:(NSString *)dunganLine;
 @end
+// =========================================================================================
 
 %hook UILabel
 - (void)setText:(NSString *)text { 
@@ -4944,9 +4948,10 @@ else if (g_s2_isExtractingKeChuanDetail) {
         }];
     }
 }
-// =========================================================================
-// ↓↓↓↓↓↓ 【第一步】将以下所有新代码，完整复制到您的脚本中 ↓↓↓↓↓↓
-// =========================================================================
+// ======================【第二步：将以下所有代码，粘贴到 %hook UIViewController ... %end 块的外部下方】======================
+
+%new // 或者 %implementation 也可以，%new 更简洁
+// 这是为 UIViewController 类添加我们全新的方法
 
 #pragma mark - Echo v3.0 Parser Engine
 
@@ -4969,7 +4974,7 @@ else if (g_s2_isExtractingKeChuanDetail) {
     NSMutableDictionary *parsedData = [NSMutableDictionary dictionary];
     NSArray *lines = [rawBlockText componentsSeparatedByString:@"\n"];
     
-    // 1. 定义我们关心的所有“关键字”。解析器将根据这些关键字来提取信息。
+    // 1. 定义我们关心的所有“关键字”。
     NSDictionary *knownKeys = @{
         @"遁干": @"遁干",
         @"德": @"德", @"空": @"空", @"合": @"合", @"刑": @"刑", @"冲": @"冲", @"害": @"害", @"破": @"破",
@@ -4989,35 +4994,33 @@ else if (g_s2_isExtractingKeChuanDetail) {
         
         // 优先处理那些没有明确关键字的“基础描述”行
         if (!foundFirstKey) {
-            if ([trimmedLine containsString:@"得四时"]) { // 提取旺衰
+            if ([trimmedLine containsString:@"得四时"]) {
                 NSRange range = [trimmedLine rangeOfString:@"气"];
                 if (range.location != NSNotFound && range.location > 0) {
                     parsedData[@"旺衰"] = [trimmedLine substringWithRange:NSMakeRange(range.location - 1, 1)];
                 }
             }
-            if ([trimmedLine containsString:@"临"]) { // 提取长生
+            if ([trimmedLine containsString:@"临"]) {
                  if (!parsedData[@"长生"]) parsedData[@"长生"] = trimmedLine;
             }
-            if ([trimmedLine containsString:@"乘"]) { // 提取与天将的关系
+            if ([trimmedLine containsString:@"乘"]) {
                  if (!parsedData[@"乘将关系"]) parsedData[@"乘将关系"] = trimmedLine;
             }
-            if ([trimmedLine hasPrefix:@"天后"] || [trimmedLine hasPrefix:@"朱雀"] || [trimmedLine hasPrefix:@"青龙"]){ // 天将描述行
+            if ([trimmedLine hasPrefix:@"天后"] || [trimmedLine hasPrefix:@"朱雀"] || [trimmedLine hasPrefix:@"青龙"] || [trimmedLine hasPrefix:@"白虎"] || [trimmedLine hasPrefix:@"玄武"] || [trimmedLine hasPrefix:@"太常"] || [trimmedLine hasPrefix:@"太阴"] || [trimmedLine hasPrefix:@"天空"] || [trimmedLine hasPrefix:@"贵人"] || [trimmedLine hasPrefix:@"螣蛇"] || [trimmedLine hasPrefix:@"六合"] || [trimmedLine hasPrefix:@"勾陈"]){
                 if ([trimmedLine containsString:@"昼将"]) parsedData[@"将阶"] = @"昼将";
                 if ([trimmedLine containsString:@"夜将"]) parsedData[@"将阶"] = @"夜将";
             }
         }
         
-        // 尝试匹配我们定义的关键字
         for (NSString *key in knownKeys.allKeys) {
-            NSString *pattern1 = [key stringByAppendingString:@" :"]; // 模式: "德 :"
-            NSString *pattern2 = [key stringByAppendingString:@" "];  // 模式: "遁干 "
+            NSString *pattern1 = [key stringByAppendingString:@" :"];
+            NSString *pattern2 = [key stringByAppendingString:@" "];
 
             if ([trimmedLine hasPrefix:pattern1]) {
                 foundKey = key;
                 extractedValue = [[trimmedLine substringFromIndex:pattern1.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
                 break;
             } else if ([trimmedLine hasPrefix:pattern2]) {
-                // 确保不是一个更长的单词的一部分
                  if (trimmedLine.length > key.length && [[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:[trimmedLine characterAtIndex:key.length]]) {
                     foundKey = key;
                     extractedValue = [[trimmedLine substringFromIndex:key.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
@@ -5030,12 +5033,10 @@ else if (g_s2_isExtractingKeChuanDetail) {
             foundFirstKey = YES;
             NSString *standardKey = knownKeys[foundKey];
             
-            // 特殊处理
             if ([standardKey isEqualToString:@"遁干"]) {
                 extractedValue = [self _echo_postProcessDunganLine:extractedValue];
             }
             
-            // 如果一个Key出现多次 (如“特殊交互”)，则将它们合并
             if (parsedData[standardKey]) {
                 NSString *existingValue = parsedData[standardKey];
                 parsedData[standardKey] = [NSString stringWithFormat:@"%@ | %@", existingValue, extractedValue];
@@ -5043,10 +5044,9 @@ else if (g_s2_isExtractingKeChuanDetail) {
                 parsedData[standardKey] = extractedValue;
             }
         }
-        // 找到第一个关键字后，所有不匹配的行都会被当作“噪音”忽略掉
     }
     
-    // 3. 按照V3.0规范的顺序，格式化输出
+    // 3. 格式化输出
     NSMutableString *formattedOutput = [NSMutableString string];
     [formattedOutput appendFormat:@"- 对象: %@\n", title];
 
@@ -5058,14 +5058,13 @@ else if (g_s2_isExtractingKeChuanDetail) {
         }
     }
     
-    // 如果字典为空，说明是个简单的对象，直接返回原始文本
     if (parsedData.allKeys.count == 0) {
         return [NSString stringWithFormat:@"- 对象: %@\n  - 原始信息: %@", title, rawBlockText];
     }
     
-    return [formattedOutput stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    return [formattedOutput stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]];
 }
-
+// ===================================================================================================================================
 %new
 - (void)handleMasterButtonTap:(UIButton *)sender {
     [self buttonTouchUp:sender]; // Ensure button animates back up
@@ -5818,6 +5817,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
