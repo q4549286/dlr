@@ -4967,104 +4967,8 @@ else if (g_s2_isExtractingKeChuanDetail) {
 
 // 这是解析器的核心函数，负责将单个“对象”的文本块进行结构化
 - (NSString *)_echo_parseAndFormatDetailBlock:(NSString *)rawBlockText withTitle:(NSString *)title {
-    if (!rawBlockText || rawBlockText.length == 0) {
-        return @"";
-    }
-
-    NSMutableDictionary *parsedData = [NSMutableDictionary dictionary];
-    NSArray *lines = [rawBlockText componentsSeparatedByString:@"\n"];
-    
-    // 1. 定义我们关心的所有“关键字”。
-    NSDictionary *knownKeys = @{
-        @"遁干": @"遁干",
-        @"德": @"德", @"空": @"空", @"合": @"合", @"刑": @"刑", @"冲": @"冲", @"害": @"害", @"破": @"破",
-        @"于日": @"特殊交互", @"于辰": @"特殊交互",
-        @"阳神": @"阳神", @"阴神": @"阴神", @"杂象": @"杂象"
-    };
-    
-    BOOL foundFirstKey = NO;
-
-    // 2. 逐行扫描和解析
-    for (NSString *line in lines) {
-        NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (trimmedLine.length == 0) continue;
-
-        NSString *foundKey = nil;
-        NSString *extractedValue = nil;
-        
-        // 优先处理那些没有明确关键字的“基础描述”行
-        if (!foundFirstKey) {
-            if ([trimmedLine containsString:@"得四时"]) {
-                NSRange range = [trimmedLine rangeOfString:@"气"];
-                if (range.location != NSNotFound && range.location > 0) {
-                    parsedData[@"旺衰"] = [trimmedLine substringWithRange:NSMakeRange(range.location - 1, 1)];
-                }
-            }
-            if ([trimmedLine containsString:@"临"]) {
-                 if (!parsedData[@"长生"]) parsedData[@"长生"] = trimmedLine;
-            }
-            if ([trimmedLine containsString:@"乘"]) {
-                 if (!parsedData[@"乘将关系"]) parsedData[@"乘将关系"] = trimmedLine;
-            }
-            if ([trimmedLine hasPrefix:@"天后"] || [trimmedLine hasPrefix:@"朱雀"] || [trimmedLine hasPrefix:@"青龙"] || [trimmedLine hasPrefix:@"白虎"] || [trimmedLine hasPrefix:@"玄武"] || [trimmedLine hasPrefix:@"太常"] || [trimmedLine hasPrefix:@"太阴"] || [trimmedLine hasPrefix:@"天空"] || [trimmedLine hasPrefix:@"贵人"] || [trimmedLine hasPrefix:@"螣蛇"] || [trimmedLine hasPrefix:@"六合"] || [trimmedLine hasPrefix:@"勾陈"]){
-                if ([trimmedLine containsString:@"昼将"]) parsedData[@"将阶"] = @"昼将";
-                if ([trimmedLine containsString:@"夜将"]) parsedData[@"将阶"] = @"夜将";
-            }
-        }
-        
-        for (NSString *key in knownKeys.allKeys) {
-            NSString *pattern1 = [key stringByAppendingString:@" :"];
-            NSString *pattern2 = [key stringByAppendingString:@" "];
-
-            if ([trimmedLine hasPrefix:pattern1]) {
-                foundKey = key;
-                extractedValue = [[trimmedLine substringFromIndex:pattern1.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-                break;
-            } else if ([trimmedLine hasPrefix:pattern2]) {
-                 if (trimmedLine.length > key.length && [[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:[trimmedLine characterAtIndex:key.length]]) {
-                    foundKey = key;
-                    extractedValue = [[trimmedLine substringFromIndex:key.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-                    break;
-                 }
-            }
-        }
-
-        if (foundKey) {
-            foundFirstKey = YES;
-            NSString *standardKey = knownKeys[foundKey];
-            
-            if ([standardKey isEqualToString:@"遁干"]) {
-                extractedValue = [self _echo_postProcessDunganLine:extractedValue];
-            }
-            
-            if (parsedData[standardKey]) {
-                NSString *existingValue = parsedData[standardKey];
-                parsedData[standardKey] = [NSString stringWithFormat:@"%@ | %@", existingValue, extractedValue];
-            } else {
-                parsedData[standardKey] = extractedValue;
-            }
-        }
-    }
-    
-    // 3. 格式化输出
-    NSMutableString *formattedOutput = [NSMutableString string];
-    [formattedOutput appendFormat:@"- 对象: %@\n", title];
-
-    NSArray *outputOrder = @[@"旺衰", @"长生", @"乘将关系", @"将阶", @"临宫状态", @"遁干", @"德", @"空", @"合", @"刑", @"冲", @"害", @"破", @"特殊交互", @"阳神", @"阴神", @"杂象"];
-
-    for (NSString *key in outputOrder) {
-        if (parsedData[key]) {
-            [formattedOutput appendFormat:@"  - %@: %@\n", key, parsedData[key]];
-        }
-    }
-    
-    if (parsedData.allKeys.count == 0) {
-        return [NSString stringWithFormat:@"- 对象: %@\n  - 原始信息: %@", title, rawBlockText];
-    }
-    
-    return [formattedOutput stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+    // [这里是原来的一大堆代码]
 }
-// ===================================================================================================================================
 %new
 - (void)handleMasterButtonTap:(UIButton *)sender {
     [self buttonTouchUp:sender]; // Ensure button animates back up
@@ -5817,6 +5721,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
