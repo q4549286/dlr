@@ -4220,6 +4220,8 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)setInteractionBlocked:(BOOL)blocked;
+- (NSString *)_echo_parseAndFormatDetailBlock:(NSString *)rawBlockText withTitle:(NSString *)title;
+- (NSString *)_echo_postProcessDunganLine:(NSString *)dunganLine;
 @end
 
 %hook UILabel
@@ -5816,6 +5818,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
