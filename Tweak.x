@@ -5616,47 +5616,76 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
 
     return structuredResult;
 }
+// =========================================================================
+// ↓↓↓ 使用这个完整、修正后的版本替换您现有的函数 ↓↓↓
+// =========================================================================
 %new
 - (void)processKeChuanQueue_Truth_S2 {
     if (!g_s2_isExtractingKeChuanDetail || g_s2_keChuanWorkQueue.count == 0) {
         if (g_s2_isExtractingKeChuanDetail) {
             LogMessage(EchoLogTypeTask, @"[完成] “课传流注”全部推衍完毕。");
-            // 这是修改后的代码
-NSMutableString *resultStr = [NSMutableString string];
-if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) {
-    for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) {
-        // 获取原始文本块
-        NSString *rawBlock = g_s2_capturedKeChuanDetailArray[i];
-        
-        // 调用新的解析器进行结构化处理
-        NSString *structuredBlock = parseKeChuanDetailBlock(rawBlock);
-        
-        // 组合最终结果
-        [resultStr appendFormat:@"- 对象: %@\n%@\n\n", g_s2_keChuanTitleQueue[i], structuredBlock];
-    }
-    g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    // ... 后续代码保持不变
-}
+            
+            NSMutableString *resultStr = [NSMutableString string];
+            if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) {
+                for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) {
+                    // 获取原始文本块
+                    NSString *rawBlock = g_s2_capturedKeChuanDetailArray[i];
+                    
+                    // 调用新的解析器进行结构化处理
+                    NSString *structuredBlock = parseKeChuanDetailBlock(rawBlock);
+                    
+                    // 组合最终结果
+                    [resultStr appendFormat:@"- 对象: %@\n%@\n\n", g_s2_keChuanTitleQueue[i], structuredBlock];
+                }
+
+                // 在这里处理最终结果
                 g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                
+                // 如果不是作为复合任务的一部分，则直接显示结果
                 if (!g_s2_keChuan_completion_handler) {
-                    NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
-                    NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
+                    NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; 
+                    reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
+                    NSString *finalReport = formatFinalReport(reportData); 
+                    g_lastGeneratedReport = [finalReport copy];
                     [self presentAIActionSheetWithReport:finalReport];
                 }
-            } else { g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]"; LogMessage(EchoLogError, @"%@", g_s2_finalResultFromKeChuan); }
+            } else { 
+                g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]"; 
+                LogMessage(EchoLogError, @"%@", g_s2_finalResultFromKeChuan); 
+            }
         }
-        g_s2_isExtractingKeChuanDetail = NO; g_s2_capturedKeChuanDetailArray = nil; g_s2_keChuanWorkQueue = nil; g_s2_keChuanTitleQueue = nil;
+
+        // 清理状态
+        g_s2_isExtractingKeChuanDetail = NO; 
+        g_s2_capturedKeChuanDetailArray = nil; 
+        g_s2_keChuanWorkQueue = nil; 
+        g_s2_keChuanTitleQueue = nil;
         [self hideProgressHUD];
-        if (g_s2_keChuan_completion_handler) { g_s2_keChuan_completion_handler(); g_s2_keChuan_completion_handler = nil; }
+        
+        // 如果有回调，执行回调
+        if (g_s2_keChuan_completion_handler) { 
+            g_s2_keChuan_completion_handler(); 
+            g_s2_keChuan_completion_handler = nil; 
+        }
         return;
     }
-    NSMutableDictionary *task = g_s2_keChuanWorkQueue.firstObject; [g_s2_keChuanWorkQueue removeObjectAtIndex:0];
+
+    // --- 继续处理队列中的下一个任务 ---
+    NSMutableDictionary *task = g_s2_keChuanWorkQueue.firstObject; 
+    [g_s2_keChuanWorkQueue removeObjectAtIndex:0];
     NSString *title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
     LogMessage(EchoLogTypeInfo, @"[课传] 正在参详: %@", title);
     [self updateProgressHUD:[NSString stringWithFormat:@"推演课传: %lu/%lu", (unsigned long)g_s2_capturedKeChuanDetailArray.count + 1, (unsigned long)g_s2_keChuanTitleQueue.count]];
+    
     SEL action = [task[@"taskType"] isEqualToString:@"tianJiang"] ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳摘要WithSender:");
-    if ([self respondsToSelector:action]) { SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]); } 
-    else { LogMessage(EchoLogError, @"[错误] 方法 %@ 不存在。", NSStringFromSelector(action)); [g_s2_capturedKeChuanDetailArray addObject:@"[解析失败: 方法不存在]"]; [self processKeChuanQueue_Truth_S2]; }
+    
+    if ([self respondsToSelector:action]) { 
+        SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]); 
+    } else { 
+        LogMessage(EchoLogError, @"[错误] 方法 %@ 不存在。", NSStringFromSelector(action)); 
+        [g_s2_capturedKeChuanDetailArray addObject:@"[解析失败: 方法不存在]"]; 
+        [self processKeChuanQueue_Truth_S2]; 
+    }
 }
 %new
 - (NSString *)_echo_extractSiKeInfo {
@@ -5857,6 +5886,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
