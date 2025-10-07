@@ -3960,11 +3960,40 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // ================================================================
     // 动态编号的可选板块 (顺序不变，编号会自动顺延)
     // ================================================================
+  // 这是修改后的代码
     NSArray<NSDictionary *> *optionalSections = @[
         @{
             @"key": @"行年参数", 
             @"title": @"模块二：【天命系统】 - A级情报", 
-            @"content": SafeString(reportData[@"行年参数"]),
+            // --- 调整：在这里调用新的解析器 ---
+            @"content": ({
+                NSString *rawNianmingText = SafeString(reportData[@"行年参数"]);
+                NSMutableString *formattedNianming = [NSMutableString string];
+                if (rawNianmingText.length > 0) {
+                    // 按 "- 参数 X" 分割
+                    NSArray *paramBlocks = [rawNianmingText componentsSeparatedByString:@"- 参数 "];
+                    for (int i = 1; i < paramBlocks.count; i++) { // 从1开始，跳过第一个空字符串
+                        NSString *block = paramBlocks[i];
+                        // 提取参数编号
+                        NSRange range = [block rangeOfCharacterFromSet:[NSCharacterSet decimalDigitCharacterSet]];
+                        if (range.location == 0) {
+                            NSInteger paramNumber = [[block substringWithRange:range] integerValue];
+                            [formattedNianming appendFormat:@"- 参数 %ld\n", (long)paramNumber];
+                            
+                            // 获取该参数的剩余文本并传入解析器
+                            NSString *contentToParse = [block substringFromIndex:range.length];
+                            NSString *parsedContent = parseNianmingBlock(contentToParse);
+                            
+                            [formattedNianming appendString:parsedContent];
+                            [formattedNianming appendString:@"\n\n"];
+                        }
+                    }
+                }
+                // 移除末尾多余的换行符
+                NSString *finalString = [formattedNianming stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                (finalString.length > 0) ? [NSString stringWithFormat:@"\n%@", finalString] : @"";
+            }),
+            // --- 调整结束 ---
             @"prefix": @"// 协议定位：此模块为【天命级】情报的唯一入口，其权限高于所有其他分析性模块。\n// 核心指令：本模块的结论将作为【第二序位：天命法则】的唯一依据，拥有对整个事态最终性质的最高定义权。\n"
         },
         @{
@@ -5589,6 +5618,127 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
     [self processKeChuanQueue_Truth_S2];
 }
 // =========================================================================
+// ↓↓↓ 全新的行年参数后置解析器 ↓↓↓
+// =========================================================================
+#pragma mark - Nianming Detail Post-Processor
+
+/**
+ @brief 将从App中提取的“行年参数”原始文本块，解析成结构化的键值对格式。
+ @param rawParamBlock 单个参数（如“- 参数 1 ...”）的完整描述文本。
+ @return 格式化后的字符串，带有缩进和清晰的标签。
+*/
+static NSString* parseNianmingBlock(NSString *rawParamBlock) {
+    if (!rawParamBlock || rawParamBlock.length == 0) return @"";
+
+    NSMutableString *structuredResult = [NSMutableString string];
+    
+    // 1. 分离摘要和格局
+    NSString *summaryText = @"";
+    NSString *gejuText = @"";
+    NSRange summaryRange = [rawParamBlock rangeOfString:@"摘要:"];
+    NSRange gejuRange = [rawParamBlock rangeOfString:@"格局:"];
+
+    if (summaryRange.location != NSNotFound && gejuRange.location != NSNotFound) {
+        summaryText = [rawParamBlock substringWithRange:NSMakeRange(summaryRange.location + summaryRange.length, gejuRange.location - (summaryRange.location + summaryRange.length))];
+        gejuText = [rawParamBlock substringFromIndex:gejuRange.location + gejuRange.length];
+    } else if (summaryRange.location != NSNotFound) {
+        summaryText = [rawParamBlock substringFromIndex:summaryRange.location + summaryRange.length];
+    }
+    
+    summaryText = [summaryText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    gejuText = [gejuText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+    // 2. 解析摘要部分 (行年 和 本命)
+    NSArray *parts = [summaryText componentsSeparatedByString:@"本命在"];
+    NSString *xingNianPart = parts.count > 0 ? parts[0] : @"";
+    NSString *benMingPart = parts.count > 1 ? [NSString stringWithFormat:@"本命在%@", parts[1]] : @"";
+
+    void (^parseDetailPart)(NSString*, NSString*) = ^(NSString *title, NSString *partText) {
+        if (partText.length == 0) return;
+        
+        [structuredResult appendFormat:@"\n  // %@\n", title];
+        
+        // 提取核心信息: xx年生 行年在xx...
+        NSRegularExpression *coreInfoRegex = [NSRegularExpression regularExpressionWithPattern:@"(.*?):" options:0 error:nil];
+        NSTextCheckingResult *coreInfoMatch = [coreInfoRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
+        if (coreInfoMatch) {
+            NSString *coreInfo = [partText substringWithRange:[coreInfoMatch rangeAtIndex:1]];
+            [structuredResult appendFormat:@"  - 核心: %@\n", [coreInfo stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        }
+        
+        // 提取长生状态: 临X宫为X之地
+        NSRegularExpression *changshengRegex = [NSRegularExpression regularExpressionWithPattern:@"临(.)宫为(.+之地)" options:0 error:nil];
+        NSTextCheckingResult *changshengMatch = [changshengRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
+        if (changshengMatch) {
+            NSString *location = [partText substringWithRange:[changshengMatch rangeAtIndex:1]];
+            NSString *status = [partText substringWithRange:[changshengMatch rangeAtIndex:2]];
+            [structuredResult appendFormat:@"  - 状态: 临%@宫为%@\n", location, status];
+        }
+        
+        // 提取上神和天将信息
+        NSRegularExpression *tianjiangRegex = [NSRegularExpression regularExpressionWithPattern:@"其上神乘(.+?)为(.*?)[，|。](.*)" options:0 error:nil];
+        NSTextCheckingResult *tianjiangMatch = [tianjiangRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
+        if (tianjiangMatch) {
+            NSString *tianJiang = [partText substringWithRange:[tianjiangMatch rangeAtIndex:1]];
+            NSString *relation = [partText substringWithRange:[tianjiangMatch rangeAtIndex:2]];
+            NSString *desc = [partText substringWithRange:[tianjiangMatch rangeAtIndex:3]];
+            [structuredResult appendFormat:@"  - 天将: 乘%@为%@ (%@)\n", tianJiang, relation, [desc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        }
+        
+        // 提取与发用的关系
+        NSRange fayongRange = [partText rangeOfString:@"与发用之关系:"];
+        if (fayongRange.location != NSNotFound) {
+            NSString *fayongText = [partText substringFromIndex:fayongRange.location + fayongRange.length];
+            NSRange shenshaRange = [fayongText rangeOfString:@"所值神煞:"];
+            if (shenshaRange.location != NSNotFound) {
+                fayongText = [fayongText substringToIndex:shenshaRange.location];
+            }
+            [structuredResult appendFormat:@"  - 发用关系: %@\n", [fayongText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        }
+
+        // 提取神煞信息
+        NSRange shenshaRange = [partText rangeOfString:@"所值神煞:"];
+        if (shenshaRange.location != NSNotFound) {
+            NSString *shenshaText = [[partText substringFromIndex:shenshaRange.location + shenshaRange.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (shenshaText.length > 0) {
+                 [structuredResult appendString:@"  - 所值神煞:\n"];
+                 // 按 "值" 分割神煞
+                 NSArray *shenshas = [shenshaText componentsSeparatedByString:@"值"];
+                 for (NSString *ss in shenshas) {
+                     if (ss.length > 0) {
+                         [structuredResult appendFormat:@"    - 值%@\n", [ss stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                     }
+                 }
+            }
+        }
+    };
+    
+    parseDetailPart(@"行年信息", xingNianPart);
+    parseDetailPart(@"本命信息", benMingPart);
+
+    // 3. 解析格局部分
+    if (gejuText.length > 0) {
+        [structuredResult appendString:@"\n  // 格局要点\n"];
+        NSArray *gejuParts = [gejuText componentsSeparatedByString:@"|"];
+        for (NSString *part in gejuParts) {
+            NSString *trimmedPart = [part stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (trimmedPart.length > 0) {
+                // 特殊处理带解释的格局
+                NSRange reasonRange = [trimmedPart rangeOfString:@"因"];
+                if (reasonRange.location != NSNotFound) {
+                    NSString *gejuName = [[trimmedPart substringToIndex:reasonRange.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+                    NSString *reason = [trimmedPart substringFromIndex:reasonRange.location];
+                    [structuredResult appendFormat:@"  - %@ (%@)\n", gejuName, reason];
+                } else {
+                    [structuredResult appendFormat:@"  - %@\n", trimmedPart];
+                }
+            }
+        }
+    }
+    
+    return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+// =========================================================================
 // ↓↓↓ 全新的课传流注后置解析器 (v1.3 - 增强模式匹配) ↓↓↓
 // =========================================================================
 #pragma mark - KeChuan Detail Post-Processor
@@ -6019,6 +6169,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
