@@ -3777,14 +3777,19 @@ return            @"<SYSTEM_PROMPT>\n"
          @"// -> 透明化强制: 所有关键结论与实体命名，必须附带基于【理气归象】的、可追溯的原理说明。\n";}
 
 
+// =========================================================================
+// ↓↓↓ 使用这个完整、顺序调整后的版本替换您现有的函数 ↓↓↓
+// =========================================================================
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
-    __block NSInteger sectionCounter = 4;
+    __block NSInteger sectionCounter = 4; // 动态板块计数器从4开始
 
     // vvvvvvvvvvvvvv 日干十二长生数据与计算引擎 v3.2 vvvvvvvvvvvvvvvvvv
     // ^^^^^^^^^^^^^^^^ 日干十二长生数据与计算引擎 v3.2 ^^^^^^^^^^^^^^^^^^^^^
 
-    // 板块一：基础盘元
+    // ================================================================
+    // 板块一：基础盘元 (顺序不变)
+    // ================================================================
     [report appendString:@"// 1. 基础盘元\n"];
     NSString *timeBlockFull = SafeString(reportData[@"时间块"]);
     if (timeBlockFull.length > 0) {
@@ -3839,71 +3844,41 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     }
     [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)%@\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, formattedDetail, SafeString(reportData[@"昼夜"])];
 
-    // 板块二：核心盘架
+    // ================================================================
+    // 板块二：核心盘架 (顺序不变)
+    // ================================================================
     [report appendString:@"// 2. 核心盘架\n"];
     NSString *tianDiPanText = reportData[@"天地盘"];
-  if (tianDiPanText) {
-    NSMutableString *formattedTianDiPan = [NSMutableString string];
-    [formattedTianDiPan appendString:@"// 2.1. 天地盘\n"]; // 标题已修改
-    // NSDictionary *riGanChangShengMap = generateRiGanChangShengMap(riGan); // 这行可以安全地删除或注释掉
-    NSArray *tianDiPanLines = [tianDiPanText componentsSeparatedByString:@"\n"];
-    for (NSString *line in tianDiPanLines) {
-        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s*(\\S)宫:\\s*(.*)" options:0 error:nil];
-        NSTextCheckingResult *match = [regex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
-        if (match && [match numberOfRanges] == 3) {
-            NSString *diPanGong = [line substringWithRange:[match rangeAtIndex:1]];
-            NSString *tianPanContent = [line substringWithRange:[match rangeAtIndex:2]];
-            // 不再获取 changShengState
-            [formattedTianDiPan appendFormat:@"- %@宫: %@\n", diPanGong, tianPanContent]; // 输出格式已修改
-        } else {
-            [formattedTianDiPan appendFormat:@"%@\n", line];
+    if (tianDiPanText) {
+        NSMutableString *formattedTianDiPan = [NSMutableString string];
+        [formattedTianDiPan appendString:@"// 2.1. 天地盘\n"];
+        NSArray *tianDiPanLines = [tianDiPanText componentsSeparatedByString:@"\n"];
+        for (NSString *line in tianDiPanLines) {
+            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s*(\\S)宫:\\s*(.*)" options:0 error:nil];
+            NSTextCheckingResult *match = [regex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
+            if (match && [match numberOfRanges] == 3) {
+                NSString *diPanGong = [line substringWithRange:[match rangeAtIndex:1]];
+                NSString *tianPanContent = [line substringWithRange:[match rangeAtIndex:2]];
+                [formattedTianDiPan appendFormat:@"- %@宫: %@\n", diPanGong, tianPanContent];
+            } else {
+                [formattedTianDiPan appendFormat:@"%@\n", line];
+            }
         }
+        [report appendFormat:@"%@\n", [formattedTianDiPan stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
     }
-    [report appendFormat:@"%@\n", [formattedTianDiPan stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-}
     NSString *siKeText = reportData[@"四课"];
     NSString *sanChuanText = reportData[@"三传"];
     if (siKeText) [report appendFormat:@"\n// 2.2. 四课\n%@\n\n", siKeText];
     if (sanChuanText) [report appendFormat:@"// 2.3. 三传\n%@\n\n", sanChuanText];
 
-    // 板块三：格局总览
-    [report appendString:@"// 3. 格局总览\n"];
-    NSString *keTiFull = reportData[@"课体范式_简"] ?: reportData[@"课体范式_详"];
-    if (keTiFull.length > 0) {
-        [report appendString:@"// 3.1. 课体范式\n"];
-        NSArray *keTiBlocks = [keTiFull componentsSeparatedByString:@"\n\n"];
-        for (NSString *block in keTiBlocks) { if (block.length > 0) { [report appendFormat:@"- %@\n\n", [block stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; } }
-    }
-    NSString *jiuZongMenFull = reportData[@"九宗门_详"] ?: reportData[@"九宗门_简"];
-    if (jiuZongMenFull.length > 0) {
-        jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"];
-        jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "];
-        [report appendString:@"// 3.2. 九宗门\n"];
-        [report appendFormat:@"- %@\n\n", [jiuZongMenFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-    }
-    
-    void (^formatKeyValueSection)(NSString*, NSString*) = ^(NSString *title, NSString *key) {
-        NSString *content = reportData[key];
-        if (content.length > 0) {
-            [report appendFormat:@"%@\n", title];
-            NSArray *entries = [content componentsSeparatedByString:@"\n"];
-            for (NSString *entry in entries) {
-                NSArray *parts = [entry componentsSeparatedByString:@"→"];
-                if (parts.count >= 2) {
-                    [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], parts[1]];
-                }
-            }
-            [report appendString:@"\n"];
-        }
-    };
-    formatKeyValueSection(@"// 3.3. 毕法要诀", @"毕法要诀");
-    formatKeyValueSection(@"// 3.4. 特定格局", @"格局要览");
-
-    // 板块四：爻位详解
+    // ================================================================
+    // <--- 调整：这是原第4板块，现在是第3板块 --->
+    // ================================================================
     NSMutableString *yaoWeiContent = [NSMutableString string];
     NSString *fangFaFull = reportData[@"解析方法"];
     if (fangFaFull.length > 0) {
-        NSDictionary *fangFaMap = @{ @"日辰主客→": @"// 4.1. 日辰关系\n", @"三传事体→": @"// 4.2. 三传事理\n", @"发用事端→": @"// 4.3. 发用详解\n", @"克应之期→": @"// 4.4. 克应之期\n", @"来占之情→": @"// 4.5. 来情占断\n" };
+        // 子标题编号已从 4.x 更新为 3.x
+        NSDictionary *fangFaMap = @{ @"日辰主客→": @"// 3.1. 日辰关系\n", @"三传事体→": @"// 3.2. 三传事理\n", @"发用事端→": @"// 3.3. 发用详解\n", @"克应之期→": @"// 3.4. 克应之期\n", @"来占之情→": @"// 3.5. 来情占断\n" };
         NSArray *orderedKeys = @[@"日辰主客→", @"三传事体→", @"发用事端→", @"克应之期→", @"来占之情→"];
         for (NSString *key in orderedKeys) {
             NSRange range = [fangFaFull rangeOfString:key];
@@ -3928,7 +3903,8 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
     NSString *keChuanDetail = reportData[@"课传详解"];
     if (keChuanDetail.length > 0) {
-        [yaoWeiContent appendString:@"// 4.6. 神将详解 (课传流注)\n"];
+        // 子标题编号已从 4.6 更新为 3.6
+        [yaoWeiContent appendString:@"// 3.6. 神将详解 (课传流注)\n"];
         [yaoWeiContent appendString:keChuanDetail];
         [yaoWeiContent appendString:@"\n"];
     }
@@ -3937,29 +3913,72 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         while ([yaoWeiContent hasSuffix:@"\n\n"]) {
             [yaoWeiContent deleteCharactersInRange:NSMakeRange(yaoWeiContent.length - 1, 1)];
         }
-        [report appendString:@"// 4. 爻位详解\n"];
+        // 主标题编号已从 4 更新为 3
+        [report appendString:@"// 3. 爻位详解\n"];
         [report appendString:yaoWeiContent];
         [report appendString:@"\n"];
     }
-
+    
+    // ================================================================
+    // <--- 调整：这是原第3板块，现在是第4板块 --->
+    // ================================================================
+    [report appendString:@"// 4. 格局总览\n"];
+    NSString *keTiFull = reportData[@"课体范式_简"] ?: reportData[@"课体范式_详"];
+    if (keTiFull.length > 0) {
+        // 子标题编号已从 3.1 更新为 4.1
+        [report appendString:@"// 4.1. 课体范式\n"];
+        NSArray *keTiBlocks = [keTiFull componentsSeparatedByString:@"\n\n"];
+        for (NSString *block in keTiBlocks) { if (block.length > 0) { [report appendFormat:@"- %@\n\n", [block stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; } }
+    }
+    NSString *jiuZongMenFull = reportData[@"九宗门_详"] ?: reportData[@"九宗门_简"];
+    if (jiuZongMenFull.length > 0) {
+        jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"];
+        jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "];
+        // 子标题编号已从 3.2 更新为 4.2
+        [report appendString:@"// 4.2. 九宗门\n"];
+        [report appendFormat:@"- %@\n\n", [jiuZongMenFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+    }
+    
+    void (^formatKeyValueSection)(NSString*, NSString*) = ^(NSString *title, NSString *key) {
+        NSString *content = reportData[key];
+        if (content.length > 0) {
+            [report appendFormat:@"%@\n", title];
+            NSArray *entries = [content componentsSeparatedByString:@"\n"];
+            for (NSString *entry in entries) {
+                NSArray *parts = [entry componentsSeparatedByString:@"→"];
+                if (parts.count >= 2) {
+                    [report appendFormat:@"- %@: %@\n", [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]], parts[1]];
+                }
+            }
+            [report appendString:@"\n"];
+        }
+    };
+    // 子标题编号已从 3.x 更新为 4.x
+    formatKeyValueSection(@"// 4.3. 毕法要诀", @"毕法要诀");
+    formatKeyValueSection(@"// 4.4. 特定格局", @"格局要览");
+    
+    // ================================================================
+    // 动态编号的可选板块 (顺序不变，编号会自动顺延)
+    // ================================================================
     NSArray<NSDictionary *> *optionalSections = @[
-@{
-    @"key": @"行年参数", 
-    @"title": @"模块二：【天命系统】 - A级情报", 
-    @"content": SafeString(reportData[@"行年参数"]),
-    @"prefix": @"// 协议定位：此模块为【天命级】情报的唯一入口，其权限高于所有其他分析性模块。\n// 核心指令：本模块的结论将作为【第二序位：天命法则】的唯一依据，拥有对整个事态最终性质的最高定义权。\n"
-},@{
-    @"key": @"神煞详情", 
-    @"title": @"神煞系统", 
-    @"content": SafeString(reportData[@"神煞详情"]), 
-    @"prefix": @"// 协议定位：此模块为未经筛选的【原始神煞情报数据库】。\n// 核心指令：严禁对此处任何神煞进行即时解读或赋予权重。\n// 最终裁决权：所有信号的有效性、关联度与最终解释权，将唯一、强制地由【第二阶·第二幕：特殊功能性资源评估 (神煞)】协议，通过其内置的【三阶过滤】流程进行终审裁决。\n"
-},
-@{
-    @"key": @"辅助系统", 
-    @"title": @"模块五：【辅助系统】 - B级情报", 
-    @"content": @"COMPOSITE_SECTION_PLACEHOLDER",
-    @"prefix": @"// 协议定位：此模块提供宏观背景信息。\n// 核心指令：其内容主要用于【第一阶：时空总纲审判】，为事件定性提供辅助参考，不直接参与核心的生克推演。\n"
-}
+        @{
+            @"key": @"行年参数", 
+            @"title": @"模块二：【天命系统】 - A级情报", 
+            @"content": SafeString(reportData[@"行年参数"]),
+            @"prefix": @"// 协议定位：此模块为【天命级】情报的唯一入口，其权限高于所有其他分析性模块。\n// 核心指令：本模块的结论将作为【第二序位：天命法则】的唯一依据，拥有对整个事态最终性质的最高定义权。\n"
+        },
+        @{
+            @"key": @"神煞详情", 
+            @"title": @"神煞系统", 
+            @"content": SafeString(reportData[@"神煞详情"]), 
+            @"prefix": @"// 协议定位：此模块为未经筛选的【原始神煞情报数据库】。\n// 核心指令：严禁对此处任何神煞进行即时解读或赋予权重。\n// 最终裁决权：所有信号的有效性、关联度与最终解释权，将唯一、强制地由【第二阶·第二幕：特殊功能性资源评估 (神煞)】协议，通过其内置的【三阶过滤】流程进行终审裁决。\n"
+        },
+        @{
+            @"key": @"辅助系统", 
+            @"title": @"模块五：【辅助系统】 - B级情报", 
+            @"content": @"COMPOSITE_SECTION_PLACEHOLDER",
+            @"prefix": @"// 协议定位：此模块提供宏观背景信息。\n// 核心指令：其内容主要用于【第一阶：时空总纲审判】，为事件定性提供辅助参考，不直接参与核心的生克推演。\n"
+        }
     ];
 
     for (NSDictionary *sectionInfo in optionalSections) {
@@ -4050,29 +4069,58 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
+// =========================================================================
+// ↓↓↓ 使用这个已同步更新顺序的版本替换您现有的函数 ↓↓↓
+// =========================================================================
 static NSString* generateContentSummaryLine(NSString *fullReport) {
     if (!fullReport || fullReport.length == 0) return @"";
+    
+    // --- 调整：更新这里的编号和顺序 ---
     NSDictionary *keywordMap = @{ 
-        @"// 1. 基础盘元": @"基础盘元", @"// 2. 核心盘架": @"核心盘架", 
-        @"// 3. 格局总览": @"格局总览", @"// 4. 爻位详解": @"爻位详解", 
-        @"// 4.6. 神将详解": @"课传详解", @"// 5. 行年参数": @"行年参数", 
-        @"// 6. 神煞系统": @"神煞系统", @"// 7. 辅助系统": @"辅助系统"
+        @"// 1. 基础盘元": @"基础盘元", 
+        @"// 2. 核心盘架": @"核心盘架", 
+        @"// 3. 爻位详解": @"爻位详解",       // <-- 原为 #4
+        @"// 3.6. 神将详解": @"课传详解",     // <-- 原为 #4.6
+        @"// 4. 格局总览": @"格局总览",       // <-- 原为 #3
+        @"// 5. 行年参数": @"行年参数", 
+        @"// 6. 神煞系统": @"神煞系统", 
+        @"// 7. 辅助系统": @"辅助系统"
     };
+    
     NSMutableArray *includedSections = [NSMutableArray array];
+    
+    // --- 调整：更新这里的顺序 ---
     NSArray *orderedKeys = @[
-        @"// 1. 基础盘元", @"// 2. 核心盘架", @"// 3. 格局总览", 
-        @"// 4. 爻位详解", @"// 4.6. 神将详解", @"// 5. 行年参数", 
-        @"// 6. 神煞系统", @"// 7. 辅助系统"
+        @"// 1. 基础盘元", 
+        @"// 2. 核心盘架", 
+        @"// 3. 爻位详解",       // <-- 原为 #4
+        @"// 3.6. 神将详解",     // <-- 原为 #4.6
+        @"// 4. 格局总览",       // <-- 原为 #3
+        @"// 5. 行年参数", 
+        @"// 6. 神煞系统", 
+        @"// 7. 辅助系统"
     ];
+    
     for (NSString *keyword in orderedKeys) {
         if ([fullReport containsString:keyword]) {
             NSString *sectionName = keywordMap[keyword];
-            if (![includedSections containsObject:sectionName]) { [includedSections addObject:sectionName]; }
+            // 确保不重复添加 "爻位详解" 和 "课传详解"
+            if ([sectionName isEqualToString:@"课传详解"]) {
+                 // 如果已经有了"爻位详解"，就先移除它，再添加"课传详解"，这样更精确
+                if ([includedSections containsObject:@"爻位详解"]) {
+                    [includedSections removeObject:@"爻位详解"];
+                }
+            }
+            if (![includedSections containsObject:sectionName]) { 
+                [includedSections addObject:sectionName]; 
+            }
         }
     }
+    
     if (includedSections.count > 0) {
         return [NSString stringWithFormat:@"// 以上内容包含： %@\n", [includedSections componentsJoinedByString:@"、"]];
     }
+    
     return @"";
 }
 
@@ -5944,6 +5992,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
