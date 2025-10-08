@@ -5809,14 +5809,27 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
             [structuredResult appendFormat:@"  - 长生: 临%@为%@\n", [trimmedLine substringWithRange:[changshengMatch rangeAtIndex:1]], [trimmedLine substringWithRange:[changshengMatch rangeAtIndex:2]]];
         }
         
-        // 3. (v1.5) 解析乘将关系 (兼容长短句)
+               // 3. (v1.5) 解析乘将关系 (兼容长短句) - 这是解决您问题的核心
         NSRegularExpression *chengjiangRegex = [NSRegularExpression regularExpressionWithPattern:@"乘(.+?)为(.*?)[。|\\s]" options:0 error:nil];
         NSTextCheckingResult *chengjiangMatch = [chengjiangRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
         if (chengjiangMatch && [structuredResult rangeOfString:@"乘将关系:"].location == NSNotFound) {
             NSString *tianJiang = [trimmedLine substringWithRange:[chengjiangMatch rangeAtIndex:1]];
             NSString *relation = [trimmedLine substringWithRange:[chengjiangMatch rangeAtIndex:2]];
+            // 进一步清理关系描述，去掉末尾可能存在的句号或多余词
+             relation = [[relation componentsSeparatedByString:@"。"] firstObject];
+             relation = [[relation componentsSeparatedByString:@"此"] firstObject];
             [structuredResult appendFormat:@"  - 乘将关系: 乘%@为%@\n", tianJiang, relation];
             lineHandled = YES;
+        } else {
+             // 备用正则，捕捉类似“乘天后受其生”的句式
+             NSRegularExpression *chengjiangRegexAlt = [NSRegularExpression regularExpressionWithPattern:@"乘(.+?)(受其生|能生之|为内战|为外战)" options:0 error:nil];
+             NSTextCheckingResult *chengjiangMatchAlt = [chengjiangRegexAlt firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
+             if (chengjiangMatchAlt && [structuredResult rangeOfString:@"乘将关系:"].location == NSNotFound) {
+                 NSString *tianJiang = [trimmedLine substringWithRange:[chengjiangMatchAlt rangeAtIndex:1]];
+                 NSString *relation = [trimmedLine substringWithRange:[chengjiangMatchAlt rangeAtIndex:2]];
+                 [structuredResult appendFormat:@"  - 乘将关系: 乘%@%@\n", tianJiang, relation];
+                 lineHandled = YES;
+             }
         }
         
         // 4. (v1.5) 解析天将的临宫状态
@@ -6184,6 +6197,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
