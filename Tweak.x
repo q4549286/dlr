@@ -1981,12 +1981,18 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     
     NSString *jiuZongMenFull = reportData[@"九宗门_详"] ?: reportData[@"九宗门_简"];
     if (jiuZongMenFull.length > 0) {
-        // ================== 新增过滤逻辑 (START) ==================
-        NSRange jianDuanRange = [jiuZongMenFull rangeOfString:@"简断"];
-        if (jianDuanRange.location != NSNotFound) {
-            jiuZongMenFull = [jiuZongMenFull substringToIndex:jianDuanRange.location];
-        }
-        // ================== 新增过滤逻辑 (END) ====================
+        // ================== V2 修正过滤逻辑 (START) ==================
+        NSMutableString *processedJiuZongMen = [jiuZongMenFull mutableCopy];
+        
+        // 使用正则表达式精确移除 "简断" 和 "象曰" 的完整段落
+        NSRegularExpression *jianDuanRegex = [NSRegularExpression regularExpressionWithPattern:@"简断\\s*\\n[\\s\\S]*?(?=\\n\\s*\\n|\\z)" options:0 error:nil];
+        [jianDuanRegex replaceMatchesInString:processedJiuZongMen options:0 range:NSMakeRange(0, processedJiuZongMen.length) withTemplate:@""];
+
+        NSRegularExpression *xiangYueRegex = [NSRegularExpression regularExpressionWithPattern:@"(故)?象曰\\s*\\n[\\s\\S]*?(?=\\n\\s*\\n|\\z)" options:0 error:nil];
+        [xiangYueRegex replaceMatchesInString:processedJiuZongMen options:0 range:NSMakeRange(0, processedJiuZongMen.length) withTemplate:@""];
+        
+        jiuZongMenFull = [processedJiuZongMen stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        // ================== V2 修正过滤逻辑 (END) ====================
 
         jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"];
         jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "];
@@ -2006,24 +2012,31 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                     NSString *entryTitle = [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                     NSString *entryContent = [parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-                    // ================== 新增过滤逻辑 (START) ==================
-                    if ([key isEqualToString:@"毕法要诀"]) {
-                        NSRange filterRange = [entryContent rangeOfString:@"主"];
-                        if (filterRange.location != NSNotFound) {
-                            entryContent = [entryContent substringToIndex:filterRange.location];
-                        }
-                    } else if ([key isEqualToString:@"格局要览"]) {
-                        NSArray *filters = @[@"此主", @"此凡占", @"凡占"];
+                    // ================== V2 修正过滤逻辑 (START) ==================
+                    // 适用于毕法要诀和特定格局
+                    if ([key isEqualToString:@"毕法要诀"] || [key isEqualToString:@"格局要览"]) {
+                        // 关键词列表，从最长最精确的开始匹配，防止提前截断
+                        NSArray *filters = @[@"此主", @"此凡占", @"此言", @"凡占", @"主", @"此 "];
                         for (NSString *filter in filters) {
-                            NSRange filterRange = [entryContent rangeOfString:filter];
+                            // 为了更精确匹配，我们查找 "。 关键词" 或者 " 关键词" 这种模式
+                            // 这样可以避免错误地匹配单词内部的字符
+                            NSString *searchPattern = [NSString stringWithFormat:@" %@", filter];
+                            NSRange filterRange = [entryContent rangeOfString:searchPattern];
+                            
+                            // 如果不在中间，检查是否在句首
+                            if (filterRange.location == NSNotFound && [entryContent hasPrefix:filter]) {
+                               filterRange = NSMakeRange(0, filter.length);
+                            }
+
                             if (filterRange.location != NSNotFound) {
                                 entryContent = [entryContent substringToIndex:filterRange.location];
-                                break; // 找到第一个就停止
+                                break; // 找到第一个匹配项后就停止，因为列表是有序的
                             }
                         }
                     }
-                    entryContent = [entryContent stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" \t。"]]; // 清理末尾的句号和空格
-                    // ================== 新增过滤逻辑 (END) ====================
+                    // 清理末尾可能遗留的句号、空格等
+                    entryContent = [entryContent stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" \t。"]];
+                    // ================== V2 修正过滤逻辑 (END) ====================
 
                     [report appendFormat:@"- %@: %@\n", entryTitle, entryContent];
                 }
@@ -4087,6 +4100,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
