@@ -1797,8 +1797,49 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
     __block NSInteger sectionCounter = 4; // 动态板块计数器从4开始
 
-    // vvvvvvvvvvvvvv 日干十二长生数据与计算引擎 v3.2 vvvvvvvvvvvvvvvvvv
-    // ^^^^^^^^^^^^^^^^ 日干十二长生数据与计算引擎 v3.2 ^^^^^^^^^^^^^^^^^^^^^
+    // ================== V3 过滤逻辑辅助模块 (START) ==================
+    // 这个模块专门用于处理“变体”部分的过滤，可在多个地方复用
+    NSString* (^processVariantText)(NSString*) = ^NSString*(NSString *rawVariantText) {
+        if (!rawVariantText || rawVariantText.length == 0) return @"";
+        
+        NSArray<NSString *> *lines = [rawVariantText componentsSeparatedByString:@"\n"];
+        if (lines.count <= 1) return rawVariantText; // 如果只有一行(或没有)，直接返回
+
+        NSMutableString *result = [NSMutableString stringWithFormat:@"%@\n", lines[0]]; // 保留 "变体" 标题行
+        
+        NSMutableString *currentVariantBlock = [NSMutableString string];
+        for (int i = 1; i < lines.count; i++) {
+            NSString *line = [lines[i] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+            if (line.length == 0) continue;
+
+            // 检查是否是新的变体开始 (如 "一、", "二、")
+            NSRegularExpression *markerRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
+            BOOL isNewVariant = ([markerRegex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)] != nil);
+            
+            if (isNewVariant) {
+                // 如果是新的变体，先把之前累积的旧变体处理掉
+                if (currentVariantBlock.length > 0) {
+                    NSString *firstLineOfOldVariant = [[currentVariantBlock componentsSeparatedByString:@"\n"] firstObject];
+                    [result appendFormat:@"%@\n", [firstLineOfOldVariant stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                }
+                // 重置，开始记录新的变体
+                [currentVariantBlock setString:line];
+            } else {
+                // 如果不是新变体，说明是上一行的延续，追加
+                [currentVariantBlock appendFormat:@"\n%@", line];
+            }
+        }
+        
+        // 处理最后一个累积的变体
+        if (currentVariantBlock.length > 0) {
+            NSString *firstLineOfLastVariant = [[currentVariantBlock componentsSeparatedByString:@"\n"] firstObject];
+            [result appendFormat:@"%@\n", [firstLineOfLastVariant stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        }
+
+        return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    };
+    // ================== V3 过滤逻辑辅助模块 (END) ====================
+
 
     // ================================================================
     // 板块一：基础盘元 (顺序不变)
@@ -1910,7 +1951,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                     [content deleteCharactersInRange:NSMakeRange(nextKeyRange.location, content.length - nextKeyRange.location)];
                 }
                 
-                // ================== 新增过滤逻辑 (START) ==================
                 if ([key isEqualToString:@"日辰主客→"]) {
                     NSString *filterText = @"此以日辰对较而定主客彼我之关系，大体日为我，辰为彼；日为人，辰为宅；日为尊，辰为卑；日为老，辰为幼；日为夫，辰为妻；日为官，辰为民；出行则日为陆为车，辰则为水为舟；日为出，为南向，为前方，辰则为入，为北向，为后方；占病则以日为人，以辰为病；占产则以日为子，以辰为母；占农则以日为农夫，以辰为谷物；占猎则以日为猎师，以辰为鸟兽。故日辰之位，随占不同，总要依类而推之，方无差谬。";
                     [content replaceOccurrencesOfString:filterText withString:@"" options:0 range:NSMakeRange(0, content.length)];
@@ -1918,7 +1958,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                     NSString *filterText = @"此以三传之进退顺逆、有气无气、顺生逆克等而定事情之大体。";
                     [content replaceOccurrencesOfString:filterText withString:@"" options:0 range:NSMakeRange(0, content.length)];
                 }
-                // ================== 新增过滤逻辑 (END) ====================
                 
                 [yaoWeiContent appendFormat:@"%@%@\n\n", fangFaMap[key], [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             }
@@ -1949,54 +1988,62 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     [report appendString:@"// 4. 格局总览\n"];
     NSString *keTiFull = reportData[@"课体范式_简"] ?: reportData[@"课体范式_详"];
     if (keTiFull.length > 0) {
-        // 子标题编号已从 3.1 更新为 4.1
         [report appendString:@"// 4.1. 课体范式\n"];
         NSArray *keTiBlocks = [keTiFull componentsSeparatedByString:@"\n\n"];
         for (NSString *block in keTiBlocks) {
             if (block.length > 0) {
-                // ================== 新增过滤逻辑 (START) ==================
-                NSString *processedBlock = block;
-                NSRange jianDuanRange = [processedBlock rangeOfString:@"简断"];
-                if (jianDuanRange.location != NSNotFound) {
-                    // 保留“简断”之前的部分
-                    NSString *headerPart = [processedBlock substringToIndex:jianDuanRange.location];
-                    
-                    // 查找“变体”部分
-                    NSString *footerPart = @"";
-                    NSRange bianTiRange = [processedBlock rangeOfString:@"变体"];
-                    if (bianTiRange.location != NSNotFound) {
-                        footerPart = [processedBlock substringFromIndex:bianTiRange.location];
-                    }
-                    
-                    // 组合新的字符串
-                    processedBlock = [NSString stringWithFormat:@"%@\n%@", 
-                                      [headerPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]],
-                                      [footerPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                NSMutableString *processedBlock = [NSMutableString string];
+                NSString *headerPart = block;
+                NSString *variantPart = @"";
+                
+                NSRange bianTiRange = [block rangeOfString:@"变体"];
+                if (bianTiRange.location != NSNotFound) {
+                    headerPart = [block substringToIndex:bianTiRange.location];
+                    variantPart = [block substringFromIndex:bianTiRange.location];
                 }
+
+                NSRange jianDuanRange = [headerPart rangeOfString:@"简断"];
+                if (jianDuanRange.location != NSNotFound) {
+                    headerPart = [headerPart substringToIndex:jianDuanRange.location];
+                }
+                
+                [processedBlock appendString:[headerPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                
+                if (variantPart.length > 0) {
+                    [processedBlock appendFormat:@"\n%@", processVariantText(variantPart)];
+                }
+                
                 [report appendFormat:@"- %@\n\n", [processedBlock stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-                // ================== 新增过滤逻辑 (END) ====================
             }
         }
     }
     
     NSString *jiuZongMenFull = reportData[@"九宗门_详"] ?: reportData[@"九宗门_简"];
     if (jiuZongMenFull.length > 0) {
-        // ================== V2 修正过滤逻辑 (START) ==================
-        NSMutableString *processedJiuZongMen = [jiuZongMenFull mutableCopy];
-        
-        // 使用正则表达式精确移除 "简断" 和 "象曰" 的完整段落
-        NSRegularExpression *jianDuanRegex = [NSRegularExpression regularExpressionWithPattern:@"简断\\s*\\n[\\s\\S]*?(?=\\n\\s*\\n|\\z)" options:0 error:nil];
-        [jianDuanRegex replaceMatchesInString:processedJiuZongMen options:0 range:NSMakeRange(0, processedJiuZongMen.length) withTemplate:@""];
+        NSMutableString *processedJiuZongMen = [NSMutableString string];
+        NSString *headerPart = jiuZongMenFull;
+        NSString *variantPart = @"";
 
-        NSRegularExpression *xiangYueRegex = [NSRegularExpression regularExpressionWithPattern:@"(故)?象曰\\s*\\n[\\s\\S]*?(?=\\n\\s*\\n|\\z)" options:0 error:nil];
-        [xiangYueRegex replaceMatchesInString:processedJiuZongMen options:0 range:NSMakeRange(0, processedJiuZongMen.length) withTemplate:@""];
+        NSRange bianTiRange = [jiuZongMenFull rangeOfString:@"变体"];
+        if (bianTiRange.location != NSNotFound) {
+            headerPart = [jiuZongMenFull substringToIndex:bianTiRange.location];
+            variantPart = [jiuZongMenFull substringFromIndex:bianTiRange.location];
+        }
+
+        NSMutableString *tempHeader = [headerPart mutableCopy];
+        // 使用更安全的正则表达式，确保不会跨区删除
+        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(简断|故?象曰)\\s*\\n[\\s\\S]*" options:0 error:nil];
+        [regex replaceMatchesInString:tempHeader options:0 range:NSMakeRange(0, tempHeader.length) withTemplate:@""];
+        
+        [processedJiuZongMen appendString:[tempHeader stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        
+        if (variantPart.length > 0) {
+            [processedJiuZongMen appendFormat:@"\n%@", processVariantText(variantPart)];
+        }
         
         jiuZongMenFull = [processedJiuZongMen stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        // ================== V2 修正过滤逻辑 (END) ====================
-
         jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"];
         jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "];
-        // 子标题编号已从 3.2 更新为 4.2
         [report appendString:@"// 4.2. 九宗门\n"];
         [report appendFormat:@"- %@\n\n", [jiuZongMenFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
     }
@@ -2012,31 +2059,26 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                     NSString *entryTitle = [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                     NSString *entryContent = [parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-                    // ================== V2 修正过滤逻辑 (START) ==================
-                    // 适用于毕法要诀和特定格局
+                    // ================== V3 修正过滤逻辑 (START) ==================
                     if ([key isEqualToString:@"毕法要诀"] || [key isEqualToString:@"格局要览"]) {
                         // 关键词列表，从最长最精确的开始匹配，防止提前截断
-                        NSArray *filters = @[@"此主", @"此凡占", @"此言", @"凡占", @"主", @"此 "];
+                        NSArray *filters = @[@"此言", @"此主", @"此凡占", @"如此", @"遇此", @"凡占", @"主", @"此 "];
                         for (NSString *filter in filters) {
-                            // 为了更精确匹配，我们查找 "。 关键词" 或者 " 关键词" 这种模式
-                            // 这样可以避免错误地匹配单词内部的字符
                             NSString *searchPattern = [NSString stringWithFormat:@" %@", filter];
                             NSRange filterRange = [entryContent rangeOfString:searchPattern];
                             
-                            // 如果不在中间，检查是否在句首
                             if (filterRange.location == NSNotFound && [entryContent hasPrefix:filter]) {
                                filterRange = NSMakeRange(0, filter.length);
                             }
 
                             if (filterRange.location != NSNotFound) {
                                 entryContent = [entryContent substringToIndex:filterRange.location];
-                                break; // 找到第一个匹配项后就停止，因为列表是有序的
+                                break;
                             }
                         }
                     }
-                    // 清理末尾可能遗留的句号、空格等
                     entryContent = [entryContent stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" \t。"]];
-                    // ================== V2 修正过滤逻辑 (END) ====================
+                    // ================== V3 修正过滤逻辑 (END) ====================
 
                     [report appendFormat:@"- %@: %@\n", entryTitle, entryContent];
                 }
@@ -2044,47 +2086,37 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
             [report appendString:@"\n"];
         }
     };
-    // 子标题编号已从 3.x 更新为 4.x
     formatKeyValueSection(@"// 4.3. 毕法要诀", @"毕法要诀");
     formatKeyValueSection(@"// 4.4. 特定格局", @"格局要览");
     
     // ================================================================
     // 动态编号的可选板块 (顺序不变，编号会自动顺延)
     // ================================================================
-  // 这是修改后的代码
     NSArray<NSDictionary *> *optionalSections = @[
         @{
             @"key": @"行年参数", 
             @"title": @"模块二：【天命系统】 - A级情报", 
-            // --- 调整：在这里调用新的解析器 ---
             @"content": ({
                 NSString *rawNianmingText = SafeString(reportData[@"行年参数"]);
                 NSMutableString *formattedNianming = [NSMutableString string];
                 if (rawNianmingText.length > 0) {
-                    // 按 "- 参数 X" 分割
                     NSArray *paramBlocks = [rawNianmingText componentsSeparatedByString:@"- 参数 "];
-                    for (int i = 1; i < paramBlocks.count; i++) { // 从1开始，跳过第一个空字符串
+                    for (int i = 1; i < paramBlocks.count; i++) {
                         NSString *block = paramBlocks[i];
-                        // 提取参数编号
                         NSRange range = [block rangeOfCharacterFromSet:[NSCharacterSet decimalDigitCharacterSet]];
                         if (range.location == 0) {
                             NSInteger paramNumber = [[block substringWithRange:range] integerValue];
                             [formattedNianming appendFormat:@"- 参数 %ld\n", (long)paramNumber];
-                            
-                            // 获取该参数的剩余文本并传入解析器
                             NSString *contentToParse = [block substringFromIndex:range.length];
                             NSString *parsedContent = parseNianmingBlock(contentToParse);
-                            
                             [formattedNianming appendString:parsedContent];
                             [formattedNianming appendString:@"\n\n"];
                         }
                     }
                 }
-                // 移除末尾多余的换行符
                 NSString *finalString = [formattedNianming stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 (finalString.length > 0) ? [NSString stringWithFormat:@"\n%@", finalString] : @"";
             }),
-            // --- 调整结束 ---
             @"prefix": @"// 协议定位：此模块为【天命级】情报的唯一入口，其权限高于所有其他分析性模块。\n// 核心指令：本模块的结论将作为【第二序位：天命法则】的唯一依据，拥有对整个事态最终性质的最高定义权。\n"
         },
         @{
@@ -4100,6 +4132,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
