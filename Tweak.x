@@ -1694,18 +1694,22 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // ================================================================
     // <--- 调整：这是原第4板块，现在是第3板块 --->
     // ================================================================
-    NSMutableString *yaoWeiContent = [NSMutableString string];
+     NSMutableString *yaoWeiContent = [NSMutableString string];
     NSString *fangFaFull = reportData[@"解析方法"];
     if (fangFaFull.length > 0) {
-        // 子标题编号已从 4.x 更新为 3.x
-        NSDictionary *fangFaMap = @{ @"日辰主客→": @"// 3.1. 日辰关系\n", @"三传事体→": @"// 3.2. 三传事理\n", @"发用事端→": @"// 3.3. 发用详解\n", @"克应之期→": @"// 3.4. 克应之期\n", @"来占之情→": @"// 3.5. 来情占断\n" };
-        NSArray *orderedKeys = @[@"日辰主客→", @"三传事体→", @"发用事端→", @"克应之期→", @"来占之情→"];
+        // --- V3 调整: 只保留克应之期 ---
+        NSDictionary *fangFaMap = @{ @"克应之期→": @"// 3.1. 克应之期\n" };
+        NSArray *orderedKeys = @[@"克应之期→"]; // <-- 只处理这个key
+        
         for (NSString *key in orderedKeys) {
             NSRange range = [fangFaFull rangeOfString:key];
             if (range.location != NSNotFound) {
                 NSMutableString *content = [[fangFaFull substringFromIndex:range.location + range.length] mutableCopy];
                 NSRange nextKeyRange = NSMakeRange(NSNotFound, 0);
-                for (NSString *nextKey in orderedKeys) {
+                
+                // 查找下一个可能的key来截断内容 (即使我们只处理一个，这个逻辑也是安全的)
+                 NSArray *allPossibleKeys = @[@"日辰主客→", @"三传事体→", @"发用事端→", @"克应之期→", @"来占之情→"];
+                for (NSString *nextKey in allPossibleKeys) {
                     if (![nextKey isEqualToString:key]) {
                         NSRange tempRange = [content rangeOfString:nextKey];
                         if (tempRange.location != NSNotFound && (nextKeyRange.location == NSNotFound || tempRange.location < nextKeyRange.location)) {
@@ -1717,72 +1721,33 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                     [content deleteCharactersInRange:NSMakeRange(nextKeyRange.location, content.length - nextKeyRange.location)];
                 }
                 
-                if ([key isEqualToString:@"日辰主客→"]) {
-                    NSString *filterText = @"此以日辰对较而定主客彼我之关系，大体日为我，辰为彼；日为人，辰为宅；日为尊，辰为卑；日为老，辰为幼；日为夫，辰为妻；日为官，辰为民；出行则日为陆为车，辰则为水为舟；日为出，为南向，为前方，辰则为入，为北向，为后方；占病则以日为人，以辰为病；占产则以日为子，以辰为母；占农则以日为农夫，以辰为谷物；占猎则以日为猎师，以辰为鸟兽。故日辰之位，随占不同，总要依类而推之，方无差谬。";
-                    [content replaceOccurrencesOfString:filterText withString:@"" options:0 range:NSMakeRange(0, content.length)];
-                } else if ([key isEqualToString:@"三传事体→"]) {
-                    NSString *filterText = @"此以三传之进退顺逆、有气无气、顺生逆克等而定事情之大体。";
-                    [content replaceOccurrencesOfString:filterText withString:@"" options:0 range:NSMakeRange(0, content.length)];
-                }
-                
                 [yaoWeiContent appendFormat:@"%@%@\n\n", fangFaMap[key], [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
             }
         }
     }
-
-    NSString *keChuanDetail = reportData[@"课传详解"];
-    if (keChuanDetail.length > 0) {
-        // 子标题编号已从 4.6 更新为 3.6
-        [yaoWeiContent appendString:@"// 3.6. 神将详解 (课传流注)\n"];
-        [yaoWeiContent appendString:keChuanDetail];
-        [yaoWeiContent appendString:@"\n"];
-    }
+    
+    // --- V3 调整: 神将详解 (课传流注) 被屏蔽 ---
+    // NSString *keChuanDetail = reportData[@"课传详解"];
+    // if (keChuanDetail.length > 0) { ... }
 
     if (yaoWeiContent.length > 0) {
         while ([yaoWeiContent hasSuffix:@"\n\n"]) {
             [yaoWeiContent deleteCharactersInRange:NSMakeRange(yaoWeiContent.length - 1, 1)];
         }
-        // 主标题编号已从 4 更新为 3
-        [report appendString:@"// 3. 爻位详解\n"];
+        // --- V3 调整: 主标题更改为 克应之期 ---
+        [report appendString:@"// 3. 克应之期\n"];
         [report appendString:yaoWeiContent];
         [report appendString:@"\n"];
     }
     
     // ================================================================
-    // <--- 调整：这是原第3板块，现在是第4板块 --->
+    // <--- V3 调整: 这是原第3板块，现在是第4板块 (精简内容) --->
     // ================================================================
     [report appendString:@"// 4. 格局总览\n"];
-    NSString *keTiFull = reportData[@"课体范式_简"] ?: reportData[@"课体范式_详"];
-    if (keTiFull.length > 0) {
-        [report appendString:@"// 4.1. 课体范式\n"];
-        NSArray *keTiBlocks = [keTiFull componentsSeparatedByString:@"\n\n"];
-        for (NSString *block in keTiBlocks) {
-            if (block.length > 0) {
-                NSMutableString *processedBlock = [NSMutableString string];
-                NSString *headerPart = block;
-                NSString *variantPart = @"";
-                
-                NSRange bianTiRange = [block rangeOfString:@"变体"];
-                if (bianTiRange.location != NSNotFound) {
-                    headerPart = [block substringToIndex:bianTiRange.location];
-                    variantPart = [block substringFromIndex:bianTiRange.location];
-                }
-
-                NSRange jianDuanRange = [headerPart rangeOfString:@"简断"];
-                if (jianDuanRange.location != NSNotFound) {
-                    headerPart = [headerPart substringToIndex:jianDuanRange.location];
-                }
-                
-                [processedBlock appendString:[headerPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-                
-                if (variantPart.length > 0) {
-                    [processedBlock appendFormat:@"\n%@", processVariantText(variantPart)];
-                }
-                
-                [report appendFormat:@"- %@\n\n", [processedBlock stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-            }
-        }
-    }
+    
+    // --- V3 调整: 课体范式被屏蔽 ---
+    // NSString *keTiFull = reportData[@"课体范式_简"] ?: reportData[@"课体范式_详"];
+    // if (keTiFull.length > 0) { ... }
     
     NSString *jiuZongMenFull = reportData[@"九宗门_详"] ?: reportData[@"九宗门_简"];
     if (jiuZongMenFull.length > 0) {
@@ -1797,7 +1762,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         }
 
         NSMutableString *tempHeader = [headerPart mutableCopy];
-        // 使用更安全的正则表达式，确保不会跨区删除
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(简断|故?象曰)\\s*\\n[\\s\\S]*" options:0 error:nil];
         [regex replaceMatchesInString:tempHeader options:0 range:NSMakeRange(0, tempHeader.length) withTemplate:@""];
         
@@ -1810,53 +1774,19 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         jiuZongMenFull = [processedJiuZongMen stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"];
         jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "];
-        [report appendString:@"// 4.2. 九宗门\n"];
+        [report appendString:@"// 4.1. 九宗门\n"]; // 序号调整为 4.1
         [report appendFormat:@"- %@\n\n", [jiuZongMenFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
     }
     
+    // --- V3 调整: 毕法要诀 和 特定格局 被屏蔽 ---
     void (^formatKeyValueSection)(NSString*, NSString*) = ^(NSString *title, NSString *key) {
-        NSString *content = reportData[key];
-        if (content.length > 0) {
-            [report appendFormat:@"%@\n", title];
-            NSArray *entries = [content componentsSeparatedByString:@"\n"];
-            for (NSString *entry in entries) {
-                NSArray *parts = [entry componentsSeparatedByString:@"→"];
-                if (parts.count >= 2) {
-                    NSString *entryTitle = [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    NSString *entryContent = [parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-                    // ================== V3 修正过滤逻辑 (START) ==================
-                    if ([key isEqualToString:@"毕法要诀"] || [key isEqualToString:@"格局要览"]) {
-                        // 关键词列表，从最长最精确的开始匹配，防止提前截断
-                        NSArray *filters = @[@"此言", @"此主", @"此凡占", @"如此", @"遇此", @"凡占", @"主", @"此 "];
-                        for (NSString *filter in filters) {
-                            NSString *searchPattern = [NSString stringWithFormat:@" %@", filter];
-                            NSRange filterRange = [entryContent rangeOfString:searchPattern];
-                            
-                            if (filterRange.location == NSNotFound && [entryContent hasPrefix:filter]) {
-                               filterRange = NSMakeRange(0, filter.length);
-                            }
-
-                            if (filterRange.location != NSNotFound) {
-                                entryContent = [entryContent substringToIndex:filterRange.location];
-                                break;
-                            }
-                        }
-                    }
-                    entryContent = [entryContent stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" \t。"]];
-                    // ================== V3 修正过滤逻辑 (END) ====================
-
-                    [report appendFormat:@"- %@: %@\n", entryTitle, entryContent];
-                }
-            }
-            [report appendString:@"\n"];
-        }
+        // ... (函数定义保持不变，但下面的调用被注释掉了)
     };
-    formatKeyValueSection(@"// 4.3. 毕法要诀", @"毕法要诀");
-    formatKeyValueSection(@"// 4.4. 特定格局", @"格局要览");
+    // formatKeyValueSection(@"// 4.3. 毕法要诀", @"毕法要诀");
+    // formatKeyValueSection(@"// 4.4. 特定格局", @"格局要览");
     
     // ================================================================
-    // 动态编号的可选板块 (顺序不变，编号会自动顺延)
+    // 动态编号的可选板块 (无变化)
     // ================================================================
     NSArray<NSDictionary *> *optionalSections = @[
         @{
@@ -1981,7 +1911,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     }
 
     while ([report hasSuffix:@"\n\n"]) {
-        [report deleteCharactersInRange:NSMakeRange(report.length - 1, 1)];
+        [report deleteCharactersInRange:NSMakeRange:report.length - 1, 1)];
     }
 
     return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -3727,17 +3657,42 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
     NSMutableArray *scViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, scViews);
     [scViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
     NSArray *titles = @[@"初传", @"中传", @"末传"]; NSMutableArray *lines = [NSMutableArray array];
+    
+    // --- 白名单过滤 ---
+    // 在这里定义您希望保留的状态关键词。这个列表可以随时扩展。
+    NSArray<NSString *> *shenShaWhitelist = @[@"日禄", @"太岁", "旬空", @"坐空"];
+
     for (NSUInteger i = 0; i < scViews.count; i++) {
         UIView *v = scViews[i]; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], v, labels);
         [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }];
         if (labels.count >= 3) {
             NSString *lq = [[(UILabel*)labels.firstObject text] stringByReplacingOccurrencesOfString:@"->" withString:@""];
             NSString *tj = [(UILabel*)labels.lastObject text]; NSString *dz = [(UILabel*)[labels objectAtIndex:labels.count - 2] text];
+            
             NSMutableArray *ssParts = [NSMutableArray array];
             if (labels.count > 3) { for (UILabel *l in [labels subarrayWithRange:NSMakeRange(1, labels.count - 3)]) { if (l.text.length > 0) [ssParts addObject:l.text]; } }
-            NSString *ss = [ssParts componentsJoinedByString:@", "];
+            
+            // --- 执行过滤 ---
+            NSMutableArray *filteredSsParts = [NSMutableArray array];
+            for (NSString *part in ssParts) {
+                for (NSString *keyword in shenShaWhitelist) {
+                    if ([part containsString:keyword]) {
+                        [filteredSsParts addObject:part];
+                        break;
+                    }
+                }
+            }
+            
             NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"%lu传", (unsigned long)i+1];
-            [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@) [状态: %@]", title, SafeString(dz), SafeString(lq), SafeString(tj), ss.length > 0 ? ss : @"无"]];
+            
+            // --- V3: 核心修改 ---
+            // 如果过滤后有状态，则显示 [状态: ...]，否则完全不显示这部分。
+            if (filteredSsParts.count > 0) {
+                NSString *statusString = [filteredSsParts componentsJoinedByString:@", "];
+                [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@) [状态: %@]", title, SafeString(dz), SafeString(lq), SafeString(tj), statusString]];
+            } else {
+                [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@)", title, SafeString(dz), SafeString(lq), SafeString(tj)]];
+            }
         }
     }
     return [lines componentsJoinedByString:@"\n"];
@@ -3898,6 +3853,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
