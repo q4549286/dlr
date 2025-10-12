@@ -1564,7 +1564,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     __block NSInteger sectionCounter = 4; // 动态板块计数器从4开始
 
     // ================== V3 过滤逻辑辅助模块 (START) ==================
-    // 这个模块专门用于处理“变体”部分的过滤，可在多个地方复用
+    // (此辅助模块无需修改，保持原样)
     NSString* (^processVariantText)(NSString*) = ^NSString*(NSString *rawVariantText) {
         if (!rawVariantText || rawVariantText.length == 0) return @"";
         
@@ -1578,25 +1578,20 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
             NSString *line = [lines[i] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             if (line.length == 0) continue;
 
-            // 检查是否是新的变体开始 (如 "一、", "二、")
             NSRegularExpression *markerRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
             BOOL isNewVariant = ([markerRegex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)] != nil);
             
             if (isNewVariant) {
-                // 如果是新的变体，先把之前累积的旧变体处理掉
                 if (currentVariantBlock.length > 0) {
                     NSString *firstLineOfOldVariant = [[currentVariantBlock componentsSeparatedByString:@"\n"] firstObject];
                     [result appendFormat:@"%@\n", [firstLineOfOldVariant stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
                 }
-                // 重置，开始记录新的变体
                 [currentVariantBlock setString:line];
             } else {
-                // 如果不是新变体，说明是上一行的延续，追加
                 [currentVariantBlock appendFormat:@"\n%@", line];
             }
         }
         
-        // 处理最后一个累积的变体
         if (currentVariantBlock.length > 0) {
             NSString *firstLineOfLastVariant = [[currentVariantBlock componentsSeparatedByString:@"\n"] firstObject];
             [result appendFormat:@"%@\n", [firstLineOfLastVariant stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
@@ -1608,7 +1603,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
 
     // ================================================================
-    // 板块一：基础盘元 (顺序不变)
+    // 板块一：基础盘元 (无变化)
     // ================================================================
     [report appendString:@"// 1. 基础盘元\n"];
     NSString *timeBlockFull = SafeString(reportData[@"时间块"]);
@@ -1665,7 +1660,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)%@\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, formattedDetail, SafeString(reportData[@"昼夜"])];
 
     // ================================================================
-    // 板块二：核心盘架 (顺序不变)
+    // 板块二：核心盘架 (无变化)
     // ================================================================
     [report appendString:@"// 2. 核心盘架\n"];
     NSString *tianDiPanText = reportData[@"天地盘"];
@@ -1692,14 +1687,13 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     if (sanChuanText) [report appendFormat:@"// 2.3. 三传\n%@\n\n", sanChuanText];
 
     // ================================================================
-    // <--- 调整：这是原第4板块，现在是第3板块 --->
+    // <--- V3 调整: 这是原第4板块，现在是第3板块 (精简内容) --->
     // ================================================================
-     NSMutableString *yaoWeiContent = [NSMutableString string];
+    NSMutableString *yaoWeiContent = [NSMutableString string];
     NSString *fangFaFull = reportData[@"解析方法"];
     if (fangFaFull.length > 0) {
-        // --- V3 调整: 只保留克应之期 ---
         NSDictionary *fangFaMap = @{ @"克应之期→": @"// 3.1. 克应之期\n" };
-        NSArray *orderedKeys = @[@"克应之期→"]; // <-- 只处理这个key
+        NSArray *orderedKeys = @[@"克应之期→"]; 
         
         for (NSString *key in orderedKeys) {
             NSRange range = [fangFaFull rangeOfString:key];
@@ -1707,7 +1701,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                 NSMutableString *content = [[fangFaFull substringFromIndex:range.location + range.length] mutableCopy];
                 NSRange nextKeyRange = NSMakeRange(NSNotFound, 0);
                 
-                // 查找下一个可能的key来截断内容 (即使我们只处理一个，这个逻辑也是安全的)
                  NSArray *allPossibleKeys = @[@"日辰主客→", @"三传事体→", @"发用事端→", @"克应之期→", @"来占之情→"];
                 for (NSString *nextKey in allPossibleKeys) {
                     if (![nextKey isEqualToString:key]) {
@@ -1726,15 +1719,10 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         }
     }
     
-    // --- V3 调整: 神将详解 (课传流注) 被屏蔽 ---
-    // NSString *keChuanDetail = reportData[@"课传详解"];
-    // if (keChuanDetail.length > 0) { ... }
-
     if (yaoWeiContent.length > 0) {
         while ([yaoWeiContent hasSuffix:@"\n\n"]) {
             [yaoWeiContent deleteCharactersInRange:NSMakeRange(yaoWeiContent.length - 1, 1)];
         }
-        // --- V3 调整: 主标题更改为 克应之期 ---
         [report appendString:@"// 3. 克应之期\n"];
         [report appendString:yaoWeiContent];
         [report appendString:@"\n"];
@@ -1744,10 +1732,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // <--- V3 调整: 这是原第3板块，现在是第4板块 (精简内容) --->
     // ================================================================
     [report appendString:@"// 4. 格局总览\n"];
-    
-    // --- V3 调整: 课体范式被屏蔽 ---
-    // NSString *keTiFull = reportData[@"课体范式_简"] ?: reportData[@"课体范式_详"];
-    // if (keTiFull.length > 0) { ... }
     
     NSString *jiuZongMenFull = reportData[@"九宗门_详"] ?: reportData[@"九宗门_简"];
     if (jiuZongMenFull.length > 0) {
@@ -1774,14 +1758,48 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         jiuZongMenFull = [processedJiuZongMen stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n\n" withString:@"\n"];
         jiuZongMenFull = [jiuZongMenFull stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "];
-        [report appendString:@"// 4.1. 九宗门\n"]; // 序号调整为 4.1
+        [report appendString:@"// 4.1. 九宗门\n"];
         [report appendFormat:@"- %@\n\n", [jiuZongMenFull stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
     }
     
-    // --- V3 调整: 毕法要诀 和 特定格局 被屏蔽 ---
+    // --- V4 修正: 整个 'formatKeyValueSection' 的定义被注释掉，以解决 "unused variable" 错误 ---
+    /*
     void (^formatKeyValueSection)(NSString*, NSString*) = ^(NSString *title, NSString *key) {
-        // ... (函数定义保持不变，但下面的调用被注释掉了)
+        NSString *content = reportData[key];
+        if (content.length > 0) {
+            [report appendFormat:@"%@\n", title];
+            NSArray *entries = [content componentsSeparatedByString:@"\n"];
+            for (NSString *entry in entries) {
+                NSArray *parts = [entry componentsSeparatedByString:@"→"];
+                if (parts.count >= 2) {
+                    NSString *entryTitle = [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    NSString *entryContent = [parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+                    if ([key isEqualToString:@"毕法要诀"] || [key isEqualToString:@"格局要览"]) {
+                        NSArray *filters = @[@"此言", @"此主", @"此凡占", @"如此", @"遇此", @"凡占", @"主", @"此 "];
+                        for (NSString *filter in filters) {
+                            NSString *searchPattern = [NSString stringWithFormat:@" %@", filter];
+                            NSRange filterRange = [entryContent rangeOfString:searchPattern];
+                            
+                            if (filterRange.location == NSNotFound && [entryContent hasPrefix:filter]) {
+                               filterRange = NSMakeRange(0, filter.length);
+                            }
+
+                            if (filterRange.location != NSNotFound) {
+                                entryContent = [entryContent substringToIndex:filterRange.location];
+                                break;
+                            }
+                        }
+                    }
+                    entryContent = [entryContent stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" \t。"]];
+
+                    [report appendFormat:@"- %@: %@\n", entryTitle, entryContent];
+                }
+            }
+            [report appendString:@"\n"];
+        }
     };
+    */
     // formatKeyValueSection(@"// 4.3. 毕法要诀", @"毕法要诀");
     // formatKeyValueSection(@"// 4.4. 特定格局", @"格局要览");
     
@@ -3853,6 +3871,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
