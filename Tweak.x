@@ -3660,7 +3660,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
     
     // --- 白名单过滤 ---
     // 在这里定义您希望保留的状态关键词。这个列表可以随时扩展。
-    NSArray<NSString *> *shenShaWhitelist = @[@"日禄", @"太岁", "旬空", @"坐空"];
+    NSArray<NSString *> *shenShaWhitelist = @[@"日禄", @"太岁", @"旬空", @"日马", @"坐空"];
 
     for (NSUInteger i = 0; i < scViews.count; i++) {
         UIView *v = scViews[i]; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], v, labels);
@@ -3853,6 +3853,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
