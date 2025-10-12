@@ -1911,7 +1911,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     }
 
     while ([report hasSuffix:@"\n\n"]) {
-        [report deleteCharactersInRange:NSMakeRange:report.length - 1, 1)];
+        [report deleteCharactersInRange:NSMakeRange(report.length - 1, 1)];
     }
 
     return [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -3853,6 +3853,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
