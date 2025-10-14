@@ -1613,7 +1613,7 @@ static NSString* extractValueAfterKeyword(NSString *line, NSString *keyword) {
     return [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 // =========================================================================
-// ↓↓↓ 全新的行年参数后置解析器 (v2.3 - 最终正则优化) ↓↓↓
+// ↓↓↓ 使用这个最终修正版，它能精确处理 “，正” 这类残留注解 ↓↓↓
 // =========================================================================
 #pragma mark - Nianming Detail Post-Processor
 
@@ -1653,8 +1653,6 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
         
         [structuredResult appendFormat:@"\n  // %@\n", title];
         
-        // --- v2.3 最终正则优化 ---
-        // 匹配模式: (描述文本) (行年/本命)在(干支)，其临(干支)乘(干支)将乘(天将):
         NSRegularExpression *coreInfoRegex = [NSRegularExpression 
             regularExpressionWithPattern:@"(.*?)(行年|本命)在(.{2,})，其临(.{1,2})乘(.{1,2})将乘(.*?):" 
             options:0 error:nil];
@@ -1677,14 +1675,12 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
             [structuredResult appendFormat:@"  - 将: %@\n", tianJiang];
         }
 
-        // 提取长生状态
         NSRegularExpression *changshengRegex = [NSRegularExpression regularExpressionWithPattern:@"临.宫为(.+之地)" options:0 error:nil];
         NSTextCheckingResult *changshengMatch = [changshengRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
         if (changshengMatch) {
             [structuredResult appendFormat:@"  - 长生: %@\n", [partText substringWithRange:[changshengMatch rangeAtIndex:1]]];
         }
         
-        // 提取乘将关系描述
         NSRegularExpression *tianjiangDescRegex = [NSRegularExpression regularExpressionWithPattern:@"其上神乘.*?为(.*?)[。|\\s]([^\\(]*?与发用之关系|[^\\(]*?所值神煞|$)" options:0 error:nil];
         NSTextCheckingResult *tianjiangDescMatch = [tianjiangDescRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
         if (tianjiangDescMatch) {
@@ -1692,7 +1688,6 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
             [structuredResult appendFormat:@"  - 乘将关系: 为%@\n", [fullRelationText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
         }
         
-        // 提取与发用的关系
         NSRange fayongRange = [partText rangeOfString:@"与发用之关系:"];
         if (fayongRange.location != NSNotFound) {
             NSString *fayongText = [partText substringFromIndex:fayongRange.location + fayongRange.length];
@@ -1703,7 +1698,6 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
             [structuredResult appendFormat:@"  - 发用关系: %@\n", [fayongText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
         }
 
-        // 提取神煞信息
         NSRange shenshaRange = [partText rangeOfString:@"所值神煞:"];
         if (shenshaRange.location != NSNotFound) {
             NSString *shenshaText = [[partText substringFromIndex:shenshaRange.location + shenshaRange.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -1712,7 +1706,30 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
                  NSArray *shenshas = [shenshaText componentsSeparatedByString:@"值"];
                  for (NSString *ss in shenshas) {
                      if (ss.length > 0) {
-                         [structuredResult appendFormat:@"    - 值%@\n", [ss stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                         // --- **START: NEW, MORE PRECISE CLEANUP LOGIC** ---
+                         NSString *cleanSs = [ss stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                         
+                         // Step 1: Remove debug comments like "///..."
+                         NSRange junkRange = [cleanSs rangeOfString:@"///"];
+                         if (junkRange.location != NSNotFound) {
+                             cleanSs = [cleanSs substringToIndex:junkRange.location];
+                             cleanSs = [cleanSs stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                         }
+                         
+                         // Step 2: Remove short, trailing annotations like "，正"
+                         NSRegularExpression *annotationRegex = [NSRegularExpression regularExpressionWithPattern:@"，\\s*\\S{1,2}$" options:0 error:nil];
+                         cleanSs = [annotationRegex stringByReplacingMatchesInString:cleanSs options:0 range:NSMakeRange(0, cleanSs.length) withTemplate:@""];
+                         
+                         // Step 3: Normalize final punctuation for consistency
+                         if ([cleanSs hasSuffix:@","] || [cleanSs hasSuffix:@"，"] || [cleanSs hasSuffix:@"。"] || [cleanSs hasSuffix:@"."]) {
+                             cleanSs = [cleanSs substringToIndex:cleanSs.length - 1];
+                         }
+                         if (![cleanSs hasSuffix:@"。"]) {
+                             cleanSs = [cleanSs stringByAppendingString:@"。"];
+                         }
+                         // --- **END: NEW, MORE PRECISE CLEANUP LOGIC** ---
+                         
+                         [structuredResult appendFormat:@"    - 值%@\n", cleanSs];
                      }
                  }
             }
@@ -3581,7 +3598,7 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 }
 
 // =========================================================================
-// ↓↓↓ 全新的课传流注后置解析器 (v1.5 - 全局扫描模式) ↓↓↓
+// ↓↓↓ 粘贴这个更新后的版本，以修改课传流注中的交互关键词 ↓↓↓
 // =========================================================================
 #pragma mark - KeChuan Detail Post-Processor
 
@@ -3660,8 +3677,12 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
     
     // --- 阶段二：处理剩余的键值对信息 ---
     NSDictionary<NSString *, NSString *> *keywordMap = @{
-        @"遁干": @"遁干", // 遁干比较特殊，单独处理
-        @"德 :": @"德", @"空 :": @"空", @"合 :": @"合", @"刑 :": @"刑", @"冲 :": @"冲", @"害 :": @"害", @"破 :": @"破",
+        @"遁干": @"遁干",
+        @"德 :": @"德", @"空 :": @"空", @"合 :": @"合",
+        @"刑 :": @"刑(只参与取象禁止对吉凶产生干涉)",
+        @"冲 :": @"冲(只参与取象禁止对吉凶产生干涉)",
+        @"害 :": @"害(只参与取象禁止对吉凶产生干涉)",
+        @"破 :": @"破(只参与取象禁止对吉凶产生干涉)",
         @"阳神为": @"阳神", @"阴神为": @"阴神",
         @"于日": @"特殊交互(对日)", @"于辰": @"特殊交互(对辰)",
     };
@@ -3678,7 +3699,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"初建: "];
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"复建:" withString:@" 复建: "];
             
-// THIS IS THE NEW, CORRECTED CODE
             // 将多个空格合并为一个
             NSArray *components = [dunGanLine componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             NSMutableArray *filteredComponents = [NSMutableArray array];
@@ -3700,7 +3720,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         // 处理“杂象”标题
         if ([line isEqualToString:@"杂象"]) {
             inZaxiang = YES;
-            [structuredResult appendString:@"  - 杂象:\n"];
+            [structuredResult appendString:@"  - 杂象(只参与取象禁止对吉凶产生干涉):\n"];
             [processedLines addObject:line];
             continue;
         }
@@ -4031,6 +4051,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
