@@ -1740,6 +1740,7 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
     parseDetailPart(@"本命信息", benMingPart);
 
     // 3. 解析格局部分 (条件化输出)
+/*
     if (gejuText.length > 0) {
         BOOL hasRealGeju = NO;
         NSArray *gejuParts = [gejuText componentsSeparatedByString:@"|"];
@@ -1768,7 +1769,7 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
             [structuredResult appendString:formattedGeju];
         }
     }
-    
+*/    
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 static NSString* generateStructuredReport(NSDictionary *reportData) {
@@ -4022,6 +4023,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
