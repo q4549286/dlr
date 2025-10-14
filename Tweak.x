@@ -3598,9 +3598,9 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 }
 
 // =========================================================================
-// ↓↓↓ 粘贴这个最终修正版 (v1.6)，以同时捕获“乘”和“临”的信息 ↓↓↓
+// ↓↓↓ 粘贴这个修复编译错误的最终版 (v1.7) ↓↓↓
 // =========================================================================
-#pragma mark - KeChuan Detail Post-Processor (v1.6)
+#pragma mark - KeChuan Detail Post-Processor (v1.7)
 
 /**
  @brief 将从App中提取的“课传流注”原始文本块，解析成结构化的键值对格式。
@@ -3626,7 +3626,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         NSTextCheckingResult *wangshuaiMatch = [wangshuaiRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
         if (wangshuaiMatch && [structuredResult rangeOfString:@"旺衰:"].location == NSNotFound) {
             [structuredResult appendFormat:@"  - 旺衰: %@\n", [trimmedLine substringWithRange:[wangshuaiMatch rangeAtIndex:2]]];
-            // 旺衰信息通常是独立的，标记为已处理
             lineHandled = YES;
         }
 
@@ -3638,34 +3637,27 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
             lineHandled = YES;
         }
         
-        // ======================= V1.6 修正开始 =======================
         // 3. 修正后的 “乘” 与 “临” 解析逻辑
-        
-        // 优先尝试匹配更具体的 "临宫状态" 模式 (e.g., "临..., ...此曰...")
         NSRegularExpression *lingongRegex = [NSRegularExpression regularExpressionWithPattern:@"临(.)(\\([^)]*\\))?，.*?此曰(.*?)(，|,|。|\\s)" options:0 error:nil];
         NSTextCheckingResult *lingongMatch = [lingongRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
         
         if (lingongMatch && [structuredResult rangeOfString:@"临宫状态:"].location == NSNotFound) {
-            // 如果匹配成功，则提取并格式化为 "临宫状态"
             NSString *fullDesc = [trimmedLine stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"。 ,，"]];
             [structuredResult appendFormat:@"  - 临宫状态: %@\n", fullDesc];
             lineHandled = YES;
         } 
-        // 如果不是 "临宫状态" 行，再检查它是否是以 "乘" 开头的 "乘将关系" 行
         else if ([trimmedLine hasPrefix:@"乘"] && [structuredResult rangeOfString:@"乘将关系:"].location == NSNotFound) {
-            // 简单地捕获整行作为关系描述，这是最健壮的方式
             NSString *relationDescription = [trimmedLine stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"。 ,，"]];
             [structuredResult appendFormat:@"  - 乘将关系: %@\n", relationDescription];
             lineHandled = YES;
         }
-        // ======================= V1.6 修正结束 =======================
 
         if (lineHandled) {
              [processedLines addObject:trimmedLine];
         }
     }
     
-    // --- 阶段二：处理剩余的键值对信息 (逻辑不变) ---
+    // --- 阶段二：处理剩余的键值对信息 ---
     NSDictionary<NSString *, NSString *> *keywordMap = @{
         @"遁干": @"遁干",
         @"德 :": @"德", @"空 :": @"空", @"合 :": @"合",
@@ -3710,7 +3702,9 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
             continue;
         }
         
-        BOOL keywordFound = NO;
+        // ======================= FIX: REMOVED UNUSED VARIABLE =======================
+        // The `BOOL keywordFound = NO;` and `keywordFound = YES;` lines were removed.
+        // The `break;` is sufficient to stop the loop once a keyword is found.
         for (NSString *keyword in keywordMap.allKeys) {
             if ([line hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(line, keyword);
@@ -3721,10 +3715,10 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
                      [structuredResult appendFormat:@"  - %@: %@\n", label, value];
                 }
                 [processedLines addObject:line];
-                keywordFound = YES;
-                break;
+                break; // <-- This is what makes the logic work without the flag.
             }
         }
+        // ============================= END OF FIX =============================
     }
     
     while ([structuredResult hasSuffix:@"\n\n"]) {
@@ -4028,6 +4022,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
