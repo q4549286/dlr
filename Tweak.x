@@ -3598,9 +3598,9 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 }
 
 // =========================================================================
-// ↓↓↓ 粘贴这个更新后的版本，以修改课传流注中的交互关键词 ↓↓↓
+// ↓↓↓ 粘贴这个最终修正版 (v1.6)，以同时捕获“乘”和“临”的信息 ↓↓↓
 // =========================================================================
-#pragma mark - KeChuan Detail Post-Processor
+#pragma mark - KeChuan Detail Post-Processor (v1.6)
 
 /**
  @brief 将从App中提取的“课传流注”原始文本块，解析成结构化的键值对格式。
@@ -3614,7 +3614,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
     NSArray<NSString *> *lines = [rawText componentsSeparatedByString:@"\n"];
     NSMutableArray<NSString *> *processedLines = [NSMutableArray array];
 
-    // --- 阶段一：(v1.5) 全局扫描所有行，提取核心状态 ---
+    // --- 阶段一：全局扫描所有行，提取核心状态与关系 ---
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
@@ -3626,6 +3626,8 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         NSTextCheckingResult *wangshuaiMatch = [wangshuaiRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
         if (wangshuaiMatch && [structuredResult rangeOfString:@"旺衰:"].location == NSNotFound) {
             [structuredResult appendFormat:@"  - 旺衰: %@\n", [trimmedLine substringWithRange:[wangshuaiMatch rangeAtIndex:2]]];
+            // 旺衰信息通常是独立的，标记为已处理
+            lineHandled = YES;
         }
 
         // 2. 解析长生状态
@@ -3633,49 +3635,37 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         NSTextCheckingResult *changshengMatch = [changshengRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
         if (changshengMatch && [structuredResult rangeOfString:@"长生:"].location == NSNotFound) {
             [structuredResult appendFormat:@"  - 长生: 临%@为%@\n", [trimmedLine substringWithRange:[changshengMatch rangeAtIndex:1]], [trimmedLine substringWithRange:[changshengMatch rangeAtIndex:2]]];
-        }
-        
-               // 3. (v1.5) 解析乘将关系 (兼容长短句) - 这是解决您问题的核心
-        NSRegularExpression *chengjiangRegex = [NSRegularExpression regularExpressionWithPattern:@"乘(.+?)为(.*?)[。|\\s]" options:0 error:nil];
-        NSTextCheckingResult *chengjiangMatch = [chengjiangRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
-        if (chengjiangMatch && [structuredResult rangeOfString:@"乘将关系:"].location == NSNotFound) {
-            NSString *tianJiang = [trimmedLine substringWithRange:[chengjiangMatch rangeAtIndex:1]];
-            NSString *relation = [trimmedLine substringWithRange:[chengjiangMatch rangeAtIndex:2]];
-            // 进一步清理关系描述，去掉末尾可能存在的句号或多余词
-             relation = [[relation componentsSeparatedByString:@"。"] firstObject];
-             relation = [[relation componentsSeparatedByString:@"此"] firstObject];
-            [structuredResult appendFormat:@"  - 乘将关系: 乘%@为%@\n", tianJiang, relation];
             lineHandled = YES;
-        } else {
-             // 备用正则，捕捉类似“乘天后受其生”的句式
-             NSRegularExpression *chengjiangRegexAlt = [NSRegularExpression regularExpressionWithPattern:@"乘(.+?)(受其生|能生之|为内战|为外战)" options:0 error:nil];
-             NSTextCheckingResult *chengjiangMatchAlt = [chengjiangRegexAlt firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
-             if (chengjiangMatchAlt && [structuredResult rangeOfString:@"乘将关系:"].location == NSNotFound) {
-                 NSString *tianJiang = [trimmedLine substringWithRange:[chengjiangMatchAlt rangeAtIndex:1]];
-                 NSString *relation = [trimmedLine substringWithRange:[chengjiangMatchAlt rangeAtIndex:2]];
-                 [structuredResult appendFormat:@"  - 乘将关系: 乘%@%@\n", tianJiang, relation];
-                 lineHandled = YES;
-             }
         }
         
-        // 4. (v1.5) 解析天将的临宫状态
+        // ======================= V1.6 修正开始 =======================
+        // 3. 修正后的 “乘” 与 “临” 解析逻辑
+        
+        // 优先尝试匹配更具体的 "临宫状态" 模式 (e.g., "临..., ...此曰...")
         NSRegularExpression *lingongRegex = [NSRegularExpression regularExpressionWithPattern:@"临(.)(\\([^)]*\\))?，.*?此曰(.*?)(，|,|。|\\s)" options:0 error:nil];
         NSTextCheckingResult *lingongMatch = [lingongRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
+        
         if (lingongMatch && [structuredResult rangeOfString:@"临宫状态:"].location == NSNotFound) {
-            NSString *location = [trimmedLine substringWithRange:[lingongMatch rangeAtIndex:1]];
-            NSString *status = [lingongMatch rangeAtIndex:2].location != NSNotFound ? [trimmedLine substringWithRange:[lingongMatch rangeAtIndex:2]] : @"";
-            NSString *term = [trimmedLine substringWithRange:[lingongMatch rangeAtIndex:3]];
-            NSString *fullDesc = [trimmedLine substringFromIndex:[lingongMatch range].location];
-            [structuredResult appendFormat:@"  - 临宫状态: 临%@%@曰%@ (%@)\n", location, status, term, fullDesc];
+            // 如果匹配成功，则提取并格式化为 "临宫状态"
+            NSString *fullDesc = [trimmedLine stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"。 ,，"]];
+            [structuredResult appendFormat:@"  - 临宫状态: %@\n", fullDesc];
+            lineHandled = YES;
+        } 
+        // 如果不是 "临宫状态" 行，再检查它是否是以 "乘" 开头的 "乘将关系" 行
+        else if ([trimmedLine hasPrefix:@"乘"] && [structuredResult rangeOfString:@"乘将关系:"].location == NSNotFound) {
+            // 简单地捕获整行作为关系描述，这是最健壮的方式
+            NSString *relationDescription = [trimmedLine stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"。 ,，"]];
+            [structuredResult appendFormat:@"  - 乘将关系: %@\n", relationDescription];
             lineHandled = YES;
         }
-        
+        // ======================= V1.6 修正结束 =======================
+
         if (lineHandled) {
              [processedLines addObject:trimmedLine];
         }
     }
     
-    // --- 阶段二：处理剩余的键值对信息 ---
+    // --- 阶段二：处理剩余的键值对信息 (逻辑不变) ---
     NSDictionary<NSString *, NSString *> *keywordMap = @{
         @"遁干": @"遁干",
         @"德 :": @"德", @"空 :": @"空", @"合 :": @"合",
@@ -3692,32 +3682,21 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         NSString *line = [lines[i] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (line.length == 0 || [processedLines containsObject:line]) continue;
 
-        // 特殊处理：遁干 (现在更灵活)
         if ([line hasPrefix:@"遁干"]) {
             NSString *dunGanLine = extractValueAfterKeyword(line, @"遁干");
-            // 格式化，确保冒号后有空格
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"初建: "];
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"复建:" withString:@" 复建: "];
-            
-            // 将多个空格合并为一个
             NSArray *components = [dunGanLine componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             NSMutableArray *filteredComponents = [NSMutableArray array];
-            for (NSString *component in components) {
-                if (component.length > 0) {
-                    [filteredComponents addObject:component];
-                }
-            }
+            for (NSString *component in components) { if (component.length > 0) [filteredComponents addObject:component]; }
             dunGanLine = [filteredComponents componentsJoinedByString:@" "];
-            
             [structuredResult appendFormat:@"  - 遁干: %@\n", dunGanLine];
             [processedLines addObject:line];
-            // 遁干的解释行不再需要，因为六亲关系已在括号里
             if (i + 1 < lines.count && [[lines[i+1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] hasPrefix:@"一、"]) [processedLines addObject:[lines[i+1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
             if (i + 2 < lines.count && [[lines[i+2] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] hasPrefix:@"二、"]) [processedLines addObject:[lines[i+2] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
             continue;
         }
 
-        // 处理“杂象”标题
         if ([line isEqualToString:@"杂象"]) {
             inZaxiang = YES;
             [structuredResult appendString:@"  - 杂象(只参与取象禁止对吉凶产生干涉):\n"];
@@ -3725,31 +3704,29 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
             continue;
         }
         
-        // 如果在杂象部分，所有内容都缩进
         if (inZaxiang) {
             [structuredResult appendFormat:@"    - %@\n", line];
             [processedLines addObject:line];
             continue;
         }
         
-        // 处理其他普通键值对
+        BOOL keywordFound = NO;
         for (NSString *keyword in keywordMap.allKeys) {
             if ([line hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(line, keyword);
                 NSString *label = keywordMap[keyword];
-                
-                // 清理掉可能重复的旺衰信息
                 value = [value stringByReplacingOccurrencesOfString:@"此为.+值四时.气。" withString:@"" options:NSRegularExpressionSearch range:NSMakeRange(0, value.length)];
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-                [structuredResult appendFormat:@"  - %@: %@\n", label, value];
+                if (value.length > 0) {
+                     [structuredResult appendFormat:@"  - %@: %@\n", label, value];
+                }
                 [processedLines addObject:line];
+                keywordFound = YES;
                 break;
             }
         }
     }
     
-    // 移除末尾多余的换行符
     while ([structuredResult hasSuffix:@"\n\n"]) {
         [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)];
     }
@@ -4051,6 +4028,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
