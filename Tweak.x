@@ -3667,7 +3667,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         @"害 :": @"害",
         @"破 :": @"破",
         @"阳神为": @"阳神", @"阴神为": @"阴神",
-        @"于日": @"特殊交互(对日，注意空亡得冲/填实，则忽略此信息)", @"于辰": @"特殊交互(对辰注意空亡得冲/填实)",
     };
     
     BOOL inZaxiang = NO;
@@ -4023,6 +4022,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
