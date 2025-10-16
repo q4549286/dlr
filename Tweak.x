@@ -3344,21 +3344,25 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 }
 
 // =========================================================================
-// ↓↓↓ 粘贴这个修复编译错误的最终版 (v1.7) ↓↓↓
+// ↓↓↓ 粘贴这个修正后的版本 (v1.8)，它能根据对象类型决定是否输出旺衰 ↓↓↓
 // =========================================================================
-#pragma mark - KeChuan Detail Post-Processor (v1.7)
+#pragma mark - KeChuan Detail Post-Processor (v1.8)
 
 /**
  @brief 将从App中提取的“课传流注”原始文本块，解析成结构化的键值对格式。
  @param rawText 单个对象（如“初传 - 地支(寅)”）的完整描述文本。
+ @param objectTitle 该对象的标题，用于判断其类型（如是否为天将）。
  @return 格式化后的字符串，带有缩进和清晰的标签。
 */
-static NSString* parseKeChuanDetailBlock(NSString *rawText) {
+static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle) {
     if (!rawText || rawText.length == 0) return @"";
 
     NSMutableString *structuredResult = [NSMutableString string];
     NSArray<NSString *> *lines = [rawText componentsSeparatedByString:@"\n"];
     NSMutableArray<NSString *> *processedLines = [NSMutableArray array];
+
+    // --- 核心修改：根据对象标题判断是否为“天将”，以便决定是否解析“旺衰” ---
+    BOOL isTianJiangObject = (objectTitle && [objectTitle containsString:@"天将"]);
 
     // --- 阶段一：全局扫描所有行，提取核心状态与关系 ---
     for (NSString *line in lines) {
@@ -3367,12 +3371,14 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
         
         BOOL lineHandled = NO;
 
-        // 1. 解析旺衰
-        NSRegularExpression *wangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"(得|值)四时(.)气" options:0 error:nil];
-        NSTextCheckingResult *wangshuaiMatch = [wangshuaiRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
-        if (wangshuaiMatch && [structuredResult rangeOfString:@"旺衰:"].location == NSNotFound) {
-            [structuredResult appendFormat:@"  - 旺衰: %@\n", [trimmedLine substringWithRange:[wangshuaiMatch rangeAtIndex:2]]];
-            lineHandled = YES;
+        // 1. 解析旺衰 (条件化：仅为“天将”对象解析)
+        if (isTianJiangObject) {
+            NSRegularExpression *wangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"(得|值)四时(.)气" options:0 error:nil];
+            NSTextCheckingResult *wangshuaiMatch = [wangshuaiRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
+            if (wangshuaiMatch && [structuredResult rangeOfString:@"旺衰:"].location == NSNotFound) {
+                [structuredResult appendFormat:@"  - 旺衰: %@\n", [trimmedLine substringWithRange:[wangshuaiMatch rangeAtIndex:2]]];
+                lineHandled = YES;
+            }
         }
 
         // 2. 解析长生状态
@@ -3447,9 +3453,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
             continue;
         }
         
-        // ======================= FIX: REMOVED UNUSED VARIABLE =======================
-        // The `BOOL keywordFound = NO;` and `keywordFound = YES;` lines were removed.
-        // The `break;` is sufficient to stop the loop once a keyword is found.
         for (NSString *keyword in keywordMap.allKeys) {
             if ([line hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(line, keyword);
@@ -3460,10 +3463,9 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
                      [structuredResult appendFormat:@"  - %@: %@\n", label, value];
                 }
                 [processedLines addObject:line];
-                break; // <-- This is what makes the logic work without the flag.
+                break;
             }
         }
-        // ============================= END OF FIX =============================
     }
     
     while ([structuredResult hasSuffix:@"\n\n"]) {
@@ -3484,14 +3486,15 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
             NSMutableString *resultStr = [NSMutableString string];
             if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) {
                 for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) {
-                    // 获取原始文本块
+                    // --- 核心修改：将标题传递给解析器以提供上下文 ---
+                    NSString *title = g_s2_keChuanTitleQueue[i];
                     NSString *rawBlock = g_s2_capturedKeChuanDetailArray[i];
                     
-                    // 调用新的解析器进行结构化处理
-                    NSString *structuredBlock = parseKeChuanDetailBlock(rawBlock);
+                    // 调用已修改的解析器，传入标题
+                    NSString *structuredBlock = parseKeChuanDetailBlock(rawBlock, title);
                     
                     // 组合最终结果
-                    [resultStr appendFormat:@"- 对象: %@\n%@\n\n", g_s2_keChuanTitleQueue[i], structuredBlock];
+                    [resultStr appendFormat:@"- 对象: %@\n%@\n\n", title, structuredBlock];
                 }
 
                 // 在这里处理最终结果
@@ -3503,6 +3506,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText) {
                     reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
                     NSString *finalReport = formatFinalReport(reportData); 
                     g_lastGeneratedReport = [finalReport copy];
+                    [self showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];
                     [self presentAIActionSheetWithReport:finalReport];
                 }
             } else { 
@@ -3767,6 +3771,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
