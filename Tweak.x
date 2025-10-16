@@ -3741,7 +3741,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     // --- 阶段二：处理剩余的键值对信息 ---
     NSDictionary<NSString *, NSString *> *keywordMap = @{
         @"遁干": @"遁干",
-        @"德 :": @"德", @"空 :": @"空", @"合 :": @"合",
+        @"德 :": @"德S+", @"空 :": @"空", @"合 :": @"合",
         @"刑 :": @"刑",
         @"冲 :": @"冲",
         @"害 :": @"害",
@@ -3757,7 +3757,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         if ([line hasPrefix:@"遁干"]) {
             NSString *dunGanLine = extractValueAfterKeyword(line, @"遁干");
             dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干: "];
-            dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时: "];
+            dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时（非遁干）: "];
             NSArray *components = [dunGanLine componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             NSMutableArray *filteredComponents = [NSMutableArray array];
             for (NSString *component in components) { if (component.length > 0) [filteredComponents addObject:component]; }
@@ -4100,6 +4100,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
