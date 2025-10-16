@@ -3756,8 +3756,8 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
 
         if ([line hasPrefix:@"遁干"]) {
             NSString *dunGanLine = extractValueAfterKeyword(line, @"遁干");
-            dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"初建: "];
-            dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"复建:" withString:@" 复建: "];
+            dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干: "];
+            dunGanLine = [dunGanLine stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时: "];
             NSArray *components = [dunGanLine componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             NSMutableArray *filteredComponents = [NSMutableArray array];
             for (NSString *component in components) { if (component.length > 0) [filteredComponents addObject:component]; }
@@ -4100,6 +4100,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
