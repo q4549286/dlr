@@ -2280,7 +2280,7 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
     }
 NSString *footerText = [NSString stringWithFormat:@"\n\n"
                           "//=======================================================\n"
-                          "// 【首席六壬情报分析师 · 终极宪法】\n"
+                          "// 【大六壬大佬手机微信解课-衍生现实版】\n"
                           "// 【情报任务书：[自动生成任务编号]】\n"
                           "//=======================================================\n\n"
                           "//-------------------【核心情报需求】-------------------\n\n"
@@ -4100,6 +4100,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
