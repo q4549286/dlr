@@ -1786,7 +1786,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
 
     // ================================================================
-    // 板块一：基础盘元 (无变化)
+    // 板块一：基础盘元
     // ================================================================
     [report appendString:@"// 1. 基础盘元\n"];
     NSString *timeBlockFull = SafeString(reportData[@"时间块"]);
@@ -1810,8 +1810,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSString *yueJiang = [[yueJiangFull componentsSeparatedByString:@" "].firstObject stringByReplacingOccurrencesOfString:@"月将:" withString:@""] ?: @"";
     yueJiang = [yueJiang stringByReplacingOccurrencesOfString:@"日宿在" withString:@""];
     NSString *xunInfo = SafeString(reportData[@"旬空_旬信息"]);
-    NSString *riGan = SafeString(reportData[@"旬空_日干"]);
-    NSArray<NSString *> *liuQinArray = reportData[@"旬空_六亲数组"];
+    
     NSString *kong = @"", *xun = @"";
     if (xunInfo.length > 0) {
         NSRange bracketStart = [xunInfo rangeOfString:@"("], bracketEnd = [xunInfo rangeOfString:@")"];
@@ -1831,16 +1830,10 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
             if (xun.length == 0) { kong = xunInfo; }
         }
     }
-    NSString *formattedDetail = @"";
-    if (liuQinArray && liuQinArray.count > 0 && kong.length == liuQinArray.count) {
-        NSMutableString *statements = [NSMutableString string];
-        for (int i = 0; i < kong.length; i++) {
-            [statements appendFormat:@"%@为空亡%@", [kong substringWithRange:NSMakeRange(i, 1)], liuQinArray[i]];
-            if (i < kong.length - 1) { [statements appendString:@", "]; }
-        }
-        formattedDetail = [NSString stringWithFormat:@" [空亡详解: 以日干'%@'论, %@]", riGan, statements];
-    }
-    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)%@\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, formattedDetail, SafeString(reportData[@"昼夜"])];
+    
+    // --- **核心修改点** ---
+    // 移除了原来构建 [空亡详解...] 字符串的逻辑，并修改了下面的 appendFormat。
+    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, SafeString(reportData[@"昼夜"])];
 
     // ================================================================
     // 板块二：核心盘架 (无变化)
@@ -3996,6 +3989,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
