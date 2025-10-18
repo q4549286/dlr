@@ -3239,22 +3239,25 @@ currentY += 44 + 10;
             [g_questionTextView resignFirstResponder];
             break;
         }
-        case kButtonTag_AIPromptToggle: { 
+                case kButtonTag_AIPromptToggle: { 
             sender.selected = !sender.selected; 
             g_shouldIncludeAIPromptHeader = sender.selected; 
             NSString *status = g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"; 
-            NSString *title = [NSString stringWithFormat:@"AI Prompt: %@", status]; 
+            NSString *title = [NSString stringWithFormat:@"Prompt: %@", status]; 
             [sender setTitle:title forState:UIControlStateNormal]; 
+            // <<<<<<<<<<<< 颜色修改 >>>>>>>>>>>>>
             sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; 
             LogMessage(EchoLogTypeInfo, @"[设置] Prompt 已 %@。", status); 
             break; 
         }
+        
         case kButtonTag_BenMingToggle: {
             sender.selected = !sender.selected;
             g_shouldExtractBenMing = sender.selected;
             NSString *status = g_shouldExtractBenMing ? @"开启" : @"关闭";
             NSString *title = [NSString stringWithFormat:@"本命: %@", status];
             [sender setTitle:title forState:UIControlStateNormal];
+            // <<<<<<<<<<<< 颜色修改 >>>>>>>>>>>>>
             sender.backgroundColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY;
             LogMessage(EchoLogTypeInfo, @"[设置] 本命信息提取已 %@。", status);
             break;
@@ -4208,6 +4211,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
