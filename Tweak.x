@@ -2788,7 +2788,7 @@ else if (g_s2_isExtractingKeChuanDetail) {
     NSInteger nianmingIndex = -1;
     for (int i = 0; i < segmentControl.numberOfSegments; i++) {
         // 使用 "年" 作为关键词，以兼容未来可能的文字变化（如"行年"、"年命"）
-        if ([[segmentControl titleForSegmentAtIndex:i] containsString:@"年"]) {
+        if ([[segmentControl titleForSegmentAtIndex:i] containsString:@"行年"]) {
             nianmingIndex = i;
             break;
         }
@@ -4208,6 +4208,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
