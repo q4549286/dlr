@@ -1853,26 +1853,47 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *yaoWeiContent = [NSMutableString string];
     NSString *fangFaFull = reportData[@"解析方法"];
     
-    // --- 子板块 1: 克应之期 ---
+    // --- 子板块 1: 课盘解析 (恢复并重构) ---
     if (fangFaFull.length > 0) {
-        NSString *key = @"克应之期→";
-        NSRange range = [fangFaFull rangeOfString:key];
-        if (range.location != NSNotFound) {
-            NSMutableString *content = [[fangFaFull substringFromIndex:range.location + range.length] mutableCopy];
-            NSRange nextKeyRange = NSMakeRange(NSNotFound, 0);
-             NSArray *allPossibleKeys = @[@"日辰主客→", @"三传事体→", @"发用事端→", @"克应之期→", @"来占之情→"];
+        [yaoWeiContent appendString:@"// 3.1. 课盘解析\n"];
+
+        // 定义所有需要提取的板块及其顺序
+        NSArray<NSString *> *allPossibleKeys = @[
+            @"来占之情→", @"发用事端→", @"三传事体→", @"日辰主客→", @"克应之期→"
+        ];
+        
+        // 动态提取每个板块的内容
+        for (NSString *key in allPossibleKeys) {
+            NSRange startRange = [fangFaFull rangeOfString:key];
+            if (startRange.location == NSNotFound) continue;
+
+            // 寻找下一个key的起始位置，以确定当前内容的结束位置
+            NSRange endRange = NSMakeRange(NSNotFound, 0);
             for (NSString *nextKey in allPossibleKeys) {
                 if (![nextKey isEqualToString:key]) {
-                    NSRange tempRange = [content rangeOfString:nextKey];
-                    if (tempRange.location != NSNotFound && (nextKeyRange.location == NSNotFound || tempRange.location < nextKeyRange.location)) {
-                        nextKeyRange = tempRange;
+                    // 只在当前key之后搜索
+                    NSRange searchRange = NSMakeRange(startRange.location + 1, fangFaFull.length - (startRange.location + 1));
+                    NSRange tempRange = [fangFaFull rangeOfString:nextKey options:0 range:searchRange];
+                    if (tempRange.location != NSNotFound && (endRange.location == NSNotFound || tempRange.location < endRange.location)) {
+                        endRange = tempRange;
                     }
                 }
             }
-            if (nextKeyRange.location != NSNotFound) {
-                [content deleteCharactersInRange:NSMakeRange(nextKeyRange.location, content.length - nextKeyRange.location)];
+
+            // 提取内容
+            NSString *content;
+            if (endRange.location != NSNotFound) {
+                content = [fangFaFull substringWithRange:NSMakeRange(startRange.location + startRange.length, endRange.location - (startRange.location + startRange.length))];
+            } else {
+                content = [fangFaFull substringFromIndex:startRange.location + startRange.length];
             }
-            [yaoWeiContent appendFormat:@"// 3.1. 克应之期\n%@\n\n", [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+
+            NSString *cleanContent = [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (cleanContent.length > 0) {
+                // 这是预留的“解析器”，目前只做简单格式化
+                NSString *title = [key stringByReplacingOccurrencesOfString:@"→" withString:@""];
+                [yaoWeiContent appendFormat:@"// %@\n%@\n\n", title, cleanContent];
+            }
         }
     }
     
