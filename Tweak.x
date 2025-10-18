@@ -3203,7 +3203,7 @@ currentY += 44 + 10;
             NSString *title = [NSString stringWithFormat:@"AI Prompt: %@", status]; 
             [sender setTitle:title forState:UIControlStateNormal]; 
             sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; 
-            LogMessage(EchoLogTypeInfo, @"[设置] AI Prompt 已 %@。", status); 
+            LogMessage(EchoLogTypeInfo, @"[设置] Prompt 已 %@。", status); 
             break; 
         }
         case kButtonTag_BenMingToggle: {
@@ -4165,6 +4165,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
