@@ -1727,6 +1727,87 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
 */    
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+#pragma mark - FangFa Parser (V1.0)
+
+/**
+ @brief 解析并过滤“解析方法”中的内容，移除固定句式和结论性断语。
+ @param rawContent 单个板块（如“来占之情”）的原始文本。
+ @return 过滤后的、只包含客观事实的文本。
+*/
+static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
+    if (!rawContent || rawContent.length == 0) return @"";
+
+    // 1. 定义需要完全移除的固定引导句 (boilerplate)
+    NSArray<NSString *> *boilerplateSentences = @[
+        @"凡看来情，以占之正时，详其与日之生克刑合，则于所占事体，可先有所主，故曰先锋门。",
+        @"此以用神所乘所临，以及与日之生合刑墓等断事发之机。",
+        @"此以三传之进退顺逆、有气无气、顺生逆克等而定事情之大体。",
+        @"此以日辰对较而定主客彼我之关系，大体日为我，辰为彼；日为人，辰为宅；日为尊，辰为卑；日为老，辰为幼；日为夫，辰为妻；日为官，辰为民；出行则日为陆为车，辰则为水为舟；日为出，为南向，为前方，辰则为入，为北向，为后方；占病则以日为人，以辰为病；占产则以日为子，以辰为母；占农则以日为农夫，以辰为谷物；占猎则以日为猎师，以辰为鸟兽。故日辰之位，随占不同，总要依类而推之，方无差谬。",
+        @"此以用神之旺相并天乙前后断事情之迟速，并以用神所合之岁月节候而定事体之远近，复以天上季神所临定成事之期。"
+    ];
+
+    // 2. 定义用于识别“结论性”断语的前缀关键词
+    NSArray<NSString *> *conclusionPrefixes = @[
+        @"主", @"此主", @"恐", @"必", @"利", @"不利", @"主凡事", @"恐遭", @"宅必", @"宅将", @"情多", @"主百事", @"凡事"
+    ];
+
+    NSMutableString *workingContent = [rawContent mutableCopy];
+
+    // --- 阶段一：移除完整的固定引导句 ---
+    for (NSString *sentence in boilerplateSentences) {
+        [workingContent replaceOccurrencesOfString:sentence withString:@"" options:0 range:NSMakeRange(0, workingContent.length)];
+    }
+    
+    // --- 阶段二：按句子和子句过滤结论性断语 ---
+    // 按句号分割成多个句子
+    NSArray<NSString *> *sentences = [[workingContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] componentsSeparatedByString:@"。"];
+    NSMutableArray<NSString *> *factualSentences = [NSMutableArray array];
+
+    for (NSString *sentence in sentences) {
+        NSString *trimmedSentence = [sentence stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (trimmedSentence.length == 0) continue;
+
+        // 按逗号分割成多个子句
+        NSArray<NSString *> *clauses = [trimmedSentence componentsSeparatedByString:@"，"];
+        NSMutableArray<NSString *> *factualClauses = [NSMutableArray array];
+        
+        for (NSString *clause in clauses) {
+            NSString *trimmedClause = [clause stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (trimmedClause.length == 0) continue;
+
+            BOOL isConclusion = NO;
+            for (NSString *prefix in conclusionPrefixes) {
+                // 如果子句以结论性前缀开头，则标记为结论，予以过滤
+                if ([trimmedClause hasPrefix:prefix]) {
+                    isConclusion = YES;
+                    break;
+                }
+            }
+
+            if (!isConclusion) {
+                [factualClauses addObject:trimmedClause];
+            }
+        }
+
+        // 如果过滤后仍有事实子句保留，则重新组合成句子
+        if (factualClauses.count > 0) {
+            [factualSentences addObject:[factualClauses componentsJoinedByString:@"，"]];
+        }
+    }
+
+    // --- 阶段三：重新组合所有事实句子，并格式化输出 ---
+    if (factualSentences.count == 0) {
+        return @""; // 如果过滤后没有任何内容，则返回空字符串
+    }
+
+    NSString *finalResult = [factualSentences componentsJoinedByString:@"。\n"];
+    // 确保末尾只有一个句号
+    if (![finalResult hasSuffix:@"。"]) {
+        finalResult = [finalResult stringByAppendingString:@"。"];
+    }
+    
+    return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
     __block NSInteger sectionCounter = 4; // 动态板块计数器从4开始
@@ -1848,30 +1929,26 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     if (sanChuanText) [report appendFormat:@"// 2.3. 三传\n%@\n\n", sanChuanText];
 
     // ================================================================
-    // <--- 核心修改：恢复神将详解，重构本版块 --->
+    // <--- 核心修改：恢复并过滤“课盘解析” --->
     // ================================================================
     NSMutableString *yaoWeiContent = [NSMutableString string];
     NSString *fangFaFull = reportData[@"解析方法"];
     
-    // --- 子板块 1: 课盘解析 (恢复并重构) ---
+    // --- 子板块 1: 课盘解析 (恢复、重构并集成过滤器) ---
     if (fangFaFull.length > 0) {
         [yaoWeiContent appendString:@"// 3.1. 课盘解析\n"];
 
-        // 定义所有需要提取的板块及其顺序
         NSArray<NSString *> *allPossibleKeys = @[
             @"来占之情→", @"发用事端→", @"三传事体→", @"日辰主客→", @"克应之期→"
         ];
         
-        // 动态提取每个板块的内容
         for (NSString *key in allPossibleKeys) {
             NSRange startRange = [fangFaFull rangeOfString:key];
             if (startRange.location == NSNotFound) continue;
 
-            // 寻找下一个key的起始位置，以确定当前内容的结束位置
             NSRange endRange = NSMakeRange(NSNotFound, 0);
             for (NSString *nextKey in allPossibleKeys) {
                 if (![nextKey isEqualToString:key]) {
-                    // 只在当前key之后搜索
                     NSRange searchRange = NSMakeRange(startRange.location + 1, fangFaFull.length - (startRange.location + 1));
                     NSRange tempRange = [fangFaFull rangeOfString:nextKey options:0 range:searchRange];
                     if (tempRange.location != NSNotFound && (endRange.location == NSNotFound || tempRange.location < endRange.location)) {
@@ -1880,19 +1957,19 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                 }
             }
 
-            // 提取内容
-            NSString *content;
+            NSString *rawContent;
             if (endRange.location != NSNotFound) {
-                content = [fangFaFull substringWithRange:NSMakeRange(startRange.location + startRange.length, endRange.location - (startRange.location + startRange.length))];
+                rawContent = [fangFaFull substringWithRange:NSMakeRange(startRange.location + startRange.length, endRange.location - (startRange.location + startRange.length))];
             } else {
-                content = [fangFaFull substringFromIndex:startRange.location + startRange.length];
+                rawContent = [fangFaFull substringFromIndex:startRange.location + startRange.length];
             }
 
-            NSString *cleanContent = [content stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            if (cleanContent.length > 0) {
-                // 这是预留的“解析器”，目前只做简单格式化
+            // *** 调用新的解析器进行过滤 ***
+            NSString *filteredContent = parseAndFilterFangFaBlock(rawContent);
+
+            if (filteredContent.length > 0) {
                 NSString *title = [key stringByReplacingOccurrencesOfString:@"→" withString:@""];
-                [yaoWeiContent appendFormat:@"// %@\n%@\n\n", title, cleanContent];
+                [yaoWeiContent appendFormat:@"// %@\n%@\n\n", title, filteredContent];
             }
         }
     }
@@ -3995,6 +4072,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
