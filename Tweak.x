@@ -1727,21 +1727,20 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
 */    
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-#pragma mark - FangFa Parser (V4.0 - Two-Stage Filtering Engine)
+#pragma mark - FangFa Parser (V4.0 - Ultimate Filtering Engine)
 
 /**
  @brief (V4.0) 解析并过滤“解析方法”中的内容。
-        采用“尾部结论切除 + 整句结论移除”的两阶段强力过滤引擎，
-        确保只保留最纯粹的客观事实陈述。
+        采用“强力多模式正则 + 精细清理”引擎，无死角移除所有固定句式、
+        结论性断语（无论句首、句中、句末）、语法残留和副作用文本，
+        确保输出结果为最高纯净度的客观事实陈述。
  @param rawContent 单个板块（如“来占之情”）的原始文本。
  @return 过滤后的、高度纯净的客观事实文本。
 */
 static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
 
-    // --- 阶段一：定义过滤规则 ---
-
-    // 1. 定义需要完全移除的固定引导句 (Boilerplate)
+    // --- 阶段一：移除固定的引导性长句 (Boilerplate) ---
     NSArray<NSString *> *boilerplateSentences = @[
         @"凡看来情，以占之正时，详其与日之生克刑合，则于所占事体，可先有所主，故曰先锋门。",
         @"此以用神所乘所临，以及与日之生合刑墓等断事发之机。",
@@ -1749,81 +1748,64 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
         @"此以日辰对较而定主客彼我之关系，大体日为我，辰为彼；日为人，辰为宅；日为尊，辰为卑；日为老，辰为幼；日为夫，辰为妻；日为官，辰为民；出行则日为陆为车，辰则为水为舟；日为出，为南向，为前方，辰则为入，为北向，为后方；占病则以日为人，以辰为病；占产则以日为子，以辰为母；占农则以日为农夫，以辰为谷物；占猎则以日为猎师，以辰为鸟兽。故日辰之位，随占不同，总要依类而推之，方无差谬。",
         @"此以用神之旺相并天乙前后断事情之迟速，并以用神所合之岁月节候而定事体之远近，复以天上季神所临定成事之期。"
     ];
-    
-    // 2. (核心) 定义用于切除“尾部结论”的正则表达式模式
-    NSArray<NSString *> *trailingConclusivePatterns = @[
-        @"，\\s*凶祸.*",
-        @"，\\s*事虽顺.*",
-        @"，\\s*情多窒且塞.*",
-        @"，\\s*可致福禄.*",
-        @"，\\s*岁无成.*",
-        @"，\\s*而不能由己.*",
-        @"，\\s*用昼将主人害.*",
-        @"，\\s*主彼我.*",
-        @"，\\s*唯不利病讼及解散事",
-        @"，\\s*又当详合中刑害生墓"
-    ];
-
-    // 3. 定义用于移除“整句结论”的前缀关键词
-    NSArray<NSString *> *conclusivePrefixes = @[
-        @"主", @"此主", @"恐", @"利", @"不利", @"则", @"凡事", @"故当", @"当以", @"大有生意",
-        @"其势悖逆", @"不堪期", @"宅将", @"此为"
-    ];
-
     NSMutableString *workingContent = [rawContent mutableCopy];
-
-    // --- 阶段二：执行过滤 ---
-
-    // 1. 移除固定的引导句
     for (NSString *sentence in boilerplateSentences) {
         [workingContent replaceOccurrencesOfString:sentence withString:@"" options:0 range:NSMakeRange(0, workingContent.length)];
     }
 
-    // 2. (核心) 执行尾部结论切除
-    for (NSString *pattern in trailingConclusivePatterns) {
+    // --- 阶段二：强力正则过滤，移除所有结论性子句 ---
+    // V4.0 模式：更全面，能处理句中和句末的结论
+    NSArray<NSString *> *conclusionPatterns = @[
+        // 模式1: 移除从关键词开始到句尾的所有内容
+        @"(主|恐|利|不利|则|此主|凡事|又当|故当|当以|大有生意|凶祸更甚|凶祸消磨|其势悖逆|用昼将|唯不利|岁无成|而不能由己|可致福禄重重|情多窒且塞|事虽顺而有耗散之患|生归日辰则无虞|理势自然).*?($|。|，)",
+        // 模式2: 移除从句首/逗号开始，包含关键词的整个子句
+        @"(^|，|。)\\s*(主|恐|利|不利|则|此主|凡事|又当|故当|当以|不堪期|却无气|事虽新起)[^，。]*"
+    ];
+
+    for (NSString *pattern in conclusionPatterns) {
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
-        [regex replaceMatchesInString:workingContent options:0 range:NSMakeRange(0, workingContent.length) withTemplate:@""];
+        NSString *previous;
+        do {
+            previous = [workingContent copy];
+            // 替换找到的模式为空字符串
+            [regex replaceMatchesInString:workingContent options:0 range:NSMakeRange(0, workingContent.length) withTemplate:@""];
+        } while (![previous isEqualToString:workingContent]);
     }
 
-    // 3. 执行整句结论移除
-    NSArray<NSString *> *sentences = [[workingContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] componentsSeparatedByString:@"。"];
-    NSMutableArray<NSString *> *factualSentences = [NSMutableArray array];
-    for (NSString *sentence in sentences) {
-        NSString *trimmedSentence = [sentence stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (trimmedSentence.length == 0) continue;
-
-        NSArray<NSString *> *clauses = [trimmedSentence componentsSeparatedByString:@"，"];
-        NSMutableArray<NSString *> *factualClauses = [NSMutableArray array];
-        for (NSString *clause in clauses) {
-            NSString *trimmedClause = [clause stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            if (trimmedClause.length == 0) continue;
-
-            BOOL isConclusive = NO;
-            for (NSString *prefix in conclusivePrefixes) {
-                if ([trimmedClause hasPrefix:prefix]) {
-                    isConclusive = YES;
-                    break;
-                }
-            }
-            if (!isConclusive) {
-                [factualClauses addObject:trimmedClause];
-            }
-        }
-        if (factualClauses.count > 0) {
-            [factualSentences addObject:[factualClauses componentsJoinedByString:@"，"]];
-        }
+    // --- 阶段三：后期清理，移除语法残留和多余格式 ---
+    // 1. 将所有内容暂时合并为一行，以便于清理
+    [workingContent replaceOccurrencesOfString:@"\n" withString:@" " options:0 range:NSMakeRange(0, workingContent.length)];
+    
+    // 2. 移除开头或孤立的连词
+    NSArray *conjunctionsToRemove = @[@"但", @"却", @"又，"];
+    for (NSString *conj in conjunctionsToRemove) {
+        [workingContent replaceOccurrencesOfString:[NSString stringWithFormat:@"%@ ", conj] withString:@"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, workingContent.length)];
     }
     
-    // --- 阶段三：格式化输出 ---
-    if (factualSentences.count == 0) {
-        return @"";
+    // 3. 清理多余的空格和不正确的标点组合
+    while ([workingContent containsString:@"  "]) {
+        [workingContent replaceOccurrencesOfString:@"  " withString:@" " options:0 range:NSMakeRange(0, workingContent.length)];
+    }
+    // 移除连续的逗号和句号，以及它们之前多余的空格
+    [workingContent replaceOccurrencesOfString:@"\\s*([，。])\\s*" withString:@"$1" options:NSRegularExpressionSearch range:NSMakeRange(0, workingContent.length)];
+    [workingContent replaceOccurrencesOfString:@"[，。]{2,}" withString:@"。" options:NSRegularExpressionSearch range:NSMakeRange(0, workingContent.length)];
+    
+    // 移除句首可能残留的标点
+    if ([workingContent hasPrefix:@"，"] || [workingContent hasPrefix:@"。"]) {
+        [workingContent deleteCharactersInRange:NSMakeRange(0, 1)];
     }
     
+    // --- 阶段四：重新格式化为清晰的句子列表 ---
+    NSArray<NSString *> *finalSentences = [[workingContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] componentsSeparatedByString:@"。"];
     NSMutableString *finalResult = [NSMutableString string];
-    for (NSString *sentence in factualSentences) {
-        [finalResult appendFormat:@"%@。\n", sentence];
+    for (NSString *sentence in finalSentences) {
+        NSString *trimmedSentence = [sentence stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" ,，"]];
+        if (trimmedSentence.length > 0) {
+            // 确保每个事实独立成行并以句号结尾
+            [finalResult appendFormat:@"%@。\n", trimmedSentence];
+        }
     }
-
+    
     return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 static NSString* generateStructuredReport(NSDictionary *reportData) {
@@ -4090,6 +4072,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
