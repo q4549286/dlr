@@ -3761,19 +3761,41 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                 value = [value stringByReplacingOccurrencesOfString:@"此为.+值四时.气。" withString:@"" options:NSRegularExpressionSearch range:NSMakeRange(0, value.length)];
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                // --- 替换为这段新代码 ---
+// --- 替换为下面这个最终版本 ---
 if (value.length > 0) {
-    // --- START: 新增的过滤逻辑 ---
+    // --- 核心过滤引擎 ---
     if ([label isEqualToString:@"刑"] || [label isEqualToString:@"冲"] || [label isEqualToString:@"害"] || [label isEqualToString:@"破"]) {
-        // 通过第一个空格来分割“关系描述”和“详细解释”
+        // 模式一：处理 “关系 + 解释” 格式
         NSArray *parts = [value componentsSeparatedByString:@" "];
         if (parts.count > 0) {
-            // 只保留第一部分，即纯粹的交互关系
-            value = parts[0];
+            value = parts[0]; // 只保留关系部分
+        }
+    } 
+    else if ([label isEqualToString:@"阳神"] || [label isEqualToString:@"阴神"]) {
+        // 模式二：处理 “A，关系1，解释1。关系2，解释2。” 格式
+        NSArray<NSString *> *clauses = [value componentsSeparatedByString:@"。"];
+        NSMutableArray<NSString *> *filteredClauses = [NSMutableArray array];
+        for (NSString *clause in clauses) {
+            NSString *trimmedClause = [clause stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (trimmedClause.length == 0) continue;
+
+            // 按逗号分割，通常前两个部分是核心关系
+            NSArray<NSString *> *parts = [trimmedClause componentsSeparatedByString:@"，"];
+            if (parts.count >= 2) {
+                NSString *relationshipPart = [[parts subarrayWithRange:NSMakeRange(0, 2)] componentsJoinedByString:@"，"];
+                [filteredClauses addObject:relationshipPart];
+            } else {
+                [filteredClauses addObject:trimmedClause]; // 如果不匹配，保留原样以防数据丢失
+            }
+        }
+        // 重新组合，并确保以句号结尾
+        value = [filteredClauses componentsJoinedByString:@"。"];
+        if (value.length > 0 && ![value hasSuffix:@"。"]) {
+            value = [value stringByAppendingString:@"。"];
         }
     }
-    // --- END: 新增的过滤逻辑 ---
-    
-    // 确保过滤后的 value 仍然有内容再添加
+    // --- 过滤引擎结束 ---
+
     if (value.length > 0) {
         [structuredResult appendFormat:@"  - %@: %@\n", label, value];
     }
@@ -4085,6 +4107,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
