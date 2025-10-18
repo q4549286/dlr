@@ -3760,11 +3760,24 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                 NSString *label = keywordMap[keyword];
                 value = [value stringByReplacingOccurrencesOfString:@"此为.+值四时.气。" withString:@"" options:NSRegularExpressionSearch range:NSMakeRange(0, value.length)];
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                if (value.length > 0) {
-                     [structuredResult appendFormat:@"  - %@: %@\n", label, value];
-                }
-                [processedLines addObject:line];
-                break;
+               // --- 替换为这段新代码 ---
+if (value.length > 0) {
+    // --- START: 新增的过滤逻辑 ---
+    if ([label isEqualToString:@"刑"] || [label isEqualToString:@"冲"] || [label isEqualToString:@"害"] || [label isEqualToString:@"破"]) {
+        // 通过第一个空格来分割“关系描述”和“详细解释”
+        NSArray *parts = [value componentsSeparatedByString:@" "];
+        if (parts.count > 0) {
+            // 只保留第一部分，即纯粹的交互关系
+            value = parts[0];
+        }
+    }
+    // --- END: 新增的过滤逻辑 ---
+    
+    // 确保过滤后的 value 仍然有内容再添加
+    if (value.length > 0) {
+        [structuredResult appendFormat:@"  - %@: %@\n", label, value];
+    }
+}
             }
         }
     }
@@ -4072,6 +4085,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
