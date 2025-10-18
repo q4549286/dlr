@@ -2948,26 +2948,28 @@ else if (g_s2_isExtractingKeChuanDetail) {
     [contentView addSubview:titleLabel];
     currentY += 30 + 20;
 
-// --- 【新布局】AI Prompt 和 本命 开关 ---
-CGFloat topSwitchWidth = (contentView.bounds.size.width - 2 * padding - 10) * 0.66; // AI Prompt 按钮占 2/3 宽度
-CGFloat benMingSwitchWidth = (contentView.bounds.size.width - 2 * padding - 10) * 0.34; // 本命按钮占 1/3 宽度
+// --- 【新布局 V2 - 和谐版】Prompt 和 本命 开关 ---
+// 计算与下方标准/深度课盘按钮完全一致的宽度
+CGFloat halfBtnWidth = (contentView.bounds.size.width - 2 * padding - padding) / 2.0;
 
-// AI Prompt 按钮
-UIButton *promptButton = createButton(@"AI Prompt: 开启", @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
-promptButton.frame = CGRectMake(padding, currentY, topSwitchWidth, 44);
-// <<<<<<<<<<<< Bug修复：初始化时同步状态 >>>>>>>>>>>>>
-promptButton.selected = g_shouldIncludeAIPromptHeader; 
+// Prompt 按钮
+NSString *promptTitle = [NSString stringWithFormat:@"Prompt: %@", g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"];
+UIColor *promptColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY;
+UIButton *promptButton = createButton(promptTitle, @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, promptColor);
+promptButton.frame = CGRectMake(padding, currentY, halfBtnWidth, 44);
+promptButton.selected = g_shouldIncludeAIPromptHeader; // 修复首次点击bug
 [contentView addSubview:promptButton];
 
-// 新增：本命开关按钮 (定义一个新的 tag)
-static const NSInteger kButtonTag_BenMingToggle = 995; 
-UIButton *benMingButton = createButton(@"本命: 开启", @"person.text.rectangle", kButtonTag_BenMingToggle, ECHO_COLOR_PROMPT_ON);
-benMingButton.frame = CGRectMake(padding + topSwitchWidth + 10, currentY, benMingSwitchWidth, 44);
+// 本命开关按钮
+static const NSInteger kButtonTag_BenMingToggle = 995;
+NSString *benMingTitle = [NSString stringWithFormat:@"本命: %@", g_shouldExtractBenMing ? @"开启" : @"关闭"];
+UIColor *benMingColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY;
+UIButton *benMingButton = createButton(benMingTitle, @"person.text.rectangle", kButtonTag_BenMingToggle, benMingColor);
+benMingButton.frame = CGRectMake(padding + halfBtnWidth + padding, currentY, halfBtnWidth, 44);
 benMingButton.selected = g_shouldExtractBenMing; // 初始化状态
 [contentView addSubview:benMingButton];
 
 currentY += 44 + 10;
-// ...
     
     UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
     textViewContainer.backgroundColor = ECHO_COLOR_CARD_BG;
@@ -4163,6 +4165,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
