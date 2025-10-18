@@ -2767,76 +2767,119 @@ else if (g_s2_isExtractingKeChuanDetail) {
 }
 
 // ... (所有数据提取的核心函数，如 extractNianmingInfoWithCompletion 等，保持不变)
+// =========================================================================
+// ↓↓↓ 使用这个带有自动界面切换功能的最终修正版 ↓↓↓
+// =========================================================================
 %new
 - (void)extractNianmingInfoWithCompletion:(void (^)(NSString *nianmingText))completion {
-    LogMessage(EchoLogTypeTask, @"[任务启动] 参详行年参数...");
-    g_isExtractingNianming = YES; 
-    g_capturedZhaiYaoArray = [NSMutableArray array]; 
-    g_capturedGeJuArray = [NSMutableArray array];
+    // <<<<<<<<<<<< 核心修正 START: 增加界面自动切换逻辑 >>>>>>>>>>>>>
     
-    UICollectionView *targetCV = nil;
-    Class unitClass = NSClassFromString(@"六壬大占.行年單元");
-    NSMutableArray *cvs = [NSMutableArray array]; 
-    FindSubviewsOfClassRecursive([UICollectionView class], self.view, cvs);
-    for (UICollectionView *cv in cvs) { if ([cv.visibleCells.firstObject isKindOfClass:unitClass]) { targetCV = cv; break; } }
-    
-    if (!targetCV) { 
-        LogMessage(EchoLogTypeWarning, @"[行年] 未找到行年单元，跳过分析。"); 
-        g_isExtractingNianming = NO; if (completion) { completion(@""); } return; 
+    // 1. 寻找分段控制器
+    NSMutableArray<UISegmentedControl *> *segmentControls = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UISegmentedControl class], self.view, segmentControls);
+    if (segmentControls.count == 0) {
+        LogMessage(EchoLogError, @"[行年] 错误: 找不到用于切换的 UISegmentedControl。");
+        if (completion) completion(@"[推衍失败: 找不到切换控件]");
+        return;
     }
-    
-    NSMutableArray *allUnitCells = [NSMutableArray array];
-    for (UIView *cell in targetCV.visibleCells) { if([cell isKindOfClass:unitClass]){ [allUnitCells addObject:cell]; } }
-    [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
-    
-    if (allUnitCells.count == 0) { 
-        LogMessage(EchoLogTypeWarning, @"[行年] 行年单元数量为0，跳过分析。"); 
-        g_isExtractingNianming = NO; if (completion) { completion(@""); } return; 
+    UISegmentedControl *segmentControl = segmentControls.firstObject;
+
+    // 2. 寻找"行年"选项卡的索引
+    NSInteger nianmingIndex = -1;
+    for (int i = 0; i < segmentControl.numberOfSegments; i++) {
+        // 使用 "年" 作为关键词，以兼容未来可能的文字变化（如"行年"、"年命"）
+        if ([[segmentControl titleForSegmentAtIndex:i] containsString:@"年"]) {
+            nianmingIndex = i;
+            break;
+        }
     }
+    if (nianmingIndex == -1) {
+        LogMessage(EchoLogError, @"[行年] 错误: 在 UISegmentedControl 中找不到 '行年' 选项。");
+        if (completion) completion(@"[推衍失败: 找不到'行年'选项]");
+        return;
+    }
+
+    // 3. 如果当前不在"行年"界面，则执行切换
+    LogMessage(EchoLogTypeInfo, @"[行年] 找到切换控件，正在确保界面已切换到 '行年' (索引 %ld)...", (long)nianmingIndex);
+    if (segmentControl.selectedSegmentIndex != nianmingIndex) {
+        segmentControl.selectedSegmentIndex = nianmingIndex;
+        [segmentControl sendActionsForControlEvents:UIControlEventValueChanged];
+    }
+
+    // 4. 等待UI刷新后，再执行真正的提取逻辑
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
     
-    LogMessage(EchoLogTypeInfo, @"[行年] 发现 %lu 个参数，将依次进行两步推衍...", (unsigned long)allUnitCells.count);
-    
-    __weak typeof(self) weakSelf = self;
-    __block NSInteger currentIndex = 0;
-    __block void (^processNextCell)();
-    
-    processNextCell = [^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || currentIndex >= allUnitCells.count) {
-            LogMessage(EchoLogTypeTask, @"[行年] 所有参数参详完毕。");
-            NSMutableString *resultStr = [NSMutableString string];
-            for (NSUInteger i = 0; i < allUnitCells.count; i++) {
-                NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[摘要未获取]";
-                NSString *geJu = (i < g_capturedGeJuArray.count) ? g_capturedGeJuArray[i] : @"[格局未获取]";
-                [resultStr appendFormat:@"- 参数 %lu\n  摘要: %@\n  格局: %@", (unsigned long)i + 1, zhaiYao, geJu];
-                if (i < allUnitCells.count - 1) { [resultStr appendString:@"\n\n"]; }
-            }
-            g_isExtractingNianming = NO;
-            g_currentItemToExtract = nil;
-            if (completion) { completion([resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
-            processNextCell = nil;
-            return;
+        // <<<<<<<<<<<< 原有的提取逻辑被完整地包裹在这里 >>>>>>>>>>>>>
+        LogMessage(EchoLogTypeTask, @"[任务启动] 参详行年参数...");
+        g_isExtractingNianming = YES; 
+        g_capturedZhaiYaoArray = [NSMutableArray array]; 
+        g_capturedGeJuArray = [NSMutableArray array];
+        
+        UICollectionView *targetCV = nil;
+        Class unitClass = NSClassFromString(@"六壬大占.行年單元");
+        NSMutableArray *cvs = [NSMutableArray array]; 
+        FindSubviewsOfClassRecursive([UICollectionView class], self.view, cvs);
+        for (UICollectionView *cv in cvs) { if ([cv.visibleCells.firstObject isKindOfClass:unitClass]) { targetCV = cv; break; } }
+        
+        if (!targetCV) { 
+            LogMessage(EchoLogTypeWarning, @"[行年] 未找到行年单元，跳过分析。"); 
+            g_isExtractingNianming = NO; if (completion) { completion(@""); } return; 
         }
         
-        UICollectionViewCell *cell = allUnitCells[currentIndex];
-        id delegate = targetCV.delegate;
-        NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
+        NSMutableArray *allUnitCells = [NSMutableArray array];
+        for (UIView *cell in targetCV.visibleCells) { if([cell isKindOfClass:unitClass]){ [allUnitCells addObject:cell]; } }
+        [allUnitCells sortUsingComparator:^NSComparisonResult(UIView *v1, UIView *v2) { return [@(v1.frame.origin.x) compare:@(v2.frame.origin.x)]; }];
         
-        LogMessage(EchoLogTypeInfo, @"[行年] 正在参详参数 %ld 的 [年命摘要]", (long)currentIndex + 1);
-        g_currentItemToExtract = @"年命摘要";
-        if (delegate && indexPath) [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
+        if (allUnitCells.count == 0) { 
+            LogMessage(EchoLogTypeWarning, @"[行年] 行年单元数量为0，跳过分析。"); 
+            g_isExtractingNianming = NO; if (completion) { completion(@""); } return; 
+        }
         
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            LogMessage(EchoLogTypeInfo, @"[行年] 正在参详参数 %ld 的 [格局方法]", (long)currentIndex + 1);
-            g_currentItemToExtract = @"格局方法";
+        LogMessage(EchoLogTypeInfo, @"[行年] 发现 %lu 个参数，将依次进行两步推衍...", (unsigned long)allUnitCells.count);
+        
+        __weak typeof(self) weakSelf = self;
+        __block NSInteger currentIndex = 0;
+        __block void (^processNextCell)();
+        
+        processNextCell = [^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf || currentIndex >= allUnitCells.count) {
+                LogMessage(EchoLogTypeTask, @"[行年] 所有参数参详完毕。");
+                NSMutableString *resultStr = [NSMutableString string];
+                for (NSUInteger i = 0; i < allUnitCells.count; i++) {
+                    NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[摘要未获取]";
+                    NSString *geJu = (i < g_capturedGeJuArray.count) ? g_capturedGeJuArray[i] : @"[格局未获取]";
+                    [resultStr appendFormat:@"- 参数 %lu\n  摘要: %@\n  格局: %@", (unsigned long)i + 1, zhaiYao, geJu];
+                    if (i < allUnitCells.count - 1) { [resultStr appendString:@"\n\n"]; }
+                }
+                g_isExtractingNianming = NO;
+                g_currentItemToExtract = nil;
+                if (completion) { completion([resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
+                processNextCell = nil;
+                return;
+            }
+            
+            UICollectionViewCell *cell = allUnitCells[currentIndex];
+            id delegate = targetCV.delegate;
+            NSIndexPath *indexPath = [targetCV indexPathForCell:cell];
+            
+            LogMessage(EchoLogTypeInfo, @"[行年] 正在参详参数 %ld 的 [年命摘要]", (long)currentIndex + 1);
+            g_currentItemToExtract = @"年命摘要";
             if (delegate && indexPath) [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
+            
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                LogMessage(EchoLogTypeInfo, @"[行年] 正在参详参数 %ld 的 [格局方法]", (long)currentIndex + 1);
+                g_currentItemToExtract = @"格局方法";
+                if (delegate && indexPath) [delegate collectionView:targetCV didSelectItemAtIndexPath:indexPath];
 
-            currentIndex++;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), processNextCell);
-        });
-    } copy];
-    
-    processNextCell();
+                currentIndex++;
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), processNextCell);
+            });
+        } copy];
+        
+        processNextCell();
+
+    }); // <<<<<<<<<<<< 核心修正 END: 整个原有逻辑都在这个 dispatch_after 内部
 }
 %new 
 - (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion {
@@ -4165,6 +4208,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
