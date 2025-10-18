@@ -2991,25 +2991,25 @@ else if (g_s2_isExtractingKeChuanDetail) {
     [contentView addSubview:titleLabel];
     currentY += 30 + 20;
 
-// --- 【新布局 V2 - 和谐版】Prompt 和 本命 开关 ---
-// 计算与下方标准/深度课盘按钮完全一致的宽度
-CGFloat halfBtnWidth = (contentView.bounds.size.width - 2 * padding - padding) / 2.0;
+// --- 【新布局 V3 - 视觉优化版】Prompt 和 本命 开关 ---
+// <<<<<<<<<<<< 核心修正：确保宽度计算与下方按钮完全一致 >>>>>>>>>>>>>
+CGFloat cardBtnWidth = (contentView.bounds.size.width - 2 * padding - padding) / 2.0;
 
 // Prompt 按钮
 NSString *promptTitle = [NSString stringWithFormat:@"Prompt: %@", g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"];
-UIColor *promptColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY;
+UIColor *promptColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; // 开启:绿色, 关闭:深灰
 UIButton *promptButton = createButton(promptTitle, @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, promptColor);
-promptButton.frame = CGRectMake(padding, currentY, halfBtnWidth, 44);
-promptButton.selected = g_shouldIncludeAIPromptHeader; // 修复首次点击bug
+promptButton.frame = CGRectMake(padding, currentY, cardBtnWidth, 44); // 使用统一的宽度变量
+promptButton.selected = g_shouldIncludeAIPromptHeader;
 [contentView addSubview:promptButton];
 
 // 本命开关按钮
 static const NSInteger kButtonTag_BenMingToggle = 995;
 NSString *benMingTitle = [NSString stringWithFormat:@"本命: %@", g_shouldExtractBenMing ? @"开启" : @"关闭"];
-UIColor *benMingColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY;
+UIColor *benMingColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; // 开启:绿色, 关闭:深灰
 UIButton *benMingButton = createButton(benMingTitle, @"person.text.rectangle", kButtonTag_BenMingToggle, benMingColor);
-benMingButton.frame = CGRectMake(padding + halfBtnWidth + padding, currentY, halfBtnWidth, 44);
-benMingButton.selected = g_shouldExtractBenMing; // 初始化状态
+benMingButton.frame = CGRectMake(padding + cardBtnWidth + padding, currentY, cardBtnWidth, 44); // 使用统一的宽度变量
+benMingButton.selected = g_shouldExtractBenMing;
 [contentView addSubview:benMingButton];
 
 currentY += 44 + 10;
@@ -4208,6 +4208,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
