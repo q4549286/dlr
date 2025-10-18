@@ -2992,32 +2992,38 @@ else if (g_s2_isExtractingKeChuanDetail) {
     [contentView addSubview:titleLabel];
     currentY += 30 + 20;
 
-// --- 【新布局 V3 - 精致版】Prompt 和 本命 开关 ---
-// 目标：按钮更小巧，颜色层次更分明
+// --- 【新布局 V4 - 精确对齐版】Prompt 和 本命 开关 ---
 CGFloat compactButtonHeight = 40.0;
-// 计算两个小按钮的宽度，使其总宽度+间距 小于下方大按钮的总宽度
-CGFloat compactBtnWidth = (contentView.bounds.size.width - 2 * padding - padding) / 2.0; // 保持与下方按钮相同的计算基准
+CGFloat innerPadding = 10.0; // 按钮之间的间距
+
+// 1. 先计算出下方 "课盘总览" 卡片的内部总可用宽度
+CGFloat cardInnerTotalWidth = contentView.bounds.size.width - 2 * padding; // 卡片总宽度
+CGFloat cardContentWidth = cardInnerTotalWidth - 2 * padding; // 卡片内部，减去左右内边距
+
+// 2. 根据内部总宽度，精确计算每个小按钮的宽度
+CGFloat compactBtnWidth = (cardContentWidth - innerPadding) / 2.0;
+
+// 3. 计算按钮组的起始X坐标，确保它们在卡片内部居中对齐
+CGFloat startX = padding + padding; // contentView的边距 + 卡片的内边距
 
 // Prompt 按钮
 NSString *promptTitle = [NSString stringWithFormat:@"Prompt: %@", g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"];
-UIColor *promptColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF; // 使用新颜色
+UIColor *promptColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF;
 UIButton *promptButton = createButton(promptTitle, @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, promptColor);
-promptButton.frame = CGRectMake(padding, currentY, compactBtnWidth, compactButtonHeight); // 使用新尺寸
-promptButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular]; // 字体也稍小一点
+promptButton.frame = CGRectMake(startX, currentY, compactBtnWidth, compactButtonHeight);
 promptButton.selected = g_shouldIncludeAIPromptHeader;
 [contentView addSubview:promptButton];
 
 // 本命开关按钮
 static const NSInteger kButtonTag_BenMingToggle = 995;
 NSString *benMingTitle = [NSString stringWithFormat:@"本命: %@", g_shouldExtractBenMing ? @"开启" : @"关闭"];
-UIColor *benMingColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF; // 使用新颜色
+UIColor *benMingColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF;
 UIButton *benMingButton = createButton(benMingTitle, @"person.text.rectangle", kButtonTag_BenMingToggle, benMingColor);
-benMingButton.frame = CGRectMake(padding + compactBtnWidth + padding, currentY, compactBtnWidth, compactButtonHeight); // 使用新尺寸
-benMingButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular]; // 字体也稍小一点
+benMingButton.frame = CGRectMake(startX + compactBtnWidth + innerPadding, currentY, compactBtnWidth, compactButtonHeight);
 benMingButton.selected = g_shouldExtractBenMing;
 [contentView addSubview:benMingButton];
 
-currentY += compactButtonHeight + 15; // 调整Y轴增量，保持与下方卡片的间距
+currentY += compactButtonHeight + 15;
     
     UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
     textViewContainer.backgroundColor = ECHO_COLOR_CARD_BG;
@@ -4213,6 +4219,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
