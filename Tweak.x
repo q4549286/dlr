@@ -35,6 +35,7 @@ static const NSInteger kButtonTag_AIPromptToggle    = 996;
 #define ECHO_COLOR_MAIN_BLUE        [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
 #define ECHO_COLOR_MAIN_TEAL        [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
 #define ECHO_COLOR_AUX_GREY         [UIColor colorWithWhite:0.3 alpha:1.0]
+#define ECHO_COLOR_SWITCH_OFF       [UIColor colorWithWhite:0.25 alpha:1.0] // <<<<<< 新增颜色
 #define ECHO_COLOR_ACTION_CLOSE     [UIColor colorWithWhite:0.25 alpha:1.0]
 #define ECHO_COLOR_ACTION_AI        [UIColor colorWithRed:0.22 green:0.59 blue:0.85 alpha:1.0]
 #define ECHO_COLOR_SUCCESS          [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
@@ -2991,28 +2992,32 @@ else if (g_s2_isExtractingKeChuanDetail) {
     [contentView addSubview:titleLabel];
     currentY += 30 + 20;
 
-// --- 【新布局 V3 - 视觉优化版】Prompt 和 本命 开关 ---
-// <<<<<<<<<<<< 核心修正：确保宽度计算与下方按钮完全一致 >>>>>>>>>>>>>
-CGFloat cardBtnWidth = (contentView.bounds.size.width - 2 * padding - padding) / 2.0;
+// --- 【新布局 V3 - 精致版】Prompt 和 本命 开关 ---
+// 目标：按钮更小巧，颜色层次更分明
+CGFloat compactButtonHeight = 40.0;
+// 计算两个小按钮的宽度，使其总宽度+间距 小于下方大按钮的总宽度
+CGFloat compactBtnWidth = (contentView.bounds.size.width - 2 * padding - padding) / 2.0; // 保持与下方按钮相同的计算基准
 
 // Prompt 按钮
 NSString *promptTitle = [NSString stringWithFormat:@"Prompt: %@", g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"];
-UIColor *promptColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; // 开启:绿色, 关闭:深灰
+UIColor *promptColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF; // 使用新颜色
 UIButton *promptButton = createButton(promptTitle, @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, promptColor);
-promptButton.frame = CGRectMake(padding, currentY, cardBtnWidth, 44); // 使用统一的宽度变量
+promptButton.frame = CGRectMake(padding, currentY, compactBtnWidth, compactButtonHeight); // 使用新尺寸
+promptButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular]; // 字体也稍小一点
 promptButton.selected = g_shouldIncludeAIPromptHeader;
 [contentView addSubview:promptButton];
 
 // 本命开关按钮
 static const NSInteger kButtonTag_BenMingToggle = 995;
 NSString *benMingTitle = [NSString stringWithFormat:@"本命: %@", g_shouldExtractBenMing ? @"开启" : @"关闭"];
-UIColor *benMingColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; // 开启:绿色, 关闭:深灰
+UIColor *benMingColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF; // 使用新颜色
 UIButton *benMingButton = createButton(benMingTitle, @"person.text.rectangle", kButtonTag_BenMingToggle, benMingColor);
-benMingButton.frame = CGRectMake(padding + cardBtnWidth + padding, currentY, cardBtnWidth, 44); // 使用统一的宽度变量
+benMingButton.frame = CGRectMake(padding + compactBtnWidth + padding, currentY, compactBtnWidth, compactButtonHeight); // 使用新尺寸
+benMingButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular]; // 字体也稍小一点
 benMingButton.selected = g_shouldExtractBenMing;
 [contentView addSubview:benMingButton];
 
-currentY += 44 + 10;
+currentY += compactButtonHeight + 15; // 调整Y轴增量，保持与下方卡片的间距
     
     UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
     textViewContainer.backgroundColor = ECHO_COLOR_CARD_BG;
@@ -3045,24 +3050,18 @@ currentY += 44 + 10;
     [contentView addSubview:card1];
 
     CGFloat card1InnerY = 15;
-        UILabel *sec1Title = createSectionTitle(@"课盘总览");
+    UILabel *sec1Title = createSectionTitle(@"课盘总览");
     sec1Title.frame = CGRectMake(padding, card1InnerY, card1.bounds.size.width - 2*padding, 22);
     [card1 addSubview:sec1Title];
     card1InnerY += 22 + 10;
     
-    // <<<<<<<<<<<< 修正：直接使用已定义的 cardBtnWidth，不再重新定义 >>>>>>>>>>>>>
-    // (注意：这里不再有 "CGFloat cardBtnWidth = ..." 这一行了)
-    
+    CGFloat cardBtnWidth = (card1.bounds.size.width - 3*padding) / 2.0;
     UIButton *stdButton = createButton(@"标准课盘", @"doc.text", kButtonTag_StandardReport, ECHO_COLOR_MAIN_TEAL);
-    // <<<<<<<<<<<< 修正：使用正确的变量和间距来设置 frame >>>>>>>>>>>>>
     stdButton.frame = CGRectMake(padding, card1InnerY, cardBtnWidth, 48);
     [card1 addSubview:stdButton];
-    
     UIButton *deepButton = createButton(@"深度课盘", @"square.stack.3d.up.fill", kButtonTag_DeepDiveReport, ECHO_COLOR_MAIN_BLUE);
-    // <<<<<<<<<<<< 修正：使用正确的变量和间距来设置 frame >>>>>>>>>>>>>
     deepButton.frame = CGRectMake(padding + cardBtnWidth + padding, card1InnerY, cardBtnWidth, 48);
     [card1 addSubview:deepButton];
-    
     card1InnerY += 48 + 15;
     card1.frame = CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, card1InnerY);
     currentY += card1.frame.size.height + 20;
@@ -3245,26 +3244,23 @@ currentY += 44 + 10;
             [g_questionTextView resignFirstResponder];
             break;
         }
-                case kButtonTag_AIPromptToggle: { 
+        case kButtonTag_AIPromptToggle: { 
             sender.selected = !sender.selected; 
             g_shouldIncludeAIPromptHeader = sender.selected; 
             NSString *status = g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"; 
-            NSString *title = [NSString stringWithFormat:@"Prompt: %@", status]; 
+            NSString *title = [NSString stringWithFormat:@"AI Prompt: %@", status]; 
             [sender setTitle:title forState:UIControlStateNormal]; 
-            // <<<<<<<<<<<< 颜色修改 >>>>>>>>>>>>>
-            sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; 
+            sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF; // 使用新颜色
             LogMessage(EchoLogTypeInfo, @"[设置] Prompt 已 %@。", status); 
             break; 
         }
-        
         case kButtonTag_BenMingToggle: {
             sender.selected = !sender.selected;
             g_shouldExtractBenMing = sender.selected;
             NSString *status = g_shouldExtractBenMing ? @"开启" : @"关闭";
             NSString *title = [NSString stringWithFormat:@"本命: %@", status];
             [sender setTitle:title forState:UIControlStateNormal];
-            // <<<<<<<<<<<< 颜色修改 >>>>>>>>>>>>>
-            sender.backgroundColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY;
+            sender.backgroundColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF; // 使用新颜色
             LogMessage(EchoLogTypeInfo, @"[设置] 本命信息提取已 %@。", status);
             break;
         }
@@ -4217,10 +4213,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-
-
-
-
 
 
 
