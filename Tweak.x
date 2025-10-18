@@ -3045,18 +3045,24 @@ currentY += 44 + 10;
     [contentView addSubview:card1];
 
     CGFloat card1InnerY = 15;
-    UILabel *sec1Title = createSectionTitle(@"课盘总览");
+        UILabel *sec1Title = createSectionTitle(@"课盘总览");
     sec1Title.frame = CGRectMake(padding, card1InnerY, card1.bounds.size.width - 2*padding, 22);
     [card1 addSubview:sec1Title];
     card1InnerY += 22 + 10;
     
-    CGFloat cardBtnWidth = (card1.bounds.size.width - 3*padding) / 2.0;
+    // <<<<<<<<<<<< 修正：直接使用已定义的 cardBtnWidth，不再重新定义 >>>>>>>>>>>>>
+    // (注意：这里不再有 "CGFloat cardBtnWidth = ..." 这一行了)
+    
     UIButton *stdButton = createButton(@"标准课盘", @"doc.text", kButtonTag_StandardReport, ECHO_COLOR_MAIN_TEAL);
+    // <<<<<<<<<<<< 修正：使用正确的变量和间距来设置 frame >>>>>>>>>>>>>
     stdButton.frame = CGRectMake(padding, card1InnerY, cardBtnWidth, 48);
     [card1 addSubview:stdButton];
+    
     UIButton *deepButton = createButton(@"深度课盘", @"square.stack.3d.up.fill", kButtonTag_DeepDiveReport, ECHO_COLOR_MAIN_BLUE);
+    // <<<<<<<<<<<< 修正：使用正确的变量和间距来设置 frame >>>>>>>>>>>>>
     deepButton.frame = CGRectMake(padding + cardBtnWidth + padding, card1InnerY, cardBtnWidth, 48);
     [card1 addSubview:deepButton];
+    
     card1InnerY += 48 + 15;
     card1.frame = CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, card1InnerY);
     currentY += card1.frame.size.height + 20;
@@ -4211,6 +4217,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
