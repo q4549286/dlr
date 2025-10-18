@@ -1711,9 +1711,9 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
             NSString *tianJiang    = [[partText substringWithRange:[coreInfoMatch rangeAtIndex:6]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
             if ([title isEqualToString:@"行年信息"]) {
-                [structuredResult appendFormat:@"  - 行年: %@ (%@)\n", subjectDesc, subjectDiZhi];
+                [structuredResult appendFormat:@"  - 行年: %@ (%@ 行年)\n", subjectDesc, subjectDiZhi];
             } else {
-                 [structuredResult appendFormat:@"  - 本命: %@ (%@)\n", subjectDesc, subjectDiZhi];
+                 [structuredResult appendFormat:@"  - 本命: %@ (%@ 本命)\n", subjectDesc, subjectDiZhi];
             }
             [structuredResult appendFormat:@"  - 临宫: %@\n", linGong];
             [structuredResult appendFormat:@"  - 乘: %@\n", cheng];
@@ -4256,6 +4256,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
