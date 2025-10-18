@@ -1727,17 +1727,21 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
 */    
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-#pragma mark - FangFa Parser (V1.0)
+#pragma mark - FangFa Parser (V2.0 - Factual Extraction)
 
 /**
- @brief 解析并过滤“解析方法”中的内容，移除固定句式和结论性断语。
+ @brief (V2.0) 解析并过滤“解析方法”中的内容。
+        采用“事实提取”模式，只保留包含客观关系和状态关键词的子句，
+        从根本上移除所有固定句式和结论性断语。
  @param rawContent 单个板块（如“来占之情”）的原始文本。
  @return 过滤后的、只包含客观事实的文本。
 */
 static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
 
-    // 1. 定义需要完全移除的固定引导句 (boilerplate)
+    // --- 阶段一：定义“事实”的构成元素 ---
+    
+    // 1. 定义需要完全移除的固定引导句 (Boilerplate)
     NSArray<NSString *> *boilerplateSentences = @[
         @"凡看来情，以占之正时，详其与日之生克刑合，则于所占事体，可先有所主，故曰先锋门。",
         @"此以用神所乘所临，以及与日之生合刑墓等断事发之机。",
@@ -1746,22 +1750,31 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
         @"此以用神之旺相并天乙前后断事情之迟速，并以用神所合之岁月节候而定事体之远近，复以天上季神所临定成事之期。"
     ];
 
-    // 2. 定义用于识别“结论性”断语的前缀关键词
-    NSArray<NSString *> *conclusionPrefixes = @[
-        @"主", @"此主", @"恐", @"必", @"利", @"不利", @"主凡事", @"恐遭", @"宅必", @"宅将", @"情多", @"主百事", @"凡事"
+    // 2. 定义“事实子句”的关键词白名单 (Whitelist)
+    // 只有包含这些词的子句才被认为是描述客观事实的
+    NSArray<NSString *> *factualKeywords = @[
+        // 核心关系
+        @"克", @"刑", @"合", @"破", @"生", @"冲", @"害",
+        // 位置与状态
+        @"临", @"乘", @"为", @"发用", @"居", @"传入", @"上乘", @"得",
+        // 结构与身份
+        @"用神", @"初传", @"中传", @"末传", @"天乙", @"日辰互", @"正时", @"三传",
+        @"太岁", @"季神",
+        // 组合状态
+        @"皆孟", @"逆行", @"顺治"
     ];
-
+    
     NSMutableString *workingContent = [rawContent mutableCopy];
 
-    // --- 阶段一：移除完整的固定引导句 ---
+    // --- 阶段二：预处理，移除引导句 ---
     for (NSString *sentence in boilerplateSentences) {
         [workingContent replaceOccurrencesOfString:sentence withString:@"" options:0 range:NSMakeRange(0, workingContent.length)];
     }
     
-    // --- 阶段二：按句子和子句过滤结论性断语 ---
+    // --- 阶段三：核心过滤逻辑 ---
     // 按句号分割成多个句子
     NSArray<NSString *> *sentences = [[workingContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] componentsSeparatedByString:@"。"];
-    NSMutableArray<NSString *> *factualSentences = [NSMutableArray array];
+    NSMutableArray<NSString *> *filteredSentences = [NSMutableArray array];
 
     for (NSString *sentence in sentences) {
         NSString *trimmedSentence = [sentence stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -1775,33 +1788,40 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
             NSString *trimmedClause = [clause stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (trimmedClause.length == 0) continue;
 
-            BOOL isConclusion = NO;
-            for (NSString *prefix in conclusionPrefixes) {
-                // 如果子句以结论性前缀开头，则标记为结论，予以过滤
-                if ([trimmedClause hasPrefix:prefix]) {
-                    isConclusion = YES;
+            BOOL isFactual = NO;
+            // 检查子句是否包含任何一个“事实关键词”
+            for (NSString *keyword in factualKeywords) {
+                if ([trimmedClause containsString:keyword]) {
+                    isFactual = YES;
                     break;
                 }
             }
 
-            if (!isConclusion) {
+            // 如果是事实子句，则保留
+            if (isFactual) {
+                // 对保留的子句进行微调，移除“但”这类引导词
+                if ([trimmedClause hasPrefix:@"但 "]) {
+                    trimmedClause = [trimmedClause substringFromIndex:2];
+                }
+                 else if ([trimmedClause hasPrefix:@"却 "]) {
+                    trimmedClause = [trimmedClause substringFromIndex:2];
+                }
                 [factualClauses addObject:trimmedClause];
             }
         }
 
-        // 如果过滤后仍有事实子句保留，则重新组合成句子
+        // 如果这个句子中包含任何事实子句，则将它们重新组合
         if (factualClauses.count > 0) {
-            [factualSentences addObject:[factualClauses componentsJoinedByString:@"，"]];
+            [filteredSentences addObject:[factualClauses componentsJoinedByString:@"，"]];
         }
     }
 
-    // --- 阶段三：重新组合所有事实句子，并格式化输出 ---
-    if (factualSentences.count == 0) {
+    // --- 阶段四：格式化并返回最终结果 ---
+    if (filteredSentences.count == 0) {
         return @""; // 如果过滤后没有任何内容，则返回空字符串
     }
 
-    NSString *finalResult = [factualSentences componentsJoinedByString:@"。\n"];
-    // 确保末尾只有一个句号
+    NSString *finalResult = [filteredSentences componentsJoinedByString:@"。\n"];
     if (![finalResult hasSuffix:@"。"]) {
         finalResult = [finalResult stringByAppendingString:@"。"];
     }
@@ -4072,6 +4092,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
