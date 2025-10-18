@@ -72,8 +72,8 @@ static NSString *g_lastGeneratedReport = nil;
 
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES;
-static BOOL g_shouldExtractXingNianOnly = NO; // <--- 新增
-static BOOL g_shouldExtractBenMingOnly = NO;  // <--- 新增
+static BOOL g_shouldExtractBenMing = YES; // <<<<<<<<<<<< 新增本命开关状态
+
 static BOOL g_isExtractingTimeInfo = NO;
 static UITextView *g_questionTextView = nil;
 static UIButton *g_clearInputButton = nil;
@@ -1760,9 +1760,13 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
         // <<<<<<<<<<<< 核心修改区域 END >>>>>>>>>>>>>
     };
     
-    // 4. 执行解析
-    parseDetailPart(@"行年信息", xingNianPart);
+// 4. 执行解析
+parseDetailPart(@"行年信息", xingNianPart);
+
+// <<<<<<<<<<<< 核心修改：根据开关决定是否解析本命 >>>>>>>>>>>>>
+if (g_shouldExtractBenMing) {
     parseDetailPart(@"本命信息", benMingPart);
+}
 
     // 3. 解析格局部分 (条件化输出)
 /*
@@ -2733,16 +2737,14 @@ else if (g_s2_isExtractingKeChuanDetail) {
 
 
 %hook UIViewController
+
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        // 保持这个外层 dispatch_after 不变
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            // <<<< 在这里添加一层主线程调度 >>>>
-            dispatch_async(dispatch_get_main_queue(), ^{
-                UIWindow *keyWindow = GetFrontmostWindow();
-                if (!keyWindow) return;
+            UIWindow *keyWindow = GetFrontmostWindow();
+            if (!keyWindow) return;
             if ([keyWindow viewWithTag:kEchoControlButtonTag]) {
                 [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview];
             }
@@ -2803,41 +2805,12 @@ else if (g_s2_isExtractingKeChuanDetail) {
         if (!strongSelf || currentIndex >= allUnitCells.count) {
             LogMessage(EchoLogTypeTask, @"[行年] 所有参数参详完毕。");
             NSMutableString *resultStr = [NSMutableString string];
-            // <<<<<<<<<<<<<<<< 核心修改点 START >>>>>>>>>>>>>>>>
             for (NSUInteger i = 0; i < allUnitCells.count; i++) {
                 NSString *zhaiYao = (i < g_capturedZhaiYaoArray.count) ? g_capturedZhaiYaoArray[i] : @"[摘要未获取]";
                 NSString *geJu = (i < g_capturedGeJuArray.count) ? g_capturedGeJuArray[i] : @"[格局未获取]";
-                
-                NSString *fullBlock = [NSString stringWithFormat:@"- 参数 %lu\n  摘要: %@\n  格局: %@", (unsigned long)i + 1, zhaiYao, geJu];
-                
-                // 根据开关状态决定输出内容
-                if (g_shouldExtractXingNianOnly) {
-                    if ([zhaiYao containsString:@"行年在"]) {
-                        NSRange benMingRange = [fullBlock rangeOfString:@"本命在"];
-                        if (benMingRange.location != NSNotFound) {
-                            [resultStr appendString:[fullBlock substringToIndex:benMingRange.location]];
-                        } else {
-                            [resultStr appendString:fullBlock];
-                        }
-                    }
-                } else if (g_shouldExtractBenMingOnly) {
-                    if ([zhaiYao containsString:@"本命在"]) {
-                        NSRange benMingRange = [fullBlock rangeOfString:@"本命在"];
-                        if (benMingRange.location != NSNotFound) {
-                            // 为了保持格式，我们还是加上参数标题
-                            [resultStr appendFormat:@"- 参数 %lu\n  摘要: %@", (unsigned long)i + 1, [fullBlock substringFromIndex:benMingRange.location]];
-                        }
-                    }
-                } else {
-                    // 默认情况，输出全部
-                    [resultStr appendString:fullBlock];
-                }
-                
-                if (i < allUnitCells.count - 1 && resultStr.length > 0 && ![resultStr hasSuffix:@"\n\n"]) {
-                     [resultStr appendString:@"\n\n"];
-                }
+                [resultStr appendFormat:@"- 参数 %lu\n  摘要: %@\n  格局: %@", (unsigned long)i + 1, zhaiYao, geJu];
+                if (i < allUnitCells.count - 1) { [resultStr appendString:@"\n\n"]; }
             }
-            // <<<<<<<<<<<<<<<< 核心修改点 END >>>>>>>>>>>>>>>>
             g_isExtractingNianming = NO;
             g_currentItemToExtract = nil;
             if (completion) { completion([resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]); }
@@ -2974,45 +2947,27 @@ else if (g_s2_isExtractingKeChuanDetail) {
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [contentView addSubview:titleLabel];
     currentY += 30 + 20;
-    
-    // --- AI Prompt & 行年/本命开关组合 ---
-    CGFloat totalWidth = contentView.bounds.size.width - 2 * padding;
-    CGFloat promptButtonWidth = totalWidth * 0.62; // AI按钮占约62%
-    CGFloat switchesContainerWidth = totalWidth - promptButtonWidth - 10; // 开关容器占剩余部分，10为间距
-    CGFloat switchesContainerX = padding + promptButtonWidth + 10;
-    CGFloat controlsHeight = 44;
 
-    // 1. AI Prompt 按钮 (调整宽度)
-    UIButton *promptButton = createButton(@"AI Prompt: 开启", @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
-    promptButton.frame = CGRectMake(padding, currentY, promptButtonWidth, controlsHeight);
-    [contentView addSubview:promptButton];
+// --- 【新布局】AI Prompt 和 本命 开关 ---
+CGFloat topSwitchWidth = (contentView.bounds.size.width - 2 * padding - 10) * 0.66; // AI Prompt 按钮占 2/3 宽度
+CGFloat benMingSwitchWidth = (contentView.bounds.size.width - 2 * padding - 10) * 0.34; // 本命按钮占 1/3 宽度
 
-    // 2. 行年/本命开关容器
-    UIView *switchesContainer = [[UIView alloc] initWithFrame:CGRectMake(switchesContainerX, currentY, switchesContainerWidth, controlsHeight)];
-    switchesContainer.backgroundColor = ECHO_COLOR_CARD_BG;
-    switchesContainer.layer.cornerRadius = 12;
-    [contentView addSubview:switchesContainer];
+// AI Prompt 按钮
+UIButton *promptButton = createButton(@"AI Prompt: 开启", @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, ECHO_COLOR_PROMPT_ON);
+promptButton.frame = CGRectMake(padding, currentY, topSwitchWidth, 44);
+// <<<<<<<<<<<< Bug修复：初始化时同步状态 >>>>>>>>>>>>>
+promptButton.selected = g_shouldIncludeAIPromptHeader; 
+[contentView addSubview:promptButton];
 
-    // 3. 在容器内创建开关和标签
-    CGFloat switchWidth = 51;
-    CGFloat switchHeight = 31;
-    CGFloat innerPadding = (switchesContainer.bounds.size.width - 2 * switchWidth) / 3.0; // 动态计算内部间距
-    
-    // "仅行年" 开关
-    UISwitch *xingNianSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(innerPadding, (controlsHeight - switchHeight) / 2.0, switchWidth, switchHeight)];
-    xingNianSwitch.on = g_shouldExtractXingNianOnly;
-    xingNianSwitch.tag = 1; // 标记为行年开关
-    [xingNianSwitch addTarget:self action:@selector(toggleNianmingExtraction:) forControlEvents:UIControlEventValueChanged];
-    [switchesContainer addSubview:xingNianSwitch];
-    
-    // "仅本命" 开关
-    UISwitch *benMingSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(innerPadding * 2 + switchWidth, (controlsHeight - switchHeight) / 2.0, switchWidth, switchHeight)];
-    benMingSwitch.on = g_shouldExtractBenMingOnly;
-    benMingSwitch.tag = 2; // 标记为本命开关
-    [benMingSwitch addTarget:self action:@selector(toggleNianmingExtraction:) forControlEvents:UIControlEventValueChanged];
-    [switchesContainer addSubview:benMingSwitch];
+// 新增：本命开关按钮 (定义一个新的 tag)
+static const NSInteger kButtonTag_BenMingToggle = 995; 
+UIButton *benMingButton = createButton(@"本命: 开启", @"person.text.rectangle", kButtonTag_BenMingToggle, ECHO_COLOR_PROMPT_ON);
+benMingButton.frame = CGRectMake(padding + topSwitchWidth + 10, currentY, benMingSwitchWidth, 44);
+benMingButton.selected = g_shouldExtractBenMing; // 初始化状态
+[contentView addSubview:benMingButton];
 
-    currentY += controlsHeight + 10;
+currentY += 44 + 10;
+// ...
     
     UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
     textViewContainer.backgroundColor = ECHO_COLOR_CARD_BG;
@@ -3231,6 +3186,7 @@ else if (g_s2_isExtractingKeChuanDetail) {
     }
 
     __weak typeof(self) weakSelf = self;
+    static const NSInteger kButtonTag_BenMingToggle = 995;
     switch (sender.tag) {
         case kButtonTag_ClearInput: {
             g_questionTextView.text = @"";
@@ -3238,8 +3194,27 @@ else if (g_s2_isExtractingKeChuanDetail) {
             [g_questionTextView resignFirstResponder];
             break;
         }
-        case kButtonTag_AIPromptToggle: { sender.selected = !sender.selected; g_shouldIncludeAIPromptHeader = sender.selected; NSString *status = g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"; NSString *title = [NSString stringWithFormat:@"AI Prompt: %@", status]; [sender setAttributedTitle:nil forState:UIControlStateNormal]; [sender setTitle:title forState:UIControlStateNormal]; sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; LogMessage(EchoLogTypeInfo, @"[设置] AI Prompt 已 %@。", status); break; }
-        case kButtonTag_ClosePanel: [self createOrShowMainControlPanel]; break;
+        case kButtonTag_AIPromptToggle: { 
+            sender.selected = !sender.selected; 
+            g_shouldIncludeAIPromptHeader = sender.selected; 
+            NSString *status = g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"; 
+            NSString *title = [NSString stringWithFormat:@"AI Prompt: %@", status]; 
+            [sender setTitle:title forState:UIControlStateNormal]; 
+            sender.backgroundColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY; 
+            LogMessage(EchoLogTypeInfo, @"[设置] AI Prompt 已 %@。", status); 
+            break; 
+        }
+        case kButtonTag_BenMingToggle: {
+            sender.selected = !sender.selected;
+            g_shouldExtractBenMing = sender.selected;
+            NSString *status = g_shouldExtractBenMing ? @"开启" : @"关闭";
+            NSString *title = [NSString stringWithFormat:@"本命: %@", status];
+            [sender setTitle:title forState:UIControlStateNormal];
+            sender.backgroundColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_AUX_GREY;
+            LogMessage(EchoLogTypeInfo, @"[设置] 本命信息提取已 %@。", status);
+            break;
+        }
+       case kButtonTag_ClosePanel: [self createOrShowMainControlPanel]; break;
         case kButtonTag_SendLastReportToAI: { NSString *lastReport = g_lastGeneratedReport; if (lastReport && lastReport.length > 0) { [self presentAIActionSheetWithReport:lastReport]; } else { LogMessage(EchoLogTypeWarning, @"课盘缓存为空，请先推衍。"); [self showEchoNotificationWithTitle:@"操作无效" message:@"尚未生成任何课盘。"]; } break; }
         case kButtonTag_StandardReport: [self executeSimpleExtraction]; break;
         case kButtonTag_DeepDiveReport: [self executeCompositeExtraction]; break;
@@ -4188,8 +4163,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-
-
 
 
 
