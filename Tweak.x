@@ -1608,12 +1608,14 @@ static NSString* extractValueAfterKeyword(NSString *line, NSString *keyword) {
     return [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 // =========================================================================
-// ↓↓↓ 使用这个最终修正版，它能精确处理 “，正” 这类残留注解 ↓↓↓
+// ↓↓↓ 使用这个最终修正版，它能精确处理重复神煞并只保留最短版本 ↓↓↓
 // =========================================================================
 #pragma mark - Nianming Detail Post-Processor
 
 /**
- @brief 将从App中提取的“行年参数”原始文本块，解析成结构化的键值对格式。
+ @brief (最终修正版) 将从App中提取的“行年参数”原始文本块，解析成结构化的键值对格式。
+        - 解决了神煞重复的问题，采用“最短优先”原则，确保每个神煞只输出一次且为最简洁的版本。
+        - 优化了行年/本命的分割逻辑，使其更健壮。
  @param rawParamBlock 单个参数（如“- 参数 1 ...”）的完整描述文本。
  @return 格式化后的字符串，带有缩进和清晰的标签。
 */
@@ -1622,28 +1624,36 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
 
     NSMutableString *structuredResult = [NSMutableString string];
     
-    // 1. 分离摘要和格局
+    // 1. 分离摘要和格局 (保持不变)
     NSString *summaryText = @"";
-    NSString *gejuText = @"";
     NSRange summaryRange = [rawParamBlock rangeOfString:@"摘要:"];
-    NSRange gejuRange = [rawParamBlock rangeOfString:@"格局:"];
-
-    if (summaryRange.location != NSNotFound && gejuRange.location != NSNotFound) {
-        summaryText = [rawParamBlock substringWithRange:NSMakeRange(summaryRange.location + summaryRange.length, gejuRange.location - (summaryRange.location + summaryRange.length))];
-        gejuText = [rawParamBlock substringFromIndex:gejuRange.location + gejuRange.length];
-    } else if (summaryRange.location != NSNotFound) {
-        summaryText = [rawParamBlock substringFromIndex:summaryRange.location + summaryRange.length];
+    if (summaryRange.location != NSNotFound) {
+        // 安全地截取，避免越界
+        NSString *temp = [rawParamBlock substringFromIndex:summaryRange.location + summaryRange.length];
+        NSRange gejuRange = [temp rangeOfString:@"格局:"];
+        if (gejuRange.location != NSNotFound) {
+            summaryText = [temp substringToIndex:gejuRange.location];
+        } else {
+            summaryText = temp;
+        }
     }
-    
     summaryText = [summaryText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    gejuText = [gejuText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-    // 2. 解析摘要部分 (行年 和 本命)
-    NSArray *parts = [summaryText componentsSeparatedByString:@"本命在"];
-    NSString *xingNianPart = parts.count > 0 ? parts[0] : @"";
-    NSString *benMingPart = parts.count > 1 ? [NSString stringWithFormat:@"本命在%@", parts[1]] : @"";
+    // 2. 优化行年/本命的分割逻辑
+    NSString *benMingSeparator = @"本命在";
+    NSRange benMingRange = [summaryText rangeOfString:benMingSeparator];
+    
+    NSString *xingNianPart = summaryText;
+    NSString *benMingPart = @"";
 
+    if (benMingRange.location != NSNotFound) {
+        xingNianPart = [summaryText substringToIndex:benMingRange.location];
+        benMingPart = [summaryText substringFromIndex:benMingRange.location];
+    }
+
+    // 3. 定义一个可重用的解析Block
     void (^parseDetailPart)(NSString*, NSString*) = ^(NSString *title, NSString *partText) {
+        partText = [partText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if (partText.length == 0) return;
         
         [structuredResult appendFormat:@"\n  // %@\n", title];
@@ -1686,51 +1696,69 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
         NSRange fayongRange = [partText rangeOfString:@"与发用之关系:"];
         if (fayongRange.location != NSNotFound) {
             NSString *fayongText = [partText substringFromIndex:fayongRange.location + fayongRange.length];
-            NSRange shenshaRange = [fayongText rangeOfString:@"所值神煞:"];
-            if (shenshaRange.location != NSNotFound) {
-                fayongText = [fayongText substringToIndex:shenshaRange.location];
+            NSRange shenshaRangeInFayong = [fayongText rangeOfString:@"所值神煞:"];
+            if (shenshaRangeInFayong.location != NSNotFound) {
+                fayongText = [fayongText substringToIndex:shenshaRangeInFayong.location];
             }
             [structuredResult appendFormat:@"  - 发用关系: %@\n", [fayongText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
         }
 
+        // <<<<<<<<<<<< 核心修改区域 START >>>>>>>>>>>>>
         NSRange shenshaRange = [partText rangeOfString:@"所值神煞:"];
         if (shenshaRange.location != NSNotFound) {
             NSString *shenshaText = [[partText substringFromIndex:shenshaRange.location + shenshaRange.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (shenshaText.length > 0) {
-                 [structuredResult appendString:@"  - 所值神煞:\n"];
-                                  NSArray *shenshas = [shenshaText componentsSeparatedByString:@"值"];
-                 for (NSString *ss in shenshas) {
-                     if (ss.length > 0) {
-                         NSString *cleanSs = [ss stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                         
-                         // <<<<<<<<<<<< 核心修改点 START >>>>>>>>>>>>>
-                         // 如果这一行包含了详细解释（标志是中文逗号），就直接跳过它
-                         if ([cleanSs containsString:@"，"]) {
-                             continue;
-                         }
-                         // <<<<<<<<<<<< 核心修改点 END >>>>>>>>>>>>>>>
+                [structuredResult appendString:@"  - 所值神煞:\n"];
+                
+                NSMutableDictionary *uniqueShenshas = [NSMutableDictionary dictionary];
+                NSArray *shenshas = [shenshaText componentsSeparatedByString:@"值"];
+                
+                // 1. 遍历所有神煞，优胜劣汰，只保留最短的版本
+                for (NSString *ss in shenshas) {
+                    if (ss.length == 0) continue;
+                    
+                    NSString *cleanSs = [ss stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    
+                    // 提取核心名字作为Key（例如 "太岁，则..." 的key是 "太岁"）
+                    NSRange punctuationRange = [cleanSs rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"，。"]];
+                    NSString *key = (punctuationRange.location != NSNotFound) ? [cleanSs substringToIndex:punctuationRange.location] : cleanSs;
+                    key = [key stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    
+                    if (key.length == 0) continue;
 
-                         // 对保留下来的简洁条目进行清理
-                         NSRange junkRange = [cleanSs rangeOfString:@"///"];
-                         if (junkRange.location != NSNotFound) {
-                             cleanSs = [cleanSs substringToIndex:junkRange.location];
-                             cleanSs = [cleanSs stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                         }
-                         
-                         if ([cleanSs hasSuffix:@","] || [cleanSs hasSuffix:@"，"] || [cleanSs hasSuffix:@"。"] || [cleanSs hasSuffix:@"."]) {
-                             cleanSs = [cleanSs substringToIndex:cleanSs.length - 1];
-                         }
-                         if (![cleanSs hasSuffix:@"。"]) {
-                             cleanSs = [cleanSs stringByAppendingString:@"。"];
-                         }
-                         
-                         [structuredResult appendFormat:@"    - 值%@\n", cleanSs];
-                     }
-                 }
+                    // 如果这个key还没出现过，或者新来的这个版本更短，就更新字典
+                    NSString *existingEntry = uniqueShenshas[key];
+                    if (!existingEntry || cleanSs.length < existingEntry.length) {
+                        uniqueShenshas[key] = cleanSs;
+                    }
+                }
+                
+                // 2. 格式化并输出最终胜出的神煞
+                for (NSString *finalSs in [uniqueShenshas allValues]) {
+                    NSString *processedSs = [finalSs copy];
+                    
+                    // 清理注释和多余标点
+                    NSRange junkRange = [processedSs rangeOfString:@"///"];
+                    if (junkRange.location != NSNotFound) {
+                        processedSs = [processedSs substringToIndex:junkRange.location];
+                    }
+                    processedSs = [processedSs stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+                    if ([processedSs hasSuffix:@","] || [processedSs hasSuffix:@"，"] || [processedSs hasSuffix:@"。"] || [processedSs hasSuffix:@"."]) {
+                        processedSs = [processedSs substringToIndex:processedSs.length - 1];
+                    }
+                    if (![processedSs hasSuffix:@"。"]) {
+                        processedSs = [processedSs stringByAppendingString:@"。"];
+                    }
+                    
+                    [structuredResult appendFormat:@"    - 值%@\n", processedSs];
+                }
             }
         }
+        // <<<<<<<<<<<< 核心修改区域 END >>>>>>>>>>>>>
     };
     
+    // 4. 执行解析
     parseDetailPart(@"行年信息", xingNianPart);
     parseDetailPart(@"本命信息", benMingPart);
 
@@ -4093,6 +4121,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
