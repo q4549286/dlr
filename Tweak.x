@@ -1698,31 +1698,31 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
             NSString *shenshaText = [[partText substringFromIndex:shenshaRange.location + shenshaRange.length] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (shenshaText.length > 0) {
                  [structuredResult appendString:@"  - 所值神煞:\n"];
-                 NSArray *shenshas = [shenshaText componentsSeparatedByString:@"值"];
+                                  NSArray *shenshas = [shenshaText componentsSeparatedByString:@"值"];
                  for (NSString *ss in shenshas) {
                      if (ss.length > 0) {
-                         // --- **START: NEW, MORE PRECISE CLEANUP LOGIC** ---
                          NSString *cleanSs = [ss stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                          
-                         // Step 1: Remove debug comments like "///..."
+                         // <<<<<<<<<<<< 核心修改点 START >>>>>>>>>>>>>
+                         // 如果这一行包含了详细解释（标志是中文逗号），就直接跳过它
+                         if ([cleanSs containsString:@"，"]) {
+                             continue;
+                         }
+                         // <<<<<<<<<<<< 核心修改点 END >>>>>>>>>>>>>>>
+
+                         // 对保留下来的简洁条目进行清理
                          NSRange junkRange = [cleanSs rangeOfString:@"///"];
                          if (junkRange.location != NSNotFound) {
                              cleanSs = [cleanSs substringToIndex:junkRange.location];
                              cleanSs = [cleanSs stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                          }
                          
-                         // Step 2: Remove short, trailing annotations like "，正"
-                         NSRegularExpression *annotationRegex = [NSRegularExpression regularExpressionWithPattern:@"，\\s*\\S{1,2}$" options:0 error:nil];
-                         cleanSs = [annotationRegex stringByReplacingMatchesInString:cleanSs options:0 range:NSMakeRange(0, cleanSs.length) withTemplate:@""];
-                         
-                         // Step 3: Normalize final punctuation for consistency
                          if ([cleanSs hasSuffix:@","] || [cleanSs hasSuffix:@"，"] || [cleanSs hasSuffix:@"。"] || [cleanSs hasSuffix:@"."]) {
                              cleanSs = [cleanSs substringToIndex:cleanSs.length - 1];
                          }
                          if (![cleanSs hasSuffix:@"。"]) {
                              cleanSs = [cleanSs stringByAppendingString:@"。"];
                          }
-                         // --- **END: NEW, MORE PRECISE CLEANUP LOGIC** ---
                          
                          [structuredResult appendFormat:@"    - 值%@\n", cleanSs];
                      }
@@ -4093,6 +4093,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
