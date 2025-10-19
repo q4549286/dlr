@@ -1726,7 +1726,7 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
         if (changshengMatch) {
             [structuredResult appendFormat:@"  - 长生: %@\n", [partText substringWithRange:[changshengMatch rangeAtIndex:1]]];
         }
-        
+                /* 
         NSRegularExpression *tianjiangDescRegex = [NSRegularExpression regularExpressionWithPattern:@"其上神乘.*?为(.*?)[。|\\s]([^\\(]*?与发用之关系|[^\\(]*?所值神煞|$)" options:0 error:nil];
         NSTextCheckingResult *tianjiangDescMatch = [tianjiangDescRegex firstMatchInString:partText options:0 range:NSMakeRange(0, partText.length)];
         if (tianjiangDescMatch) {
@@ -1746,7 +1746,7 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
 
             [structuredResult appendFormat:@"  - 乘将关系: 为%@\n", [fullRelationText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
         }
-        
+          */ // <--- 在这里加上注释结尾
         NSRange fayongRange = [partText rangeOfString:@"与发用之关系:"];
         if (fayongRange.location != NSNotFound) {
             NSString *fayongText = [partText substringFromIndex:fayongRange.location + fayongRange.length];
@@ -4262,6 +4262,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
