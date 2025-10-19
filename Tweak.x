@@ -3850,11 +3850,12 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 // =========================================================================
 // ↓↓↓ 使用这个完整、修正后的 v2.1 版本，替换您现有的整个函数 ↓↓↓
 // =========================================================================
-#pragma mark - KeChuan Detail Post-Processor (v2.1)
+#pragma mark - KeChuan Detail Post-Processor (v2.2 - Mubei Fix)
 
 /**
- @brief (v2.1) 将从App中提取的“课传流注”原始文本块，解析成结构化的键值对格式。
-        采用“模式识别+正则过滤”双引擎，精准移除所有解释性断语。
+ @brief (v2.2) 将从App中提取的“课传流注”原始文本块，解析成结构化的键值对格式。
+        - 采用“模式识别+正则过滤”双引擎，精准移除所有解释性断语。
+        - 新增对“墓”关系的提取。
  @param rawText 单个对象（如“初传 - 地支(寅)”）的完整描述文本。
  @param objectTitle 该对象的标题，用于提供上下文。
  @return 格式化后的、纯净客观关系的字符串。
@@ -3869,7 +3870,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     BOOL isTianJiangObject = (objectTitle && [objectTitle containsString:@"天将"]);
 
     // --- 阶段一：提取核心状态 (旺衰, 长生) ---
-    // (这部分逻辑保持不变)
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
@@ -3892,9 +3892,10 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     }
 
     // --- 阶段二：处理所有其他关系，并应用强力过滤引擎 ---
+    // <<<<<<<<<<<< 核心修正点：在这里添加了 "墓 :" 关键字 >>>>>>>>>>>>>
     NSDictionary<NSString *, NSString *> *keywordMap = @{
         @"乘": @"乘将关系", @"临": @"临宫状态",
-        @"遁干": @"遁干", @"德 :": @"德S+", @"空 :": @"空", @"合 :": @"合",
+        @"遁干": @"遁干", @"德 :": @"德S+", @"墓 :": @"墓", @"空 :": @"空", @"合 :": @"合",
         @"刑 :": @"刑", @"冲 :": @"冲", @"害 :": @"害", @"破 :": @"破",
         @"阳神为": @"阳神", @"阴神为": @"阴神", @"杂象": @"杂象",
     };
@@ -3914,7 +3915,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
                 NSString *label = keywordMap[keyword];
 
-                // --- START: 全新过滤引擎 v2.1 ---
+                // --- START: 过滤引擎 v2.1 ---
                 if ([label isEqualToString:@"刑"] || [label isEqualToString:@"冲"] || [label isEqualToString:@"害"] || [label isEqualToString:@"破"]) {
                     NSArray *parts = [value componentsSeparatedByString:@" "];
                     if (parts.count > 0) value = parts[0];
@@ -3937,7 +3938,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                 else if ([label isEqualToString:@"杂象"]) {
                     inZaxiang = YES;
                 }
-                // --- END: 全新过滤引擎 v2.1 ---
+                // --- END: 过滤引擎 v2.1 ---
                 
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" ,，。"]];
                 if (value.length > 0) {
@@ -3952,6 +3953,13 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
             }
         }
     }
+    
+    while ([structuredResult hasSuffix:@"\n\n"]) {
+        [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)];
+    }
+
+    return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
     
     while ([structuredResult hasSuffix:@"\n\n"]) {
         [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)];
@@ -4256,6 +4264,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
