@@ -3894,10 +3894,10 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     // --- 阶段二：处理所有其他关系，并应用强力过滤引擎 ---
     // <<<<<<<<<<<< 核心修正点：在这里添加了 "墓 :" 关键字 >>>>>>>>>>>>>
     NSDictionary<NSString *, NSString *> *keywordMap = @{
-        @"乘": @"乘将关系", @"临": @"临宫状态",
-        @"遁干": @"遁干", @"德 :": @"德S+", @"墓 :": @"墓A+", @"空 :": @"空A+", @"合 :": @"合",
-        @"刑 :": @"刑B", @"冲 :": @"冲A-", @"害 :": @"害B", @"破 :": @"破C-",
-        @"阳神为": @"阳神", @"阴神为": @"阴神", @"杂象": @"杂象",
+        @"乘": @"乘将关系A+", @"临": @"临宫状态A+",
+        @"遁干": @"遁干A+", @"德 :": @"德S+", @"墓 :": @"墓A+", @"空 :": @"空A+", @"合 :": @"合A+",
+        @"刑 :": @"刑C", @"冲 :": @"冲B+", @"害 :": @"害B", @"破 :": @"破C-",
+        @"阳神为": @"阳神A+", @"阴神为": @"阴神A+", @"杂象": @"杂象",
     };
     
     BOOL inZaxiang = NO;
@@ -4258,6 +4258,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
