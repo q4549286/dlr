@@ -3894,9 +3894,9 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     // --- 阶段二：处理所有其他关系，并应用强力过滤引擎 ---
     NSDictionary<NSString *, NSString *> *keywordMap = @{
         @"乘": @"乘将关系", @"临": @"临宫状态",
-        @"遁干": @"遁干", @"德 :": @"德S+", @"空 :": @"空", @"合 :": @"合",
-        @"刑 :": @"刑", @"冲 :": @"冲", @"害 :": @"害", @"破 :": @"破",
-        @"阳神为": @"阳神", @"阴神为": @"阴神", @"杂象": @"杂象",
+        @"遁干": @"遁干A+", @"德 :": @"德S+", @"空 :": @"空A+",  @"墓 :": @"墓A+",@"合 :": @"合A+",
+        @"刑 :": @"刑C-", @"冲 :": @"冲B+", @"害 :": @"害C-", @"破 :": @"破D+",
+        @"阳神为": @"阳神A+", @"阴神为": @"阴神A+", @"杂象": @"杂象B+",
     };
     
     BOOL inZaxiang = NO;
@@ -4256,6 +4256,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
