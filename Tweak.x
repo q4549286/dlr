@@ -3960,13 +3960,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
 
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-    
-    while ([structuredResult hasSuffix:@"\n\n"]) {
-        [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)];
-    }
 
-    return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-}
 // =========================================================================
 // ↓↓↓ 使用这个完整、修正后的版本替换您现有的函数 ↓↓↓
 // =========================================================================
@@ -4264,6 +4258,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
