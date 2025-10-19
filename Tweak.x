@@ -3895,7 +3895,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     // <<<<<<<<<<<< 核心修正点：在这里添加了 "墓 :" 关键字 >>>>>>>>>>>>>
     NSDictionary<NSString *, NSString *> *keywordMap = @{
         @"乘": @"乘将关系", @"临": @"临宫状态",
-        @"遁干": @"遁干", @"德 :": @"德S+", @"墓 :": @"墓", @"空 :": @"空", @"合 :": @"合",
+        @"遁干": @"遁干", @"德 :": @"德S+", @"墓 :": @"墓A+", @"空 :": @"空A+", @"合 :": @"合",
         @"刑 :": @"刑", @"冲 :": @"冲", @"害 :": @"害", @"破 :": @"破",
         @"阳神为": @"阳神", @"阴神为": @"阴神", @"杂象": @"杂象",
     };
@@ -4264,6 +4264,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
