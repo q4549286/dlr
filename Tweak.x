@@ -3895,7 +3895,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     NSDictionary<NSString *, NSString *> *keywordMap = @{
         @"乘": @"乘将关系", @"临": @"临宫状态",
         @"遁干": @"遁干A+", @"德 :": @"德S+", @"空 :": @"空A+",  @"墓 :": @"墓A+",@"合 :": @"合A+",
-        @"刑 :": @"刑C-", @"冲 :": @"冲B+", @"害 :": @"害C-", @"破 :": @"破D+",
+        @"刑 :": @"刑C-", @"冲 :": @"冲B+", @"害 :": @"害C-", @"破 :": @"破D",
         @"阳神为": @"阳神A+", @"阴神为": @"阴神A+", @"杂象": @"杂象B+",
     };
     
@@ -3914,12 +3914,12 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
                 NSString *label = keywordMap[keyword];
 
-                // --- START: 全新过滤引擎 v2.1 ---
-                if ([label isEqualToString:@"刑"] || [label isEqualToString:@"冲"] || [label isEqualToString:@"害"] || [label isEqualToString:@"破"]) {
+              // --- START: 全新过滤引擎 v2.1 (已同步更新为前缀匹配) ---
+                if ([label hasPrefix:@"刑"] || [label hasPrefix:@"冲"] || [label hasPrefix:@"害"] || [label hasPrefix:@"破"]) {
                     NSArray *parts = [value componentsSeparatedByString:@" "];
                     if (parts.count > 0) value = parts[0];
                 }
-                else if ([label isEqualToString:@"乘将关系"] || [label isEqualToString:@"临宫状态"]) {
+                else if ([label hasPrefix:@"乘将关系"] || [label hasPrefix:@"临宫状态"]) {
                     // 移除从句首开始，直到第一个句号（包括句号）之后的所有内容
                     NSRange periodRange = [value rangeOfString:@"。"];
                     if (periodRange.location != NSNotFound) {
@@ -3929,12 +3929,12 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                     NSRegularExpression *trailingRegex = [NSRegularExpression regularExpressionWithPattern:@"，(得四时|此曰|故|实难).*$" options:0 error:nil];
                     value = [trailingRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
                 }
-                else if ([label isEqualToString:@"阳神"] || [label isEqualToString:@"阴神"]) {
+                else if ([label hasPrefix:@"阳神"] || [label hasPrefix:@"阴神"]) {
                     // 使用正则表达式，全局移除所有“逗号+解释性关键词+任意内容”的组合
                     NSRegularExpression *interpRegex = [NSRegularExpression regularExpressionWithPattern:@"，(主|此主|此可|此为)[^。]*" options:0 error:nil];
                     value = [interpRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
                 }
-                else if ([label isEqualToString:@"杂象"]) {
+                else if ([label hasPrefix:@"杂象"]) {
                     inZaxiang = YES;
                 }
                 // --- END: 全新过滤引擎 v2.1 ---
@@ -4256,6 +4256,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
