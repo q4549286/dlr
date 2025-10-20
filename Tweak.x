@@ -4307,34 +4307,27 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
                 NSString *label = keywordMap[keyword];
 
-              // --- START: 全新过滤引擎 v2.1 (已同步更新为前缀匹配) ---
+                 // <<<<<<<<<<<<<<< 核心修改点：强力过滤引擎 >>>>>>>>>>>>>>>>>
+                // 1. 定义一个通用的结论性断语正则表达式
+                NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知).*$" options:0 error:nil];
+                
+                // 2. 无条件对 value 应用过滤
+                value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
+                
+                // 3. 对特定关系（如刑冲）进行额外清理，只保留第一个词
                 if ([label hasPrefix:@"刑"] || [label hasPrefix:@"冲"] || [label hasPrefix:@"害"] || [label hasPrefix:@"破"]) {
                     NSArray *parts = [value componentsSeparatedByString:@" "];
                     if (parts.count > 0) value = parts[0];
                 }
-                else if ([label hasPrefix:@"乘将关系"] || [label hasPrefix:@"临宫状态"]) {
-                    // 移除从句首开始，直到第一个句号（包括句号）之后的所有内容
-                    NSRange periodRange = [value rangeOfString:@"。"];
-                    if (periodRange.location != NSNotFound) {
-                        value = [value substringToIndex:periodRange.location];
-                    }
-                    // 移除常见的解释性从句
-                    NSRegularExpression *trailingRegex = [NSRegularExpression regularExpressionWithPattern:@"，(得四时|此曰|故|实难).*$" options:0 error:nil];
-                    value = [trailingRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
-                }
-                else if ([label hasPrefix:@"阳神"] || [label hasPrefix:@"阴神"]) {
-                    // 使用正则表达式，全局移除所有“逗号+解释性关键词+任意内容”的组合
-                    NSRegularExpression *interpRegex = [NSRegularExpression regularExpressionWithPattern:@"，(主|此主|此可|此为)[^。]*" options:0 error:nil];
-                    value = [interpRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
-                }
-                else if ([label hasPrefix:@"杂象"]) {
+                // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+                if ([label hasPrefix:@"杂象"]) {
                     inZaxiang = YES;
                 }
-                // --- END: 全新过滤引擎 v2.1 ---
-                
+
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" ,，。"]];
                 if (value.length > 0) {
-                     if ([label isEqualToString:@"杂象"]) {
+                     if ([label isEqualToString:@"杂象B+"]) { // 注意这里要用字典里的原始值
                          [structuredResult appendString:@"  - 杂象(只参与取象禁止对吉凶产生干涉):\n"];
                      } else {
                          [structuredResult appendFormat:@"  - %@: %@\n", label, value];
@@ -4649,6 +4642,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
