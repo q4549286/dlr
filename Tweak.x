@@ -2397,6 +2397,147 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
     
     return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+#pragma mark - ShenSha Filtering Parser (V1.0)
+
+/**
+ @brief (全新) 解析、分类并格式化原始的神煞数据块。
+ @param rawContent 从App中提取的“神煞详情”原始文本。
+ @return 按照预设分类和格式美化后的神煞报告。
+*/
+static NSString* parseAndFilterShenSha(NSString *rawContent) {
+    if (!rawContent || rawContent.length == 0) return @"";
+
+    // ================== 1. 解析引擎：提取所有神煞及其地支 ==================
+    NSMutableDictionary<NSString *, NSString *> *parsedShenShaData = [NSMutableDictionary dictionary];
+    
+    // 预处理：统一分隔符
+    NSString *cleanedContent = [rawContent stringByReplacingOccurrencesOfString:@"\n" withString:@","];
+    cleanedContent = [cleanedContent stringByReplacingOccurrencesOfString:@"|" withString:@","];
+    
+    NSArray<NSString *> *allItems = [cleanedContent componentsSeparatedByString:@","];
+    
+    for (NSString *item in allItems) {
+        NSString *trimmedItem = [item stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (trimmedItem.length == 0 || [trimmedItem hasPrefix:@"//"]) continue;
+
+        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(.*?)\\s*\\((.*?)\\)" options:0 error:nil];
+        NSTextCheckingResult *match = [regex firstMatchInString:trimmedItem options:0 range:NSMakeRange(0, trimmedItem.length)];
+
+        NSString *name = @"";
+        NSString *branch = @"";
+
+        if (match) {
+            name = [trimmedItem substringWithRange:[match rangeAtIndex:1]];
+            branch = [trimmedItem substringWithRange:[match rangeAtIndex:2]];
+        } else {
+            // 处理没有括号的条目，如 "天德合:"
+            name = [trimmedItem stringByReplacingOccurrencesOfString:@":" withString:@""];
+        }
+
+        name = [name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        if (name.length == 0) continue;
+
+        // 特殊处理官符，合并年、月信息
+        NSString *keyName = name;
+        NSString *prefix = @"";
+        if ([name hasPrefix:@"年"]) {
+            keyName = [name substringFromIndex:1];
+            prefix = @"年";
+        } else if ([name hasPrefix:@"月"]) {
+            keyName = [name substringFromIndex:1];
+            prefix = @"月";
+        }
+
+        NSString *existingBranch = parsedShenShaData[keyName];
+        NSString *newBranchValue = branch.length > 0 ? [NSString stringWithFormat:@"%@%@", prefix, branch] : @"";
+
+        if (existingBranch) {
+            if (newBranchValue.length > 0) {
+                 parsedShenShaData[keyName] = [NSString stringWithFormat:@"%@, %@", existingBranch, newBranchValue];
+            }
+        } else {
+            if (newBranchValue.length > 0) {
+                parsedShenShaData[keyName] = newBranchValue;
+            } else {
+                // 对于没有地支的神煞，也记录下来，以备将来使用（此处用空字符串标记）
+                parsedShenShaData[keyName] = @""; 
+            }
+        }
+    }
+
+    // ================== 2. 分类规则库 ==================
+    NSArray<NSDictionary *> *categories = @[
+        @{
+            @"title": @"// 1. 通用核心神煞",
+            @"subsections": @[
+                @{ @"subtitle": @"- **吉神类:**", @"shenshas": @[@"天德", @"月德", @"天喜", @"天赦", @"皇恩"] },
+                @{ @"subtitle": @"- **驿马类:**", @"shenshas": @[@"岁马", @"月马", @"日马", @"天马"] },
+                @{ @"subtitle": @"- **凶煞类:**", @"shenshas": @[@"羊刃", @"飞刃", @"亡神", @"劫煞", @"灾煞"] },
+                @{ @"subtitle": @"- **状态类:**", @"shenshas": @[@"旬空", @"岁破", @"月破", @"太岁", @"岁禄", @"日禄", @"岁墓", @"支墓"] }
+            ]
+        },
+        @{
+            @"title": @"// 2. 专题功能神煞",
+            @"subsections": @[
+                @{ @"subtitle": @"**//官运事业**", @"shenshas": @[] }, // 这是一个纯标题行
+                @{ @"subtitle": @"- **正面信号:**", @"shenshas": @[@"岁禄", @"日禄", @"文星", @"天印", @"进神"] },
+                @{ @"subtitle": @"- **负面信号:**", @"shenshas": @[@"官符", @"岁虎", @"退神", @"日破碎"] },
+                @{ @"subtitle": @"**//财运求索**", @"shenshas": @[] },
+                @{ @"subtitle": @"- **正面信号:**", @"shenshas": @[@"天财", @"长生", @"福星"] },
+                @{ @"subtitle": @"- **负面信号:**", @"shenshas": @[@"大耗", @"小耗", @"天贼", @"盗神"] },
+                @{ @"subtitle": @"**//婚恋情感**", @"shenshas": @[] },
+                @{ @"subtitle": @"- **正面信号:**", @"shenshas": @[@"天喜", @"岁合", @"月合", @"日合", @"支合", @"生气"] },
+                @{ @"subtitle": @"- **负面信号:**", @"shenshas": @[@"桃花", @"咸池", @"孤辰", @"寡宿", @"月厌", @"奸门", @"奸私", @"日淫"] },
+                @{ @"subtitle": @"**//健康疾病**", @"shenshas": @[] },
+                @{ @"subtitle": @"- **正面信号:**", @"shenshas": @[@"天医", @"地医", @"天解", @"地解", @"解神"] },
+                @{ @"subtitle": @"- **负面信号:**", @"shenshas": @[@"病符", @"死符", @"死神", @"死气", @"丧门", @"吊客", @"血光", @"血支", @"披麻", @"孝服"] },
+                @{ @"subtitle": @"**//官非诉讼**", @"shenshas": @[] },
+                @{ @"subtitle": @"- **解厄信号:**", @"shenshas": @[@"天德", @"月德", @"岁德", @"天赦"] },
+                @{ @"subtitle": @"- **致讼信号:**", @"shenshas": @[@"官符", @"天刑", @"天狱", @"天网", @"岁虎"] },
+                @{ @"subtitle": @"**//阴私鬼神**", @"shenshas": @[] },
+                @{ @"subtitle": @"- **核心信号:**", @"shenshas": @[@"天鬼", @"月华盖", @"日华盖", @"天巫", @"地狱", @"五墓", @"哭神", @"伏骨"] }
+            ]
+        }
+    ];
+
+    // ================== 3. 格式化输出引擎 ==================
+    NSMutableString *finalReport = [NSMutableString string];
+    
+    for (NSDictionary *category in categories) {
+        [finalReport appendFormat:@"%@\n", category[@"title"]];
+        
+        for (NSDictionary *subsection in category[@"subsections"]) {
+            NSArray *shenshaNames = subsection[@"shenshas"];
+            NSString *subtitle = subsection[@"subtitle"];
+            
+            // 如果是纯标题行
+            if (shenshaNames.count == 0) {
+                [finalReport appendFormat:@"%@\n", subtitle];
+                continue;
+            }
+
+            NSMutableArray *foundShenShasInLine = [NSMutableArray array];
+            for (NSString *name in shenshaNames) {
+                NSString *branch = parsedShenShaData[name];
+                if (branch != nil) { // 检查是否存在，即使branch是空字符串
+                    // 如果branch是空字符串（来自像 "天德合:" 这样的条目），则不显示括号
+                    if (branch.length > 0) {
+                         [foundShenShasInLine addObject:[NSString stringWithFormat:@"%@(%@)", name, branch]];
+                    } else {
+                         [foundShenShasInLine addObject:name];
+                    }
+                }
+            }
+            
+            // 只有当该分类下有神煞时，才输出这一行
+            if (foundShenShasInLine.count > 0) {
+                [finalReport appendFormat:@"%@ %@\n", subtitle, [foundShenShasInLine componentsJoinedByString:@", "]];
+            }
+        }
+    }
+    
+    return [finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
     __block NSInteger sectionCounter = 4; // 动态板块计数器从4开始
@@ -2701,33 +2842,9 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
             content = [auxiliaryContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         }
         
-        if ([sectionInfo[@"key"] isEqualToString:@"神煞详情"]) {
-            NSMutableString *formattedShenSha = [NSMutableString string];
-            NSArray *lines = [content componentsSeparatedByString:@"\n"];
-            for (NSString *line in lines) {
-                NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                if ([trimmedLine hasPrefix:@"//"]) {
-                    [formattedShenSha appendFormat:@"%@\n", trimmedLine];
-                } else if (trimmedLine.length > 0) {
-                    NSArray *items = [trimmedLine componentsSeparatedByString:@"|"];
-                    NSMutableString *rowString = [NSMutableString string];
-                    NSInteger lineCharCount = 0;
-                    for (int i = 0; i < items.count; ++i) {
-                        NSString *item = [items[i] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                        if (lineCharCount + item.length > 35 && lineCharCount > 0) {
-                            [rowString appendString:@"\n  "];
-                            lineCharCount = 0;
-                        }
-                        [rowString appendString:item];
-                        lineCharCount += item.length + 2;
-                        if ((i + 1) < items.count) {
-                            [rowString appendString:@", "];
-                        }
-                    }
-                    [formattedShenSha appendFormat:@"- %@\n", rowString];
-                }
-            }
-            content = [formattedShenSha stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+      if ([sectionInfo[@"key"] isEqualToString:@"神煞详情"]) {
+            // 调用全新的神煞过滤解析器
+            content = parseAndFilterShenSha(content);
         }
 
         if (content.length > 0) {
@@ -4743,6 +4860,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
