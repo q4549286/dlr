@@ -2748,85 +2748,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
 // =========================================================================
 // ↓↓↓ 使用这个已同步更新顺序的版本替换您现有的函数 ↓↓↓
-// =========================================================================
-static NSString* generateContentSummaryLine(NSString *fullReport) {
-    if (!fullReport || fullReport.length == 0) return @"";
-    
-    // --- 调整：不再依赖硬编码的数字，只依赖标题文本 ---
-    // 键是报告中实际出现的标题文本，值是摘要中希望显示的名称
-    NSDictionary *keywordMap = @{
-        @"基础盘元": @"基础盘元",
-        @"核心盘架": @"核心盘架",
-        @"爻位详解": @"爻位详解",
-        @"神将详解": @"课传详解", // "神将详解"是"课传详解"的标题
-        @"格局总览": @"格局总览",
-        @"行年参数": @"行年参数",
-        @"神煞系统": @"神煞系统",
-        @"辅助系统": @"辅助系统",
-        @"七政四余": @"七政四余", // 新增对子项的识别
-        @"三宫时信息": @"三宫时信息", // 新增对子项的识别
-    };
 
-    // --- 调整：这里的顺序决定了摘要中各项的排列顺序 ---
-    NSArray *orderedDisplayNames = @[
-        @"基础盘元",
-        @"核心盘架",
-        @"爻位详解",
-        @"课传详解",
-        @"格局总览",
-        @"行年参数",
-        @"神煞系统",
-        @"辅助系统",
-        @"七政四余",
-        @"三宫时信息",
-    ];
-
-    NSMutableArray *includedSections = [NSMutableArray array];
-
-    // 遍历所有可能的板块名称
-    for (NSString *displayName in orderedDisplayNames) {
-        // 找到displayName对应的搜索关键词
-        NSString *searchKeyword = [[keywordMap allKeysForObject:displayName] firstObject];
-        if (!searchKeyword) continue;
-        
-        // 构建一个更灵活的搜索模式，例如 "// [任意数字]. [空格]神煞系统"
-        // 或者 "// [任意数字].[任意数字]. [空格]七政四余"
-        NSString *regexPattern = [NSString stringWithFormat:@"//\\s*\\d+(\\.\\d+)?\\.\\s*%@", searchKeyword];
-        
-        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:regexPattern options:0 error:nil];
-        NSTextCheckingResult *match = [regex firstMatchInString:fullReport options:0 range:NSMakeRange(0, fullReport.length)];
-        
-        if (match) {
-            // 确保不重复添加
-            if (![includedSections containsObject:displayName]) {
-                
-                // 优化逻辑：如果有了更具体的"课传详解"，就不要"爻位详解"
-                if ([displayName isEqualToString:@"课传详解"]) {
-                    [includedSections removeObject:@"爻位详解"];
-                }
-                
-                // 优化逻辑：如果有了"七政四余"或"三宫时信息"，就不要宽泛的"辅助系统"
-                if ([displayName isEqualToString:@"七政四余"] || [displayName isEqualToString:@"三宫时信息"]) {
-                     [includedSections removeObject:@"辅助系统"];
-                }
-                
-                // 优化逻辑：如果已经有了子项，就不要再添加父项
-                if ([displayName isEqualToString:@"辅助系统"] && 
-                   ([includedSections containsObject:@"七政四余"] || [includedSections containsObject:@"三宫时信息"])) {
-                    // Do nothing
-                } else {
-                    [includedSections addObject:displayName];
-                }
-            }
-        }
-    }
-
-    if (includedSections.count > 0) {
-        return [NSString stringWithFormat:@"// 以上内容包含： %@\n", [includedSections componentsJoinedByString:@"、"]];
-    }
-    
-    return @"";
-}
 // =========================================================================
 // ↓↓↓ 将这个全新的YAML生成器函数，完整地粘贴到您的代码中 ↓↓↓
 // =========================================================================
@@ -5036,6 +4958,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
