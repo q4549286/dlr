@@ -2909,9 +2909,8 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
 
     NSMutableDictionary *parsedEntities = [NSMutableDictionary dictionary];
 
-    // --- 第一遍：解析基础信息 (地支, 天将, 六亲) ---
-    // =========================================================================
-// ↓↓↓ 用这段修正后的代码块，替换 generateYAMLReport 函数中的对应部分 ↓↓↓
+// =========================================================================
+// ↓↓↓ 使用这个【已修复编译错误】的最终版本，替换 generateYAMLReport 函数中的对应部分 ↓↓↓
 // =========================================================================
 
     // --- 第一遍：解析基础信息 (地支, 天将, 六亲) ---
@@ -2939,12 +2938,11 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
         } else if ([sourceType isEqualToString:@"三传"]) {
             // 正则表达式现在只捕获地支、六亲、天将
             NSString *pattern = [NSString stringWithFormat:@"- %@: (\\S+) \\((\\S+), (\\S+)\\)", key];
-            data[@"地支"] = extractUsingRegex(pattern, sanChuanText);
             
-            // 使用辅助函数提取第二个和第三个捕获组
             NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
             NSTextCheckingResult *match = [regex firstMatchInString:sanChuanText options:0 range:NSMakeRange(0, sanChuanText.length)];
             if (match && match.numberOfRanges > 3) {
+                data[@"地支"] = [sanChuanText substringWithRange:[match rangeAtIndex:1]];
                 NSString *liuQinRaw = [sanChuanText substringWithRange:[match rangeAtIndex:2]];
                 data[@"六亲"] = [liuQinRaw stringByReplacingOccurrencesOfString:@"财" withString:@"妻财"];
                 data[@"天将"] = [sanChuanText substringWithRange:[match rangeAtIndex:3]];
@@ -2969,12 +2967,20 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
     // 补充阴神
     parsedEntities[@"日干"][@"阴神"] = parsedEntities[@"第二课"][@"地支"];
     parsedEntities[@"日支"][@"阴神"] = parsedEntities[@"第四课"][@"地支"];
-    // 四课的阴神，规则是 阳神的阴神 = 阴神本身。
-    // 例如：第一课(干阳)的阴神是第二课(干阴)。第二课(干阴)的阴神是其地支(戌)的阴神(丑)。
     parsedEntities[@"第一课"][@"阴神"] = parsedEntities[@"第二课"][@"地支"];
-    parsedEntities[@"第二课"][@"阴神"] = extractUsingRegex([NSString stringWithFormat:@"- 对象: 日阴 - 天将\\(太阴\\)[\\s\\S]*?阴神A\\+: (\\S+)", ], keChuanDetailText);
+    
+    // VVVVVVVVVVVVVVVVVVVV 修正点 VVVVVVVVVVVVVVVVVVVV
+    // 删除了 stringWithFormat 末尾多余的逗号
+    parsedEntities[@"第二课"][@"阴神"] = extractUsingRegex([NSString stringWithFormat:@"- 对象: 日阴 - 天将\\(太阴\\)[\\s\\S]*?阴神A\\+: (\\S+)"], keChuanDetailText);
+    // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     parsedEntities[@"第三课"][@"阴神"] = parsedEntities[@"第四课"][@"地支"];
-    parsedEntities[@"第四课"][@"阴神"] = extractUsingRegex([NSString stringWithFormat:@"- 对象: 辰阴 - 天将\\(螣蛇\\)[\\s\\S]*?阴神A\\+: (\\S+)", ], keChuanDetailText);
+
+    // VVVVVVVVVVVVVVVVVVVV 修正点 VVVVVVVVVVVVVVVVVVVV
+    // 删除了 stringWithFormat 末尾多余的逗号
+    parsedEntities[@"第四课"][@"阴神"] = extractUsingRegex([NSString stringWithFormat:@"- 对象: 辰阴 - 天将\\(螣蛇\\)[\\s\\S]*?阴神A\\+: (\\S+)"], keChuanDetailText);
+    // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 
     // 补充旺衰、长生、遁干、所临地盘和司法裁决
     for (NSString *entityId in parsedEntities.allKeys) {
@@ -3023,12 +3029,14 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
         // 司法前置裁决 (逻辑推导)
         NSMutableArray *juece = [NSMutableArray array];
         if ([detailBlock containsString:@"墓"] && [detailBlock containsString:@"冲"]) {
-             NSString *chongShen = extractUsingRegex(@"冲B\\+: .*冲.*?(\\S+)", detailBlock);
+             NSString *chongShen = @"?";
              // 修正逻辑：更准确地找到谁是冲神
              NSRegularExpression *chongRegex = [NSRegularExpression regularExpressionWithPattern:@"冲.*?(\\S+)" options:0 error:nil];
              NSArray<NSTextCheckingResult *> *matches = [chongRegex matchesInString:detailBlock options:0 range:NSMakeRange(0, detailBlock.length)];
              if (matches.count > 0) {
-                 chongShen = [detailBlock substringWithRange:[matches.firstObject rangeAtIndex:1]];
+                 // 冲神通常是地支，所以只取第一个字
+                 NSString *fullMatch = [detailBlock substringWithRange:[matches.firstObject rangeAtIndex:1]];
+                 chongShen = [fullMatch substringToIndex:1];
              }
             
             [juece addObject:[NSString stringWithFormat:@"%@墓，但见冲神(%@)，此墓被激活为库", [entityId containsString:@"支"] || [entityId containsString:@"辰"] ? @"支":@"干", chongShen]];
@@ -5057,6 +5065,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
