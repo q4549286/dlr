@@ -4323,13 +4323,14 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 }
 
 // =========================================================================
-// ↓↓↓ 使用这个完整、修正后的 v2.1 版本，替换您现有的整个函数 ↓↓↓
+// ↓↓↓ 使用这个完整、修正后的 v2.3 版本，替换您现有的整个函数 ↓↓↓
 // =========================================================================
-#pragma mark - KeChuan Detail Post-Processor (v2.1)
+#pragma mark - KeChuan Detail Post-Processor (v2.3 - User Feedback Refined)
 
 /**
- @brief (v2.1) 将从App中提取的“课传流注”原始文本块，解析成结构化的键值对格式。
-        采用“模式识别+正则过滤”双引擎，精准移除所有解释性断语。
+ @brief (v2.3) 将从App中提取的“课传流注”原始文本块，解析成结构化的键值对格式。
+        - 新增：根据用户反馈，为“日干”对象通用化解析“寄X得Y”格式的旺衰状态。
+        - 采用“模式识别+正则过滤”双引擎，精准移除所有解释性断语。
  @param rawText 单个对象（如“初传 - 地支(寅)”）的完整描述文本。
  @param objectTitle 该对象的标题，用于提供上下文。
  @return 格式化后的、纯净客观关系的字符串。
@@ -4343,11 +4344,27 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
 
     BOOL isTianJiangObject = (objectTitle && [objectTitle containsString:@"天将"]);
 
-    // --- 阶段一：提取核心状态 (旺衰, 长生) ---
-    // (这部分逻辑保持不变)
+    // --- 阶段一：提取核心状态 (旺衰, 长生, 及特殊状态) ---
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
+        
+        // <<<<<<<<<<<<<<<< 用户请求修改点 V2 START >>>>>>>>>>>>>>>>
+        // 特殊处理：如果对象是日干，寻找 "寄X得Y" 格式的旺衰描述
+        if (objectTitle && [objectTitle containsString:@"日干"]) {
+            NSRegularExpression *riGanWangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"^寄(.)得(.*)" options:0 error:nil];
+            NSTextCheckingResult *riGanMatch = [riGanWangshuaiRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
+
+            if (riGanMatch && [structuredResult rangeOfString:@"日干旺衰:"].location == NSNotFound) {
+                NSString *jiChen = [trimmedLine substringWithRange:[riGanMatch rangeAtIndex:1]]; // 捕获 X
+                NSString *deQi   = [trimmedLine substringWithRange:[riGanMatch rangeAtIndex:2]]; // 捕获 Y
+                
+                [structuredResult appendFormat:@"  - 日干旺衰: %@ (因寄%@)\n", deQi, jiChen];
+                [processedLines addObject:trimmedLine];
+                continue; // 处理完后跳到下一行
+            }
+        }
+        // <<<<<<<<<<<<<<<< 用户请求修改点 V2 END >>>>>>>>>>>>>>>>
         
         if (isTianJiangObject) {
             NSRegularExpression *wangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"(得|值)四时(.)气" options:0 error:nil];
@@ -4389,19 +4406,14 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
                 NSString *label = keywordMap[keyword];
 
-                 // <<<<<<<<<<<<<<< 核心修改点：强力过滤引擎 >>>>>>>>>>>>>>>>>
-                // 1. 定义一个通用的结论性断语正则表达式
+                // <<<<<<<<<<<<<<< 强力过滤引擎 >>>>>>>>>>>>>>>>>
                 NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知).*$" options:0 error:nil];
-                
-                // 2. 无条件对 value 应用过滤
                 value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
-                
-                // 3. 对特定关系（如刑冲）进行额外清理，只保留第一个词
                 if ([label hasPrefix:@"刑"] || [label hasPrefix:@"冲"] || [label hasPrefix:@"害"] || [label hasPrefix:@"破"]) {
                     NSArray *parts = [value componentsSeparatedByString:@" "];
                     if (parts.count > 0) value = parts[0];
                 }
-                // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
                 if ([label hasPrefix:@"杂象"]) {
                     inZaxiang = YES;
@@ -4409,7 +4421,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
 
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" ,，。"]];
                 if (value.length > 0) {
-                     if ([label isEqualToString:@"杂象B+"]) { // 注意这里要用字典里的原始值
+                     if ([label isEqualToString:@"杂象B+"]) {
                          [structuredResult appendString:@"  - 杂象(只参与取象禁止对吉凶产生干涉):\n"];
                      } else {
                          [structuredResult appendFormat:@"  - %@: %@\n", label, value];
@@ -4724,6 +4736,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
