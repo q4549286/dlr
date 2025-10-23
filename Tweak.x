@@ -2785,13 +2785,13 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
                 NSString *finalString = [formattedNianming stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 (finalString.length > 0) ? [NSString stringWithFormat:@"\n%@", finalString] : @"";
             }),
-            @"prefix": @"// 协议定位：此模块为【天命级】情报的唯一入口，其权限高于所有其他分析性模块。\n// 核心指令：本模块的结论将作为【第二序位：天命法则】的唯一依据，拥有对整个事态最终性质的最高定义权。\n"
+            @"prefix": @"// 协议定位：此模块为【天命级】情报的唯一入口，其权限高于所有其他分析性模块。\n// 核心指令：本模块的结论将作为【PartIII,Chapter 8: 个体化修正层】的唯一依据，拥有对整个事态最终性质的最高定义权。\n"
         },
         @{
             @"key": @"神煞详情", 
             @"title": @"神煞系统", 
             @"content": SafeString(reportData[@"神煞详情"]), 
-            @"prefix": @"// 协议定位：此模块为未经筛选的【原始神煞情报数据库】。\n// 核心指令：严禁对此处任何神煞进行即时解读或赋予权重。\n// 最终裁决权：所有信号的有效性、关联度与最终解释权，将唯一、强制地由【环境与变量层】协议，通过其内置的【三阶过滤】流程进行终审裁决。\n"
+            @"prefix": @"// 协议定位：此模块为未经筛选的【原始神煞情报数据库】。\n// 核心指令：严禁对此处任何神煞进行即时解读或赋予权重。\n// 最终裁决权：所有信号的有效性、关联度与最终解释权，将唯一、强制地由【PartIII,Chapter 9: 环境与变量层】协议，通过其内置的【三阶过滤】流程进行终审裁决。\n"
         },
         @{
             @"key": @"辅助系统", 
@@ -4860,6 +4860,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
