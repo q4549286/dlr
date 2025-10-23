@@ -4323,13 +4323,13 @@ LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部�
 }
 
 // =========================================================================
-// ↓↓↓ 使用这个完整、修正后的 v2.3 版本，替换您现有的整个函数 ↓↓↓
+// ↓↓↓ 使用这个完整、修正后的 v2.4 版本，替换您现有的整个函数 ↓↓↓
 // =========================================================================
-#pragma mark - KeChuan Detail Post-Processor (v2.3 - User Feedback Refined)
+#pragma mark - KeChuan Detail Post-Processor (v2.4 - User Feedback Final Fix)
 
 /**
- @brief (v2.3) 将从App中提取的“课传流注”原始文本块，解析成结构化的键值对格式。
-        - 新增：根据用户反馈，为“日干”对象通用化解析“寄X得Y”格式的旺衰状态。
+ @brief (v2.4) 将从App中提取的“课传流注”原始文本块，解析成结构化的键值对格式。
+        - 修正：根据用户反馈，采用更灵活的正则表达式，确保能正确捕获日干的“寄X得Y”旺衰状态。
         - 采用“模式识别+正则过滤”双引擎，精准移除所有解释性断语。
  @param rawText 单个对象（如“初传 - 地支(寅)”）的完整描述文本。
  @param objectTitle 该对象的标题，用于提供上下文。
@@ -4349,22 +4349,23 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
         
-        // <<<<<<<<<<<<<<<< 用户请求修改点 V2 START >>>>>>>>>>>>>>>>
+        // <<<<<<<<<<<<<<<< 用户请求修改点 V3 (最终修正) START >>>>>>>>>>>>>>>>
         // 特殊处理：如果对象是日干，寻找 "寄X得Y" 格式的旺衰描述
         if (objectTitle && [objectTitle containsString:@"日干"]) {
-            NSRegularExpression *riGanWangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"^寄(.)得(.*)" options:0 error:nil];
+            // 使用更灵活的正则表达式，它不要求行首匹配，并且智能地在标点符号前停止捕获
+            NSRegularExpression *riGanWangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"寄(.)得([^，。]*)" options:0 error:nil];
             NSTextCheckingResult *riGanMatch = [riGanWangshuaiRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
 
             if (riGanMatch && [structuredResult rangeOfString:@"日干旺衰:"].location == NSNotFound) {
-                NSString *jiChen = [trimmedLine substringWithRange:[riGanMatch rangeAtIndex:1]]; // 捕获 X
-                NSString *deQi   = [trimmedLine substringWithRange:[riGanMatch rangeAtIndex:2]]; // 捕获 Y
+                NSString *jiChen = [trimmedLine substringWithRange:[riGanMatch rangeAtIndex:1]]; // 捕获 "辰"
+                NSString *deQi   = [[trimmedLine substringWithRange:[riGanMatch rangeAtIndex:2]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]; // 捕获 "旺气" 并清理空格
                 
                 [structuredResult appendFormat:@"  - 日干旺衰: %@ (因寄%@)\n", deQi, jiChen];
                 [processedLines addObject:trimmedLine];
                 continue; // 处理完后跳到下一行
             }
         }
-        // <<<<<<<<<<<<<<<< 用户请求修改点 V2 END >>>>>>>>>>>>>>>>
+        // <<<<<<<<<<<<<<<< 用户请求修改点 V3 (最终修正) END >>>>>>>>>>>>>>>>
         
         if (isTianJiangObject) {
             NSRegularExpression *wangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"(得|值)四时(.)气" options:0 error:nil];
@@ -4736,6 +4737,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
