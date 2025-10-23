@@ -3156,35 +3156,6 @@ static NSString* formatYAMLReportAndAIHeader(NSDictionary* reportData) {
         return yamlReport;
     }
 }
-static NSString* formatFinalReport(NSDictionary* reportData) {
-    NSString *headerPrompt = g_shouldIncludeAIPromptHeader ? getAIPromptHeader() : @"";
-    NSString *structuredReport = generateStructuredReport(reportData);
-    NSString *summaryLine = generateContentSummaryLine(structuredReport);
-    
-    NSString *userQuestion = @"";
-    if (g_questionTextView && g_questionTextView.text.length > 0 && ![g_questionTextView.text isEqualToString:@"选填：输入您想问的具体问题"]) {
-        userQuestion = g_questionTextView.text;
-    }
-NSString *footerText = [NSString stringWithFormat:@"\n\n"
-                          "//=======================================================\n"
-                          "// 【大六壬大佬手机微信解课-衍生现实版】\n"
-                          "// 【情报任务书：[自动生成任务编号]】\n"
-                          "//=======================================================\n\n"
-                          "//-------------------【核心情报需求】-------------------\n\n"
-                          "//**【1. 核心问题 (用户原始输入)】**\n"
-                          "// %@\n\n",
-                          userQuestion];
-
-
-
-
-
-    if (headerPrompt.length > 0) {
-        return [NSString stringWithFormat:@"%@%@\n%@%@", headerPrompt, structuredReport, summaryLine, footerText];
-    } else {
-        return [NSString stringWithFormat:@"%@\n%@%@", structuredReport, summaryLine, footerText];
-    }
-}
 
 
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeTask, EchoLogTypeSuccess, EchoLogTypeWarning, EchoLogError };
@@ -5065,6 +5036,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
