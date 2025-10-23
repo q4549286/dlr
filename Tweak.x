@@ -2766,8 +2766,8 @@ static NSString* extractUsingRegex(NSString *pattern, NSString *text) {
     return nil;
 }
 
-// =========================================================================
-// ↓↓↓ 使用这个【已修复所有BUG】的最终版本，替换整个 generateYAMLReport 函数 ↓↓↓
+// = a=======================================================================
+// ↓↓↓ 使用这个【已修复编译错误】的最终版本，再次替换整个 generateYAMLReport 函数 ↓↓↓
 // =========================================================================
 
 static NSString* generateYAMLReport(NSDictionary* reportData) {
@@ -2777,6 +2777,7 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
 
     NSMutableString *yaml = [NSMutableString string];
 
+    // ... (模块一 和 模块二 的代码保持不变，这里省略) ...
     // ===================================================================
     // 模块一 & 二：元数据 和 全局规则
     // ===================================================================
@@ -2788,13 +2789,11 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
     [yaml appendString:@"# 模块一：元数据 \n"];
     [yaml appendString:@"# ===================================================================\n"];
     [yaml appendString:@"元数据:\n"];
-    // BUG FIX 1: 恢复阳历时间提取，并保留干支时间
     NSString *gongliTime = extractUsingRegex(@"- 公历\\(北京时间\\) : (.*)", sourceReport) ?: @"";
     NSString *zhanwenTime = extractUsingRegex(@"- 干支\\(真太阳时\\) : (.*)", sourceReport) ?: @"";
-    // BUG FIX 2: 修正日干旺衰提取逻辑
-    NSString *riGanWangsai = extractUsingRegex(@"- 对象: 日干 \\(.*?\\)\\s+-\\s+日干旺衰: (.*?)\\s", sourceReport) ?: @"";
+    NSString *riGanWangsai = extractUsingRegex(@"- 对象: 日干 \\(.*?\\)[\\s\\S]*?- 日干旺衰: (.*?)(?:\\s|\\n)", sourceReport) ?: @"";
 
-    [yaml appendFormat:@"  占问时间: \"%@ (%@)\"\n", gongliTime, zhanwenTime]; // 组合显示
+    [yaml appendFormat:@"  占问时间: \"%@ (%@)\"\n", gongliTime, zhanwenTime];
     [yaml appendFormat:@"  核心问题: \"%@\"\n", userQuestion];
     [yaml appendFormat:@"  日干旺衰: \"%@\"\n\n", riGanWangsai];
 
@@ -2817,20 +2816,22 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
     [yaml appendString:@"# ===================================================================\n"];
     [yaml appendString:@"实体清单:\n"];
 
-    // 准备数据源
     NSString *siKeText = extractUsingRegex(@"// 2.2. 四课\n([\\s\\S]*?)\n\n", sourceReport);
     NSString *sanChuanText = extractUsingRegex(@"// 2.3. 三传\n([\\s\\S]*?)\n\n", sourceReport);
     NSString *tianDiPanText = extractUsingRegex(@"// 2.1. 天地盘\n([\\s\\S]*?)\n\n", sourceReport);
     NSString *keChuanDetailText = extractUsingRegex(@"// 3.2. 神将详解 \\(课传流注\\)\n([\\s\\S]*?)// 4.", sourceReport);
 
-    // BUG FIX 3 & 8: 修正四课解析逻辑
+    // VVVVVVVVVVVVVVVVVVVV 编译错误修复点 VVVVVVVVVVVVVVVVVVVV
+    // 将正则表达式中不需要捕获的括号去掉，只保留最后一个括号，并移除第三个参数
     NSDictionary *siKeMapping = @{
-        @"第一课": extractUsingRegex(@"- 第一课\\(日干\\): \\S+ 上 (\\S+)，\\1乘(\\S+)", siKeText, 2),
-        @"第二课": extractUsingRegex(@"- 第二课\\(日上\\): \\S+ 上 (\\S+)，\\1乘(\\S+)", siKeText, 2),
-        @"第三课": extractUsingRegex(@"- 第三课\\(支辰\\): \\S+ 上 (\\S+)，\\1乘(\\S+)", siKeText, 2),
-        @"第四课": extractUsingRegex(@"- 第四课\\(辰上\\): \\S+ 上 (\\S+)，\\1乘(\\S+)", siKeText, 2)
+        @"第一课": extractUsingRegex(@"- 第一课\\(日干\\): \\S+ 上 \\S+，\\S+乘(\\S+)", siKeText),
+        @"第二课": extractUsingRegex(@"- 第二课\\(日上\\): \\S+ 上 \\S+，\\S+乘(\\S+)", siKeText),
+        @"第三课": extractUsingRegex(@"- 第三课\\(支辰\\): \\S+ 上 \\S+，\\S+乘(\\S+)", siKeText),
+        @"第四课": extractUsingRegex(@"- 第四课\\(辰上\\): \\S+ 上 \\S+，\\S+乘(\\S+)", siKeText)
     };
+    // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     
+    // ... (后续的所有代码都和上一版完全一样，无需修改，这里省略以便清晰) ...
     NSDictionary *sanChuanMapping = @{
         @"初传": extractUsingRegex(@"- 初传: (\\S+)", sanChuanText),
         @"中传": extractUsingRegex(@"- 中传: (\\S+)", sanChuanText),
@@ -2873,10 +2874,14 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
         NSTextCheckingResult *matchSK = [regexSK firstMatchInString:siKeText options:0 range:NSMakeRange(0, siKeText.length)];
 
         if (matchSC) { // 优先从三传获取信息
-            data[@"天将"] = [sanChuanText substringWithRange:[matchSC rangeAtIndex:3]];
-            data[@"六亲"] = [[sanChuanText substringWithRange:[matchSC rangeAtIndex:2]] stringByReplacingOccurrencesOfString:@"财" withString:@"妻财"];
+            if ([matchSC numberOfRanges] > 3) {
+                data[@"天将"] = [sanChuanText substringWithRange:[matchSC rangeAtIndex:3]];
+                data[@"六亲"] = [[sanChuanText substringWithRange:[matchSC rangeAtIndex:2]] stringByReplacingOccurrencesOfString:@"财" withString:@"妻财"];
+            }
         } else if (matchSK) { // 再从四课获取
-            data[@"天将"] = [siKeText substringWithRange:[matchSK rangeAtIndex:2]];
+            if ([matchSK numberOfRanges] > 2) {
+                data[@"天将"] = [siKeText substringWithRange:[matchSK rangeAtIndex:2]];
+            }
         }
         
         parsedEntities[entityId] = data;
@@ -2893,7 +2898,7 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
         }
     }
     
-    // BUG FIX 4: 修正所有阴神提取
+    // 补充阴神
     parsedEntities[@"日干"][@"阴神"] = parsedEntities[@"第二课"][@"地支"];
     parsedEntities[@"日支"][@"阴神"] = parsedEntities[@"第四课"][@"地支"];
     parsedEntities[@"第一课"][@"阴神"] = parsedEntities[@"第二课"][@"地支"];
@@ -2917,11 +2922,10 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
         NSString *changshengRaw = extractUsingRegex(@"长生: (.*)", detailBlock);
         if (changshengRaw) {
             NSString *gong = extractUsingRegex(@"临(.)为", changshengRaw);
-            // BUG FIX 5 & 9: 修正十二长生格式，并用它来定义所临地盘
             NSString *di = extractUsingRegex(@"为(.*?)之地", changshengRaw);
             if (gong && di) {
                 data[@"十二长生"] = [NSString stringWithFormat:@"%@ (于%@)", di, gong];
-                data[@"所临地盘"] = gong; // 使用提取到的 'gong'
+                data[@"所临地盘"] = gong;
             }
         }
         
@@ -2962,11 +2966,9 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
         [yaml appendString:@"]\n\n"];
     }
 
-
     // ===================================================================
     // 模块四：天命系统
     // ===================================================================
-    // BUG FIX 6: 检查天命信息是否存在
     NSString *nianmingBlock = extractUsingRegex(@"- 参数 2([\\s\\S]*?)(?=- 参数|$)", sourceReport);
     if (nianmingBlock && ![nianmingBlock containsString:@"(null)"]) {
         [yaml appendString:@"# ===================================================================\n"];
@@ -2990,11 +2992,9 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
         [yaml appendFormat:@"      天盘天将: \"%@\"\n\n", extractUsingRegex(@"将: (\\S+)", xingNianBlock)];
     }
 
-
     // ===================================================================
     // 模块五：神煞系统 (精选版)
     // ===================================================================
-    // BUG FIX 7: 修正神煞提取逻辑
     NSString *shenShaFullText = extractUsingRegex(@"// 6. 神煞系统([\\s\\S]*?)// 7.", sourceReport);
     if (shenShaFullText) {
         [yaml appendString:@"# ===================================================================\n"];
@@ -3003,24 +3003,25 @@ static NSString* generateYAMLReport(NSDictionary* reportData) {
         [yaml appendString:@"神煞系统:\n"];
         
         NSSet *whitelist = [NSSet setWithArray:@[@"太岁", @"月建", @"月破", @"旬空", @"日禄", @"羊刃", @"驿马", @"桃花", @"天乙贵人", @"天德", @"月德", @"官符", @"劫煞", @"亡神", @"天罗", @"地网"]];
+        NSMutableSet *alreadyAdded = [NSMutableSet set];
         
-        // 使用更强大的正则表达式，可以匹配带括号和不带括号的
         NSRegularExpression *shenShaRegex = [NSRegularExpression regularExpressionWithPattern:@"([\\u4e00-\\u9fa5]+)(?:\\((\\S+)\\))?" options:0 error:nil];
         NSArray<NSTextCheckingResult *> *matches = [shenShaRegex matchesInString:shenShaFullText options:0 range:NSMakeRange(0, shenShaFullText.length)];
         
         for (NSTextCheckingResult *match in matches) {
             NSString *name = [shenShaFullText substringWithRange:[match rangeAtIndex:1]];
-            if ([whitelist containsObject:name]) {
+            if ([whitelist containsObject:name] && ![alreadyAdded containsObject:name]) {
                  NSString *luoGong = @"";
                  if ([match rangeAtIndex:2].location != NSNotFound) {
                     luoGong = [shenShaFullText substringWithRange:[match rangeAtIndex:2]];
-                 } else if ([name isEqualToString:@"旬空"]) { // 特殊处理旬空
+                 } else if ([name isEqualToString:@"旬空"]) {
                     luoGong = [xunKong componentsSeparatedByString:@" "].firstObject;
                  }
 
                  if (luoGong.length > 0) {
                     [yaml appendFormat:@"  - 名称: \"%@\"\n", name];
                     [yaml appendFormat:@"    落宫: \"%@\"\n", luoGong];
+                    [alreadyAdded addObject:name];
                  }
             }
         }
@@ -4942,6 +4943,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
