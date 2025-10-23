@@ -2395,9 +2395,6 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
     
     return [finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-// =========================================================================
-// ↓↓↓ 3. 替换这个函数 ↓↓↓
-// =========================================================================
 static NSString* generateStructuredReport(NSDictionary *reportData) {
     NSMutableString *report = [NSMutableString string];
     __block NSInteger sectionCounter = 4; // 动态板块计数器从4开始
@@ -2487,62 +2484,18 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         }
     }
     
+    // --- **核心修改点** ---
+    // 移除了原来构建 [空亡详解...] 字符串的逻辑，并修改了下面的 appendFormat。
     [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, SafeString(reportData[@"昼夜"])];
 
     // ================================================================
-    // <<<<<<<<<<<<<<<< 核心修改区域 START >>>>>>>>>>>>>>>>
+    // 板块二：核心盘架 (无变化)
     // ================================================================
     [report appendString:@"// 2. 核心盘架\n"];
-    
-    NSString *siKeText = reportData[@"四课"];
-    NSString *sanChuanText = reportData[@"三传"];
-    
-    if (siKeText && siKeText.length > 0) {
-        [report appendString:@"// 2.1. 四课三传\n"];
-        
-        // 解析四课文本
-        NSString *diGan = @"";
-        NSString *diZhi = @"";
-        NSMutableArray *keLines = [NSMutableArray array];
-        
-        NSArray *lines = [siKeText componentsSeparatedByString:@"\n"];
-        for (NSString *line in lines) {
-            if ([line hasPrefix:@"[日干:"]) {
-                diGan = [[line stringByReplacingOccurrencesOfString:@"[日干:" withString:@""] stringByReplacingOccurrencesOfString:@"]" withString:@""];
-            } else if ([line hasPrefix:@"[日支:"]) {
-                diZhi = [[line stringByReplacingOccurrencesOfString:@"[日支:" withString:@""] stringByReplacingOccurrencesOfString:@"]" withString:@""];
-            } else if ([line containsString:@"课:"]) {
-                [keLines addObject:[line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-            }
-        }
-        
-        // 按照新顺序组装
-        [report appendFormat:@"- 日干: %@\n", diGan];
-        [report appendFormat:@"- 日支: %@\n", diZhi];
-        for (NSString *keLine in keLines) {
-            [report appendFormat:@"- %@\n", keLine];
-        }
-        
-        // 附加三传
-        if (sanChuanText && sanChuanText.length > 0) {
-            NSArray *sanChuanLines = [sanChuanText componentsSeparatedByString:@"\n"];
-            for (NSString *chuanLine in sanChuanLines) {
-                 [report appendFormat:@"- %@\n", [chuanLine stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
-            }
-        }
-        
-        [report appendString:@"\n"];
-
-    } else {
-        // 降级处理：如果四课信息为空，则按旧方式显示
-        if (siKeText) [report appendFormat:@"\n// 2.1. 四课\n%@\n\n", siKeText];
-        if (sanChuanText) [report appendFormat:@"// 2.2. 三传\n%@\n\n", sanChuanText];
-    }
-    // 天地盘部分保持不变
     NSString *tianDiPanText = reportData[@"天地盘"];
     if (tianDiPanText) {
         NSMutableString *formattedTianDiPan = [NSMutableString string];
-        [formattedTianDiPan appendString:@"// 2.2. 天地盘\n"];
+        [formattedTianDiPan appendString:@"// 2.1. 天地盘\n"];
         NSArray *tianDiPanLines = [tianDiPanText componentsSeparatedByString:@"\n"];
         for (NSString *line in tianDiPanLines) {
             NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"-\\s*(\\S)宫:\\s*(.*)" options:0 error:nil];
@@ -2557,8 +2510,11 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         }
         [report appendFormat:@"%@\n", [formattedTianDiPan stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
     }
-    // <<<<<<<<<<<<<<<< 核心修改区域 END >>>>>>>>>>>>>>>>
-    
+    NSString *siKeText = reportData[@"四课"];
+    NSString *sanChuanText = reportData[@"三传"];
+    if (siKeText) [report appendFormat:@"\n// 2.2. 四课\n%@\n\n", siKeText];
+    if (sanChuanText) [report appendFormat:@"// 2.3. 三传\n%@\n\n", sanChuanText];
+
     // ================================================================
     // <--- 核心修改：恢复并过滤“课盘解析” --->
     // ================================================================
@@ -4557,9 +4513,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         [self processKeChuanQueue_Truth_S2]; 
     }
 }
-// =========================================================================
-// ↓↓↓ 1. 替换这个函数 ↓↓↓
-// =========================================================================
 %new
 - (NSString *)_echo_extractSiKeInfo {
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖"); if (!siKeViewClass) return @"";
@@ -4576,25 +4529,12 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     [c2 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
     [c3 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
     [c4 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
-    
-    // 从右到左提取：第一课(日上), 第二课(日阴), 第三课(辰上), 第四课(辰阴)
     NSString *k1_shang = ((UILabel*)c4[0]).text, *k1_jiang = ((UILabel*)c4[1]).text, *k1_xia = ((UILabel*)c4[2]).text;
     NSString *k2_shang = ((UILabel*)c3[0]).text, *k2_jiang = ((UILabel*)c3[1]).text, *k2_xia = ((UILabel*)c3[2]).text;
     NSString *k3_shang = ((UILabel*)c2[0]).text, *k3_jiang = ((UILabel*)c2[1]).text, *k3_xia = ((UILabel*)c2[2]).text;
     NSString *k4_shang = ((UILabel*)c1[0]).text, *k4_jiang = ((UILabel*)c1[1]).text, *k4_xia = ((UILabel*)c1[2]).text;
-    
-    // 使用特殊标记输出，便于后续解析
-    return [NSString stringWithFormat:@"[日干:%@]\n[日支:%@]\n第一课:%@(%@) 上 %@\n第二课:%@(%@) 上 %@\n第三课:%@(%@) 上 %@\n第四课:%@(%@) 上 %@",
-        SafeString(k1_xia), SafeString(k3_xia),
-        SafeString(k1_shang), SafeString(k1_jiang), SafeString(k1_xia),
-        SafeString(k2_shang), SafeString(k2_jiang), SafeString(k2_xia),
-        SafeString(k3_shang), SafeString(k3_jiang), SafeString(k3_xia),
-        SafeString(k4_shang), SafeString(k4_jiang), SafeString(k4_xia)
-    ];
+    return [NSString stringWithFormat:@"- 第一课(日干): %@ 上 %@，%@乘%@\n- 第二课(日上): %@ 上 %@，%@乘%@\n- 第三课(支辰): %@ 上 %@，%@乘%@\n- 第四课(辰上): %@ 上 %@，%@乘%@", SafeString(k1_xia), SafeString(k1_shang), SafeString(k1_shang), SafeString(k1_jiang), SafeString(k2_xia), SafeString(k2_shang), SafeString(k2_shang), SafeString(k2_jiang), SafeString(k3_xia), SafeString(k3_shang), SafeString(k3_shang), SafeString(k3_jiang), SafeString(k4_xia), SafeString(k4_shang), SafeString(k4_shang), SafeString(k4_jiang) ];
 }
-// =========================================================================
-// ↓↓↓ 2. 替换这个函数 ↓↓↓
-// =========================================================================
 %new
 - (NSString *)_echo_extractSanChuanInfo {
     Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖"); if (!sanChuanViewClass) return @"";
@@ -4633,9 +4573,9 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
             // 如果过滤后有状态，则显示 [状态: ...]，否则完全不显示这部分。
             if (filteredSsParts.count > 0) {
                 NSString *statusString = [filteredSsParts componentsJoinedByString:@", "];
-                [lines addObject:[NSString stringWithFormat:@"%@: %@ (%@, %@) [状态: %@]", title, SafeString(dz), SafeString(lq), SafeString(tj), statusString]];
+                [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@) [状态: %@]", title, SafeString(dz), SafeString(lq), SafeString(tj), statusString]];
             } else {
-                [lines addObject:[NSString stringWithFormat:@"%@: %@ (%@, %@)", title, SafeString(dz), SafeString(lq), SafeString(tj)]];
+                [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@)", title, SafeString(dz), SafeString(lq), SafeString(tj)]];
             }
         }
     }
@@ -4797,7 +4737,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-
 
 
 
