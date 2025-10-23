@@ -2748,319 +2748,113 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
 
 // =========================================================================
 // ↓↓↓ 使用这个已同步更新顺序的版本替换您现有的函数 ↓↓↓
-
 // =========================================================================
-// ↓↓↓ 将这个全新的YAML生成器函数，完整地粘贴到您的代码中 ↓↓↓
-// =========================================================================
-
-#pragma mark - YAML Report Generator
-
-// 辅助函数：使用正则表达式从文本中安全提取第一个匹配项
-static NSString* extractUsingRegex(NSString *pattern, NSString *text) {
-    if (!text || !pattern) return nil;
-    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
-    NSTextCheckingResult *match = [regex firstMatchInString:text options:0 range:NSMakeRange(0, text.length)];
-    if (match && [match numberOfRanges] > 1) {
-        return [[text substringWithRange:[match rangeAtIndex:1]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    }
-    return nil;
-}
-
-// = a=======================================================================
-// ↓↓↓ 使用这个【已修复编译错误】的最终版本，再次替换整个 generateYAMLReport 函数 ↓↓↓
-// =========================================================================
-
-static NSString* generateYAMLReport(NSDictionary* reportData) {
-    // 1. 先获取您现有的、完整的文本报告作为我们的“原材料”
-    NSString *sourceReport = generateStructuredReport(reportData);
-    NSString *userQuestion = (g_questionTextView && g_questionTextView.text.length > 0 && ![g_questionTextView.text isEqualToString:@"选填：输入您想问的具体问题"]) ? g_questionTextView.text : @"";
-
-    NSMutableString *yaml = [NSMutableString string];
-
-    // ... (模块一 和 模块二 的代码保持不变，这里省略) ...
-    // ===================================================================
-    // 模块一 & 二：元数据 和 全局规则
-    // ===================================================================
-    [yaml appendString:@"# ===================================================================\n"];
-    [yaml appendString:@"# 大六壬 · 全域关联分析图谱 · 初始配置文件\n"];
-    [yaml appendString:@"# 版本: 2.2 \n"];
-    [yaml appendString:@"# ===================================================================\n\n"];
+static NSString* generateContentSummaryLine(NSString *fullReport) {
+    if (!fullReport || fullReport.length == 0) return @"";
     
-    [yaml appendString:@"# 模块一：元数据 \n"];
-    [yaml appendString:@"# ===================================================================\n"];
-    [yaml appendString:@"元数据:\n"];
-    NSString *gongliTime = extractUsingRegex(@"- 公历\\(北京时间\\) : (.*)", sourceReport) ?: @"";
-    NSString *zhanwenTime = extractUsingRegex(@"- 干支\\(真太阳时\\) : (.*)", sourceReport) ?: @"";
-    NSString *riGanWangsai = extractUsingRegex(@"- 对象: 日干 \\(.*?\\)[\\s\\S]*?- 日干旺衰: (.*?)(?:\\s|\\n)", sourceReport) ?: @"";
-
-    [yaml appendFormat:@"  占问时间: \"%@ (%@)\"\n", gongliTime, zhanwenTime];
-    [yaml appendFormat:@"  核心问题: \"%@\"\n", userQuestion];
-    [yaml appendFormat:@"  日干旺衰: \"%@\"\n\n", riGanWangsai];
-
-    [yaml appendString:@"# ===================================================================\n"];
-    [yaml appendString:@"# 模块二：全局规则与宗门\n"];
-    [yaml appendString:@"# ===================================================================\n"];
-    [yaml appendString:@"全局规则:\n"];
-    NSString *yueJiang = extractUsingRegex(@"- 月将: (\\S+)", sourceReport) ?: @"";
-    NSString *xunKong = extractUsingRegex(@"- 旬空: (.*)", sourceReport) ?: @"";
-    NSString *jiuZongMen = [extractUsingRegex(@"- (.*门)", sourceReport) stringByReplacingOccurrencesOfString:@"门" withString:@"格"] ?: @"";
-    [yaml appendFormat:@"  月将: \"%@\"\n", yueJiang];
-    [yaml appendFormat:@"  旬空: \"%@\"\n", xunKong];
-    [yaml appendFormat:@"  九宗门: \"%@\"\n\n", jiuZongMen];
-
-    // ===================================================================
-    // 模块三：核心实体清单
-    // ===================================================================
-    [yaml appendString:@"# ===================================================================\n"];
-    [yaml appendString:@"# 模块三：核心实体清单\n"];
-    [yaml appendString:@"# ===================================================================\n"];
-    [yaml appendString:@"实体清单:\n"];
-
-    NSString *siKeText = extractUsingRegex(@"// 2.2. 四课\n([\\s\\S]*?)\n\n", sourceReport);
-    NSString *sanChuanText = extractUsingRegex(@"// 2.3. 三传\n([\\s\\S]*?)\n\n", sourceReport);
-    NSString *tianDiPanText = extractUsingRegex(@"// 2.1. 天地盘\n([\\s\\S]*?)\n\n", sourceReport);
-    NSString *keChuanDetailText = extractUsingRegex(@"// 3.2. 神将详解 \\(课传流注\\)\n([\\s\\S]*?)// 4.", sourceReport);
-
-    // VVVVVVVVVVVVVVVVVVVV 编译错误修复点 VVVVVVVVVVVVVVVVVVVV
-    // 将正则表达式中不需要捕获的括号去掉，只保留最后一个括号，并移除第三个参数
-    NSDictionary *siKeMapping = @{
-        @"第一课": extractUsingRegex(@"- 第一课\\(日干\\): \\S+ 上 \\S+，\\S+乘(\\S+)", siKeText),
-        @"第二课": extractUsingRegex(@"- 第二课\\(日上\\): \\S+ 上 \\S+，\\S+乘(\\S+)", siKeText),
-        @"第三课": extractUsingRegex(@"- 第三课\\(支辰\\): \\S+ 上 \\S+，\\S+乘(\\S+)", siKeText),
-        @"第四课": extractUsingRegex(@"- 第四课\\(辰上\\): \\S+ 上 \\S+，\\S+乘(\\S+)", siKeText)
+    // --- 调整：不再依赖硬编码的数字，只依赖标题文本 ---
+    // 键是报告中实际出现的标题文本，值是摘要中希望显示的名称
+    NSDictionary *keywordMap = @{
+        @"基础盘元": @"基础盘元",
+        @"核心盘架": @"核心盘架",
+        @"爻位详解": @"爻位详解",
+        @"神将详解": @"课传详解", // "神将详解"是"课传详解"的标题
+        @"格局总览": @"格局总览",
+        @"行年参数": @"行年参数",
+        @"神煞系统": @"神煞系统",
+        @"辅助系统": @"辅助系统",
+        @"七政四余": @"七政四余", // 新增对子项的识别
+        @"三宫时信息": @"三宫时信息", // 新增对子项的识别
     };
-    // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    
-    // ... (后续的所有代码都和上一版完全一样，无需修改，这里省略以便清晰) ...
-    NSDictionary *sanChuanMapping = @{
-        @"初传": extractUsingRegex(@"- 初传: (\\S+)", sanChuanText),
-        @"中传": extractUsingRegex(@"- 中传: (\\S+)", sanChuanText),
-        @"末传": extractUsingRegex(@"- 末传: (\\S+)", sanChuanText)
-    };
-    
-    NSArray *entities = @[
-        @{@"id": @"日干",   @"diZhiSource": siKeText, @"diZhiPattern": @"- 第一课\\(日干\\): (\\S+) 上"},
-        @{@"id": @"日支",   @"diZhiSource": siKeText, @"diZhiPattern": @"- 第三课\\(支辰\\): (\\S+) 上"},
-        @{@"id": @"第一课", @"diZhi": siKeMapping[@"第一课"]},
-        @{@"id": @"第二课", @"diZhi": siKeMapping[@"第二课"]},
-        @{@"id": @"第三课", @"diZhi": siKeMapping[@"第三课"]},
-        @{@"id": @"第四课", @"diZhi": siKeMapping[@"第四课"]},
-        @{@"id": @"初传",   @"diZhi": sanChuanMapping[@"初传"]},
-        @{@"id": @"中传",   @"diZhi": sanChuanMapping[@"中传"]},
-        @{@"id": @"末传",   @"diZhi": sanChuanMapping[@"末传"]}
+
+    // --- 调整：这里的顺序决定了摘要中各项的排列顺序 ---
+    NSArray *orderedDisplayNames = @[
+        @"基础盘元",
+        @"核心盘架",
+        @"爻位详解",
+        @"课传详解",
+        @"格局总览",
+        @"行年参数",
+        @"神煞系统",
+        @"辅助系统",
+        @"七政四余",
+        @"三宫时信息",
     ];
 
-    NSMutableDictionary *parsedEntities = [NSMutableDictionary dictionary];
+    NSMutableArray *includedSections = [NSMutableArray array];
 
-    // --- 第一遍：解析基础信息 (地支, 天将, 六亲) ---
-    for (NSDictionary *entityInfo in entities) {
-        NSString *entityId = entityInfo[@"id"];
-        NSMutableDictionary *data = [NSMutableDictionary dictionary];
+    // 遍历所有可能的板块名称
+    for (NSString *displayName in orderedDisplayNames) {
+        // 找到displayName对应的搜索关键词
+        NSString *searchKeyword = [[keywordMap allKeysForObject:displayName] firstObject];
+        if (!searchKeyword) continue;
         
-        // 获取地支
-        if (entityInfo[@"diZhi"]) {
-            data[@"地支"] = entityInfo[@"diZhi"];
-        } else {
-            data[@"地支"] = extractUsingRegex(entityInfo[@"diZhiPattern"], entityInfo[@"diZhiSource"]);
-        }
-
-        // 获取天将和六亲
-        NSString *patternSC = [NSString stringWithFormat:@"- (初传|中传|末传): %@ \\((\\S+), (\\S+)\\)", data[@"地支"]];
-        NSRegularExpression *regexSC = [NSRegularExpression regularExpressionWithPattern:patternSC options:0 error:nil];
-        NSTextCheckingResult *matchSC = [regexSC firstMatchInString:sanChuanText options:0 range:NSMakeRange(0, sanChuanText.length)];
+        // 构建一个更灵活的搜索模式，例如 "// [任意数字]. [空格]神煞系统"
+        // 或者 "// [任意数字].[任意数字]. [空格]七政四余"
+        NSString *regexPattern = [NSString stringWithFormat:@"//\\s*\\d+(\\.\\d+)?\\.\\s*%@", searchKeyword];
         
-        NSString *patternSK = [NSString stringWithFormat:@"- (第一课|第二课|第三课|第四课).*?，(\\S+)乘%@", data[@"地支"]];
-        NSRegularExpression *regexSK = [NSRegularExpression regularExpressionWithPattern:patternSK options:0 error:nil];
-        NSTextCheckingResult *matchSK = [regexSK firstMatchInString:siKeText options:0 range:NSMakeRange(0, siKeText.length)];
-
-        if (matchSC) { // 优先从三传获取信息
-            if ([matchSC numberOfRanges] > 3) {
-                data[@"天将"] = [sanChuanText substringWithRange:[matchSC rangeAtIndex:3]];
-                data[@"六亲"] = [[sanChuanText substringWithRange:[matchSC rangeAtIndex:2]] stringByReplacingOccurrencesOfString:@"财" withString:@"妻财"];
+        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:regexPattern options:0 error:nil];
+        NSTextCheckingResult *match = [regex firstMatchInString:fullReport options:0 range:NSMakeRange(0, fullReport.length)];
+        
+        if (match) {
+            // 确保不重复添加
+            if (![includedSections containsObject:displayName]) {
+                
+                // 优化逻辑：如果有了更具体的"课传详解"，就不要"爻位详解"
+                if ([displayName isEqualToString:@"课传详解"]) {
+                    [includedSections removeObject:@"爻位详解"];
+                }
+                
+                // 优化逻辑：如果有了"七政四余"或"三宫时信息"，就不要宽泛的"辅助系统"
+                if ([displayName isEqualToString:@"七政四余"] || [displayName isEqualToString:@"三宫时信息"]) {
+                     [includedSections removeObject:@"辅助系统"];
+                }
+                
+                // 优化逻辑：如果已经有了子项，就不要再添加父项
+                if ([displayName isEqualToString:@"辅助系统"] && 
+                   ([includedSections containsObject:@"七政四余"] || [includedSections containsObject:@"三宫时信息"])) {
+                    // Do nothing
+                } else {
+                    [includedSections addObject:displayName];
+                }
             }
-        } else if (matchSK) { // 再从四课获取
-            if ([matchSK numberOfRanges] > 2) {
-                data[@"天将"] = [siKeText substringWithRange:[matchSK rangeAtIndex:2]];
-            }
         }
-        
-        parsedEntities[entityId] = data;
+    }
+
+    if (includedSections.count > 0) {
+        return [NSString stringWithFormat:@"// 以上内容包含： %@\n", [includedSections componentsJoinedByString:@"、"]];
     }
     
-    // 补充四课六亲
-    for (NSString *ke in @[@"第一课", @"第二课", @"第三课", @"第四课"]) {
-        NSString *diZhi = parsedEntities[ke][@"地支"];
-        for (NSString *chuan in @[@"初传", @"中传", @"末传"]) {
-            if ([parsedEntities[chuan][@"地支"] isEqualToString:diZhi]) {
-                parsedEntities[ke][@"六亲"] = parsedEntities[chuan][@"六亲"];
-                break;
-            }
-        }
-    }
-    
-    // 补充阴神
-    parsedEntities[@"日干"][@"阴神"] = parsedEntities[@"第二课"][@"地支"];
-    parsedEntities[@"日支"][@"阴神"] = parsedEntities[@"第四课"][@"地支"];
-    parsedEntities[@"第一课"][@"阴神"] = parsedEntities[@"第二课"][@"地支"];
-    parsedEntities[@"第二课"][@"阴神"] = extractUsingRegex(@"- 对象: 日阴 - 天将.*?\\s+-\\s+阴神A\\+: (\\S+)", keChuanDetailText);
-    parsedEntities[@"第三课"][@"阴神"] = parsedEntities[@"第四课"][@"地支"];
-    parsedEntities[@"第四课"][@"阴神"] = extractUsingRegex(@"- 对象: 辰阴 - 天将.*?\\s+-\\s+阴神A\\+: (\\S+)", keChuanDetailText);
-    parsedEntities[@"初传"][@"阴神"] = extractUsingRegex(@"- 对象: 初传 - 天将.*?\\s+-\\s+阴神A\\+: (\\S+)", keChuanDetailText);
-    parsedEntities[@"中传"][@"阴神"] = extractUsingRegex(@"- 对象: 中传 - 天将.*?\\s+-\\s+阴神A\\+: (\\S+)", keChuanDetailText);
-    parsedEntities[@"末传"][@"阴神"] = extractUsingRegex(@"- 对象: 末传 - 天将.*?\\s+-\\s+阴神A\\+: (\\S+)", keChuanDetailText);
-
-    // 补充旺衰、长生、遁干、所临地盘和司法裁决
-    for (NSString *entityId in parsedEntities.allKeys) {
-        NSMutableDictionary *data = parsedEntities[entityId];
-        NSString *diZhi = data[@"地支"];
-        NSString *tianJiang = data[@"天将"] ?: @"";
-
-        data[@"旺衰"] = ([entityId isEqualToString:@"日干"]) ? riGanWangsai : ([entityId isEqualToString:@"日支"] ? @"旺" : extractUsingRegex([NSString stringWithFormat:@"- 对象: .*? - 天将\\(%@\\)[\\s\\S]*?- 旺衰: (\\S+)", tianJiang], keChuanDetailText));
-
-        NSString *detailBlock = extractUsingRegex([NSString stringWithFormat:@"- 对象: .*?%@.*?\\((%@|.*?)\\)([\\s\\S]*?)(?=- 对象:|$)", [entityId containsString:@"课"] ? @"-" : entityId, diZhi], keChuanDetailText);
-
-        NSString *changshengRaw = extractUsingRegex(@"长生: (.*)", detailBlock);
-        if (changshengRaw) {
-            NSString *gong = extractUsingRegex(@"临(.)为", changshengRaw);
-            NSString *di = extractUsingRegex(@"为(.*?)之地", changshengRaw);
-            if (gong && di) {
-                data[@"十二长生"] = [NSString stringWithFormat:@"%@ (于%@)", di, gong];
-                data[@"所临地盘"] = gong;
-            }
-        }
-        
-        data[@"遁干"] = extractUsingRegex(@"复建: (\\S+)", detailBlock);
-
-        NSMutableArray *juece = [NSMutableArray array];
-        if ([detailBlock containsString:@"墓"] && [detailBlock containsString:@"冲"]) {
-            NSString *chongShen = @"?";
-            NSRegularExpression *chongRegex = [NSRegularExpression regularExpressionWithPattern:@"冲.*?(\\S+)" options:0 error:nil];
-            NSTextCheckingResult *match = [chongRegex firstMatchInString:detailBlock options:0 range:NSMakeRange(0, detailBlock.length)];
-            if (match) {
-                chongShen = [[detailBlock substringWithRange:[match rangeAtIndex:1]] substringToIndex:1];
-            }
-            [juece addObject:[NSString stringWithFormat:@"%@墓，但见冲神(%@)，此墓被激活为库", [entityId containsString:@"支"] || [entityId containsString:@"辰"] ? @"支":@"干", chongShen]];
-        }
-        if ([detailBlock containsString:@"空"] && ([detailBlock containsString:@"月建"] || [detailBlock containsString:@"填实"])) {
-            [juece addObject:@"旬空，但为月建，强制填实"];
-        }
-        data[@"司法前置裁决"] = juece;
-    }
-    
-    // 最后格式化输出
-    for (NSString *entityId in @[@"日干", @"日支", @"第一课", @"第二课", @"第三课", @"第四课", @"初传", @"中传", @"末传"]) {
-         NSDictionary *data = parsedEntities[entityId];
-        [yaml appendFormat:@"  - 实体ID: \"%@\"\n", entityId];
-        [yaml appendFormat:@"    地支: \"%@\"\n", SafeString(data[@"地支"])];
-        [yaml appendFormat:@"    天将: %@\n", data[@"天将"] ? [NSString stringWithFormat:@"\"%@\"", data[@"天将"]] : @"N/A"];
-        [yaml appendFormat:@"    六亲: \"%@\"\n", SafeString(data[@"六亲"]) ?: @"N/A"];
-        [yaml appendFormat:@"    旺衰: \"%@\"\n", SafeString(data[@"旺衰"])];
-        [yaml appendFormat:@"    十二长生: %@\n", data[@"十二长生"] ? [NSString stringWithFormat:@"\"%@\"", data[@"十二长生"]] : @"N/A"];
-        [yaml appendFormat:@"    所临地盘: \"%@\"\n", SafeString(data[@"所临地盘"])];
-        [yaml appendFormat:@"    阴神: \"%@\"\n", SafeString(data[@"阴神"]) ?: @"N/A"];
-        [yaml appendFormat:@"    遁干: %@\n", data[@"遁干"] ? [NSString stringWithFormat:@"\"%@\"", data[@"遁干"]] : @"N/A"];
-        [yaml appendString:@"    司法前置裁决: ["];
-        if ([data[@"司法前置裁决"] count] > 0) {
-            [yaml appendFormat:@"\"%@\"", [data[@"司法前置裁决"] componentsJoinedByString:@"\", \""]];
-        }
-        [yaml appendString:@"]\n\n"];
-    }
-
-    // ===================================================================
-    // 模块四：天命系统
-    // ===================================================================
-    NSString *nianmingBlock = extractUsingRegex(@"- 参数 2([\\s\\S]*?)(?=- 参数|$)", sourceReport);
-    if (nianmingBlock && ![nianmingBlock containsString:@"(null)"]) {
-        [yaml appendString:@"# ===================================================================\n"];
-        [yaml appendString:@"# 模块四：天命系统\n"];
-        [yaml appendString:@"# ===================================================================\n"];
-        [yaml appendString:@"天命系统:\n"];
-        
-        NSString *xingNianBlock = extractUsingRegex(@"// 行年信息([\\s\\S]*?)// 本命信息", nianmingBlock);
-        NSString *benMingBlock = extractUsingRegex(@"// 本命信息([\\s\\S]*)", nianmingBlock);
-        
-        [yaml appendString:@"  - 角色ID: \"求测人 (某女)\"\n"];
-        [yaml appendString:@"    本命: \n"];
-        [yaml appendFormat:@"      地支: \"%@\"\n", extractUsingRegex(@"本命:  \\((\\S+) 本命\\)", benMingBlock)];
-        [yaml appendFormat:@"      所临地盘: \"%@\"\n", extractUsingRegex(@"临宫: (\\S+)", benMingBlock)];
-        [yaml appendFormat:@"      天盘上神: \"%@\"\n", extractUsingRegex(@"乘: (\\S+)", benMingBlock)];
-        [yaml appendFormat:@"      天盘天将: \"%@\"\n", extractUsingRegex(@"将: (\\S+)", benMingBlock)];
-        [yaml appendString:@"    行年: \n"];
-        [yaml appendFormat:@"      地支: \"%@\"\n", extractUsingRegex(@"\\((\\S+) 行年\\)", xingNianBlock)];
-        [yaml appendFormat:@"      所临地盘: \"%@\"\n", extractUsingRegex(@"临宫: (\\S+)", xingNianBlock)];
-        [yaml appendFormat:@"      天盘上神: \"%@\"\n", extractUsingRegex(@"乘: (\\S+)", xingNianBlock)];
-        [yaml appendFormat:@"      天盘天将: \"%@\"\n\n", extractUsingRegex(@"将: (\\S+)", xingNianBlock)];
-    }
-
-    // ===================================================================
-    // 模块五：神煞系统 (精选版)
-    // ===================================================================
-    NSString *shenShaFullText = extractUsingRegex(@"// 6. 神煞系统([\\s\\S]*?)// 7.", sourceReport);
-    if (shenShaFullText) {
-        [yaml appendString:@"# ===================================================================\n"];
-        [yaml appendString:@"# 模块五：神煞系统 (精选版)\n"];
-        [yaml appendString:@"# ===================================================================\n"];
-        [yaml appendString:@"神煞系统:\n"];
-        
-        NSSet *whitelist = [NSSet setWithArray:@[@"太岁", @"月建", @"月破", @"旬空", @"日禄", @"羊刃", @"驿马", @"桃花", @"天乙贵人", @"天德", @"月德", @"官符", @"劫煞", @"亡神", @"天罗", @"地网"]];
-        NSMutableSet *alreadyAdded = [NSMutableSet set];
-        
-        NSRegularExpression *shenShaRegex = [NSRegularExpression regularExpressionWithPattern:@"([\\u4e00-\\u9fa5]+)(?:\\((\\S+)\\))?" options:0 error:nil];
-        NSArray<NSTextCheckingResult *> *matches = [shenShaRegex matchesInString:shenShaFullText options:0 range:NSMakeRange(0, shenShaFullText.length)];
-        
-        for (NSTextCheckingResult *match in matches) {
-            NSString *name = [shenShaFullText substringWithRange:[match rangeAtIndex:1]];
-            if ([whitelist containsObject:name] && ![alreadyAdded containsObject:name]) {
-                 NSString *luoGong = @"";
-                 if ([match rangeAtIndex:2].location != NSNotFound) {
-                    luoGong = [shenShaFullText substringWithRange:[match rangeAtIndex:2]];
-                 } else if ([name isEqualToString:@"旬空"]) {
-                    luoGong = [xunKong componentsSeparatedByString:@" "].firstObject;
-                 }
-
-                 if (luoGong.length > 0) {
-                    [yaml appendFormat:@"  - 名称: \"%@\"\n", name];
-                    [yaml appendFormat:@"    落宫: \"%@\"\n", luoGong];
-                    [alreadyAdded addObject:name];
-                 }
-            }
-        }
-        [yaml appendString:@"\n"];
-    }
-
-
-    // ===================================================================
-    // 模块六：天地盘
-    // ===================================================================
-    [yaml appendString:@"# ===================================================================\n"];
-    [yaml appendString:@"# 模块六：天地盘 \n"];
-    [yaml appendString:@"# 说明: 定义全局空间背景，所有实体的空间关系根源于此。\n"];
-    [yaml appendString:@"# 格式: [地盘宫位]: \"[天盘地支]([天盘天将])\"\n"];
-    [yaml appendString:@"# ===================================================================\n"];
-    [yaml appendString:@"天地盘:\n"];
-    NSArray *tiandiLines = [tianDiPanText componentsSeparatedByString:@"\n"];
-    for (NSString *line in tiandiLines) {
-        NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if ([trimmedLine hasPrefix:@"-"]) {
-            NSString *formattedLine = [trimmedLine stringByReplacingOccurrencesOfString:@"- " withString:@"  "];
-            formattedLine = [formattedLine stringByReplacingOccurrencesOfString:@": " withString:@": \""];
-            formattedLine = [formattedLine stringByAppendingString:@"\""];
-            [yaml appendFormat:@"%@\n", formattedLine];
-        }
-    }
-
-    return yaml;
+    return @"";
 }
 
-// 新的最终格式化函数，它调用YAML生成器
-static NSString* formatYAMLReportAndAIHeader(NSDictionary* reportData) {
+static NSString* formatFinalReport(NSDictionary* reportData) {
     NSString *headerPrompt = g_shouldIncludeAIPromptHeader ? getAIPromptHeader() : @"";
-    NSString *yamlReport = generateYAMLReport(reportData);
+    NSString *structuredReport = generateStructuredReport(reportData);
+    NSString *summaryLine = generateContentSummaryLine(structuredReport);
     
+    NSString *userQuestion = @"";
+    if (g_questionTextView && g_questionTextView.text.length > 0 && ![g_questionTextView.text isEqualToString:@"选填：输入您想问的具体问题"]) {
+        userQuestion = g_questionTextView.text;
+    }
+NSString *footerText = [NSString stringWithFormat:@"\n\n"
+                          "//=======================================================\n"
+                          "// 【大六壬大佬手机微信解课-衍生现实版】\n"
+                          "// 【情报任务书：[自动生成任务编号]】\n"
+                          "//=======================================================\n\n"
+                          "//-------------------【核心情报需求】-------------------\n\n"
+                          "//**【1. 核心问题 (用户原始输入)】**\n"
+                          "// %@\n\n",
+                          userQuestion];
+
+
+
+
+
     if (headerPrompt.length > 0) {
-        return [NSString stringWithFormat:@"%@\n%@", headerPrompt, yamlReport];
+        return [NSString stringWithFormat:@"%@%@\n%@%@", headerPrompt, structuredReport, summaryLine, footerText];
     } else {
-        return yamlReport;
+        return [NSString stringWithFormat:@"%@\n%@%@", structuredReport, summaryLine, footerText];
     }
 }
 
@@ -3993,8 +3787,8 @@ currentY += compactButtonHeight + 15;
         case kButtonTag_StandardReport: [self executeSimpleExtraction]; break;
         case kButtonTag_DeepDiveReport: [self executeCompositeExtraction]; break;
         // ... (The rest of the cases for specific extractions)
-        case kButtonTag_KeTi: { [self setInteractionBlocked:YES]; [self startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课体范式_详"] = result; NSString *finalReport = formatYAMLReportAndAIHeader(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
-        case kButtonTag_JiuZongMen: { [self setInteractionBlocked:YES]; [self startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"九宗门_详"] = result; NSString *finalReport = formatYAMLReportAndAIHeader(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
+        case kButtonTag_KeTi: { [self setInteractionBlocked:YES]; [self startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课体范式_详"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
+        case kButtonTag_JiuZongMen: { [self setInteractionBlocked:YES]; [self startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"九宗门_详"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
         case kButtonTag_KeChuan: [self startExtraction_Truth_S2_WithCompletion:nil]; break;
         case kButtonTag_ShenSha: {
             [self setInteractionBlocked:YES];
@@ -4004,21 +3798,21 @@ currentY += compactButtonHeight + 15;
                 if (shenShaResult) {
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
                     reportData[@"神煞详情"] = shenShaResult;
-                    NSString *finalReport = formatYAMLReportAndAIHeader(reportData);
+                    NSString *finalReport = formatFinalReport(reportData);
                     g_lastGeneratedReport = [finalReport copy];
                     [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport];
                 }
             }];
             break;
         }
-        case kButtonTag_NianMing: { [self setInteractionBlocked:YES]; [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatYAMLReportAndAIHeader(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
+        case kButtonTag_NianMing: { [self setInteractionBlocked:YES]; [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
         case kButtonTag_BiFa: {
             [self setInteractionBlocked:YES];
             [self extractBiFa_NoPopup_WithCompletion:^(NSString *result) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 [strongSelf setInteractionBlocked:NO];
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"毕法要诀"] = result;
-                NSString *finalReport = formatYAMLReportAndAIHeader(reportData); g_lastGeneratedReport = [finalReport copy];
+                NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
                 [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
@@ -4029,7 +3823,7 @@ currentY += compactButtonHeight + 15;
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 [strongSelf setInteractionBlocked:NO];
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"格局要览"] = result;
-                NSString *finalReport = formatYAMLReportAndAIHeader(reportData); g_lastGeneratedReport = [finalReport copy];
+                NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
                 [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
@@ -4040,7 +3834,7 @@ currentY += compactButtonHeight + 15;
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
                 [strongSelf setInteractionBlocked:NO];
                 NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"解析方法"] = result;
-                NSString *finalReport = formatYAMLReportAndAIHeader(reportData); g_lastGeneratedReport = [finalReport copy];
+                NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy];
                 [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport];
             }];
             break;
@@ -4349,7 +4143,7 @@ currentY += compactButtonHeight + 15;
                         dispatch_async(dispatch_get_main_queue(), ^{
                             __strong typeof(weakSelf) strongSelf5 = weakSelf; if (!strongSelf5) return;
                             LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成标准课盘...");
-                            NSString *finalReport = formatYAMLReportAndAIHeader(reportData);
+                            NSString *finalReport = formatFinalReport(reportData);
                             g_lastGeneratedReport = [finalReport copy];
 [strongSelf5 hideProgressHUD];
 [strongSelf5 showEchoNotificationWithTitle:@"标准课盘推衍完成" message:@"已生成并复制到剪贴板"];
@@ -4401,7 +4195,7 @@ LogMessage(EchoLogTypeTask, @"[完成] “标准课盘”推衍任务已完成�
                             dispatch_async(dispatch_get_main_queue(), ^{
                                 __strong typeof(weakSelf) strongSelf6 = weakSelf; if (!strongSelf6) return;
                                 LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成深度课盘...");
-                                NSString *finalReport = formatYAMLReportAndAIHeader(reportData);
+                                NSString *finalReport = formatFinalReport(reportData);
                                 g_lastGeneratedReport = [finalReport copy];
 [strongSelf6 hideProgressHUD];
 [strongSelf6 showEchoNotificationWithTitle:@"深度课盘推衍完成" message:@"已生成并复制到剪贴板"];
@@ -4676,7 +4470,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                 if (!g_s2_keChuan_completion_handler) {
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; 
                     reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
-                    NSString *finalReport = formatYAMLReportAndAIHeader(reportData); 
+                    NSString *finalReport = formatFinalReport(reportData); 
                     g_lastGeneratedReport = [finalReport copy];
                     [self showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];
                     [self presentAIActionSheetWithReport:finalReport];
@@ -4943,12 +4737,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-
-
-
-
-
-
 
 
 
