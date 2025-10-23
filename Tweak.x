@@ -74,6 +74,8 @@ static NSString *g_lastGeneratedReport = nil;
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES;
 static BOOL g_shouldExtractBenMing = YES; // <<<<<<<<<<<< 新增本命开关状态
+static BOOL g_shouldExtractAuxiliarySystems = NO; // <<<<<< 新增辅助系统开关，默认关闭
+
 
 static BOOL g_isExtractingTimeInfo = NO;
 static UITextView *g_questionTextView = nil;
@@ -4041,20 +4043,24 @@ currentY += compactButtonHeight + 15;
         [strongSelf extractGeJu_NoPopup_WithCompletion:^(NSString *result) {
             g_extractedData[@"格局要览"] = SafeString(result); dispatch_group_leave(popupGroup);
         }];
-        dispatch_group_enter(popupGroup);
+            dispatch_group_enter(popupGroup);
         [strongSelf extractFangFa_NoPopup_WithCompletion:^(NSString *result) {
             g_extractedData[@"解析方法"] = SafeString(result); dispatch_group_leave(popupGroup);
         }];
-        dispatch_group_enter(popupGroup);
-        [strongSelf extractQiZheng_NoPopup_WithCompletion:^(NSString *result) {
-            g_extractedData[@"七政四余"] = SafeString(result); dispatch_group_leave(popupGroup);
-        }];
-        dispatch_group_enter(popupGroup);
-        [strongSelf extractSanGong_NoPopup_WithCompletion:^(NSString *result) {
-            g_extractedData[@"三宫时信息"] = SafeString(result); dispatch_group_leave(popupGroup);
-        }];
-
-        dispatch_group_notify(popupGroup, dispatch_get_main_queue(), ^{
+        
+        // << 修改点: 使用开关控制是否提取辅助系统信息 >>
+        if (g_shouldExtractAuxiliarySystems) {
+            dispatch_group_enter(popupGroup);
+            [strongSelf extractQiZheng_NoPopup_WithCompletion:^(NSString *result) {
+                g_extractedData[@"七政四余"] = SafeString(result); dispatch_group_leave(popupGroup);
+            }];
+            dispatch_group_enter(popupGroup);
+            [strongSelf extractSanGong_NoPopup_WithCompletion:^(NSString *result) {
+                g_extractedData[@"三宫时信息"] = SafeString(result); dispatch_group_leave(popupGroup);
+            }];
+        }
+        
+        dispatch_group_notify(popupGroup, dispatch_get_main_queue(),^{
             LogMessage(EchoLogTypeInfo, @"[盘面] 所有信息整合完成。");
             NSString *value = g_extractedData[@"毕法要诀"];
             if (value) { g_extractedData[@"毕法要诀"] = [value stringByReplacingOccurrencesOfString:@"通类门→" withString:@""]; }
@@ -4737,6 +4743,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
