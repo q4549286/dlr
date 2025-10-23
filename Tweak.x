@@ -2528,7 +2528,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         [yaoWeiContent appendString:@"// 3.1. 课盘解析\n"];
 
         NSArray<NSString *> *allPossibleKeys = @[
-            @"来占之情→", @"发用事端→", @"三传事体→", @"日辰主客→", @"克应之期→"
+            @"来占之情→", @"发用事端→" , @"克应之期→"
         ];
         
         for (NSString *key in allPossibleKeys) {
@@ -4743,6 +4743,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
