@@ -2791,7 +2791,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
             @"key": @"神煞详情", 
             @"title": @"神煞系统", 
             @"content": SafeString(reportData[@"神煞详情"]), 
-            @"prefix": @"// 协议定位：此模块为未经筛选的【原始神煞情报数据库】。\n// 核心指令：严禁对此处任何神煞进行即时解读或赋予权重。\n// 最终裁决权：所有信号的有效性、关联度与最终解释权，将唯一、强制地由【特殊功能性资源评估 (神煞)】协议，通过其内置的【三阶过滤】流程进行终审裁决。\n"
+            @"prefix": @"// 协议定位：此模块为未经筛选的【原始神煞情报数据库】。\n// 核心指令：严禁对此处任何神煞进行即时解读或赋予权重。\n// 最终裁决权：所有信号的有效性、关联度与最终解释权，将唯一、强制地由【环境与变量层】协议，通过其内置的【三阶过滤】流程进行终审裁决。\n"
         },
         @{
             @"key": @"辅助系统", 
@@ -4860,6 +4860,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
