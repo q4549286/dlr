@@ -4443,30 +4443,68 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
 // =========================================================================
 // ↓↓↓ 使用这个完整、修正后的版本替换您现有的函数 ↓↓↓
 // =========================================================================
+// =========================================================================
+// ↓↓↓ 使用这个【最终修正版】，它能正确地将“神将详解”格式化为您要的格式 ↓↓↓
+// =========================================================================
 %new
 - (void)processKeChuanQueue_Truth_S2 {
+    // 这部分处理队列中的下一个任务，逻辑保持不变
     if (!g_s2_isExtractingKeChuanDetail || g_s2_keChuanWorkQueue.count == 0) {
+        
+        // ================== 核心修改区域 START ==================
+        // 当所有任务都处理完毕后，执行这里的最终格式化逻辑
         if (g_s2_isExtractingKeChuanDetail) {
-            LogMessage(EchoLogTypeTask, @"[完成] “课传流注”全部推衍完毕。");
+            LogMessage(EchoLogTypeTask, @"[完成] “课传流注”全部推衍完毕，正在重新整合格式...");
             
-            NSMutableString *resultStr = [NSMutableString string];
+            // 1. 创建一个字典来分组解析结果
+            NSMutableDictionary<NSString *, NSMutableString *> *groupedDetails = [NSMutableDictionary dictionary];
+            
+            // 2. 遍历所有已捕获的结果
             if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) {
                 for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) {
-                    // --- 核心修改：将标题传递给解析器以提供上下文 ---
                     NSString *title = g_s2_keChuanTitleQueue[i];
                     NSString *rawBlock = g_s2_capturedKeChuanDetailArray[i];
                     
-                    // 调用已修改的解析器，传入标题
+                    // 解析原始文本块，得到干净的细节
                     NSString *structuredBlock = parseKeChuanDetailBlock(rawBlock, title);
+                    if (structuredBlock.length == 0) continue;
+
+                    // 3. 根据标题，决定这个细节应该属于哪个组
+                    NSString *groupKey = nil;
+                    if ([title containsString:@"日干"])       groupKey = @"日干";
+                    else if ([title containsString:@"支辰"])   groupKey = @"日支";
+                    else if ([title containsString:@"日上"])   groupKey = @"第一课";
+                    else if ([title containsString:@"日阴"])   groupKey = @"第二课";
+                    else if ([title containsString:@"辰上"])   groupKey = @"第三课";
+                    else if ([title containsString:@"辰阴"])   groupKey = @"第四课";
+                    else if ([title containsString:@"初传"])   groupKey = @"初传";
+                    else if ([title containsString:@"中传"])   groupKey = @"中传";
+                    else if ([title containsString:@"末传"])   groupKey = @"末传";
                     
-                    // 组合最终结果
-                    [resultStr appendFormat:@"- 对象: %@\n%@\n\n", title, structuredBlock];
+                    if (groupKey) {
+                        // 如果这个组的键还不存在，就初始化它
+                        if (!groupedDetails[groupKey]) {
+                            groupedDetails[groupKey] = [NSMutableString string];
+                        }
+                        // 将解析后的细节追加到对应的组里
+                        [groupedDetails[groupKey] appendFormat:@"%@\n", structuredBlock];
+                    }
                 }
 
-                // 在这里处理最终结果
-                g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                // 4. 按照您想要的最终顺序，构建输出字符串
+                NSMutableString *resultStr = [NSMutableString string];
+                NSArray *outputOrder = @[@"日干", @"日支", @"第一课", @"第二课", @"第三课", @"第四课", @"初传", @"中传", @"末传"];
                 
-                // 如果不是作为复合任务的一部分，则直接显示结果
+                for (NSString *key in outputOrder) {
+                    if (groupedDetails[key]) {
+                        [resultStr appendFormat:@"- %@\n%@\n", key, [groupedDetails[key] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+                    }
+                }
+
+                // 5. 设置全局结果
+                g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+                // 如果不是复合任务的一部分，则直接显示结果
                 if (!g_s2_keChuan_completion_handler) {
                     NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; 
                     reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
@@ -4475,20 +4513,21 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                     [self showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];
                     [self presentAIActionSheetWithReport:finalReport];
                 }
+
             } else { 
                 g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]"; 
                 LogMessage(EchoLogError, @"%@", g_s2_finalResultFromKeChuan); 
             }
         }
+        // ================== 核心修改区域 END ====================
 
-        // 清理状态
+        // 清理状态，逻辑保持不变
         g_s2_isExtractingKeChuanDetail = NO; 
         g_s2_capturedKeChuanDetailArray = nil; 
         g_s2_keChuanWorkQueue = nil; 
         g_s2_keChuanTitleQueue = nil;
         [self hideProgressHUD];
         
-        // 如果有回调，执行回调
         if (g_s2_keChuan_completion_handler) { 
             g_s2_keChuan_completion_handler(); 
             g_s2_keChuan_completion_handler = nil; 
@@ -4496,7 +4535,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         return;
     }
 
-    // --- 继续处理队列中的下一个任务 ---
+    // 这部分处理队列中的下一个任务，逻辑也保持不变
     NSMutableDictionary *task = g_s2_keChuanWorkQueue.firstObject; 
     [g_s2_keChuanWorkQueue removeObjectAtIndex:0];
     NSString *title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
@@ -4737,6 +4776,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
