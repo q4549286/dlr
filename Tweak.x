@@ -4571,7 +4571,13 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
             if ([trimmedLine hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
                 NSString *label = keywordMap[keyword];
-
+                // <<<<<<<<<<<<<<<<<<<< 核心修改点 START >>>>>>>>>>>>>>>>>>>>
+                // 根据您的要求，对"遁干"的输出内容进行文本替换
+                if ([label isEqualToString:@"遁干A+"]) {
+                    value = [value stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干:"];
+                    value = [value stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时:"];
+                }
+                // <<<<<<<<<<<<<<<<<<<< 核心修改点 END >>>>>>>>>>>>>>>>>>>>
                 // <<<<<<<<<<<<<<< 强力过滤引擎 >>>>>>>>>>>>>>>>>
                 NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知).*$" options:0 error:nil];
                 value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
@@ -4902,6 +4908,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
