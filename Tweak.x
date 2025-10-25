@@ -2512,7 +2512,7 @@ static NSString* parseAndFilterShenSha(NSString *rawContent) {
         @{
             @"title": @"// 1. 通用核心神煞",
             @"subsections": @[
-                @{ @"subtitle": @"- **吉神类:**", @"shenshas": @[@"天德", @"月德", @"天喜", @"天赦", @"皇恩"] },
+                @{ @"subtitle": @"- **吉神类:**", @"shenshas": @[@"日德", @"月德", @"天喜", @"天赦", @"皇恩"] },
                 @{ @"subtitle": @"- **驿马类:**", @"shenshas": @[@"岁马", @"月马", @"日马", @"天马"] },
                 @{ @"subtitle": @"- **凶煞类:**", @"shenshas": @[@"羊刃", @"飞刃", @"亡神", @"劫煞", @"灾煞"] },
                 @{ @"subtitle": @"- **状态类:**", @"shenshas": @[@"旬空", @"岁破", @"月破", @"太岁", @"岁禄", @"日禄", @"岁墓", @"支墓"] }
@@ -2534,7 +2534,7 @@ static NSString* parseAndFilterShenSha(NSString *rawContent) {
                 @{ @"subtitle": @"- **正面信号:**", @"shenshas": @[@"天医", @"地医", @"天解", @"地解", @"解神"] },
                 @{ @"subtitle": @"- **负面信号:**", @"shenshas": @[@"病符", @"死符", @"死神", @"死气", @"丧门", @"吊客", @"血光", @"血支", @"披麻", @"孝服"] },
                 @{ @"subtitle": @"**//官非诉讼**", @"shenshas": @[] },
-                @{ @"subtitle": @"- **解厄信号:**", @"shenshas": @[@"天德", @"月德", @"岁德", @"天赦"] },
+                @{ @"subtitle": @"- **解厄信号:**", @"shenshas": @[@"日德", @"月德", @"岁德", @"天赦"] },
                 @{ @"subtitle": @"- **致讼信号:**", @"shenshas": @[@"官符", @"天刑", @"天狱", @"天网", @"岁虎"] },
                 @{ @"subtitle": @"**//阴私鬼神**", @"shenshas": @[] },
                 @{ @"subtitle": @"- **核心信号:**", @"shenshas": @[@"天鬼", @"月华盖", @"日华盖", @"天巫", @"地狱", @"五墓", @"哭神", @"伏骨"] }
@@ -4902,6 +4902,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
