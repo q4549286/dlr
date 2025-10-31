@@ -2861,6 +2861,8 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)setInteractionBlocked:(BOOL)blocked;
+- (void)startExtraction_TianDiPan_Details:(void (^)(NSString *result))completion;
+- (void)processTianDiPanQueue;
 @end
 
 %hook UILabel
@@ -4520,6 +4522,8 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         [self processKeChuanQueue_Truth_S2]; 
     }
 }
+// 前置声明，解决编译顺序问题
+static NSString* parseTianJiangDetailBlock(NSString *rawText);
 #pragma mark - TianDiPan Detail Extraction (V1.0)
 
 // 新函数 1: 弹窗内容解析器
@@ -4599,7 +4603,9 @@ static NSString* parseTianJiangDetailBlock(NSString *rawText) {
     // 触发手势
     // 这是触发点击的核心，通过找到手势的目标和动作并直接调用
     // 这种方式比模拟触摸事件更稳定
-    id target = [self GetIvarValueSafely:gesture ivarNameSuffix:@"_targets"].firstObject;
+    // 进行类型转换，告诉编译器返回的是一个数组
+NSArray *targets = (NSArray *)[self GetIvarValueSafely:gesture ivarNameSuffix:@"_targets"];
+id target = targets.firstObject;
     if (target) {
         id realTarget = [target valueForKey:@"target"];
         SEL action = NSSelectorFromString([target valueForKey:@"action"]);
@@ -4928,6 +4934,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
