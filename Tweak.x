@@ -4649,24 +4649,33 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         if (completion) completion([finalResultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
     });
 }
-// <<<<<<<<<<<< 1. 用这个修改后的版本，完整替换掉你原来的“侦察兵”函数 >>>>>>>>>>>>>
+// <<<<<<<<<<<< 1. 用这个 V3 版本，完整替换掉你原来的“侦察兵”函数 >>>>>>>>>>>>>
 %new
 - (void)investigateKeChuanContainer_S4_Debug {
-    LogMessage(EchoLogTypeTask, @"[侦察任务 V2] 开始探查'ViewController'自身内部结构...");
+    LogMessage(EchoLogTypeTask, @"[侦察任务 V3] 开始探查'天地盤視圖'组件内部结构...");
     
-    id targetObject = self; // <<<<<< 核心修改：目标直接设为 self
+    // <<<<<< 核心修改：目标现在是 self 里的 '天地盤視圖' 变量 >>>>>>
+    id targetObject = [self GetIvarValueSafely:self ivarNameSuffix:@"天地盤視圖"];
     
-    LogMessage(EchoLogTypeInfo, @"[侦察 V2] 目标对象: %@", targetObject);
+    if (!targetObject) {
+        LogMessage(EchoLogError, @"[侦察 V3] 失败: 在 ViewController 中未找到 '天地盤視圖' 实例。");
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察失败" message:@"在 ViewController 中未找到 '天地盤視圖' 实例。" preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    
+    LogMessage(EchoLogTypeInfo, @"[侦察 V3] 成功定位目标对象: %@", targetObject);
     
     unsigned int ivarCount;
     Ivar *ivars = class_copyIvarList([targetObject class], &ivarCount);
     
     if (!ivars) {
-        LogMessage(EchoLogTypeWarning, @"[侦察 V2] 警告: 无法获取'ViewController'的实例变量列表。");
+        LogMessage(EchoLogTypeWarning, @"[侦察 V3] 警告: 无法获取'天地盤視圖'的实例变量列表。");
         return;
     }
     
-    NSMutableString *report = [NSMutableString stringWithString:@"\n\n--- 'ViewController' 内部结构报告 ---\n"];
+    NSMutableString *report = [NSMutableString stringWithString:@"\n\n--- '天地盤視圖' 内部结构报告 ---\n"];
     
     for (unsigned int i = 0; i < ivarCount; i++) {
         Ivar ivar = ivars[i];
@@ -4682,16 +4691,13 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
             id value = object_getIvar(targetObject, ivar);
             [report appendFormat:@"\n[变量名]: %@\n[类型]: %@\n[值]: %@\n", name, type, [value description]];
 
-            // 重点关注 NSArray 或 NSDictionary
             if ([value isKindOfClass:[NSArray class]]) {
                 NSArray *arr = (NSArray *)value;
                 if (arr.count > 0) {
                      [report appendFormat:@"  -> 这是一个数组，包含 %lu 个对象。第一个对象是: %@\n", (unsigned long)arr.count, [arr.firstObject description]];
-                     // 如果数组里有12个对象，这很可能就是我们要找的！
                      if (arr.count == 12) {
                         [report appendString:@"  ****** 高度可疑目标！这个数组包含12个元素！******\n"];
                         
-                        // 深入探测第一个对象的内部结构
                         id firstObject = arr.firstObject;
                         unsigned int subIvarCount;
                         Ivar *subIvars = class_copyIvarList([firstObject class], &subIvarCount);
@@ -4706,11 +4712,9 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                              free(subIvars);
                              [report appendString:@"  ********************************\n"];
                         }
-
                      }
                 }
             }
-
         } @catch (NSException *exception) {
             [report appendFormat:@"\n[变量名]: %@\n[类型]: %@\n[值]: (获取失败: %@)\n", name, type, exception.reason];
         }
@@ -4719,12 +4723,10 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     free(ivars);
     [report appendString:@"\n--- 报告结束 ---\n\n"];
     
-    // 将侦察报告打印到控制台日志
     NSLog(@"%@", report);
-    LogMessage(EchoLogTypeSuccess, @"[侦察 V2] 侦察报告已生成，请在设备控制台日志中查看详细信息！");
+    LogMessage(EchoLogTypeSuccess, @"[侦察 V3] 侦察报告已生成，请在设备控制台日志中查看详细信息！");
 
-    // 为了方便，也尝试显示在UI上
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察报告 V2" message:report preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察报告 V3" message:report preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"复制并关闭" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [UIPasteboard generalPasteboard].string = report;
     }]];
@@ -4839,6 +4841,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
