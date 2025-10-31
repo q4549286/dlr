@@ -4649,28 +4649,24 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         if (completion) completion([finalResultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
     });
 }
-// <<<<<<<<<<<< 1. 将这个“侦察兵”函数添加到你的代码中 >>>>>>>>>>>>>
+// <<<<<<<<<<<< 1. 用这个修改后的版本，完整替换掉你原来的“侦察兵”函数 >>>>>>>>>>>>>
 %new
 - (void)investigateKeChuanContainer_S4_Debug {
-    LogMessage(EchoLogTypeTask, @"[侦察任务 S4-Debug] 开始探查'課傳'组件内部结构...");
+    LogMessage(EchoLogTypeTask, @"[侦察任务 V2] 开始探查'ViewController'自身内部结构...");
     
-    id keChuanContainer = [self GetIvarValueSafely:self ivarNameSuffix:@"課傳"];
-    if (!keChuanContainer) {
-        LogMessage(EchoLogError, @"[侦察 S4-Debug] 失败: 无法定位核心数据组件'課傳'。");
-        return;
-    }
+    id targetObject = self; // <<<<<< 核心修改：目标直接设为 self
     
-    LogMessage(EchoLogTypeInfo, @"[侦察 S4-Debug] 成功定位'課傳'对象: %@", keChuanContainer);
+    LogMessage(EchoLogTypeInfo, @"[侦察 V2] 目标对象: %@", targetObject);
     
     unsigned int ivarCount;
-    Ivar *ivars = class_copyIvarList([keChuanContainer class], &ivarCount);
+    Ivar *ivars = class_copyIvarList([targetObject class], &ivarCount);
     
     if (!ivars) {
-        LogMessage(EchoLogTypeWarning, @"[侦察 S4-Debug] 警告: 无法获取'課傳'对象的实例变量列表。");
+        LogMessage(EchoLogTypeWarning, @"[侦察 V2] 警告: 无法获取'ViewController'的实例变量列表。");
         return;
     }
     
-    NSMutableString *report = [NSMutableString stringWithString:@"\n\n--- '課傳' 组件内部结构报告 ---\n"];
+    NSMutableString *report = [NSMutableString stringWithString:@"\n\n--- 'ViewController' 内部结构报告 ---\n"];
     
     for (unsigned int i = 0; i < ivarCount; i++) {
         Ivar ivar = ivars[i];
@@ -4683,7 +4679,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         NSString *type = [NSString stringWithUTF8String:type_c];
         
         @try {
-            id value = object_getIvar(keChuanContainer, ivar);
+            id value = object_getIvar(targetObject, ivar);
             [report appendFormat:@"\n[变量名]: %@\n[类型]: %@\n[值]: %@\n", name, type, [value description]];
 
             // 重点关注 NSArray 或 NSDictionary
@@ -4694,6 +4690,23 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                      // 如果数组里有12个对象，这很可能就是我们要找的！
                      if (arr.count == 12) {
                         [report appendString:@"  ****** 高度可疑目标！这个数组包含12个元素！******\n"];
+                        
+                        // 深入探测第一个对象的内部结构
+                        id firstObject = arr.firstObject;
+                        unsigned int subIvarCount;
+                        Ivar *subIvars = class_copyIvarList([firstObject class], &subIvarCount);
+                        if(subIvars) {
+                             [report appendString:@"  ****** 数组内对象结构探测: ******\n"];
+                             for(unsigned int j=0; j < subIvarCount; j++) {
+                                 const char *sub_name_c = ivar_getName(subIvars[j]);
+                                 if(sub_name_c) {
+                                     [report appendFormat:@"    - 属性名: %s\n", sub_name_c];
+                                 }
+                             }
+                             free(subIvars);
+                             [report appendString:@"  ********************************\n"];
+                        }
+
                      }
                 }
             }
@@ -4708,10 +4721,10 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     
     // 将侦察报告打印到控制台日志
     NSLog(@"%@", report);
-    LogMessage(EchoLogTypeSuccess, @"[侦察 S4-Debug] 侦察报告已生成，请在设备控制台日志中查看详细信息！");
+    LogMessage(EchoLogTypeSuccess, @"[侦察 V2] 侦察报告已生成，请在设备控制台日志中查看详细信息！");
 
     // 为了方便，也尝试显示在UI上
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察报告" message:report preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察报告 V2" message:report preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"复制并关闭" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [UIPasteboard generalPasteboard].string = report;
     }]];
@@ -4826,6 +4839,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
