@@ -1912,6 +1912,8 @@ static NSString* extractValueAfterKeyword(NSString *line, NSString *keyword) {
     NSString *value = [line substringFromIndex:keywordRange.location + keywordRange.length];
     return [value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle);
+
 // =========================================================================
 // ↓↓↓ 使用这个最终修正版，它能精确处理重复神煞并只保留最短版本 ↓↓↓
 // =========================================================================
@@ -4888,6 +4890,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
