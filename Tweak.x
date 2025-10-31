@@ -2863,6 +2863,8 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)setInteractionBlocked:(BOOL)blocked;
+- (void)extractTianDiPanDetail_Direct_S4_WithCompletion:(void (^)(NSString *result))completion; // <<<<<< 在这里添加新行
+
 @end
 
 %hook UILabel
@@ -4754,5 +4756,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
