@@ -67,7 +67,6 @@ static void LogToScreen(NSString *format, ...) {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        // 【参考原始脚本写法】使用 dispatch_after
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if ([self.view.window viewWithTag:888999]) return;
             UIButton *inspectorButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -118,25 +117,47 @@ static void LogToScreen(NSString *format, ...) {
 
     __block UIView *plateView = nil;
     
-    // 简化并修复视图查找逻辑
-    void (^findViewRecursive)(UIView *) = ^(UIView *view) {
-        if ([view isKindOfClass:plateViewClass]) {
-            plateView = view;
-        }
-        // 即使找到也继续遍历，以防有多个实例（虽然不太可能）
-        for (UIView *subview in view.subviews) {
-            if (plateView) break; // 如果已经找到，就跳出内层循环
-            findViewRecursive(subview);
-        }
-    };
-    
-    // 遍历所有窗口
-    for (UIWindow *window in [UIApplication sharedApplication].windows) {
-        if (window.hidden == NO) {
-            findViewRecursive(window);
-            if (plateView) break; // 如果在某个窗口找到了，就停止遍历其他窗口
+    // ===================================================================
+    // 【最终修正】: 恢复兼容性API + 修正Block递归语法
+    // ===================================================================
+    NSMutableArray *windowsToSearch = [NSMutableArray array];
+
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                [windowsToSearch addObjectsFromArray:scene.windows];
+            }
         }
     }
+    
+    if (windowsToSearch.count == 0) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        if ([UIApplication sharedApplication].windows) {
+            [windowsToSearch addObjectsFromArray:[UIApplication sharedApplication].windows];
+        }
+        #pragma clang diagnostic pop
+    }
+
+    // 【修正】标准的递归 Block 写法
+    void (^__block __weak weak_findViewRecursive)(UIView *);
+    void (^findViewRecursive)(UIView *);
+    weak_findViewRecursive = findViewRecursive = ^(UIView *view) {
+        if (plateView) return; 
+        if ([view isKindOfClass:plateViewClass]) {
+            plateView = view;
+            return;
+        }
+        for (UIView *subview in view.subviews) {
+            weak_findViewRecursive(subview);
+        }
+    };
+
+    for (UIWindow *window in windowsToSearch) {
+        findViewRecursive(window);
+        if (plateView) break;
+    }
+    // ======================= 最终修正结束 ========================
 
     if (!plateView) {
         LogToScreen(@"[CRITICAL] 遍历所有窗口也找不到 '六壬大占.天地盤視圖類' 的实例。");
@@ -144,7 +165,6 @@ static void LogToScreen(NSString *format, ...) {
     }
     LogToScreen(@"[SUCCESS] 成功定位到天地盘视图实例: <%p>", plateView);
 
-    // 【新需求】增加要检查的经纬信息
     NSArray *ivarSuffixes = @[
         @"地宮宮名列", @"天神宮名列", @"天將宮名列",
         @"天盤外經", @"天盤內經", @"天盤將經"
@@ -167,13 +187,12 @@ static void LogToScreen(NSString *format, ...) {
             NSString *className = NSStringFromClass([dataObject class]);
             LogToScreen(@"[INFO] 变量类型: %@", className);
             
-            // 处理字典类型 (宫名列)
             if ([dataObject isKindOfClass:[NSDictionary class]]) {
                 NSDictionary *dataDict = (NSDictionary *)dataObject;
                 LogToScreen(@"[INFO] 确认是 NSDictionary，包含 %lu 个条目:", (unsigned long)dataDict.count);
                 
                 int i = 0;
-                for (id key in [dataDict.allKeys sortedArrayUsingSelector:@selector(compare:)]) { // 对Key排序，保证输出顺序稳定
+                for (id key in [dataDict.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
                     id layer = dataDict[key];
                     if (![layer isKindOfClass:[CALayer class]]) {
                          LogToScreen(@"  [%d] Key: %@ -> 值不是 CALayer", i, key);
@@ -187,7 +206,6 @@ static void LogToScreen(NSString *format, ...) {
                     i++;
                 }
             } 
-            // 【新逻辑】处理数组类型 (经纬)
             else if ([dataObject isKindOfClass:[NSArray class]]) {
                 NSArray *dataArray = (NSArray *)dataObject;
                 LogToScreen(@"[INFO] 确认是 NSArray，包含 %lu 个条目:", (unsigned long)dataArray.count);
@@ -214,10 +232,10 @@ static void LogToScreen(NSString *format, ...) {
     LogToScreen(@"\n--- [COMPLETE] 检查完毕 ---");
 }
 
-%end // %hook UIViewController 结束
+%end
 
 %ctor {
     @autoreleasepool {
-        NSLog(@"[EchoFullInspector] 完整检查脚本 (最终版) 已加载。");
+        NSLog(@"[EchoFullInspector] 完整检查脚本 (可编译最终版) 已加载。");
     }
 }
