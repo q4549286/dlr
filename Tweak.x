@@ -3296,7 +3296,6 @@ if (g_isExtractingTianJiangDetail) {
     }
     
     // 从队列中取出一个任务并执行
-    NSMutableDictionary *task = g_tianJiang_workQueue.firstObject;
     // 从队列中移除已完成的任务
     [g_tianJiang_workQueue removeObjectAtIndex:0];
     
@@ -4890,6 +4889,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
