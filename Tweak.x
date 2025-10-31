@@ -3296,7 +3296,7 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
 %new
 - (void)processTianJiangQueue_S3 {
     if (!g_isExtractingTianJiangDetail || g_tianJiang_workQueue.count == 0 || ![[g_tianJiang_workQueue.firstObject allKeys] containsObject:@"result"]) {
-        // ... (这部分清理和报告的代码保持不变)
+        // ... (这部分清理和报告的代码保持不变) ...
         if (g_isExtractingTianJiangDetail) {
             LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有天将详情推衍完毕。");
             NSMutableString *finalReport = [NSMutableString string];
@@ -3320,30 +3320,45 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
     [g_tianJiang_workQueue removeObjectAtIndex:0];
     
     if(g_tianJiang_workQueue.count > 0){
-        NSMutableDictionary *nextTask = g_tianJiang_workQueue.firstObject;
+        NSMutableString *nextTask = g_tianJiang_workQueue.firstObject;
         LogMessage(EchoLogTypeInfo, @"[天地盘天将] 正在参详: %@", nextTask[@"title"]);
         [self updateProgressHUD:[NSString stringWithFormat:@"推演天地盘天将: %@", nextTask[@"title"]]];
 
-        // --- 【核心黑魔法 V12】 ---
+        // --- 【核心黑魔法 V13 - 编译修复版】 ---
         UITapGestureRecognizer *realGesture = nextTask[@"gesture"];
-        id target = [realGesture valueForKey:@"_targets"].firstObject; // 手势的目标通常是 ViewController
-        if (!target) {
-            LogMessage(EchoLogError, @"[错误] 无法获取真实手势的 target。");
-            [nextTask setObject:@"[解析失败: 无法获取 target]" forKey:@"result"];
+        
+        // 【修正1】获取手势的目标(target)和动作(action)
+        // _targets 属性存储的是一个包含 UIGestureRecognizerTarget 对象的数组
+        NSArray *targets = [realGesture valueForKey:@"_targets"];
+        if (!targets || targets.count == 0) {
+            LogMessage(EchoLogError, @"[错误] 无法获取真实手势的 _targets 数组。");
+            [nextTask setObject:@"[解析失败: 无法获取 _targets]" forKey:@"result"];
             [self processTianJiangQueue_S3]; return;
         }
-        
-        SEL action = NSSelectorFromString(@"action");
-        if (![target respondsToSelector:action]) {
-             LogMessage(EchoLogError, @"[错误] 无法获取真实手势的 action。");
-            [nextTask setObject:@"[解析失败: 无法获取 action]" forKey:@"result"];
-            [self processTianJiangQueue_S3]; return;
-        }
-        
-        SEL targetSelector = [target performSelector:action];
 
+        // 【修正2】强制类型转换并安全获取第一个 target
+        id gestureTarget = [targets firstObject];
+        if (!gestureTarget) {
+            LogMessage(EchoLogError, @"[错误] _targets 数组为空。");
+            [nextTask setObject:@"[解析失败: _targets 为空]" forKey:@"result"];
+            [self processTianJiangQueue_S3]; return;
+        }
+
+        // 【修正3】从 UIGestureRecognizerTarget 对象中获取真正的 target 和 action
+        id realTarget = [gestureTarget valueForKey:@"_target"];
+        SEL targetSelector;
+        // SEL 是一个指针，所以我们可以直接从 ivar 中获取它的值
+        object_getInstanceVariable(gestureTarget, "_action", (void **)&targetSelector);
+
+        if (!realTarget || !targetSelector) {
+            LogMessage(EchoLogError, @"[错误] 无法从 UIGestureRecognizerTarget 中获取 target 或 action。");
+            [nextTask setObject:@"[解析失败: 无法获取 target/action]" forKey:@"result"];
+            [self processTianJiangQueue_S3]; return;
+        }
+
+        // --- 伪造流程保持不变 ---
         CGPoint targetPoint = [nextTask[@"point"] CGPointValue];
-        [realGesture setFake_location:[NSValue valueWithCGPoint:targetPoint]]; // 使用关联对象设置坐标
+        [realGesture setFake_location:[NSValue valueWithCGPoint:targetPoint]];
 
         Method originalMethod = class_getInstanceMethod([realGesture class], @selector(locationInView:));
         Method fakeMethod = class_getInstanceMethod([NSObject class], @selector(fake_locationInView:));
@@ -3351,16 +3366,19 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
         IMP originalImp = method_getImplementation(originalMethod);
         IMP fakeImp = method_getImplementation(fakeMethod);
         
-        // 替换方法实现
         method_setImplementation(originalMethod, fakeImp);
         
-        // 手动触发 action
-        id realTarget = [target performSelector:NSSelectorFromString(@"target")];
-        if (realTarget && [realTarget respondsToSelector:targetSelector]) {
-            SUPPRESS_LEAK_WARNING([realTarget performSelector:targetSelector withObject:realGesture]);
+        // 【修正4】使用正确的 target 和 selector，并抑制内存泄漏警告
+        if ([realTarget respondsToSelector:targetSelector]) {
+            // 使用 SUPPRESS_LEAK_WARNING 宏来包裹 performSelector 调用
+            SUPPRESS_LEAK_WARNING(
+                [realTarget performSelector:targetSelector withObject:realGesture]
+            );
+        } else {
+             LogMessage(EchoLogTypeWarning, @"[警告] Target 不响应选择器: %@", NSStringFromSelector(targetSelector));
         }
         
-        // 立即恢复原始方法实现，避免影响正常的用户交互
+        // 立即恢复原始方法实现
         method_setImplementation(originalMethod, originalImp);
 
     } else {
@@ -4953,6 +4971,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
