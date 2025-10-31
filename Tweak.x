@@ -3379,7 +3379,7 @@ if (g_isExtractingTianJiangDetail) {
         for (int i = 0; ivarNamesToTry[i] != NULL; ++i) {
             Ivar plateViewIvar = class_getInstanceVariable([self class], ivarNamesToTry[i]);
             if (plateViewIvar) {
-                id potentialView = object_get_Ivar(self, plateViewIvar);
+                id potentialView = object_getIvar(self, plateViewIvar);
                 if (potentialView && [potentialView isKindOfClass:[UIView class]]) {
                     plateView = (UIView *)potentialView;
                     LogMessage(EchoLogTypeInfo, @"[天地盘天将] 成功通过实例变量 '%s' 定位到天地盘视图。", ivarNamesToTry[i]);
@@ -4921,6 +4921,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
