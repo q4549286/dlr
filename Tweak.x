@@ -4933,9 +4933,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 
 
 
-给我梳理一下 按照分类 数据提取流程 拦截过程 
-
-
 
 
 
