@@ -3322,8 +3322,8 @@ if (g_isExtractingTianJiangDetail) {
 
 
 // =========================================================================
-// 新增：天地盘天将详情提取核心逻辑 (S3 - V5.0 终极模仿版)
-// (模仿课传流注的成功逻辑，直接从 ViewController 的实例变量中读取天地盘视图)
+// 新增：天地盘天将详情提取核心逻辑 (S3 - V6.0 最终模拟版)
+// (模拟App行为，通过坐标计算定位天将，并主动调用触摸处理方法)
 // =========================================================================
 
 %new
@@ -3341,19 +3341,17 @@ if (g_isExtractingTianJiangDetail) {
     g_tianJiang_completion_handler = [completion copy];
     g_tianJiang_workQueue = [NSMutableArray array];
 
-    // 1. 【核心修正】模仿课传流注的逻辑，直接从 ViewController 的实例变量中寻找天地盘视图
+    // 1. 定位天地盘视图 (逻辑同V5，已验证是正确的)
     UIView *plateView = nil;
-    
-    // 我们尝试几个最可能的名字
     const char *ivarNamesToTry[] = {"天地盤", "天地盤視圖", NULL};
     for (int i = 0; ivarNamesToTry[i] != NULL; ++i) {
         Ivar plateViewIvar = class_getInstanceVariable([self class], ivarNamesToTry[i]);
         if (plateViewIvar) {
-            id potentialView = object_getIvar(self, plateViewIvar);
+            id potentialView = object_get_Ivar(self, plateViewIvar);
             if (potentialView && [potentialView isKindOfClass:[UIView class]]) {
                 plateView = (UIView *)potentialView;
                 LogMessage(EchoLogTypeInfo, @"[天地盘天将] 成功通过实例变量 '%s' 定位到天地盘视图。", ivarNamesToTry[i]);
-                break; // 找到了就跳出循环
+                break;
             }
         }
     }
@@ -3361,47 +3359,55 @@ if (g_isExtractingTianJiangDetail) {
     if (!plateView) {
         LogMessage(EchoLogError, @"[错误] 无法通过实例变量 '天地盤' 或 '天地盤視圖' 找到天地盘视图。提取失败。");
         if(completion) completion(@"[错误: 找不到天地盘 ivar]");
-        [self processTianJiangQueue_S3]; // 调用以清理状态
+        [self processTianJiangQueue_S3];
         return;
     }
 
-    // 2. 在找到的 plateView 内部，寻找所有可交互的天将 UILabel
-    NSMutableArray<UILabel *> *allLabelsInPlate = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UILabel class], plateView, allLabelsInPlate);
-
-    // 创建一个天将名称的白名单
+    // 2.【核心变革】不再寻找手势，而是寻找天将UILabel本身
+    NSMutableArray<UILabel *> *tianJiangLabels = [NSMutableArray array];
     NSSet *tianJiangWhitelist = [NSSet setWithObjects:@"贵", @"蛇", @"朱", @"六", @"勾", @"青", @"空", @"白", @"常", @"玄", @"阴", @"后", nil];
     
-    // 3. 构建工作队列
+    NSMutableArray<UILabel *> *allLabelsInPlate = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], plateView, allLabelsInPlate);
+    
     for (UILabel *label in allLabelsInPlate) {
-        if (label.gestureRecognizers.count > 0 && [tianJiangWhitelist containsObject:label.text]) {
-            NSMutableDictionary *task = [NSMutableDictionary dictionary];
-            [task setObject:label.text forKey:@"title"];
-            [task setObject:label.gestureRecognizers.firstObject forKey:@"gesture"];
-            [g_tianJiang_workQueue addObject:task];
+        if ([tianJiangWhitelist containsObject:label.text]) {
+            // 还需要一个额外的判断来排除其他地方可能出现的同名label
+            // 一个好的判断是，天将label的父视图不是天地盘主视图
+            if (label.superview != plateView) {
+                 [tianJiangLabels addObject:label];
+            }
         }
     }
+
+    if (tianJiangLabels.count == 0) {
+        LogMessage(EchoLogTypeWarning, @"[天地盘天将] 在天地盘视图内未找到任何天将UILabel对象。");
+        if(completion) completion(@"");
+        [self processTianJiangQueue_S3];
+        return;
+    }
+
+    // 3. 构建工作队列，这次不再存储手势，而是存储UILabel本身
+    for (UILabel *label in tianJiangLabels) {
+        NSMutableDictionary *task = [NSMutableDictionary dictionary];
+        [task setObject:label.text forKey:@"title"];
+        [task setObject:label forKey:@"label"]; // 存储label对象
+        [g_tianJiang_workQueue addObject:task];
+    }
     
-    // 根据在圆盘上的角度排序
+    // 排序
     CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
     [g_tianJiang_workQueue sortUsingComparator:^NSComparisonResult(NSDictionary *task1, NSDictionary *task2) {
-        UIGestureRecognizer *g1 = task1[@"gesture"];
-        UIGestureRecognizer *g2 = task2[@"gesture"];
-        CGPoint p1 = [g1.view.superview convertPoint:g1.view.center toView:nil];
-        CGPoint p2 = [g2.view.superview convertPoint:g2.view.center toView:nil];
+        UILabel *l1 = task1[@"label"];
+        UILabel *l2 = task2[@"label"];
+        CGPoint p1 = [l1.superview convertPoint:l1.center toView:nil];
+        CGPoint p2 = [l2.superview convertPoint:l2.center toView:nil];
         CGFloat angle1 = atan2(p1.y - center.y, p1.x - center.x);
         CGFloat angle2 = atan2(p2.y - center.y, p2.x - center.x);
         return [@(angle1) compare:@(angle2)];
     }];
 
-    // 4. 检查队列并开始处理
-    if (g_tianJiang_workQueue.count == 0) {
-        LogMessage(EchoLogTypeWarning, @"[天地盘天将] 在天地盘视图内未找到任何可交互的天将标签。");
-        if(completion) completion(@"");
-        [self processTianJiangQueue_S3]; // 调用以清理状态
-        return;
-    }
-    
+    // 4. 启动处理
     [g_tianJiang_workQueue insertObject:[@{@"title": @"START_NODE", @"result":@"ok"} mutableCopy] atIndex:0];
     LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_tianJiang_workQueue.count-1);
     [self processTianJiangQueue_S3];
@@ -4896,6 +4902,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
