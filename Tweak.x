@@ -3334,103 +3334,78 @@ if (g_isExtractingTianJiangDetail) {
     }
 
     LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“天地盘天将详情”...");
+    [self showProgressHUD:@"正在推演天地盘..."];
     
-    // 1. 【核心修正】强制切换到“课盘”界面，确保所有视图都已加载
-    NSMutableArray<UISegmentedControl *> *segmentControls = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UISegmentedControl class], self.view, segmentControls);
-    if (segmentControls.count == 0) {
-        LogMessage(EchoLogError, @"[天地盘天将] 错误: 找不到用于切换界面的 UISegmentedControl。");
-        if (completion) completion(@"[推衍失败: 找不到切换控件]");
+    // 初始化状态
+    g_isExtractingTianJiangDetail = YES;
+    g_tianJiang_completion_handler = [completion copy];
+    g_tianJiang_workQueue = [NSMutableArray array];
+
+    // 1. 【核心修正】完全模仿 extractTianDiPanInfo_V18 的成功定位逻辑
+    UIView *plateView = nil;
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
+    if (!plateViewClass) {
+        LogMessage(EchoLogError, @"[错误] 找不到天地盘视图类 ('天地盤視圖' 或 '天地盤視圖類')。");
+        if(completion) completion(@"[错误: 找不到天地盘视图类]");
+        [self processTianJiangQueue_S3]; // 调用以清理状态
         return;
     }
-    UISegmentedControl *segmentControl = segmentControls.firstObject;
 
-NSInteger kePanIndex = -1;
-for (int i = 0; i < segmentControl.numberOfSegments; i++) {
-    NSString *title = [segmentControl titleForSegmentAtIndex:i];
-    // 【最终修正】将搜索关键词改为 "天地盘"，并兼容繁体
-    if ([title containsString:@"天地盘"] || [title containsString:@"天地盤"]) {
-        kePanIndex = i;
-        break;
-    }
-}
-if (kePanIndex == -1) {
-    // 【修正】更新错误日志以反映正确的搜索词
-    NSMutableArray *allTitles = [NSMutableArray array];
-    for (int i = 0; i < segmentControl.numberOfSegments; i++) {
-        [allTitles addObject:[segmentControl titleForSegmentAtIndex:i] ?: @"(nil)"];
-    }
-    LogMessage(EchoLogError, @"[天地盘天将] 错误: 找不到 '天地盘' 或 '天地盤' 选项。检测到的所有选项标题为: [%@]", [allTitles componentsJoinedByString:@", "]);
-    if (completion) completion(@"[推衍失败: 找不到'天地盘'选项]");
-    return;
-}
-
-    // 2. 等待UI刷新后，再执行真正的提取逻辑 (V5版的核心代码)
-    [self showProgressHUD:@"正在准备天地盘..."];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        
-        // 初始化状态
-        g_isExtractingTianJiangDetail = YES;
-        g_tianJiang_completion_handler = [completion copy];
-        g_tianJiang_workQueue = [NSMutableArray array];
-
-        // --- 从这里开始是 V5 版本的核心逻辑 ---
-        UIView *plateView = nil;
-        const char *ivarNamesToTry[] = {"天地盤", "天地盤視圖", NULL};
-        for (int i = 0; ivarNamesToTry[i] != NULL; ++i) {
-            Ivar plateViewIvar = class_getInstanceVariable([self class], ivarNamesToTry[i]);
-            if (plateViewIvar) {
-                id potentialView = object_getIvar(self, plateViewIvar);
-                if (potentialView && [potentialView isKindOfClass:[UIView class]]) {
-                    plateView = (UIView *)potentialView;
-                    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 成功通过实例变量 '%s' 定位到天地盘视图。", ivarNamesToTry[i]);
-                    break;
-                }
-            }
-        }
-
-        if (!plateView) {
-            LogMessage(EchoLogError, @"[错误] 切换到课盘后，仍无法通过实例变量找到天地盘视图。");
-            if(completion) completion(@"[错误: 找不到天地盘 ivar]");
-            [self processTianJiangQueue_S3]; // 调用以清理状态
-            return;
-        }
-
-        NSMutableArray<UILabel *> *allLabelsInPlate = [NSMutableArray array];
-        FindSubviewsOfClassRecursive([UILabel class], plateView, allLabelsInPlate);
-
-        NSSet *tianJiangWhitelist = [NSSet setWithObjects:@"贵", @"蛇", @"朱", @"六", @"勾", @"青", @"空", @"白", @"常", @"玄", @"阴", @"后", nil];
-        
-        for (UILabel *label in allLabelsInPlate) {
-            if (label.gestureRecognizers.count > 0 && [tianJiangWhitelist containsObject:label.text]) {
-                NSMutableDictionary *task = [NSMutableDictionary dictionary];
-                [task setObject:label.text forKey:@"title"];
-                [task setObject:label.gestureRecognizers.firstObject forKey:@"gesture"];
-                [g_tianJiang_workQueue addObject:task];
-            }
-        }
-        
-        CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
-        [g_tianJiang_workQueue sortUsingComparator:^NSComparisonResult(NSDictionary *task1, NSDictionary *task2) {
-            UIGestureRecognizer *g1 = task1[@"gesture"]; UIGestureRecognizer *g2 = task2[@"gesture"];
-            CGPoint p1 = [g1.view.superview convertPoint:g1.view.center toView:nil];
-            CGPoint p2 = [g2.view.superview convertPoint:g2.view.center toView:nil];
-            CGFloat angle1 = atan2(p1.y - center.y, p1.x - center.x);
-            CGFloat angle2 = atan2(p2.y - center.y, p2.x - center.x);
-            return [@(angle1) compare:@(angle2)];
-        }];
-
-        if (g_tianJiang_workQueue.count == 0) {
-            LogMessage(EchoLogTypeWarning, @"[天地盘天将] 切换到课盘后，在天地盘视图内仍未找到任何可交互的天将标签。这可能意味着它们不是UILabel。");
-            if(completion) completion(@"");
-            [self processTianJiangQueue_S3]; // 调用以清理状态
-            return;
-        }
-        
-        [g_tianJiang_workQueue insertObject:[@{@"title": @"START_NODE", @"result":@"ok"} mutableCopy] atIndex:0];
-        LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_tianJiang_workQueue.count-1);
+    // 从整个 App 窗口开始搜索，而不是 self.view
+    UIWindow *keyWindow = GetFrontmostWindow();
+    if (!keyWindow) {
+        LogMessage(EchoLogError, @"[错误] 找不到主窗口 (keyWindow)。");
+        if(completion) completion(@"[错误: 找不到 keyWindow]");
         [self processTianJiangQueue_S3];
-    });
+        return;
+    }
+
+    NSMutableArray *plateViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
+    if (plateViews.count == 0) {
+        LogMessage(EchoLogError, @"[错误] 在主窗口中找不到天地盘视图的实例。");
+        if(completion) completion(@"[错误: 在 keyWindow 找不到天地盘实例]");
+        [self processTianJiangQueue_S3]; // 调用以清理状态
+        return;
+    }
+    plateView = plateViews.firstObject;
+    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 成功通过全局搜索定位到天地盘视图。");
+
+    // 2. 在找到的 plateView 内部，寻找所有可交互的天将 UILabel
+    NSMutableArray<UILabel *> *allLabelsInPlate = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], plateView, allLabelsInPlate);
+
+    NSSet *tianJiangWhitelist = [NSSet setWithObjects:@"贵", @"蛇", @"朱", @"六", @"勾", @"青", @"空", @"白", @"常", @"玄", @"阴", @"后", nil];
+    
+    for (UILabel *label in allLabelsInPlate) {
+        if (label.gestureRecognizers.count > 0 && [tianJiangWhitelist containsObject:label.text]) {
+            NSMutableDictionary *task = [NSMutableDictionary dictionary];
+            [task setObject:label.text forKey:@"title"];
+            [task setObject:label.gestureRecognizers.firstObject forKey:@"gesture"];
+            [g_tianJiang_workQueue addObject:task];
+        }
+    }
+    
+    CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
+    [g_tianJiang_workQueue sortUsingComparator:^NSComparisonResult(NSDictionary *task1, NSDictionary *task2) {
+        UIGestureRecognizer *g1 = task1[@"gesture"]; UIGestureRecognizer *g2 = task2[@"gesture"];
+        CGPoint p1 = [g1.view.superview convertPoint:g1.view.center toView:nil];
+        CGPoint p2 = [g2.view.superview convertPoint:g2.view.center toView:nil];
+        CGFloat angle1 = atan2(p1.y - center.y, p1.x - center.x);
+        CGFloat angle2 = atan2(p2.y - center.y, p2.x - center.x);
+        return [@(angle1) compare:@(angle2)];
+    }];
+
+    if (g_tianJiang_workQueue.count == 0) {
+        LogMessage(EchoLogTypeWarning, @"[最终测试失败] 即使成功定位到天地盘视图，其内部依然未找到任何可交互的UILabel。确认该视图使用CALayer绘图，此功能无法通过模拟点击实现。");
+        if(completion) completion(@"[提取失败] 天地盘使用底层绘图，无法模拟点击。");
+        [self processTianJiangQueue_S3]; // 调用以清理状态
+        return;
+    }
+    
+    [g_tianJiang_workQueue insertObject:[@{@"title": @"START_NODE", @"result":@"ok"} mutableCopy] atIndex:0];
+    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_tianJiang_workQueue.count-1);
+    [self processTianJiangQueue_S3];
 }
 // ... (所有数据提取的核心函数，如 extractNianmingInfoWithCompletion 等，保持不变)
 // =========================================================================
@@ -4922,6 +4897,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
