@@ -4602,8 +4602,9 @@ static NSString* parseTianJiangDetailBlock(NSString *rawText) {
     // 触发手势
     // 这是触发点击的核心，通过找到手势的目标和动作并直接调用
     // 这种方式比模拟触摸事件更稳定
-    id target = [self GetIvarValueSafely:gesture ivarNameSuffix:@"_targets"].firstObject;
-    if (target) {
+// 修正后的代码
+    NSArray *targets = (NSArray *)[self GetIvarValueSafely:gesture ivarNameSuffix:@"_targets"];
+    id target = targets.firstObject;    if (target) {
         id realTarget = [target valueForKey:@"target"];
         SEL action = NSSelectorFromString([target valueForKey:@"action"]);
         if (realTarget && action && [realTarget respondsToSelector:action]) {
@@ -4931,6 +4932,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
