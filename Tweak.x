@@ -3325,10 +3325,9 @@ if (g_isExtractingTianJiangDetail) {
 // 新增：天地盘天将详情提取核心逻辑 (S3 - V4.0 最终精确版)
 // (精确查找天地盘视图类，并在其内部寻找可交互天将)
 // =========================================================================
-
 %new
 - (void)extractTianJiangDetailsFromPlate_WithCompletion:(void (^)(NSString *result))completion {
-    if (g_isExtractingTianJiang.Detail) {
+    if (g_isExtractingTianJiangDetail) { // <--- 已修正
         LogMessage(EchoLogError, @"[错误] 天地盘天将详情推衍任务已在进行中。");
         return;
     }
@@ -4891,6 +4890,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
