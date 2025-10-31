@@ -3,11 +3,38 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局UI变量与日志函数 (这部分不变)
+// 1. 全局UI变量、辅助函数与日志函数
 // =========================================================================
 
 static UIView *g_probePanelView = nil;
 static UITextView *g_probeLogTextView = nil;
+
+// <<<<<<<<<<<<<<<< 核心修正点 1：添加 GetFrontmostWindow 函数 >>>>>>>>>>>>>>>>
+static UIWindow* GetFrontmostWindow() {
+    UIWindow *frontmostWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *window in scene.windows) {
+                    if (window.isKeyWindow) {
+                        frontmostWindow = window;
+                        break;
+                    }
+                }
+                if (frontmostWindow) break;
+            }
+        }
+    }
+    
+    // 如果上面的新方法没找到，就用旧方法（并抑制警告）
+    if (!frontmostWindow) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        frontmostWindow = [UIApplication sharedApplication].keyWindow;
+        #pragma clang diagnostic pop
+    }
+    return frontmostWindow;
+}
 
 static void ProbeLog(NSString *format, ...) {
     if (!g_probeLogTextView) return;
@@ -31,18 +58,15 @@ static void ProbeLog(NSString *format, ...) {
 
 
 // =========================================================================
-// 2. Tweak 核心逻辑，包含 UIViewController 扩展
+// 2. Tweak 核心逻辑
 // =========================================================================
-
-// <<<<<<<<<<<<<<<< 核心修改点：将所有新方法放入 %hook UIViewController %end 块内 >>>>>>>>>>>>>>>>
 
 %hook UIViewController
 
-// --- 侦查面板的UI交互方法 ---
-
 %new
 - (void)showProbePanel {
-    UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
+    // <<<<<<<<<<<<<<<< 核心修正点 2：使用新函数替换旧API >>>>>>>>>>>>>>>>
+    UIWindow *keyWindow = GetFrontmostWindow(); 
     if (!keyWindow || g_probePanelView) return;
 
     g_probePanelView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, keyWindow.bounds.size.width, keyWindow.bounds.size.height * 0.6)];
@@ -50,6 +74,7 @@ static void ProbeLog(NSString *format, ...) {
     g_probePanelView.layer.borderColor = [UIColor cyanColor].CGColor;
     g_probePanelView.layer.borderWidth = 1.0;
     
+    // ... (面板UI的其他部分代码无需修改) ...
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, g_probePanelView.bounds.size.width, 30)];
     titleLabel.text = @"Echo 侦查面板";
     titleLabel.textColor = [UIColor cyanColor];
@@ -105,10 +130,9 @@ static void ProbeLog(NSString *format, ...) {
     }
 }
 
-// --- 核心侦查逻辑 ---
-
 %new
 - (void)runTheProbe:(id)sender {
+    // ... (这个函数内部逻辑不变) ...
     ProbeLog(@"\n\n[PROBE] ====== 开始新一轮侦查 ====== ");
 
     Class targetVCClass = NSClassFromString(@"六壬大占.ViewController");
@@ -117,8 +141,6 @@ static void ProbeLog(NSString *format, ...) {
         return;
     }
     
-    // 因为这段代码本身就在 UIViewController 的一个方法中运行，self 就是一个 UIViewController 实例。
-    // 我们需要确保 self 是我们想要的那个主 ViewController。
     if (![self isKindOfClass:targetVCClass]) {
         ProbeLog(@"[PROBE] 错误: 侦查逻辑必须从 '六壬大占.ViewController' 实例触发。当前实例是: %@", [self class]);
         return;
@@ -200,14 +222,13 @@ static void ProbeLog(NSString *format, ...) {
     ProbeLog(@"[PROBE] ====== 侦查结束 ======");
 }
 
-// --- Hook viewDidLoad 来添加我们的侦查按钮 ---
-
 - (void)viewDidLoad {
     %orig;
     
     if ([self isKindOfClass:NSClassFromString(@"六壬大占.ViewController")]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
+            // <<<<<<<<<<<<<<<< 核心修正点 3：同样使用新函数 >>>>>>>>>>>>>>>>
+            UIWindow *keyWindow = GetFrontmostWindow();
             if (!keyWindow || [keyWindow viewWithTag:888888]) return;
 
             UIButton *probeTriggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -225,11 +246,6 @@ static void ProbeLog(NSString *format, ...) {
 }
 
 %end
-
-
-// =========================================================================
-// 3. Tweak 初始化
-// =========================================================================
 
 %ctor {
     NSLog(@"[EchoProbe] 侦查脚本已加载。");
