@@ -3219,17 +3219,31 @@ if (g_isExtractingTianJiangDetail) {
     
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
+// =========================================================================
+// 辅助工具：用于伪造手势对象的坐标 (V2 - 使用关联对象)
+// =========================================================================
+// 声明一个静态 key，用于关联对象
+static const void *kFakeLocationKey = &kFakeLocationKey;
+
 @interface NSObject (FakeGestureLocation)
+- (void)setFake_location:(NSValue *)locationValue;
 - (CGPoint)fake_locationInView:(UIView *)view;
 @end
 
 @implementation NSObject (FakeGestureLocation)
+
+- (void)setFake_location:(NSValue *)locationValue {
+    objc_setAssociatedObject(self, kFakeLocationKey, locationValue, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 - (CGPoint)fake_locationInView:(UIView *)view {
-    // 这个方法永远返回存储在 self.tag 里的坐标
-    // 我们用 tag 这个整型属性来巧妙地传递 CGPoint
-    CGPoint point;
-    memcpy(&point, (void *)&self.tag, sizeof(CGPoint));
-    return point;
+    // 从关联对象中取出我们存储的坐标 NSValue
+    NSValue *locationValue = objc_getAssociatedObject(self, kFakeLocationKey);
+    if (locationValue) {
+        return [locationValue CGPointValue];
+    }
+    // 如果没有找到，返回一个默认值
+    return CGPointZero;
 }
 @end
 // =========================================================================
@@ -3313,8 +3327,7 @@ if (g_isExtractingTianJiangDetail) {
         CGPoint targetPoint = [nextTask[@"point"] CGPointValue];
         
         // 3. 用 tag 属性来存储坐标 (这是一个 hack)
-        memcpy((void *)&fakeSender.tag, &targetPoint, sizeof(CGPoint));
-
+[fakeSender setFake_location:[NSValue valueWithCGPoint:targetPoint]];
         // 4. 运行时替换 locationInView: 方法
         Method originalMethod = class_getInstanceMethod([fakeSender class], @selector(locationInView:));
         Method fakeMethod = class_getInstanceMethod([NSObject class], @selector(fake_locationInView:));
@@ -4904,6 +4917,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
