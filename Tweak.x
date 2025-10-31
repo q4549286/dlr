@@ -3816,6 +3816,20 @@ currentY += compactButtonHeight + 15;
             }];
             break;
         }
+                case kButtonTag_TianDiPanDetail: {
+            [self setInteractionBlocked:YES];
+            [self startExtraction_TianDiPan_Details:^(NSString *result) {
+                __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
+                [strongSelf setInteractionBlocked:NO];
+                NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
+                reportData[@"天地盘详解"] = result;
+                NSString *finalReport = formatFinalReport(reportData);
+                g_lastGeneratedReport = [finalReport copy];
+                [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];
+                [strongSelf presentAIActionSheetWithReport:finalReport];
+            }];
+            break;
+        }
         default: break;
     }
 }
@@ -4920,6 +4934,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 
 
 给我梳理一下 按照分类 数据提取流程 拦截过程 
+
 
 
 
