@@ -3322,12 +3322,13 @@ if (g_isExtractingTianJiangDetail) {
 
 
 // =========================================================================
-// 新增：天地盘天将详情提取核心逻辑 (S3 - V4.0 最终精确版)
-// (精确查找天地盘视图类，并在其内部寻找可交互天将)
+// 新增：天地盘天将详情提取核心逻辑 (S3 - V5.0 终极模仿版)
+// (模仿课传流注的成功逻辑，直接从 ViewController 的实例变量中读取天地盘视图)
 // =========================================================================
+
 %new
 - (void)extractTianJiangDetailsFromPlate_WithCompletion:(void (^)(NSString *result))completion {
-    if (g_isExtractingTianJiangDetail) { // <--- 已修正
+    if (g_isExtractingTianJiangDetail) {
         LogMessage(EchoLogError, @"[错误] 天地盘天将详情推衍任务已在进行中。");
         return;
     }
@@ -3340,24 +3341,29 @@ if (g_isExtractingTianJiangDetail) {
     g_tianJiang_completion_handler = [completion copy];
     g_tianJiang_workQueue = [NSMutableArray array];
 
-    // 1. 【核心修正】精确查找天地盘视图类，并进行兼容性处理
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
-    if (!plateViewClass) {
-        LogMessage(EchoLogError, @"[错误] 找不到天地盘视图类 ('天地盤視圖' 或 '天地盤視圖類')。");
-        if(completion) completion(@"[错误: 找不到天地盘视图类]");
-        [self processTianJiangQueue_S3]; // 调用以清理状态
-        return;
+    // 1. 【核心修正】模仿课传流注的逻辑，直接从 ViewController 的实例变量中寻找天地盘视图
+    UIView *plateView = nil;
+    
+    // 我们尝试几个最可能的名字
+    const char *ivarNamesToTry[] = {"天地盤", "天地盤視圖", NULL};
+    for (int i = 0; ivarNamesToTry[i] != NULL; ++i) {
+        Ivar plateViewIvar = class_getInstanceVariable([self class], ivarNamesToTry[i]);
+        if (plateViewIvar) {
+            id potentialView = object_getIvar(self, plateViewIvar);
+            if (potentialView && [potentialView isKindOfClass:[UIView class]]) {
+                plateView = (UIView *)potentialView;
+                LogMessage(EchoLogTypeInfo, @"[天地盘天将] 成功通过实例变量 '%s' 定位到天地盘视图。", ivarNamesToTry[i]);
+                break; // 找到了就跳出循环
+            }
+        }
     }
 
-    NSMutableArray *plateViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
-    if (plateViews.count == 0) {
-        LogMessage(EchoLogError, @"[错误] 找不到天地盘视图的实例。");
-        if(completion) completion(@"[错误: 找不到天地盘视图实例]");
+    if (!plateView) {
+        LogMessage(EchoLogError, @"[错误] 无法通过实例变量 '天地盤' 或 '天地盤視圖' 找到天地盘视图。提取失败。");
+        if(completion) completion(@"[错误: 找不到天地盘 ivar]");
         [self processTianJiangQueue_S3]; // 调用以清理状态
         return;
     }
-    UIView *plateView = plateViews.firstObject;
 
     // 2. 在找到的 plateView 内部，寻找所有可交互的天将 UILabel
     NSMutableArray<UILabel *> *allLabelsInPlate = [NSMutableArray array];
@@ -4890,6 +4896,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
