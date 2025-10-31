@@ -3,9 +3,9 @@
 #import <substrate.h>
 
 // =========================================================================
-// 全局UI与辅助函数 (保持不变)
+// 1. 全局UI与辅助函数
 // =========================================================================
-static UIView *g_inspectorView = nil;
+static UIView *g_extractorView = nil;
 static UITextView *g_logTextView = nil;
 
 static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
@@ -29,6 +29,15 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
     return value;
 }
 
+static NSString *GetStringFromLayer(id layer) {
+    if (layer && [layer respondsToSelector:@selector(string)]) {
+        id stringValue = [layer valueForKey:@"string"];
+        if ([stringValue isKindOfClass:[NSString class]]) { return stringValue; }
+        if ([stringValue isKindOfClass:[NSAttributedString class]]) { return ((NSAttributedString *)stringValue).string; }
+    }
+    return @"[?]";
+}
+
 static void LogToScreen(NSString *format, ...) {
     if (!g_logTextView) return;
     va_list args;
@@ -37,18 +46,22 @@ static void LogToScreen(NSString *format, ...) {
     va_end(args);
     dispatch_async(dispatch_get_main_queue(), ^{
         NSString *currentText = g_logTextView.text ?: @"";
-        NSString *newText = [NSString stringWithFormat:@"%@\n%@", message, currentText];
+        // 让新日志显示在底部，符合阅读习惯
+        NSString *newText = [NSString stringWithFormat:@"%@%@\n", currentText, message];
         g_logTextView.text = newText;
-        NSLog(@"[Inspector] %@", message);
+        // 自动滚动到底部
+        [g_logTextView scrollRangeToVisible:NSMakeRange(newText.length, 0)];
+        NSLog(@"[Extractor] %@", message);
     });
 }
 
+
 // =========================================================================
-// 核心逻辑 (终极诊断版)
+// 2. UIViewController Hook & 核心逻辑
 // =========================================================================
 
-@interface UIViewController (EchoInspector)
-- (void)inspectTianDiPanData;
+@interface UIViewController (EchoExtractor)
+- (void)extractFullData;
 @end
 
 %hook UIViewController
@@ -58,156 +71,127 @@ static void LogToScreen(NSString *format, ...) {
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if ([self.view.window viewWithTag:888999]) return;
-            UIButton *inspectorButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            inspectorButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
-            inspectorButton.tag = 888999;
-            [inspectorButton setTitle:@"终极诊断" forState:UIControlStateNormal];
-            inspectorButton.backgroundColor = [UIColor systemRedColor];
-            [inspectorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            inspectorButton.layer.cornerRadius = 18;
-            [inspectorButton addTarget:self action:@selector(inspectTianDiPanData) forControlEvents:UIControlEventTouchUpInside];
-            [self.view.window addSubview:inspectorButton];
+            if ([self.view.window viewWithTag:777888]) return;
+            UIButton *extractorButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            extractorButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
+            extractorButton.tag = 777888;
+            [extractorButton setTitle:@"提取完整数据" forState:UIControlStateNormal];
+            extractorButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0]; // Green
+            [extractorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            extractorButton.layer.cornerRadius = 18;
+            [extractorButton addTarget:self action:@selector(extractFullData) forControlEvents:UIControlEventTouchUpInside];
+            [self.view.window addSubview:extractorButton];
         });
     }
 }
 
 %new
-- (void)inspectTianDiPanData {
-    if (g_inspectorView) {
-        [g_inspectorView removeFromSuperview];
-        g_inspectorView = nil;
+- (void)extractFullData {
+    if (g_extractorView) {
+        [g_extractorView removeFromSuperview];
+        g_extractorView = nil;
         g_logTextView = nil;
         return;
     }
     
-    g_inspectorView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, self.view.bounds.size.width - 20, 500)];
-    g_inspectorView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
-    g_inspectorView.layer.cornerRadius = 15;
-    [g_inspectorView.layer setBorderColor:[UIColor redColor].CGColor];
-    [g_inspectorView.layer setBorderWidth:1.0];
+    g_extractorView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, self.view.bounds.size.width - 20, 500)];
+    g_extractorView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
+    g_extractorView.layer.cornerRadius = 15;
+    g_extractorView.layer.borderColor = [UIColor greenColor].CGColor;
+    g_extractorView.layer.borderWidth = 1.0;
     
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectInset(g_inspectorView.bounds, 10, 10)];
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectInset(g_extractorView.bounds, 10, 10)];
     g_logTextView.backgroundColor = [UIColor clearColor];
     g_logTextView.textColor = [UIColor whiteColor];
-    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12];
+    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logTextView.editable = NO;
+    g_logTextView.text = @""; // 清空初始文本
     
-    [g_inspectorView addSubview:g_logTextView];
-    [self.view.window addSubview:g_inspectorView];
+    [g_extractorView addSubview:g_logTextView];
+    [self.view.window addSubview:g_extractorView];
 
-    LogToScreen(@"[DIAGNOSTIC MODE] 诊断开始...");
+    LogToScreen(@"[INFO] 开始提取完整数据...");
 
-    // 1. 定位视图
+    // 1. 定位视图 (已验证是安全的)
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
-    if (!plateViewClass) {
-        LogToScreen(@"[CRITICAL] 找不到类 '六壬大占.天地盤視圖類'");
-        return;
-    }
-
     __block UIView *plateView = nil;
     void (^__block __weak weak_findViewRecursive)(UIView *);
     void (^findViewRecursive)(UIView *);
     weak_findViewRecursive = findViewRecursive = ^(UIView *view) {
         if (plateView) return; 
-        if ([view isKindOfClass:plateViewClass]) {
-            plateView = view;
-            return;
-        }
-        for (UIView *subview in view.subviews) {
-            weak_findViewRecursive(subview);
-        }
+        if ([view isKindOfClass:plateViewClass]) { plateView = view; return; }
+        for (UIView *subview in view.subviews) { weak_findViewRecursive(subview); }
     };
-
-    // 兼容性好的窗口遍历
-    NSMutableArray *windowsToSearch = [NSMutableArray array];
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                [windowsToSearch addObjectsFromArray:scene.windows];
-            }
-        }
-    } else {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        if ([UIApplication sharedApplication].windows) {
-            [windowsToSearch addObjectsFromArray:[UIApplication sharedApplication].windows];
-        }
-        #pragma clang diagnostic pop
-    }
-
-    for (UIWindow *window in windowsToSearch) {
-        findViewRecursive(window);
-        if (plateView) break;
+    for (UIWindow *window in [UIApplication sharedApplication].windows) {
+        if (window.hidden == NO) { findViewRecursive(window); if (plateView) break; }
     }
 
     if (!plateView) {
-        LogToScreen(@"[CRITICAL] 找不到 '六壬大占.天地盤視圖類' 的实例。");
+        LogToScreen(@"[CRITICAL] 找不到天地盘视图实例。");
         return;
     }
     LogToScreen(@"[SUCCESS] 成功定位到天地盘视图实例: <%p>", plateView);
-    LogToScreen(@"[DEBUG] 实例描述: %@", plateView);
 
+    // 2. 定义所有要提取的变量
+    NSArray *ivarSuffixes = @[
+        @"地宮宮名列", @"天神宮名列", @"天將宮名列",
+        @"天盤外經", @"天盤內經", @"天盤將經"
+    ];
 
-    // ============================================================
-    // 【终极诊断核心】 - 逐个击破
-    // ============================================================
-    
-    // --- 测试点 1: 地宮宮名列 ---
-    LogToScreen(@"\n--- [TEST 1] 正在尝试读取 '地宮宮名列' ---");
-    LogToScreen(@"[1A] 即将调用 GetIvarValueSafely...");
-    id diGongObject = GetIvarValueSafely(plateView, @"地宮宮名列");
-    LogToScreen(@"[1B] GetIvarValueSafely 调用完毕。");
-    LogToScreen(@"[1C] 返回的指针地址是: %p", diGongObject);
-    if (!diGongObject) { LogToScreen(@"[FAIL] 读取失败，返回nil。诊断中止。"); return; }
-    LogToScreen(@"[SUCCESS] Test 1 通过！");
-
-    // --- 测试点 2: 天神宮名列 ---
-    LogToScreen(@"\n--- [TEST 2] 正在尝试读取 '天神宮名列' ---");
-    LogToScreen(@"[2A] 即将调用 GetIvarValueSafely...");
-    id tianShenObject = GetIvarValueSafely(plateView, @"天神宮名列");
-    LogToScreen(@"[2B] GetIvarValueSafely 调用完毕。");
-    LogToScreen(@"[2C] 返回的指针地址是: %p", tianShenObject);
-    if (!tianShenObject) { LogToScreen(@"[FAIL] 读取失败，返回nil。诊断中止。"); return; }
-    LogToScreen(@"[SUCCESS] Test 2 通过！");
-
-    // --- 测试点 3: 天將宮名列 ---
-    LogToScreen(@"\n--- [TEST 3] 正在尝试读取 '天將宮名列' ---");
-    LogToScreen(@"[3A] 即将调用 GetIvarValueSafely...");
-    id tianJiangObject = GetIvarValueSafely(plateView, @"天將宮名列");
-    LogToScreen(@"[3B] GetIvarValueSafely 调用完毕。");
-    LogToScreen(@"[3C] 返回的指针地址是: %p", tianJiangObject);
-    if (!tianJiangObject) { LogToScreen(@"[FAIL] 读取失败，返回nil。诊断中止。"); return; }
-    LogToScreen(@"[SUCCESS] Test 3 通过！");
-
-    LogToScreen(@"\n[DIAGNOSTIC] 所有GetIvarValueSafely调用均安全通过！问题可能在后续处理。现在尝试解析...");
-    
-    // 如果上面都安全通过了，我们再尝试解析，并用 try-catch 包裹
-    @try {
-        LogToScreen(@"--- 正在解析 Test 1 的数据 ---");
-        NSDictionary *diGongDict = (NSDictionary *)diGongObject;
-        LogToScreen(@"地宮宮名列 包含 %lu 个条目。", (unsigned long)diGongDict.count);
+    // 3. 循环提取并进行详细解析 (已验证是安全的)
+    for (NSString *suffix in ivarSuffixes) {
+        LogToScreen(@"\n--- [TASK] 正在读取 '%@' ---", suffix);
+        id dataObject = GetIvarValueSafely(plateView, suffix);
         
-        LogToScreen(@"--- 正在解析 Test 2 的数据 ---");
-        NSDictionary *tianShenDict = (NSDictionary *)tianShenObject;
-        LogToScreen(@"天神宮名列 包含 %lu 个条目。", (unsigned long)tianShenDict.count);
+        if (!dataObject) {
+            LogToScreen(@"[ERROR] 读取失败: 值为 nil。");
+            continue;
+        }
 
-        LogToScreen(@"--- 正在解析 Test 3 的数据 ---");
-        NSDictionary *tianJiangDict = (NSDictionary *)tianJiangObject;
-        LogToScreen(@"天將宮名列 包含 %lu 个条目。", (unsigned long)tianJiangDict.count);
+        @try {
+            NSString *className = NSStringFromClass([dataObject class]);
+            
+            // --- 处理字典类型 (宫名列) ---
+            if ([dataObject isKindOfClass:[NSDictionary class]]) {
+                NSDictionary *dataDict = (NSDictionary *)dataObject;
+                LogToScreen(@"[INFO] 类型: %@, 数量: %lu", className, (unsigned long)dataDict.count);
+                
+                // 为了更好的可读性，对Key进行排序
+                NSArray *sortedKeys = [dataDict.allKeys sortedArrayUsingSelector:@selector(compare:)];
+                
+                for (id key in sortedKeys) {
+                    id layer = dataDict[key];
+                    NSString *text = GetStringFromLayer(layer);
+                    LogToScreen(@"  - Key: %@ -> Text: '%@'", key, text);
+                }
+            } 
+            // --- 处理数组类型 (经纬) ---
+            else if ([dataObject isKindOfClass:[NSArray class]]) {
+                NSArray *dataArray = (NSArray *)dataObject;
+                LogToScreen(@"[INFO] 类型: %@, 数量: %lu", className, (unsigned long)dataArray.count);
 
-    } @catch (NSException *exception) {
-        LogToScreen(@"\n\n[CRASH DETECTED!] 在解析数据时发生崩溃!");
-        LogToScreen(@"[CRASH INFO] 原因: %@", exception.reason);
+                for (int i = 0; i < dataArray.count; i++) {
+                    id layer = dataArray[i];
+                    NSString *text = GetStringFromLayer(layer);
+                    LogToScreen(@"  - Index [%d]: '%@'", i, text);
+                }
+            }
+            // --- 处理其他未知类型 ---
+            else {
+                LogToScreen(@"[WARNING] 未知类型: %@。 描述: %@", className, [dataObject description]);
+            }
+        } @catch (NSException *exception) {
+            LogToScreen(@"[CRITICAL] 解析 '%@' 时发生崩溃! 原因: %@", suffix, exception.reason);
+        }
     }
     
-    LogToScreen(@"\n--- [COMPLETE] 诊断完毕 ---");
+    LogToScreen(@"\n--- [COMPLETE] 所有数据提取完毕 ---");
 }
 
 %end
 
 %ctor {
     @autoreleasepool {
-        NSLog(@"[EchoUltimateDebugger] 终极诊断脚本已加载。");
+        NSLog(@"[EchoDataExtractor] 最终数据提取脚本已加载。");
     }
 }
