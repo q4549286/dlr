@@ -3,7 +3,7 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 伪造手势类 (保持不变)
+// 1. 伪造手势类
 // =========================================================================
 @interface EchoFakeGestureRecognizer : UIGestureRecognizer
 @property (nonatomic, assign) CGPoint fakeLocation;
@@ -16,59 +16,79 @@
 @end
 
 // =========================================================================
-// 2. 全局变量、UI与辅助函数
+// 2. 全局变量与辅助函数 (必须在所有 %hook 之外)
 // =========================================================================
 static UIView *g_debuggerView = nil;
 static UITextView *g_logTextView = nil;
-
-// 辅助函数 (保持不变)
-static id GetIvarValueSafely(id, NSString *);
-static void LogToScreen(NSString *, ...);
-
-// =========================================================================
-// 3. 核心Hook与调试逻辑
-// =========================================================================
-
-// 全局变量，用于在Hook之间传递信息
 static BOOL g_isPerformingFakeClick = NO;
 
-%hook 六壬大占_ViewController 
-// 注意：如果类名包含中文，Theos可能需要这样写。如果编译失败，请尝试 "LiuRenDaZhan.ViewController" 等其他可能的名称
-
-// 【核心】Hook目标方法
-- (void)顯示天地盤觸摸WithSender:(UIGestureRecognizer *)sender {
-    LogToScreen(@"\n--- HOOK TRIGGERED ---");
-    LogToScreen(@"方法 '顯示天地盤觸摸WithSender:' 被调用!");
-    
-    // 检查调用者
-    if (g_isPerformingFakeClick) {
-        LogToScreen(@"[INFO] 本次调用由我们的 Tweak 发起。");
-    } else {
-        LogToScreen(@"[INFO] 本次调用由用户手动点击触发。");
+static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
+    if (!object || !ivarNameSuffix) return nil;
+    unsigned int ivarCount;
+    Ivar *ivars = class_copyIvarList([object class], &ivarCount);
+    if (!ivars) { free(ivars); return nil; }
+    id value = nil;
+    for (unsigned int i = 0; i < ivarCount; i++) {
+        Ivar ivar = ivars[i];
+        const char *name = ivar_getName(ivar);
+        if (name) {
+            NSString *ivarNameStr = [NSString stringWithUTF8String:name];
+            if ([ivarNameStr hasSuffix:ivarNameSuffix]) {
+                value = object_getIvar(object, ivar);
+                break;
+            }
+        }
     }
-    
-    // 打印参数信息
-    LogToScreen(@"[PARAM] sender 对象: <%p>", sender);
-    LogToScreen(@"[PARAM] sender 类名: %@", NSStringFromClass([sender class]));
-    
-    // 尝试获取坐标并打印
-    @try {
-        CGPoint location = [sender locationInView:self.view];
-        LogToScreen(@"[PARAM] 点击坐标 (in self.view): {%.1f, %.1f}", location.x, location.y);
-    } @catch (NSException *exception) {
-        LogToScreen(@"[ERROR] 获取坐标时发生异常: %@", exception.reason);
-    }
-    
-    LogToScreen(@"[EXECUTION] 即将调用原始方法 (%orig)...");
-    
-    // 调用原始实现
-    %orig(sender); 
-    
-    LogToScreen(@"[EXECUTION] 原始方法 (%orig) 调用完毕。");
-    LogToScreen(@"--- HOOK FINISHED ---");
+    free(ivars);
+    return value;
 }
 
-%end // %hook 结束
+static void LogToScreen(NSString *format, ...) {
+    if (!g_logTextView) return;
+    va_list args;
+    va_start(args, format);
+    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+    va_end(args);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSString *currentText = g_logTextView.text ?: @"";
+        NSString *newText = [NSString stringWithFormat:@"%@%@\n", currentText, message];
+        g_logTextView.text = newText;
+        [g_logTextView scrollRangeToVisible:NSMakeRange(newText.length, 0)];
+        NSLog(@"[Debugger] %@", message);
+    });
+}
+
+// =========================================================================
+// 3. 核心Hook
+// =========================================================================
+
+// 【修正】将 Hook 目标类名改为更可能正确的格式
+%hook 六壬大占_ViewController
+
+- (void)顯示天地盤觸摸WithSender:(UIGestureRecognizer *)sender {
+    LogToScreen(@"\n--- HOOK TRIGGERED: 顯示天地盤觸摸WithSender: ---");
+    
+    if (g_isPerformingFakeClick) {
+        LogToScreen(@"[INFO] Invoked by Tweak.");
+    } else {
+        LogToScreen(@"[INFO] Invoked by user tap.");
+    }
+    
+    LogToScreen(@"[PARAM] Sender Class: %@", NSStringFromClass([sender class]));
+    
+    @try {
+        CGPoint location = [sender locationInView:self.view];
+        LogToScreen(@"[PARAM] Location in vc.view: {%.1f, %.1f}", location.x, location.y);
+    } @catch (NSException *exception) {
+        LogToScreen(@"[ERROR] Exception while getting location: %@", exception.reason);
+    }
+    
+    LogToScreen(@"[EXEC] Calling %orig...");
+    %orig(sender); 
+    LogToScreen(@"[EXEC] %orig returned.");
+}
+
+%end
 
 
 @interface UIViewController (EchoDebugger)
@@ -104,7 +124,6 @@ static BOOL g_isPerformingFakeClick = NO;
         return;
     }
     
-    // 创建UI...
     g_debuggerView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, self.view.bounds.size.width - 20, 300)];
     g_debuggerView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
     g_debuggerView.layer.cornerRadius = 15;
@@ -116,9 +135,8 @@ static BOOL g_isPerformingFakeClick = NO;
     [g_debuggerView addSubview:g_logTextView];
     [self.view.window addSubview:g_debuggerView];
 
-    LogToScreen(@"[DEBUG MODE] 开始调试...");
+    LogToScreen(@"[DEBUG MODE] Starting test...");
 
-    // 1. 定位 ViewController 和 天地盘视图
     UIViewController *vc = self;
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     __block UIView *plateView = nil;
@@ -132,21 +150,18 @@ static BOOL g_isPerformingFakeClick = NO;
     findViewRecursive(self.view.window);
     
     if (!plateView) {
-        LogToScreen(@"[CRITICAL] 找不到天地盘视图实例。");
+        LogToScreen(@"[CRITICAL] Failed to find plate view instance.");
         return;
     }
-    LogToScreen(@"[SUCCESS] 成功定位到天地盘视图实例。");
+    LogToScreen(@"[SUCCESS] Found plate view instance.");
 
-    // 2. 准备一个测试坐标 (就用视图中心点)
     CGPoint testPosition = CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds));
-    LogToScreen(@"[INFO] 准备使用测试坐标: {%.1f, %.1f}", testPosition.x, testPosition.y);
+    LogToScreen(@"[INFO] Using test position: {%.1f, %.1f}", testPosition.x, testPosition.y);
     
-    // 3. 创建伪造手势
     EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
     fakeGesture.fakeLocation = testPosition;
     
-    // 4. 设置标志位并执行调用
-    LogToScreen(@"[ACTION] 即将通过 performSelector 调用目标方法...");
+    LogToScreen(@"[ACTION] Performing fake click via performSelector...");
     g_isPerformingFakeClick = YES;
     
     SEL clickSelector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
@@ -156,42 +171,13 @@ static BOOL g_isPerformingFakeClick = NO;
     #pragma clang diagnostic pop
     
     g_isPerformingFakeClick = NO;
-    LogToScreen(@"[ACTION] performSelector 调用已返回。");
+    LogToScreen(@"[ACTION] performSelector returned.");
 }
 
 %end
 
-
-// =========================================================================
-// 4. 初始化
-// =========================================================================
 %ctor {
     @autoreleasepool {
-        NSLog(@"[EchoUltimateHookDebugger] 终极Hook调试脚本已加载。");
+        NSLog(@"[EchoUltimateHookDebugger] Final Syntax Corrected Version Loaded.");
     }
-}
-
-
-// =========================================================================
-// 5. 辅助函数实现 (放在文件末尾)
-// =========================================================================
-static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
-    if (!object || !ivarNameSuffix) return nil;
-    unsigned int ivarCount;
-    Ivar *ivars = class_copyIvarList([object class], &ivarCount);
-    if (!ivars) { free(ivars); return nil; }
-    id value = nil;
-    for (unsigned int i = 0; i < ivarCount; i++) {
-        Ivar ivar = ivars[i];
-        const char *name = ivar_getName(ivar);
-        if (name) {
-            NSString *ivarNameStr = [NSString stringWithUTF8String:name];
-            if ([ivarNameStr hasSuffix:ivarNameSuffix]) {
-                value = object_getIvar(object, ivar);
-                break;
-            }
-        }
-    }
-    free(ivars);
-    return value;
 }
