@@ -3,7 +3,7 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局变量、辅助函数与日志
+// 1. 全局变量、辅助函数、方法声明与日志
 // =========================================================================
 
 static UIView *g_probePanelView = nil;
@@ -11,8 +11,19 @@ static UITextView *g_probeLogTextView = nil;
 static UIView *g_probeSelectorView = nil; // 用于捕获点击的透明覆盖层
 static BOOL g_isProbeSelectorActive = NO;
 
-// 辅助函数：安全地获取实例变量的值 (从你的主脚本中借鉴)
+// <<<<<<<<<<<<<<<< 核心修正点 1：为新方法提供 @interface 声明 >>>>>>>>>>>>>>>>
+@interface UIViewController (EchoProbe)
+- (void)showProbePanel;
+- (void)closeProbePanel;
+- (void)clearProbeLog:(id)sender;
+- (void)toggleProbeSelectorMode:(id)sender;
+- (void)handleProbeTap:(UITapGestureRecognizer *)gesture;
+- (void)probeView:(UIView *)tappedView;
+@end
+
+
 static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
+    // ... (此函数不变)
     if (!object || !ivarNameSuffix) return nil;
     unsigned int ivarCount;
     Ivar *ivars = class_copyIvarList([object class], &ivarCount);
@@ -34,7 +45,7 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
 }
 
 static UIWindow* GetFrontmostWindow() {
-    // ... (这个函数保持不变，和之前修正版一样)
+    // ... (此函数不变)
     UIWindow *frontmostWindow = nil;
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
@@ -56,7 +67,7 @@ static UIWindow* GetFrontmostWindow() {
 }
 
 static void ProbeLog(NSString *format, ...) {
-    // ... (这个函数保持不变) ...
+    // ... (此函数不变) ...
     if (!g_probeLogTextView) return;
     va_list args;
     va_start(args, format);
@@ -78,41 +89,37 @@ static void ProbeLog(NSString *format, ...) {
 // 2. Tweak 核心逻辑
 // =========================================================================
 
+// <<<<<<<<<<<<<<<< 核心修正点 2：将 runTheProbe: 也声明在 @interface 中 (已完成) >>>>>>>>>>>>>>>>
+// (为了代码整洁，将 runTheProbe: 声明也加入上面的 Category 中)
+
 %hook UIViewController
 
 // --- 核心侦查逻辑 ---
 
 %new
 - (void)probeView:(UIView *)tappedView {
+    // ... (此函数实现不变) ...
     ProbeLog(@"\n\n[PROBE] ====== 实时侦查报告 ====== ");
     if (!tappedView) {
         ProbeLog(@"[PROBE] ❌ 未点击到任何有效视图。");
         ProbeLog(@"[PROBE] ===========================");
         return;
     }
-
     ProbeLog(@"[PROBE] 🎯 目标视图已锁定。开始向上追溯层级...");
-    
     int depth = 0;
     UIView *currentView = tappedView;
     while (currentView) {
         NSMutableString *indent = [NSMutableString string];
         for (int i = 0; i < depth; i++) { [indent appendString:@"  "]; }
-
         ProbeLog(@"%@↓ [%d] <%@: %p>", indent, depth, [currentView class], currentView);
         ProbeLog(@"%@   - Frame: %@", indent, NSStringFromCGRect(currentView.frame));
-        
-        // 检查特定类型并打印额外信息
         if ([currentView isKindOfClass:[UILabel class]]) {
             ProbeLog(@"%@   - Text: \"%@\"", indent, ((UILabel *)currentView).text);
         }
-        
-        // 【核心】检查手势识别器
         if (currentView.gestureRecognizers.count > 0) {
             ProbeLog(@"%@   - ‼️ 发现手势 (%lu个):", indent, (unsigned long)currentView.gestureRecognizers.count);
             for (UIGestureRecognizer *gesture in currentView.gestureRecognizers) {
                 ProbeLog(@"%@     - <%@>", indent, [gesture class]);
-                // 使用辅助函数安全地获取私有ivar _targets
                 NSArray *targets = GetIvarValueSafely(gesture, @"_targets");
                 if (targets && targets.count > 0) {
                     for (id targetActionPair in targets) {
@@ -126,7 +133,6 @@ static void ProbeLog(NSString *format, ...) {
                 }
             }
         }
-        
         currentView = currentView.superview;
         depth++;
     }
@@ -137,48 +143,41 @@ static void ProbeLog(NSString *format, ...) {
 
 %new
 - (void)handleProbeTap:(UITapGestureRecognizer *)gesture {
+    // ... (此函数实现不变) ...
     UIWindow *keyWindow = GetFrontmostWindow();
     CGPoint location = [gesture locationInView:keyWindow];
-
-    // 暂时隐藏我们的UI，以防点到自己
     g_probePanelView.hidden = YES;
     g_probeSelectorView.hidden = YES;
-
     UIView *tappedView = [keyWindow hitTest:location withEvent:nil];
-
-    // 恢复UI
     g_probePanelView.hidden = NO;
     g_probeSelectorView.hidden = NO;
-
     [self probeView:tappedView];
-    [self toggleProbeSelectorMode:gesture.view]; // 侦查完毕后自动退出选择模式
+    [self toggleProbeSelectorMode:gesture.view];
 }
 
 %new
 - (void)toggleProbeSelectorMode:(id)sender {
+    // ... (此函数实现不变) ...
     g_isProbeSelectorActive = !g_isProbeSelectorActive;
     UIWindow *keyWindow = GetFrontmostWindow();
-    UIButton *button = (UIButton *)sender;
-
+    UIButton *button = (UIButton *)sender; // 注意：sender 可能是 nil
     if (g_isProbeSelectorActive) {
         if (!g_probeSelectorView) {
             g_probeSelectorView = [[UIView alloc] initWithFrame:keyWindow.bounds];
-            g_probeSelectorView.backgroundColor = [UIColor colorWithRed:0.0 green:0.5 blue:1.0 alpha:0.2]; // 淡蓝色半透明，提示用户在选择模式
-            
+            g_probeSelectorView.backgroundColor = [UIColor colorWithRed:0.0 green:0.5 blue:1.0 alpha:0.2];
             UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleProbeTap:)];
             [g_probeSelectorView addGestureRecognizer:tap];
         }
         [keyWindow addSubview:g_probeSelectorView];
-        [keyWindow bringSubviewToFront:g_probePanelView]; // 确保面板在最上层
-        
-        [button setTitle:@"取消选择" forState:UIControlStateNormal];
+        [keyWindow bringSubviewToFront:g_probePanelView];
+        if (button) [button setTitle:@"取消选择" forState:UIControlStateNormal];
         ProbeLog(@"[PROBE] 🔍 已进入视图选择模式。请点击屏幕上任意元素进行侦查。");
     } else {
         if (g_probeSelectorView) {
             [g_probeSelectorView removeFromSuperview];
             g_probeSelectorView = nil;
         }
-        [button setTitle:@"选择视图" forState:UIControlStateNormal];
+        if (button) [button setTitle:@"选择视图" forState:UIControlStateNormal];
         ProbeLog(@"[PROBE] 🛑 已退出视图选择模式。");
     }
 }
@@ -188,22 +187,19 @@ static void ProbeLog(NSString *format, ...) {
 
 %new
 - (void)showProbePanel {
+    // ... (此函数实现不变) ...
     UIWindow *keyWindow = GetFrontmostWindow();
     if (!keyWindow || g_probePanelView) return;
-
     g_probePanelView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, keyWindow.bounds.size.width, keyWindow.bounds.size.height * 0.6)];
-    // ... (UI代码和之前一样) ...
     g_probePanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
     g_probePanelView.layer.borderColor = [UIColor cyanColor].CGColor;
     g_probePanelView.layer.borderWidth = 1.0;
-    
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, g_probePanelView.bounds.size.width, 30)];
     titleLabel.text = @"Echo 实时侦查面板";
     titleLabel.textColor = [UIColor cyanColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [g_probePanelView addSubview:titleLabel];
-    
     g_probeLogTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 50, g_probePanelView.bounds.size.width - 20, g_probePanelView.bounds.size.height - 110)];
     g_probeLogTextView.backgroundColor = [UIColor blackColor];
     g_probeLogTextView.textColor = [UIColor greenColor];
@@ -211,28 +207,23 @@ static void ProbeLog(NSString *format, ...) {
     g_probeLogTextView.editable = NO;
     g_probeLogTextView.text = @"日志窗口已就绪...\n";
     [g_probePanelView addSubview:g_probeLogTextView];
-    
     CGFloat buttonWidth = (g_probePanelView.bounds.size.width - 40) / 3.0;
     CGFloat buttonY = g_probePanelView.bounds.size.height - 50;
-    
     UIButton *selectButton = [UIButton buttonWithType:UIButtonTypeSystem];
     selectButton.frame = CGRectMake(10, buttonY, buttonWidth, 40);
     [selectButton setTitle:@"选择视图" forState:UIControlStateNormal];
     [selectButton addTarget:self action:@selector(toggleProbeSelectorMode:) forControlEvents:UIControlEventTouchUpInside];
     [g_probePanelView addSubview:selectButton];
-    
     UIButton *clearButton = [UIButton buttonWithType:UIButtonTypeSystem];
     clearButton.frame = CGRectMake(20 + buttonWidth, buttonY, buttonWidth, 40);
     [clearButton setTitle:@"清空日志" forState:UIControlStateNormal];
     [clearButton addTarget:self action:@selector(clearProbeLog:) forControlEvents:UIControlEventTouchUpInside];
     [g_probePanelView addSubview:clearButton];
-
     UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     closeButton.frame = CGRectMake(30 + buttonWidth * 2, buttonY, buttonWidth, 40);
     [closeButton setTitle:@"关闭" forState:UIControlStateNormal];
     [closeButton addTarget:self action:@selector(closeProbePanel) forControlEvents:UIControlEventTouchUpInside];
     [g_probePanelView addSubview:closeButton];
-    
     [keyWindow addSubview:g_probePanelView];
 }
 
@@ -241,7 +232,7 @@ static void ProbeLog(NSString *format, ...) {
 
 %new
 - (void)closeProbePanel {
-    if (g_isProbeSelectorActive) { [self toggleProbeSelectorMode:nil]; } // 确保关闭时退出选择模式
+    if (g_isProbeSelectorActive) { [self toggleProbeSelectorMode:nil]; }
     if (g_probePanelView) {
         [g_probePanelView removeFromSuperview];
         g_probePanelView = nil;
@@ -257,7 +248,6 @@ static void ProbeLog(NSString *format, ...) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = GetFrontmostWindow();
             if (!keyWindow || [keyWindow viewWithTag:888888]) return;
-
             UIButton *probeTriggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
             probeTriggerButton.frame = CGRectMake(10, 45, 80, 36);
             probeTriggerButton.tag = 888888;
@@ -266,7 +256,6 @@ static void ProbeLog(NSString *format, ...) {
             [probeTriggerButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             probeTriggerButton.layer.cornerRadius = 18;
             [probeTriggerButton addTarget:self action:@selector(showProbePanel) forControlEvents:UIControlEventTouchUpInside];
-            
             [keyWindow addSubview:probeTriggerButton];
         });
     }
