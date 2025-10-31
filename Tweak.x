@@ -3322,8 +3322,8 @@ if (g_isExtractingTianJiangDetail) {
 
 
 // =========================================================================
-// 新增：天地盘天将详情提取核心逻辑 (S3 - V8.0 最终界面切换版)
-// (在提取前，强制切换到“课盘”Tab，确保目标视图已加载)
+// 新增：天地盘天将详情提取核心逻辑 (S3 - V10.0 终极类名修正版)
+// (使用正确的自定义 UILabel 子类 "UILabelRotate" 进行搜索)
 // =========================================================================
 
 %new
@@ -3341,17 +3341,16 @@ if (g_isExtractingTianJiangDetail) {
     g_tianJiang_completion_handler = [completion copy];
     g_tianJiang_workQueue = [NSMutableArray array];
 
-    // 1. 【核心修正】完全模仿 extractTianDiPanInfo_V18 的成功定位逻辑
+    // 1. 定位天地盘视图 (V9 的逻辑是正确的，保持不变)
     UIView *plateView = nil;
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
-        LogMessage(EchoLogError, @"[错误] 找不到天地盘视图类 ('天地盤視圖' 或 '天地盤視圖類')。");
+        LogMessage(EchoLogError, @"[错误] 找不到天地盘视图类。");
         if(completion) completion(@"[错误: 找不到天地盘视图类]");
-        [self processTianJiangQueue_S3]; // 调用以清理状态
+        [self processTianJiangQueue_S3]; 
         return;
     }
 
-    // 从整个 App 窗口开始搜索，而不是 self.view
     UIWindow *keyWindow = GetFrontmostWindow();
     if (!keyWindow) {
         LogMessage(EchoLogError, @"[错误] 找不到主窗口 (keyWindow)。");
@@ -3365,19 +3364,29 @@ if (g_isExtractingTianJiangDetail) {
     if (plateViews.count == 0) {
         LogMessage(EchoLogError, @"[错误] 在主窗口中找不到天地盘视图的实例。");
         if(completion) completion(@"[错误: 在 keyWindow 找不到天地盘实例]");
-        [self processTianJiangQueue_S3]; // 调用以清理状态
+        [self processTianJiangQueue_S3]; 
         return;
     }
     plateView = plateViews.firstObject;
     LogMessage(EchoLogTypeInfo, @"[天地盘天将] 成功通过全局搜索定位到天地盘视图。");
 
-    // 2. 在找到的 plateView 内部，寻找所有可交互的天将 UILabel
-    NSMutableArray<UILabel *> *allLabelsInPlate = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UILabel class], plateView, allLabelsInPlate);
+    // 2. 【核心终极修正】使用正确的自定义 UILabel 子类进行搜索
+    Class customLabelClass = NSClassFromString(@"六壬大占.UILabelRotate");
+    if (!customLabelClass) {
+        LogMessage(EchoLogError, @"[错误] 找不到自定义标签类 '六壬大占.UILabelRotate'。");
+        if(completion) completion(@"[错误: 找不到 UILabelRotate 类]");
+        [self processTianJiangQueue_S3];
+        return;
+    }
+    
+    NSMutableArray<UILabel *> *allCustomLabels = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(customLabelClass, plateView, allCustomLabels);
+    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 在天地盘视图内找到 %lu 个 UILabelRotate 实例。", (unsigned long)allCustomLabels.count);
 
+    // 3. 构建工作队列
     NSSet *tianJiangWhitelist = [NSSet setWithObjects:@"贵", @"蛇", @"朱", @"六", @"勾", @"青", @"空", @"白", @"常", @"玄", @"阴", @"后", nil];
     
-    for (UILabel *label in allLabelsInPlate) {
+    for (UILabel *label in allCustomLabels) {
         if (label.gestureRecognizers.count > 0 && [tianJiangWhitelist containsObject:label.text]) {
             NSMutableDictionary *task = [NSMutableDictionary dictionary];
             [task setObject:label.text forKey:@"title"];
@@ -3386,6 +3395,7 @@ if (g_isExtractingTianJiangDetail) {
         }
     }
     
+    // 4. 后续逻辑保持不变...
     CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
     [g_tianJiang_workQueue sortUsingComparator:^NSComparisonResult(NSDictionary *task1, NSDictionary *task2) {
         UIGestureRecognizer *g1 = task1[@"gesture"]; UIGestureRecognizer *g2 = task2[@"gesture"];
@@ -3397,9 +3407,9 @@ if (g_isExtractingTianJiangDetail) {
     }];
 
     if (g_tianJiang_workQueue.count == 0) {
-        LogMessage(EchoLogTypeWarning, @"[最终测试失败] 即使成功定位到天地盘视图，其内部依然未找到任何可交互的UILabel。确认该视图使用CALayer绘图，此功能无法通过模拟点击实现。");
-        if(completion) completion(@"[提取失败] 天地盘使用底层绘图，无法模拟点击。");
-        [self processTianJiangQueue_S3]; // 调用以清理状态
+        LogMessage(EchoLogTypeWarning, @"[最终失败] 找到了 UILabelRotate 实例，但其中没有可交互的天将标签。");
+        if(completion) completion(@"");
+        [self processTianJiangQueue_S3];
         return;
     }
     
@@ -4897,6 +4907,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
