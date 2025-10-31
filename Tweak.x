@@ -4522,48 +4522,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         [self processKeChuanQueue_Truth_S2]; 
     }
 }
-// 前置声明，解决编译顺序问题
-static NSString* parseTianJiangDetailBlock(NSString *rawText);
-#pragma mark - TianDiPan Detail Extraction (V1.0)
 
-// 新函数 1: 弹窗内容解析器
-/**
- @brief 解析“天将摘要视图”弹窗内的原始文本。
- @param rawText 从弹窗UILabel中提取的完整文本。
- @return 格式化后的、只包含关键信息的字符串。
-*/
-static NSString* parseTianJiangDetailBlock(NSString *rawText) {
-    if (!rawText || rawText.length == 0) return @"";
-
-    NSMutableString *structuredResult = [NSMutableString string];
-    NSArray<NSString *> *lines = [rawText componentsSeparatedByString:@"\n"];
-    
-    for (NSString *line in lines) {
-        NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (trimmedLine.length == 0) continue;
-        
-        // 使用正则表达式移除句末的解释性断语，例如 "，主..." 或 "。此为..."
-        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(主|为|象|其|此|故).*$" options:0 error:nil];
-        NSString *cleanLine = [regex stringByReplacingMatchesInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length) withTemplate:@""];
-        
-        // 提取关键信息
-        if ([cleanLine containsString:@"旺衰"]) {
-            [structuredResult appendFormat:@"  - %@\n", cleanLine];
-        } else if ([cleanLine containsString:@"临宫"]) {
-            [structuredResult appendFormat:@"  - %@\n", cleanLine];
-        } else if ([cleanLine containsString:@"乘将"]) {
-            [structuredResult appendFormat:@"  - %@\n", cleanLine];
-        }
-        // 你可以根据需要添加更多关键词来提取其他信息
-    }
-
-    if (structuredResult.length == 0) {
-        // 如果没有匹配到特定关键词，则返回第一行作为核心摘要
-        return [NSString stringWithFormat:@"  - 核心: %@", lines.firstObject];
-    }
-
-    return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-}
 
 
 // 新函数 2: 队列处理函数
