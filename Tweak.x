@@ -3143,42 +3143,54 @@ else if (g_s2_isExtractingKeChuanDetail) {
         }
     }
     // ========== 在这里添加新的拦截逻辑 ==========
+// =========================================================================
+// 天地盘详情拦截器 (V11 - 增加延迟以解决时序问题)
+// =========================================================================
 if (g_isExtractingTianJiangDetail) {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-    // 我们只关心天将详情弹窗
     if ([vcClassName containsString:@"天將摘要視圖"]) {
-        UIView *contentView = vcToPresent.view;
         
-        // 使用与课传流注相同的提取逻辑，因为它能很好地处理各种控件
-        NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
-        NSMutableArray *allStackViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
+        // 【核心修正】将提取逻辑放入一个短暂的延迟后执行
+        // 这给了弹窗控制器足够的时间来加载和配置它的视图 (比如设置UILabel的文本)
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            
+            // --- 所有提取逻辑现在都在这个延迟块内部 ---
+            UIView *contentView = vcToPresent.view;
+            
+            NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
+            NSMutableArray *allStackViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
 
-        if (allStackViews.count > 0) {
-            UIStackView *mainStackView = allStackViews.firstObject;
-            for (UIView *subview in mainStackView.arrangedSubviews) {
-                if ([subview isKindOfClass:[UILabel class]]) {
-                    NSString *text = ((UILabel *)subview).text;
-                    if (text && text.length > 0) [finalTextParts addObject:text];
-                } 
-                // 这里可以根据需要添加对 TableView 等其他控件的解析
+            if (allStackViews.count > 0) {
+                UIStackView *mainStackView = allStackViews.firstObject;
+                for (UIView *subview in mainStackView.arrangedSubviews) {
+                    if ([subview isKindOfClass:[UILabel class]]) {
+                        NSString *text = ((UILabel *)subview).text;
+                        if (text && text.length > 0) [finalTextParts addObject:text];
+                    }
+                }
+            } else {
+                LogMessage(EchoLogError, @"[天地盘天将] 提取失败: 未找到主 UIStackView 容器。");
+                [finalTextParts addObject:@"[提取失败: 视图结构已更改]"];
             }
-        } else {
-            LogMessage(EchoLogError, @"[天地盘天将] 提取失败: 未找到主 UIStackView 容器。");
-            [finalTextParts addObject:@"[提取失败: 视图结构已更改]"];
-        }
 
-        // 将提取到的文本存入结果，并继续处理下一个
-        NSString *extractedDetail = [finalTextParts componentsJoinedByString:@"\n"];
-        // 第一个元素是标题，第二个是内容
-        [g_tianJiang_workQueue.firstObject setObject:extractedDetail forKey:@"result"]; 
-        
-        LogMessage(EchoLogTypeSuccess, @"[天地盘天将] 成功参详 %@ 详情", [g_tianJiang_workQueue.firstObject objectForKey:@"title"]);
+            NSString *extractedDetail = [finalTextParts componentsJoinedByString:@"\n"];
+            
+            // 增加一个检查，如果内容仍然为空，就记录一个更明确的警告
+            if (extractedDetail.length == 0) {
+                 LogMessage(EchoLogTypeWarning, @"[天地盘天将] 警告: 成功拦截 %@ 弹窗，但延迟后提取内容仍为空。", [g_tianJiang_workQueue.firstObject objectForKey:@"title"]);
+                 extractedDetail = @"[内容提取为空]";
+            }
 
-        dispatch_async(dispatch_get_main_queue(), ^{
+            [g_tianJiang_workQueue.firstObject setObject:extractedDetail forKey:@"result"]; 
+            LogMessage(EchoLogTypeSuccess, @"[天地盘天将] 成功参详 %@ 详情", [g_tianJiang_workQueue.firstObject objectForKey:@"title"]);
+
+            // 在提取完成后，再调用下一个任务
             [self processTianJiangQueue_S3];
         });
-        return; // 拦截成功，直接返回，不显示弹窗
+
+        // 立即返回，阻止弹窗实际显示出来
+        return; 
     }
 }
 // ========== 新的拦截逻辑结束 ==========
@@ -4917,6 +4929,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
