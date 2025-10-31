@@ -3323,37 +3323,27 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
         LogMessage(EchoLogTypeInfo, @"[天地盘天将] 正在参详: %@", nextTask[@"title"]);
         [self updateProgressHUD:[NSString stringWithFormat:@"推演天地盘天将: %@", nextTask[@"title"]]];
 
-        // --- 【核心黑魔法】伪造手势并调用方法 ---
-        SEL targetSelector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-        if (![self respondsToSelector:targetSelector]) {
-            LogMessage(EchoLogError, @"[错误] ViewController 不响应 '顯示天地盤觸摸WithSender:' 方法。");
-            [nextTask setObject:@"[解析失败: 目标方法不存在]" forKey:@"result"];
+        // --- 【核心V12】使用“借来”的 Target-Action ---
+        id target = nextTask[@"target"];
+        SEL action = NSSelectorFromString(nextTask[@"action"]);
+
+        if (!target || !action || ![target respondsToSelector:action]) {
+            LogMessage(EchoLogError, @"[错误] 从真实手势中获取的 Target 或 Action 无效。");
+            [nextTask setObject:@"[解析失败: Target-Action 无效]" forKey:@"result"];
             [self processTianJiangQueue_S3];
             return;
         }
 
-        // 1. 创建一个假的 Gesture Recognizer
         UITapGestureRecognizer *fakeSender = [[UITapGestureRecognizer alloc] init];
-        
-        // 2. 获取要伪造的坐标
         CGPoint targetPoint = [nextTask[@"point"] CGPointValue];
+        [fakeSender setFake_location:[NSValue valueWithCGPoint:targetPoint]];
         
-        // 3. 用 tag 属性来存储坐标 (这是一个 hack)
-[fakeSender setFake_location:[NSValue valueWithCGPoint:targetPoint]];
-        // 4. 运行时替换 locationInView: 方法
         Method originalMethod = class_getInstanceMethod([fakeSender class], @selector(locationInView:));
         Method fakeMethod = class_getInstanceMethod([NSObject class], @selector(fake_locationInView:));
-        if (originalMethod && fakeMethod) {
-            method_setImplementation(originalMethod, method_getImplementation(fakeMethod));
-        } else {
-            LogMessage(EchoLogError, @"[黑魔法失败] 无法替换 locationInView: 方法。");
-            [nextTask setObject:@"[解析失败: 无法伪造坐标]" forKey:@"result"];
-            [self processTianJiangQueue_S3];
-            return;
-        }
+        method_setImplementation(originalMethod, method_getImplementation(fakeMethod));
         
-        // 5. 调用目标方法！
-        SUPPRESS_LEAK_WARNING([self performSelector:targetSelector withObject:fakeSender]);
+        // 直接调用真实的目标和动作！
+        SUPPRESS_LEAK_WARNING([target performSelector:action withObject:fakeSender]);
 
     } else {
         [self processTianJiangQueue_S3];
@@ -4954,6 +4944,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
