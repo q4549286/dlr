@@ -4641,7 +4641,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     g_tianDiPan_completion_handler = [completion copy];
     
     // 1. 找到天地盘视图
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類"); // <--- 修改后的一行
     if (!plateViewClass) {
         LogMessage(EchoLogError, @"[错误] 找不到 天地盤視圖 类。");
         if(completion) completion(@"[推衍失败: 找不到天地盘视图类]");
@@ -4933,6 +4933,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
