@@ -35,7 +35,7 @@ static NSString *GetStringFromLayer(id layer) {
         if ([stringValue isKindOfClass:[NSString class]]) { return stringValue; }
         if ([stringValue isKindOfClass:[NSAttributedString class]]) { return ((NSAttributedString *)stringValue).string; }
     }
-    return @"[非文本Layer]";
+    return @"[?]";
 }
 
 static void LogToScreen(NSString *format, ...) {
@@ -67,13 +67,14 @@ static void LogToScreen(NSString *format, ...) {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time_DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // 【参考原始脚本写法】使用 dispatch_after
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if ([self.view.window viewWithTag:888999]) return;
             UIButton *inspectorButton = [UIButton buttonWithType:UIButtonTypeSystem];
             inspectorButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
             inspectorButton.tag = 888999;
             [inspectorButton setTitle:@"检查原始数据" forState:UIControlStateNormal];
-            inspectorButton.backgroundColor = [UIColor colorWithRed:0.35 green:0.34 blue:0.84 alpha:1.0]; // Indigo
+            inspectorButton.backgroundColor = [UIColor colorWithRed:0.35 green:0.34 blue:0.84 alpha:1.0];
             [inspectorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             inspectorButton.layer.cornerRadius = 18;
             [inspectorButton addTarget:self action:@selector(inspectTianDiPanData) forControlEvents:UIControlEventTouchUpInside];
@@ -91,7 +92,7 @@ static void LogToScreen(NSString *format, ...) {
         return;
     }
     
-    g_inspectorView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, self.view.bounds.size.width - 20, 400)];
+    g_inspectorView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, self.view.bounds.size.width - 20, 500)];
     g_inspectorView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
     g_inspectorView.layer.cornerRadius = 15;
     g_inspectorView.layer.borderColor = [UIColor grayColor].CGColor;
@@ -100,7 +101,7 @@ static void LogToScreen(NSString *format, ...) {
     g_logTextView = [[UITextView alloc] initWithFrame:CGRectInset(g_inspectorView.bounds, 10, 10)];
     g_logTextView.backgroundColor = [UIColor clearColor];
     g_logTextView.textColor = [UIColor whiteColor];
-    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12];
+    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logTextView.editable = NO;
     
     [g_inspectorView addSubview:g_logTextView];
@@ -115,46 +116,27 @@ static void LogToScreen(NSString *format, ...) {
     }
     LogToScreen(@"[DEBUG] 成功找到类定义。");
 
-    // ===================================================================
-    // 【核心修正】: 使用兼容性API和正确的Block语法
-    // ===================================================================
-    __block UIView *plateView = nil; // 【修正1】添加 __block
-    NSMutableArray *windowsToSearch = [NSMutableArray array];
-
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                [windowsToSearch addObjectsFromArray:scene.windows];
-            }
-        }
-    }
+    __block UIView *plateView = nil;
     
-    if (windowsToSearch.count == 0) {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        if ([UIApplication sharedApplication].windows) {
-            [windowsToSearch addObjectsFromArray:[UIApplication sharedApplication].windows];
-        }
-        #pragma clang diagnostic pop
-    }
-
-    // 【修正2】标准的递归 Block 写法
-    void (^__block findViewRecursive)(UIView *) = ^(UIView *view) {
-        if (plateView) return; 
+    // 简化并修复视图查找逻辑
+    void (^findViewRecursive)(UIView *) = ^(UIView *view) {
         if ([view isKindOfClass:plateViewClass]) {
-            plateView = view; // 现在可以赋值了
-            return;
+            plateView = view;
         }
+        // 即使找到也继续遍历，以防有多个实例（虽然不太可能）
         for (UIView *subview in view.subviews) {
-            findViewRecursive(subview); // 不会再有循环引用警告
+            if (plateView) break; // 如果已经找到，就跳出内层循环
+            findViewRecursive(subview);
         }
     };
-
-    for (UIWindow *window in windowsToSearch) {
-        findViewRecursive(window);
-        if (plateView) break;
+    
+    // 遍历所有窗口
+    for (UIWindow *window in [UIApplication sharedApplication].windows) {
+        if (window.hidden == NO) {
+            findViewRecursive(window);
+            if (plateView) break; // 如果在某个窗口找到了，就停止遍历其他窗口
+        }
     }
-    // ======================= 修正结束 ========================
 
     if (!plateView) {
         LogToScreen(@"[CRITICAL] 遍历所有窗口也找不到 '六壬大占.天地盤視圖類' 的实例。");
@@ -162,7 +144,11 @@ static void LogToScreen(NSString *format, ...) {
     }
     LogToScreen(@"[SUCCESS] 成功定位到天地盘视图实例: <%p>", plateView);
 
-    NSArray *ivarSuffixes = @[@"地宮宮名列", @"天神宮名列", @"天將宮名列"];
+    // 【新需求】增加要检查的经纬信息
+    NSArray *ivarSuffixes = @[
+        @"地宮宮名列", @"天神宮名列", @"天將宮名列",
+        @"天盤外經", @"天盤內經", @"天盤將經"
+    ];
 
     for (NSString *suffix in ivarSuffixes) {
         LogToScreen(@"\n--- [TASK] 正在读取后缀为 '%@' 的变量 ---", suffix);
@@ -178,17 +164,21 @@ static void LogToScreen(NSString *format, ...) {
         LogToScreen(@"[SUCCESS] 成功读取到非空值。尝试分析...");
 
         @try {
-            LogToScreen(@"[DEBUG] 尝试获取变量类型...");
             NSString *className = NSStringFromClass([dataObject class]);
             LogToScreen(@"[INFO] 变量类型: %@", className);
             
+            // 处理字典类型 (宫名列)
             if ([dataObject isKindOfClass:[NSDictionary class]]) {
                 NSDictionary *dataDict = (NSDictionary *)dataObject;
                 LogToScreen(@"[INFO] 确认是 NSDictionary，包含 %lu 个条目:", (unsigned long)dataDict.count);
                 
                 int i = 0;
-                for (id key in dataDict) {
-                    CALayer *layer = dataDict[key];
+                for (id key in [dataDict.allKeys sortedArrayUsingSelector:@selector(compare:)]) { // 对Key排序，保证输出顺序稳定
+                    id layer = dataDict[key];
+                    if (![layer isKindOfClass:[CALayer class]]) {
+                         LogToScreen(@"  [%d] Key: %@ -> 值不是 CALayer", i, key);
+                         continue;
+                    }
                     NSString *text = GetStringFromLayer(layer);
                     CALayer *pLayer = [layer presentationLayer] ?: layer; 
                     
@@ -196,13 +186,28 @@ static void LogToScreen(NSString *format, ...) {
                     LogToScreen(@"      - Position: {%.1f, %.1f}", pLayer.position.x, pLayer.position.y);
                     i++;
                 }
-            } else {
-                LogToScreen(@"[WARNING] 变量不是预期的 NSDictionary 类型。");
+            } 
+            // 【新逻辑】处理数组类型 (经纬)
+            else if ([dataObject isKindOfClass:[NSArray class]]) {
+                NSArray *dataArray = (NSArray *)dataObject;
+                LogToScreen(@"[INFO] 确认是 NSArray，包含 %lu 个条目:", (unsigned long)dataArray.count);
+
+                for (int i = 0; i < dataArray.count; i++) {
+                    id layer = dataArray[i];
+                     if (![layer isKindOfClass:[CALayer class]]) {
+                         LogToScreen(@"  [%d] 值不是 CALayer", i);
+                         continue;
+                    }
+                    NSString *text = GetStringFromLayer(layer);
+                    LogToScreen(@"  [%d] Text: '%@'", i, text);
+                }
+            }
+            else {
+                LogToScreen(@"[WARNING] 变量既不是 NSDictionary 也不是 NSArray。");
             }
         } @catch (NSException *exception) {
             LogToScreen(@"\n\n[CRASH DETECTED!] 在分析变量 '%@' 时发生崩溃!", suffix);
             LogToScreen(@"[CRASH INFO] 原因: %@", exception.reason);
-            LogToScreen(@"[CRASH INFO] 详细信息: %@", exception.userInfo);
         }
     }
     
@@ -211,11 +216,8 @@ static void LogToScreen(NSString *format, ...) {
 
 %end // %hook UIViewController 结束
 
-// =========================================================================
-// 3. 初始化
-// =========================================================================
 %ctor {
     @autoreleasepool {
-        NSLog(@"[EchoRawDataInspector] 原始数据检查脚本 (可编译最终版) 已加载。");
+        NSLog(@"[EchoFullInspector] 完整检查脚本 (最终版) 已加载。");
     }
 }
