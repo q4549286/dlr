@@ -3269,37 +3269,20 @@ if (g_isExtractingTianJiangDetail) {
 }
 %new
 - (void)processTianJiangQueue_S3 {
-    // 检查工作队列是否完成
     if (!g_isExtractingTianJiangDetail || g_tianJiang_workQueue.count == 0 || ![[g_tianJiang_workQueue.firstObject allKeys] containsObject:@"result"]) {
-        
-        // 如果队列为空，说明已经处理完所有任务
-        if (g_isExtractingTianJiangDetail && g_tianJiang_workQueue.count == 0) {
-            LogMessage(EchoLogError, @"[天地盘天将] 队列为空，但状态未清理，强制结束。");
-        }
-        
-        // 只有在所有任务都完成后才进入这里
         if (g_isExtractingTianJiangDetail) {
-             LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有天将详情推衍完毕。");
-
-            // 格式化最终结果
+            LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有天将详情推衍完毕。");
             NSMutableString *finalReport = [NSMutableString string];
             for (NSDictionary *task in g_tianJiang_workQueue) {
-                // 跳过我们自己添加的哨兵节点
                 if ([task[@"title"] isEqualToString:@"START_NODE"]) continue;
-
                 [finalReport appendFormat:@"- 天将: %@\n", task[@"title"]];
-                // 使用我们之前写的课传解析函数，因为它同样适用
                 NSString *parsedDetail = parseKeChuanDetailBlock(task[@"result"], task[@"title"]);
                 [finalReport appendFormat:@"%@\n\n", parsedDetail];
             }
-            
-            // 调用回调函数
             if (g_tianJiang_completion_handler) {
                 g_tianJiang_completion_handler([finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
             }
         }
-
-        // 清理状态
         g_isExtractingTianJiangDetail = NO;
         g_tianJiang_workQueue = nil;
         g_tianJiang_completion_handler = nil;
@@ -3307,31 +3290,50 @@ if (g_isExtractingTianJiangDetail) {
         return;
     }
     
-    // 从队列中取出一个任务并执行
-    // 从队列中移除已完成的任务
     [g_tianJiang_workQueue removeObjectAtIndex:0];
     
-    // 检查下一个任务是否已存在（即队列是否已空）
     if(g_tianJiang_workQueue.count > 0){
         NSMutableDictionary *nextTask = g_tianJiang_workQueue.firstObject;
         LogMessage(EchoLogTypeInfo, @"[天地盘天将] 正在参详: %@", nextTask[@"title"]);
         [self updateProgressHUD:[NSString stringWithFormat:@"推演天地盘天将: %@", nextTask[@"title"]]];
 
-        // 触发手势
-        SEL action = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
-        if ([self respondsToSelector:action]) {
-            SUPPRESS_LEAK_WARNING([self performSelector:action withObject:nextTask[@"gesture"]]);
-        } else {
-            LogMessage(EchoLogError, @"[错误] 方法 %@ 不存在。", NSStringFromSelector(action));
-            [nextTask setObject:@"[解析失败: 方法不存在]" forKey:@"result"];
+        // --- 【核心黑魔法】伪造手势并调用方法 ---
+        SEL targetSelector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+        if (![self respondsToSelector:targetSelector]) {
+            LogMessage(EchoLogError, @"[错误] ViewController 不响应 '顯示天地盤觸摸WithSender:' 方法。");
+            [nextTask setObject:@"[解析失败: 目标方法不存在]" forKey:@"result"];
             [self processTianJiangQueue_S3];
+            return;
         }
+
+        // 1. 创建一个假的 Gesture Recognizer
+        UITapGestureRecognizer *fakeSender = [[UITapGestureRecognizer alloc] init];
+        
+        // 2. 获取要伪造的坐标
+        CGPoint targetPoint = [nextTask[@"point"] CGPointValue];
+        
+        // 3. 用 tag 属性来存储坐标 (这是一个 hack)
+        memcpy((void *)&fakeSender.tag, &targetPoint, sizeof(CGPoint));
+
+        // 4. 运行时替换 locationInView: 方法
+        Method originalMethod = class_getInstanceMethod([fakeSender class], @selector(locationInView:));
+        Method fakeMethod = class_getInstanceMethod([NSObject class], @selector(fake_locationInView:));
+        if (originalMethod && fakeMethod) {
+            method_setImplementation(originalMethod, method_getImplementation(fakeMethod));
+        } else {
+            LogMessage(EchoLogError, @"[黑魔法失败] 无法替换 locationInView: 方法。");
+            [nextTask setObject:@"[解析失败: 无法伪造坐标]" forKey:@"result"];
+            [self processTianJiangQueue_S3];
+            return;
+        }
+        
+        // 5. 调用目标方法！
+        SUPPRESS_LEAK_WARNING([self performSelector:targetSelector withObject:fakeSender]);
+
     } else {
-        // 如果是最后一个任务，直接调用自己进入清理流程
         [self processTianJiangQueue_S3];
     }
 }
-
 
 // =========================================================================
 // 新增：天地盘天将详情提取核心逻辑 (S3 - V10.0 终极伪造手势版)
@@ -4902,6 +4904,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
