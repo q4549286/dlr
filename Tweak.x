@@ -3143,56 +3143,7 @@ else if (g_s2_isExtractingKeChuanDetail) {
         }
     }
     // ========== 在这里添加新的拦截逻辑 ==========
-// =========================================================================
-// 天地盘详情拦截器 (V11 - 增加延迟以解决时序问题)
-// =========================================================================
-if (g_isExtractingTianJiangDetail) {
-    NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-    if ([vcClassName containsString:@"天將摘要視圖"]) {
-        
-        // 【核心修正】将提取逻辑放入一个短暂的延迟后执行
-        // 这给了弹窗控制器足够的时间来加载和配置它的视图 (比如设置UILabel的文本)
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            
-            // --- 所有提取逻辑现在都在这个延迟块内部 ---
-            UIView *contentView = vcToPresent.view;
-            
-            NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
-            NSMutableArray *allStackViews = [NSMutableArray array];
-            FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
 
-            if (allStackViews.count > 0) {
-                UIStackView *mainStackView = allStackViews.firstObject;
-                for (UIView *subview in mainStackView.arrangedSubviews) {
-                    if ([subview isKindOfClass:[UILabel class]]) {
-                        NSString *text = ((UILabel *)subview).text;
-                        if (text && text.length > 0) [finalTextParts addObject:text];
-                    }
-                }
-            } else {
-                LogMessage(EchoLogError, @"[天地盘天将] 提取失败: 未找到主 UIStackView 容器。");
-                [finalTextParts addObject:@"[提取失败: 视图结构已更改]"];
-            }
-
-            NSString *extractedDetail = [finalTextParts componentsJoinedByString:@"\n"];
-            
-            // 增加一个检查，如果内容仍然为空，就记录一个更明确的警告
-            if (extractedDetail.length == 0) {
-                 LogMessage(EchoLogTypeWarning, @"[天地盘天将] 警告: 成功拦截 %@ 弹窗，但延迟后提取内容仍为空。", [g_tianJiang_workQueue.firstObject objectForKey:@"title"]);
-                 extractedDetail = @"[内容提取为空]";
-            }
-
-            [g_tianJiang_workQueue.firstObject setObject:extractedDetail forKey:@"result"]; 
-            LogMessage(EchoLogTypeSuccess, @"[天地盘天将] 成功参详 %@ 详情", [g_tianJiang_workQueue.firstObject objectForKey:@"title"]);
-
-            // 在提取完成后，再调用下一个任务
-            [self processTianJiangQueue_S3];
-        });
-
-        // 立即返回，阻止弹窗实际显示出来
-        return; 
-    }
-}
 // ========== 新的拦截逻辑结束 ==========
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
     void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSString *taskName, NSString *result, void(^completionBlock)(NSString*)) {
@@ -3295,6 +3246,7 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
 }
 %new
 - (void)processTianJiangQueue_S3 {
+    // 任务完成的判断和收尾逻辑，与之前 V13 版本完全相同
     if (!g_isExtractingTianJiangDetail || g_tianJiang_workQueue.count == 0 || ![[g_tianJiang_workQueue.firstObject allKeys] containsObject:@"result"]) {
         if (g_isExtractingTianJiangDetail) {
             LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有天将详情推衍完毕。");
@@ -3302,8 +3254,8 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
             for (NSDictionary *task in g_tianJiang_workQueue) {
                 if ([task[@"title"] isEqualToString:@"START_NODE"]) continue;
                 [finalReport appendFormat:@"- 天将: %@\n", task[@"title"]];
-                NSString *parsedDetail = parseKeChuanDetailBlock(task[@"result"], task[@"title"]);
-                [finalReport appendFormat:@"%@\n\n", parsedDetail];
+                // 【注意】我们不再需要 parseKeChuanDetailBlock，因为 Hook 已经拿到了干净数据
+                [finalReport appendFormat:@"%@\n\n", task[@"result"]]; 
             }
             if (g_tianJiang_completion_handler) {
                 g_tianJiang_completion_handler([finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
@@ -3316,25 +3268,27 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
         return;
     }
     
+    // 从队列中移除已完成的上一个任务
     [g_tianJiang_workQueue removeObjectAtIndex:0];
     
+    // 如果还有任务，则执行
     if(g_tianJiang_workQueue.count > 0){
         NSMutableDictionary *nextTask = g_tianJiang_workQueue.firstObject;
-        LogMessage(EchoLogTypeInfo, @"[天地盘天将] 正在参详: %@", nextTask[@"title"]);
+        LogMessage(EchoLogTypeInfo, @"[天地盘天将] 正在触发: %@", nextTask[@"title"]);
         [self updateProgressHUD:[NSString stringWithFormat:@"推演天地盘天将: %@", nextTask[@"title"]]];
 
-        // --- 【核心V13】直接硬编码已知的 target 和 action ---
+        // 使用 V13 版本成功的伪造手势逻辑
         id target = self;
         SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
 
         if (![target respondsToSelector:action]) {
             LogMessage(EchoLogError, @"[错误] ViewController (self) 不响应 '顯示天地盤觸摸WithSender:' 方法。");
-            [nextTask setObject:@"[解析失败: Target-Action 无效]" forKey:@"result"];
-            [self processTianJiangQueue_S3];
+            [nextTask setObject:@"[触发失败]" forKey:@"result"];
+            // 失败后也要继续下一个
+            dispatch_async(dispatch_get_main_queue(), ^{ [self processTianJiangQueue_S3]; });
             return;
         }
 
-        // 伪造手势的部分保持不变
         UITapGestureRecognizer *fakeSender = [[UITapGestureRecognizer alloc] init];
         CGPoint targetPoint = [nextTask[@"point"] CGPointValue];
         [fakeSender setFake_location:[NSValue valueWithCGPoint:targetPoint]];
@@ -3343,11 +3297,15 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
         Method fakeMethod = class_getInstanceMethod([NSObject class], @selector(fake_locationInView:));
         method_setImplementation(originalMethod, method_getImplementation(fakeMethod));
         
-        // 直接调用我们已知的目标和动作！
+        // 调用方法，这将触发我们的新 Hook
         SUPPRESS_LEAK_WARNING([target performSelector:action withObject:fakeSender]);
+        
+        // 这里不再立即调用 processTianJiangQueue_S3
+        // 它将由 Hook 内部的 dismiss completion block 来调用
 
     } else {
-        [self processTianJiangQueue_S3];
+        // 所有任务都已触发，最后一个 Hook 正在处理
+        // 我们只需要等待它完成并调用 processTianJiangQueue_S3 即可
     }
 }
 // =========================================================================
@@ -4865,7 +4823,69 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     });
 }
 %end
+// =========================================================================
+// 新增：Hook 天将详情弹窗，直接从实例变量读取数据
+// =========================================================================
+%hook 六壬大占_天將摘要視圖
 
+- (void)viewDidLoad {
+    %orig; // 首先，让原始的 viewDidLoad 方法执行，确保所有变量都被赋值
+
+    // 检查是否是我们的提取任务在驱动
+    if (g_isExtractingTianJiangDetail && g_tianJiang_workQueue.count > 0) {
+        
+        LogMessage(EchoLogTypeInfo, @"[Hook成功] 已进入 '天將摘要視圖' 的 viewDidLoad。");
+        
+        // 定义我们要读取的实例变量名列表
+        NSArray<NSString *> *ivarNames = @[@"名位", @"將義", @"所主", @"乘臨", @"日辰關係", @"雜象", @"摘要"];
+        NSMutableString *extractedDetail = [NSMutableString string];
+        
+        for (NSString *ivarName in ivarNames) {
+            // 使用 MSHookIvar 安全地读取 Swift 变量的值
+            // 注意：因为是 Swift 类，变量名可能被混淆，我们先尝试原始名字
+            id value = nil;
+            @try {
+                 value = MSHookIvar<id>(self, [ivarName cStringUsingEncoding:NSUTF8StringEncoding]);
+            } @catch (NSException *exception) {
+                // 如果直接读取失败，尝试 Swift 混淆后的名字
+                NSString *mangledName = [NSString stringWithFormat:@"_$_%@Sg", ivarName]; // 这是一个常见的混淆模式
+                 @try {
+                    value = MSHookIvar<id>(self, [mangledName cStringUsingEncoding:NSUTF8StringEncoding]);
+                 } @catch (NSException *innerException) {
+                    LogMessage(EchoLogTypeWarning, @"[Ivar读取] 尝试读取 '%@' 和 '%@' 均失败。", ivarName, mangledName);
+                 }
+            }
+
+            if (value && [value isKindOfClass:[NSString class]] && ((NSString *)value).length > 0) {
+                // 简单地将所有文本拼接起来
+                [extractedDetail appendFormat:@"%@\n", (NSString *)value];
+            }
+        }
+        
+        // 如果拼接后内容不为空，则任务成功
+        if (extractedDetail.length > 0) {
+            NSMutableDictionary *currentTask = g_tianJiang_workQueue.firstObject;
+            [currentTask setObject:extractedDetail forKey:@"result"];
+            LogMessage(EchoLogTypeSuccess, @"[Ivar读取] 成功从弹窗实例变量中提取 %@ 的详情。", currentTask[@"title"]);
+        } else {
+            LogMessage(EchoLogError, @"[Ivar读取] 错误：Hook 成功，但未能从任何实例变量中读取到有效文本。");
+            NSMutableDictionary *currentTask = g_tianJiang_workQueue.firstObject;
+            [currentTask setObject:@"[Ivar读取失败]" forKey:@"result"];
+        }
+        
+        // 立即关闭这个（我们实际上看不到的）弹窗
+        // 我们需要找到主 ViewController 来执行 dismiss
+        UIViewController *presentingVC = self.presentingViewController;
+        [presentingVC dismissViewControllerAnimated:NO completion:^{
+            // 在关闭动画完成后，再继续处理下一个任务，确保时序正确
+            if ([presentingVC respondsToSelector:@selector(processTianJiangQueue_S3)]) {
+                [presentingVC performSelector:@selector(processTianJiangQueue_S3)];
+            }
+        }];
+    }
+}
+
+%end
 
 %ctor {
     @autoreleasepool {
@@ -4909,6 +4929,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
