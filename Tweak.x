@@ -3,351 +3,297 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局变量、常量定义与辅助函数
+// 1. 全局变量与常量
 // =========================================================================
+static const NSInteger kEchoExtractorPanelTag = 789012;
+static const NSInteger kEchoExtractorButtonTag = 345678;
 
-#pragma mark - Constants & Global State
-static const NSInteger kEchoMonitorPanelTag = 112233;
-static const NSInteger kEchoMonitorButtonTag = 445566;
-
-static UIView *g_monitorPanelView = nil;
+static UIView *g_extractorPanelView = nil;
 static UITextView *g_logTextView = nil;
-static BOOL g_isMonitoringPaused = NO;
-static CGPoint g_panStartPoint; // 用于拖动
 
-// 复用原框架的颜色和辅助函数
-#define ECHO_COLOR_MAIN_BLUE        [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0]
-#define ECHO_COLOR_CARD_BG          [UIColor colorWithWhite:0.2 alpha:0.95]
-#define ECHO_COLOR_LOG_TOUCH        [UIColor whiteColor]
-#define ECHO_COLOR_LOG_DETAIL       [UIColor lightGrayColor]
-#define ECHO_COLOR_LOG_IMPORTANT    [UIColor cyanColor]
+// 存储提取结果
+static NSMutableArray<NSString *> *g_rawResults = nil;
+static BOOL g_isExtracting = NO;
 
-static void LogMessage(UIColor *color, NSString *format, ...);
-static UIWindow* GetFrontmostWindow();
+// 声明我们将要用到的App内部方法
+@interface UIView (EchoExtractor)
+- (void)處理點擊WithSender:(id)sender;
+@end
 
 // =========================================================================
-// 2. UI创建与管理
+// 2. UI创建与管理 (简化版)
 // =========================================================================
-@interface UIViewController (EchoMonitor)
-- (void)createOrShowMonitorPanel;
-- (void)handleMonitorButtonTap:(UIButton *)sender;
-- (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer;
+@interface UIViewController (EchoExtractor)
+- (void)createOrShowExtractorPanel;
+- (void)handleExtractorButtonTap:(UIButton *)sender;
+- (void)startRawExtraction;
 @end
 
 %hook UIViewController
 
 - (void)viewDidLoad {
     %orig;
-    
-    // 只在主界面控制器上加载
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIWindow *keyWindow = GetFrontmostWindow();
-            if (!keyWindow || [keyWindow viewWithTag:kEchoMonitorButtonTag]) return;
+            UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
+            if (!keyWindow || [keyWindow viewWithTag:kEchoExtractorButtonTag]) return;
 
-            UIButton *monitorButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            monitorButton.frame = CGRectMake(10, 45, 120, 36); // 放在左上角
-            monitorButton.tag = kEchoMonitorButtonTag;
-            [monitorButton setTitle:@"触摸监控" forState:UIControlStateNormal];
-            monitorButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            monitorButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0]; // 醒目的红色
-            [monitorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            monitorButton.layer.cornerRadius = 18;
-            monitorButton.layer.shadowColor = [UIColor blackColor].CGColor;
-            monitorButton.layer.shadowOffset = CGSizeMake(0, 2);
-            monitorButton.layer.shadowOpacity = 0.4;
-            [monitorButton addTarget:self action:@selector(createOrShowMonitorPanel) forControlEvents:UIControlEventTouchUpInside];
-            [keyWindow addSubview:monitorButton];
+            UIButton *extractorButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            extractorButton.frame = CGRectMake(10, 45, 140, 36);
+            extractorButton.tag = kEchoExtractorButtonTag;
+            [extractorButton setTitle:@"原始数据提取" forState:UIControlStateNormal];
+            extractorButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.5 blue:0.8 alpha:1.0];
+            [extractorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            extractorButton.layer.cornerRadius = 18;
+            [extractorButton addTarget:self action:@selector(createOrShowExtractorPanel) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:extractorButton];
         });
     }
 }
 
 %new
-- (void)createOrShowMonitorPanel {
-    UIWindow *keyWindow = GetFrontmostWindow();
+- (void)createOrShowExtractorPanel {
+    UIWindow *keyWindow = [UIApplication sharedApplication].keyWindow;
     if (!keyWindow) return;
 
-    if (g_monitorPanelView) {
-        [UIView animateWithDuration:0.3 animations:^{
-            g_monitorPanelView.alpha = 0;
-        } completion:^(BOOL finished) {
-            [g_monitorPanelView removeFromSuperview];
-            g_monitorPanelView = nil;
+    if (g_extractorPanelView) {
+        [UIView animateWithDuration:0.3 animations:^{ g_extractorPanelView.alpha = 0; } completion:^(BOOL finished) {
+            [g_extractorPanelView removeFromSuperview];
+            g_extractorPanelView = nil;
             g_logTextView = nil;
         }];
         return;
     }
 
-    // 创建一个更小的、可拖动的面板
-    CGFloat panelWidth = keyWindow.bounds.size.width - 20;
-    CGFloat panelHeight = 350;
-    g_monitorPanelView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, panelWidth, panelHeight)];
-    g_monitorPanelView.tag = kEchoMonitorPanelTag;
-    g_monitorPanelView.layer.cornerRadius = 16;
-    g_monitorPanelView.clipsToBounds = YES;
-    g_monitorPanelView.layer.borderColor = [UIColor grayColor].CGColor;
-    g_monitorPanelView.layer.borderWidth = 0.5;
-
+    g_extractorPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds];
+    g_extractorPanelView.tag = kEchoExtractorPanelTag;
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
-    blurView.frame = g_monitorPanelView.bounds;
-    [g_monitorPanelView addSubview:blurView];
+    blurView.frame = g_extractorPanelView.bounds;
+    [g_extractorPanelView addSubview:blurView];
 
-    // 添加拖动手势
-    UIPanGestureRecognizer *panGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePanelPan:)];
-    [g_monitorPanelView addGestureRecognizer:panGesture];
-
-    // 内容视图
     UIView *contentView = blurView.contentView;
-    
-    // 标题
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 10, panelWidth, 20)];
-    titleLabel.text = @"触摸事件监控";
+    CGFloat panelWidth = contentView.bounds.size.width;
+
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 50, panelWidth, 30)];
+    titleLabel.text = @"天地盘原始数据提取器";
     titleLabel.textColor = [UIColor whiteColor];
-    titleLabel.font = [UIFont boldSystemFontOfSize:16];
+    titleLabel.font = [UIFont boldSystemFontOfSize:20];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [contentView addSubview:titleLabel];
 
-    // 控制按钮
-    CGFloat buttonWidth = (panelWidth - 40) / 3;
-    
-    UIButton *pauseButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    pauseButton.frame = CGRectMake(10, 40, buttonWidth, 30);
-    [pauseButton setTitle:@"暂停" forState:UIControlStateNormal];
-    [pauseButton setTitle:@"继续" forState:UIControlStateSelected];
-    pauseButton.tag = 101; // Pause/Resume
-    [pauseButton addTarget:self action:@selector(handleMonitorButtonTap:) forControlEvents:UIControlEventTouchUpInside];
-    [contentView addSubview:pauseButton];
-
-    UIButton *clearButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    clearButton.frame = CGRectMake(20 + buttonWidth, 40, buttonWidth, 30);
-    [clearButton setTitle:@"清空日志" forState:UIControlStateNormal];
-    clearButton.tag = 102; // Clear
-    [clearButton addTarget:self action:@selector(handleMonitorButtonTap:) forControlEvents:UIControlEventTouchUpInside];
-    [contentView addSubview:clearButton];
+    UIButton *startButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    startButton.frame = CGRectMake(panelWidth/2 - 100, 100, 200, 44);
+    [startButton setTitle:@"开始提取12宫详情" forState:UIControlStateNormal];
+    startButton.tag = 201;
+    [startButton addTarget:self action:@selector(handleExtractorButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+    [contentView addSubview:startButton];
 
     UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeButton.frame = CGRectMake(30 + 2 * buttonWidth, 40, buttonWidth, 30);
+    closeButton.frame = CGRectMake(panelWidth/2 - 100, 150, 200, 44);
     [closeButton setTitle:@"关闭" forState:UIControlStateNormal];
-    closeButton.tag = 103; // Close
-    [closeButton addTarget:self action:@selector(handleMonitorButtonTap:) forControlEvents:UIControlEventTouchUpInside];
+    closeButton.tag = 202;
+    [closeButton addTarget:self action:@selector(handleExtractorButtonTap:) forControlEvents:UIControlEventTouchUpInside];
     [contentView addSubview:closeButton];
 
-    // 日志窗口
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 80, panelWidth - 20, panelHeight - 90)];
-    g_logTextView.backgroundColor = [UIColor clearColor];
-    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:11];
+    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 210, panelWidth - 20, contentView.bounds.size.height - 220)];
+    g_logTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.8];
+    g_logTextView.layer.cornerRadius = 10;
+    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12];
     g_logTextView.editable = NO;
     g_logTextView.textColor = [UIColor whiteColor];
-    g_logTextView.text = @"[监控核心]：已启动，等待触摸事件...\n";
+    g_logTextView.text = @"点击“开始提取”以启动流程。\n";
     [contentView addSubview:g_logTextView];
 
-    // 动画显示
-    g_monitorPanelView.alpha = 0;
-    [keyWindow addSubview:g_monitorPanelView];
-    [UIView animateWithDuration:0.3 animations:^{
-        g_monitorPanelView.alpha = 1.0;
-    }];
+    g_extractorPanelView.alpha = 0;
+    [keyWindow addSubview:g_extractorPanelView];
+    [UIView animateWithDuration:0.3 animations:^{ g_extractorPanelView.alpha = 1.0; }];
 }
 
 %new
-- (void)handleMonitorButtonTap:(UIButton *)sender {
-    switch (sender.tag) {
-        case 101: // Pause/Resume
-            g_isMonitoringPaused = !g_isMonitoringPaused;
-            sender.selected = g_isMonitoringPaused;
-            LogMessage(ECHO_COLOR_LOG_IMPORTANT, @"[系统] 监控已 %@。", g_isMonitoringPaused ? @"暂停" : @"继续");
+- (void)handleExtractorButtonTap:(UIButton *)sender {
+    switch(sender.tag) {
+        case 201: // Start
+            [self startRawExtraction];
             break;
-        case 102: // Clear
-            g_logTextView.text = @"";
-            break;
-        case 103: // Close
-            [self createOrShowMonitorPanel];
+        case 202: // Close
+            [self createOrShowExtractorPanel];
             break;
     }
 }
 
 %new
-- (void)handlePanelPan:(UIPanGestureRecognizer *)recognizer {
-    UIWindow *keyWindow = GetFrontmostWindow();
-    UIView *panel = recognizer.view;
-
-    if (recognizer.state == UIGestureRecognizerStateBegan) {
-        g_panStartPoint = [recognizer locationInView:keyWindow];
-    } else if (recognizer.state == UIGestureRecognizerStateChanged) {
-        CGPoint newPoint = [recognizer locationInView:keyWindow];
-        CGFloat dx = newPoint.x - g_panStartPoint.x;
-        CGFloat dy = newPoint.y - g_panStartPoint.y;
-        
-        CGPoint newCenter = CGPointMake(panel.center.x + dx, panel.center.y + dy);
-        panel.center = newCenter;
-        
-        g_panStartPoint = newPoint;
+- (void)startRawExtraction {
+    if (g_isExtracting) {
+        g_logTextView.text = [g_logTextView.text stringByAppendingString:@"[错误] 提取任务已在进行中。\n"];
+        return;
     }
-}
+    
+    g_isExtracting = YES;
+    g_rawResults = [NSMutableArray array];
+    g_logTextView.text = @"[任务启动] 开始提取天地盘12宫原始详情...\n";
 
-%end
+    // 1. 定位天地盘视图
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
+    if (!plateViewClass) {
+        g_logTextView.text = [g_logTextView.text stringByAppendingString:@"[错误] 找不到类 `六壬大占.天地盤視圖類`\n"];
+        g_isExtracting = NO;
+        return;
+    }
+    
+    NSMutableArray *plateViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
+    if (plateViews.count == 0) {
+        g_logTextView.text = [g_logTextView.text stringByAppendingString:@"[错误] 找不到天地盘视图实例。\n"];
+        g_isExtracting = NO;
+        return;
+    }
+    UIView *plateView = plateViews.firstObject;
 
-// =========================================================================
-// 3. 核心监控Hook
-// =========================================================================
+    // 2. 计算12个宫位的中心点坐标
+    // (复用原脚本的几何分析逻辑，但只为获取坐标)
+    Ivar diGongIvar = class_getInstanceVariable(plateViewClass, "_$_lazy_storage_$_地宮宮名列");
+    if (!diGar) { // typo fix
+        g_logTextView.text = [g_logTextView.text stringByAppendingString:@"[错误] 找不到地宫宫名列表的实例变量。\n"];
+        g_isExtracting = NO;
+        return;
+    }
+    NSDictionary *diGongDict = object_getIvar(plateView, diGongIvar);
+    if (!diGongDict) {
+        g_logTextView.text = [g_logTextView.text stringByAppendingString:@"[错误] 地宫宫名列表为空。\n"];
+        g_isExtracting = NO;
+        return;
+    }
+    
+    NSArray<CALayer *> *diGongLayers = [diGongDict allValues];
+    NSMutableArray<NSValue *> *centerPoints = [NSMutableArray array];
+    for (CALayer *layer in diGongLayers) {
+        // 将 CALayer 的中心点转换到 plateView 的坐标系
+        CGPoint centerInPlateView = layer.position;
+        [centerPoints addObject:[NSValue valueWithCGPoint:centerInPlateView]];
+    }
 
-static void logViewDetails(UIView *view, int depth);
-static void logResponderChain(UIResponder *responder);
+    g_logTextView.text = [g_logTextView.text stringByAppendingFormat:@"[信息] 成功计算出 %lu 个宫位的点击坐标。\n", (unsigned long)centerPoints.count];
+    
+    // 3. 循环模拟点击
+    __block int currentIndex = 0;
+    __block void (^processNextPoint)();
 
-%hook UIWindow
-
-- (void)sendEvent:(UIEvent *)event {
-    // 立即调用原始方法，确保不影响App功能
-    %orig(event);
-
-    // 如果监控暂停或面板不存在，则不记录
-    if (g_isMonitoringPaused || !g_monitorPanelView) {
+    SEL actionSelector = NSSelectorFromString(@"處理點擊WithSender:");
+    if (![plateView respondsToSelector:actionSelector]) {
+        g_logTextView.text = [g_logTextView.text stringByAppendingString:@"[致命错误] 天地盘视图不响应 `處理點擊WithSender:` 方法！\n"];
+        g_isExtracting = NO;
         return;
     }
 
-    // 只关心触摸事件
-    if (event.type == UIEventTypeTouches) {
-        NSSet *touches = [event allTouches];
-        UITouch *touch = [touches anyObject];
-
-        // 只在触摸开始时记录详细信息，避免日志刷屏
-        if (touch.phase == UITouchPhaseBegan) {
+    processNextPoint = [^{
+        if (currentIndex >= centerPoints.count) {
+            // 所有点击都已完成
+            g_logTextView.text = [g_logTextView.text stringByAppendingString:@"\n[任务完成] 所有12宫详情已提取完毕！\n\n--- 原始数据 ---\n\n"];
             
-            // 1. 记录触摸基本信息
-            LogMessage(ECHO_COLOR_LOG_TOUCH, @"\n--- 触摸开始 (Touch Began) ---");
-            
-            // 2. 获取并记录被触摸的视图
-            UIView *touchedView = touch.view;
-            if (touchedView) {
-                logViewDetails(touchedView, 0);
-
-                // 3. 记录响应者链
-                LogMessage(ECHO_COLOR_LOG_DETAIL, @"  响应者链 (Responder Chain):");
-                logResponderChain(touchedView);
-
-            } else {
-                LogMessage(ECHO_COLOR_LOG_DETAIL, @"  未命中任何特定视图。");
+            NSMutableString *finalReport = [NSMutableString string];
+            for (NSString *result in g_rawResults) {
+                [finalReport appendString:result];
+                [finalReport appendString:@"\n--------------------------------\n"];
             }
-        } else if (touch.phase == UITouchPhaseEnded) {
-             LogMessage(ECHO_COLOR_LOG_TOUCH, @"--- 触摸结束 (Touch Ended) ---");
-        }
-    }
-}
+            g_logTextView.text = [g_logTextView.text stringByAppendingString:finalReport];
+            
+            // 复制到剪贴板
+            [UIPasteboard generalPasteboard].string = finalReport;
+            g_logTextView.text = [g_logTextView.text stringByAppendingString:@"\n[成功] 原始数据已复制到剪贴板！\n"];
 
+            g_isExtracting = NO;
+            processNextPoint = nil;
+            return;
+        }
+
+        CGPoint pointToClick = [centerPoints[currentIndex] CGPointValue];
+
+        // **【核心模拟】**
+        // 创建一个假的 UITapGestureRecognizer
+        UITapGestureRecognizer *mockGesture = [[UITapGestureRecognizer alloc] init];
+        
+        // **【关键】** 使用KVC强制设置私有变量来伪造点击位置
+        // 我们需要找到存储 `location` 的私有 ivar。通过 Hopper 或 FLEX 观察，
+        // `UITapGestureRecognizer` 内部有一个 `_locationInView` 变量。
+        // 我们需要 swizzle `locationInView:` 方法来返回我们想要的值。
+        
+        // 更简单的方法是直接调用 `處理點擊WithSender:`
+        // 并在内部 hook `locationInView:`
+        // (为了简化这个独立脚本，我们先直接调用，看 App 是否会崩溃或行为异常)
+        // 很多时候，App的开发者可能没有严格检查sender，而是直接从其他地方获取位置。
+
+        g_logTextView.text = [g_logTextView.text stringByAppendingFormat:@"[模拟点击 %d/12] 坐标: (%.1f, %.1f)...\n", currentIndex + 1, pointToClick.x, pointToClick.y];
+        
+        // **风险尝试**：直接传递一个空的 gesture。如果App崩溃，我们需要更复杂的伪造。
+        // [plateView 處理點擊WithSender:mockGesture];
+        // **更正**：传递一个真实的gesture，但它的location是空的。
+        [plateView 處理點擊WithSender:plateView.gestureRecognizers.firstObject];
+
+
+        currentIndex++;
+        // 等待弹窗处理
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), processNextPoint);
+        
+    } copy];
+
+    processNextPoint();
+}
 %end
 
 // =========================================================================
-// 4. 日志与辅助函数
+// 3. 核心拦截与数据捕获
 // =========================================================================
-
-static void logViewDetails(UIView *view, int depth) {
-    if (!view) return;
-
-    NSMutableString *indent = [NSMutableString string];
-    for (int i = 0; i < depth; i++) {
-        [indent appendString:@"  "];
-    }
-
-    // 记录视图类名和基本信息
-    NSString *className = NSStringFromClass([view class]);
-    LogMessage(ECHO_COLOR_LOG_DETAIL, @"%@-> 命中视图: [%@]", indent, className);
+static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
+static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     
-    // 尝试获取文本内容
-    NSString *content = nil;
-    if ([view isKindOfClass:[UILabel class]]) {
-        content = ((UILabel *)view).text;
-    } else if ([view isKindOfClass:[UIButton class]]) {
-        content = ((UIButton *)view).titleLabel.text;
-    }
-    if (content) {
-        LogMessage(ECHO_COLOR_LOG_DETAIL, @"%@   - 内容: \"%@\"", indent, content);
-    }
-    
-    // **核心：记录手势识别器**
-    if (view.gestureRecognizers.count > 0) {
-        LogMessage(ECHO_COLOR_LOG_IMPORTANT, @"%@   - 发现手势识别器 [%lu个]:", indent, (unsigned long)view.gestureRecognizers.count);
-        for (UIGestureRecognizer *gesture in view.gestureRecognizers) {
-            LogMessage(ECHO_COLOR_LOG_IMPORTANT, @"%@     * %@", indent, NSStringFromClass([gesture class]));
-        }
-    }
-}
+    // 只在提取任务进行时拦截
+    if (g_isExtracting) {
+        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+        
+        // 我们需要知道详情弹窗的类名，这里先用一个通用的名字，你需要用监控脚本确认
+        if ([vcClassName containsString:@"摘要視圖"] || [vcClassName containsString:@"DetailViewController"]) {
+            
+            // 立即提取，然后阻止弹窗
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                NSMutableString *rawContent = [NSMutableString string];
+                
+                NSMutableArray *allLabels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, allLabels);
+                
+                // 按Y坐标排序，模拟视觉顺序
+                [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){
+                    return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)];
+                }];
 
-static void logResponderChain(UIResponder *responder) {
-    int i = 0;
-    while (responder) {
-        LogMessage(ECHO_COLOR_LOG_DETAIL, @"    [%d] %@", i, NSStringFromClass([responder class]));
-        responder = [responder nextResponder];
-        i++;
-    }
-}
-
-static void LogMessage(UIColor *color, NSString *format, ...) {
-    if (!g_logTextView) return;
-    
-    va_list args;
-    va_start(args, format);
-    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args);
-  
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-        [formatter setDateFormat:@"HH:mm:ss.SSS"];
-        NSString *logPrefix = [NSString stringWithFormat:@"[%@]", [formatter stringFromDate:[NSDate date]]];
-        
-        NSMutableAttributedString *logLine = [[NSMutableAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@ %@\n", logPrefix, message]];
-        
-        // 设置默认颜色
-        [logLine addAttribute:NSForegroundColorAttributeName value:color range:NSMakeRange(0, logLine.length)];
-        
-        // 时间戳用灰色
-        [logLine addAttribute:NSForegroundColorAttributeName value:[UIColor grayColor] range:NSMakeRange(0, logPrefix.length)];
-        
-        [logLine addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, logLine.length)];
-        
-        NSMutableAttributedString *existingText = [[NSMutableAttributedString alloc] initWithAttributedString:g_logTextView.attributedText];
-        [existingText appendAttributedString:logLine];
-        
-        g_logTextView.attributedText = existingText;
-        
-        // 自动滚动到底部
-        if (existingText.length > 0) {
-            NSRange bottom = NSMakeRange(existingText.length - 1, 1);
-            [g_logTextView scrollRangeToVisible:bottom];
-        }
-    });
-}
-
-static UIWindow* GetFrontmostWindow() {
-    UIWindow *frontmostWindow = nil;
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                for (UIWindow *window in scene.windows) {
-                    if (window.isKeyWindow) {
-                        frontmostWindow = window;
-                        break;
+                for (UILabel *label in allLabels) {
+                    if (label.text && label.text.length > 0) {
+                        [rawContent appendFormat:@"%@\n", label.text];
                     }
                 }
-                if (frontmostWindow) break;
-            }
+                
+                [g_rawResults addObject:rawContent];
+                g_logTextView.text = [g_logTextView.text stringByAppendingString:@"  -> 成功捕获并提取原始数据。\n"];
+            });
+
+            // 不调用 original 方法，直接返回，这样弹窗就不会出现
+            return;
         }
     }
-    if (!frontmostWindow) {
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        frontmostWindow = [UIApplication sharedApplication].keyWindow;
-        #pragma clang diagnostic pop
-    }
-    return frontmostWindow;
+
+    // 如果不是我们的目标，就正常显示弹窗
+    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
-// =========================================================================
-// 5. 初始化
-// =========================================================================
+// 辅助函数
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 
+// =========================================================================
+// 4. 初始化
+// =========================================================================
 %ctor {
     @autoreleasepool {
-        NSLog(@"[EchoMonitor] 触摸监控脚本已加载。");
+        MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
+        NSLog(@"[EchoRawExtractor] 原始数据提取脚本已加载。");
     }
 }
