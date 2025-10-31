@@ -45,7 +45,8 @@ static void LogToScreen(NSString *format, ...) {
     NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
     va_end(args);
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *newText = [NSString stringWithFormat:@"%@\n%@", message, g_logTextView.text];
+        NSString *currentText = g_logTextView.text ?: @"";
+        NSString *newText = [NSString stringWithFormat:@"%@\n%@", message, currentText];
         g_logTextView.text = newText;
         NSLog(@"[Inspector] %@", message);
     });
@@ -62,18 +63,17 @@ static void LogToScreen(NSString *format, ...) {
 
 %hook UIViewController
 
-// 在主界面加载完成后，添加一个触发按钮
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time_DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             if ([self.view.window viewWithTag:888999]) return;
             UIButton *inspectorButton = [UIButton buttonWithType:UIButtonTypeSystem];
             inspectorButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
             inspectorButton.tag = 888999;
             [inspectorButton setTitle:@"检查原始数据" forState:UIControlStateNormal];
-            inspectorButton.backgroundColor = [UIColor systemIndigoColor];
+            inspectorButton.backgroundColor = [UIColor colorWithRed:0.35 green:0.34 blue:0.84 alpha:1.0]; // Indigo
             [inspectorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             inspectorButton.layer.cornerRadius = 18;
             [inspectorButton addTarget:self action:@selector(inspectTianDiPanData) forControlEvents:UIControlEventTouchUpInside];
@@ -82,7 +82,6 @@ static void LogToScreen(NSString *format, ...) {
     }
 }
 
-// 使用 %new 关键字为 UIViewController 类添加一个新方法
 %new
 - (void)inspectTianDiPanData {
     if (g_inspectorView) {
@@ -116,7 +115,10 @@ static void LogToScreen(NSString *format, ...) {
     }
     LogToScreen(@"[DEBUG] 成功找到类定义。");
 
-    UIView *plateView = nil;
+    // ===================================================================
+    // 【核心修正】: 使用兼容性API和正确的Block语法
+    // ===================================================================
+    __block UIView *plateView = nil; // 【修正1】添加 __block
     NSMutableArray *windowsToSearch = [NSMutableArray array];
 
     if (@available(iOS 13.0, *)) {
@@ -136,15 +138,15 @@ static void LogToScreen(NSString *format, ...) {
         #pragma clang diagnostic pop
     }
 
-    void (^__block findViewRecursive)(UIView *);
-    findViewRecursive = ^(UIView *view) {
-        if (plateView) return;
+    // 【修正2】标准的递归 Block 写法
+    void (^__block findViewRecursive)(UIView *) = ^(UIView *view) {
+        if (plateView) return; 
         if ([view isKindOfClass:plateViewClass]) {
-            plateView = view;
+            plateView = view; // 现在可以赋值了
             return;
         }
         for (UIView *subview in view.subviews) {
-            findViewRecursive(subview);
+            findViewRecursive(subview); // 不会再有循环引用警告
         }
     };
 
@@ -152,6 +154,7 @@ static void LogToScreen(NSString *format, ...) {
         findViewRecursive(window);
         if (plateView) break;
     }
+    // ======================= 修正结束 ========================
 
     if (!plateView) {
         LogToScreen(@"[CRITICAL] 遍历所有窗口也找不到 '六壬大占.天地盤視圖類' 的实例。");
@@ -213,6 +216,6 @@ static void LogToScreen(NSString *format, ...) {
 // =========================================================================
 %ctor {
     @autoreleasepool {
-        NSLog(@"[EchoRawDataInspector] 原始数据检查脚本 (安全调试版) 已加载。");
+        NSLog(@"[EchoRawDataInspector] 原始数据检查脚本 (可编译最终版) 已加载。");
     }
 }
