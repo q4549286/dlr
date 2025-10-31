@@ -4647,6 +4647,74 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         if (completion) completion([finalResultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
     });
 }
+// <<<<<<<<<<<< 1. 将这个“侦察兵”函数添加到你的代码中 >>>>>>>>>>>>>
+%new
+- (void)investigateKeChuanContainer_S4_Debug {
+    LogMessage(EchoLogTypeTask, @"[侦察任务 S4-Debug] 开始探查'課傳'组件内部结构...");
+    
+    id keChuanContainer = [self GetIvarValueSafely:self ivarNameSuffix:@"課傳"];
+    if (!keChuanContainer) {
+        LogMessage(EchoLogError, @"[侦察 S4-Debug] 失败: 无法定位核心数据组件'課傳'。");
+        return;
+    }
+    
+    LogMessage(EchoLogTypeInfo, @"[侦察 S4-Debug] 成功定位'課傳'对象: %@", keChuanContainer);
+    
+    unsigned int ivarCount;
+    Ivar *ivars = class_copyIvarList([keChuanContainer class], &ivarCount);
+    
+    if (!ivars) {
+        LogMessage(EchoLogTypeWarning, @"[侦察 S4-Debug] 警告: 无法获取'課傳'对象的实例变量列表。");
+        return;
+    }
+    
+    NSMutableString *report = [NSMutableString stringWithString:@"\n\n--- '課傳' 组件内部结构报告 ---\n"];
+    
+    for (unsigned int i = 0; i < ivarCount; i++) {
+        Ivar ivar = ivars[i];
+        const char *name_c = ivar_getName(ivar);
+        const char *type_c = ivar_getTypeEncoding(ivar);
+        
+        if (name_c == NULL || type_c == NULL) continue;
+        
+        NSString *name = [NSString stringWithUTF8String:name_c];
+        NSString *type = [NSString stringWithUTF8String:type_c];
+        
+        @try {
+            id value = object_getIvar(keChuanContainer, ivar);
+            [report appendFormat:@"\n[变量名]: %@\n[类型]: %@\n[值]: %@\n", name, type, [value description]];
+
+            // 重点关注 NSArray 或 NSDictionary
+            if ([value isKindOfClass:[NSArray class]]) {
+                NSArray *arr = (NSArray *)value;
+                if (arr.count > 0) {
+                     [report appendFormat:@"  -> 这是一个数组，包含 %lu 个对象。第一个对象是: %@\n", (unsigned long)arr.count, [arr.firstObject description]];
+                     // 如果数组里有12个对象，这很可能就是我们要找的！
+                     if (arr.count == 12) {
+                        [report appendString:@"  ****** 高度可疑目标！这个数组包含12个元素！******\n"];
+                     }
+                }
+            }
+
+        } @catch (NSException *exception) {
+            [report appendFormat:@"\n[变量名]: %@\n[类型]: %@\n[值]: (获取失败: %@)\n", name, type, exception.reason];
+        }
+    }
+    
+    free(ivars);
+    [report appendString:@"\n--- 报告结束 ---\n\n"];
+    
+    // 将侦察报告打印到控制台日志
+    NSLog(@"%@", report);
+    LogMessage(EchoLogTypeSuccess, @"[侦察 S4-Debug] 侦察报告已生成，请在设备控制台日志中查看详细信息！");
+
+    // 为了方便，也尝试显示在UI上
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"侦察报告" message:report preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"复制并关闭" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [UIPasteboard generalPasteboard].string = report;
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
 // <<<<<<<<<<<< 1. 将这个新函数完整地粘贴到你的代码中 >>>>>>>>>>>>>
 %new
 - (void)extractTianDiPanDetail_Direct_S4_WithCompletion:(void (^)(NSString *result))completion {
@@ -4756,6 +4824,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
