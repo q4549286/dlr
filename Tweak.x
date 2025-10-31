@@ -3345,24 +3345,25 @@ if (g_isExtractingTianJiangDetail) {
     }
     UISegmentedControl *segmentControl = segmentControls.firstObject;
 
-    NSInteger kePanIndex = -1;
+NSInteger kePanIndex = -1;
+for (int i = 0; i < segmentControl.numberOfSegments; i++) {
+    NSString *title = [segmentControl titleForSegmentAtIndex:i];
+    // 【最终修正】将搜索关键词改为 "天地盘"，并兼容繁体
+    if ([title containsString:@"天地盘"] || [title containsString:@"天地盤"]) {
+        kePanIndex = i;
+        break;
+    }
+}
+if (kePanIndex == -1) {
+    // 【修正】更新错误日志以反映正确的搜索词
+    NSMutableArray *allTitles = [NSMutableArray array];
     for (int i = 0; i < segmentControl.numberOfSegments; i++) {
-        if ([[segmentControl titleForSegmentAtIndex:i] containsString:@"课盘"]) {
-            kePanIndex = i;
-            break;
-        }
+        [allTitles addObject:[segmentControl titleForSegmentAtIndex:i] ?: @"(nil)"];
     }
-    if (kePanIndex == -1) {
-        LogMessage(EchoLogError, @"[天地盘天将] 错误: 在 UISegmentedControl 中找不到 '课盘' 选项。");
-        if (completion) completion(@"[推衍失败: 找不到'课盘'选项]");
-        return;
-    }
-    
-    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 正在确保界面已切换到 '课盘' (索引 %ld)...", (long)kePanIndex);
-    if (segmentControl.selectedSegmentIndex != kePanIndex) {
-        segmentControl.selectedSegmentIndex = kePanIndex;
-        [segmentControl sendActionsForControlEvents:UIControlEventValueChanged];
-    }
+    LogMessage(EchoLogError, @"[天地盘天将] 错误: 找不到 '天地盘' 或 '天地盤' 选项。检测到的所有选项标题为: [%@]", [allTitles componentsJoinedByString:@", "]);
+    if (completion) completion(@"[推衍失败: 找不到'天地盘'选项]");
+    return;
+}
 
     // 2. 等待UI刷新后，再执行真正的提取逻辑 (V5版的核心代码)
     [self showProgressHUD:@"正在准备天地盘..."];
@@ -4921,6 +4922,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
