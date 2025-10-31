@@ -2598,6 +2598,12 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
             @"prefix": @"// 协议定位：此模块为未经筛选的【原始神煞情报数据库】。\n// 核心指令：严禁对此处任何神煞进行即时解读或赋予权重。\n// 最终裁决权：所有信号的有效性、关联度与最终解释权，将唯一、强制地由【PartIII,Chapter 9: 环境与变量层】协议，通过其内置的【三阶过滤】流程进行终审裁决。\n"
         },
         @{
+            @"key": @"天地盘详解",
+            @"title": @"天地盘详解 (S4)",
+            @"content": SafeString(reportData[@"天地盘详解"]),
+            @"prefix": @"// 协议定位：此模块为对天地盘十二天将的直接数据提取，提供最原始的象意参考。\n"
+        },
+        @{
             @"key": @"辅助系统", 
             @"title": @"模块五：【辅助系统】 - B级情报", 
             @"content": @"COMPOSITE_SECTION_PLACEHOLDER",
@@ -2685,6 +2691,7 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
         @"格局总览": @"格局总览",
         @"行年参数": @"行年参数",
         @"神煞系统": @"神煞系统",
+        @"天地盘详解": @"天地盘详解", // <<<<<< 新增
         @"辅助系统": @"辅助系统",
         @"七政四余": @"七政四余", // 新增对子项的识别
         @"三宫时信息": @"三宫时信息", // 新增对子项的识别
@@ -2699,6 +2706,8 @@ static NSString* generateContentSummaryLine(NSString *fullReport) {
         @"格局总览",
         @"行年参数",
         @"神煞系统",
+        @"天地盘详解", // <<<<<< 新增
+
         @"辅助系统",
         @"七政四余",
         @"三宫时信息",
@@ -4081,54 +4090,63 @@ LogMessage(EchoLogTypeTask, @"[完成] “标准课盘”推衍任务已完成�
         }];
     }];
 }
+// <<<<<<<<<<<< 2. 用这个修改后的版本，完整替换掉你原来的 executeCompositeExtraction 函数 >>>>>>>>>>>>>
 %new
 - (void)executeCompositeExtraction {
     __weak typeof(self) weakSelf = self;
     LogMessage(EchoLogTypeTask, @"[任务启动] 深度课盘推衍");
-    [self showProgressHUD:@"1/6: 推衍基础盘面..."];
+    [self showProgressHUD:@"1/7: 推衍基础盘面..."];
     __block NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
     
     [self extractKePanInfoWithCompletion:^(NSMutableDictionary *baseReportData) {
         [reportData addEntriesFromDictionary:baseReportData];
         __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
 
-        [strongSelf updateProgressHUD:@"2/6: 推演课传流注..."];
+        [strongSelf updateProgressHUD:@"2/7: 推演课传流注..."];
         [strongSelf startExtraction_Truth_S2_WithCompletion:^{
             reportData[@"课传详解"] = SafeString(g_s2_finalResultFromKeChuan);
             __strong typeof(weakSelf) strongSelf2 = weakSelf; if (!strongSelf2) return;
             
-            [strongSelf2 updateProgressHUD:@"3/6: 参详行年参数..."];
+            [strongSelf2 updateProgressHUD:@"3/7: 参详行年参数..."];
             [strongSelf2 extractNianmingInfoWithCompletion:^(NSString *nianmingText) {
                 reportData[@"行年参数"] = nianmingText;
                 __strong typeof(weakSelf) strongSelf3 = weakSelf; if (!strongSelf3) return;
 
-                [strongSelf3 updateProgressHUD:@"4/6: 推衍神煞系统..."];
+                [strongSelf3 updateProgressHUD:@"4/7: 推衍神煞系统..."];
                 [strongSelf3 extractShenShaInfo_CompleteWithCompletion:^(NSString *shenShaResult) {
                     reportData[@"神煞详情"] = shenShaResult;
                     __strong typeof(weakSelf) strongSelf4 = weakSelf; if (!strongSelf4) return;
-                 
-                    [strongSelf4 updateProgressHUD:@"5/6: 解析课体范式..."];
-                    [strongSelf4 startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:NO completion:^(NSString *keTiResult) {
-                        reportData[@"课体范式_简"] = keTiResult;
+
+                    // <<<<<<<<<<<<<<<<<<<< 新增的步骤 >>>>>>>>>>>>>>>>>>>>
+                    [strongSelf4 updateProgressHUD:@"5/7: 推衍天地盘详解..."];
+                    [strongSelf4 extractTianDiPanDetail_Direct_S4_WithCompletion:^(NSString *tianDiPanDetailResult) {
+                        reportData[@"天地盘详解"] = tianDiPanDetailResult;
                         __strong typeof(weakSelf) strongSelf5 = weakSelf; if (!strongSelf5) return;
                         
-                        [strongSelf5 updateProgressHUD:@"6/6: 解析九宗门..."];
-                        [strongSelf5 startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:NO completion:^(NSString *jiuZongMenResult) {
-                            reportData[@"九宗门_简"] = jiuZongMenResult;
-                            dispatch_async(dispatch_get_main_queue(), ^{
-                                __strong typeof(weakSelf) strongSelf6 = weakSelf; if (!strongSelf6) return;
-                                LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成深度课盘...");
-                                NSString *finalReport = formatFinalReport(reportData);
-                                g_lastGeneratedReport = [finalReport copy];
-[strongSelf6 hideProgressHUD];
-[strongSelf6 showEchoNotificationWithTitle:@"深度课盘推衍完成" message:@"已生成并复制到剪贴板"];
-[strongSelf6 presentAIActionSheetWithReport:finalReport];
-LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部完成。");
-                                g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil; g_s2_finalResultFromKeChuan = nil;
-                                LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
-                            });
+                        [strongSelf5 updateProgressHUD:@"6/7: 解析课体范式..."];
+                        [strongSelf5 startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:NO completion:^(NSString *keTiResult) {
+                            reportData[@"课体范式_简"] = keTiResult;
+                            __strong typeof(weakSelf) strongSelf6 = weakSelf; if (!strongSelf6) return;
+                            
+                            [strongSelf6 updateProgressHUD:@"7/7: 解析九宗门..."];
+                            [strongSelf6 startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:NO completion:^(NSString *jiuZongMenResult) {
+                                reportData[@"九宗门_简"] = jiuZongMenResult;
+                                dispatch_async(dispatch_get_main_queue(), ^{
+                                    __strong typeof(weakSelf) strongSelf7 = weakSelf; if (!strongSelf7) return;
+                                    LogMessage(EchoLogTypeInfo, @"[整合] 所有部分解析完成，正在生成深度课盘...");
+                                    NSString *finalReport = formatFinalReport(reportData);
+                                    g_lastGeneratedReport = [finalReport copy];
+                                    [strongSelf7 hideProgressHUD];
+                                    [strongSelf7 showEchoNotificationWithTitle:@"深度课盘推衍完成" message:@"已生成并复制到剪贴板"];
+                                    [strongSelf7 presentAIActionSheetWithReport:finalReport];
+                                    LogMessage(EchoLogTypeTask, @"[完成] “深度课盘”推衍任务已全部完成。");
+                                    g_extractedData = nil; g_s1_isExtracting = NO; g_s1_completion_handler = nil; g_s2_finalResultFromKeChuan = nil;
+                                    LogMessage(EchoLogTypeInfo, @"[状态] 全局数据已清理。");
+                                });
+                            }];
                         }];
                     }];
+                    // <<<<<<<<<<<<<<<<<<<< 新增步骤结束 >>>>>>>>>>>>>>>>>>>>
                 }];
             }];
         }];
@@ -4627,6 +4645,70 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         if (completion) completion([finalResultString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
     });
 }
+// <<<<<<<<<<<< 1. 将这个新函数完整地粘贴到你的代码中 >>>>>>>>>>>>>
+%new
+- (void)extractTianDiPanDetail_Direct_S4_WithCompletion:(void (^)(NSString *result))completion {
+    LogMessage(EchoLogTypeTask, @"[任务启动 S4] 开始直接推衍“天地盘详解”...");
+    
+    // 1. 获取核心数据容器 (課傳)
+    id keChuanContainer = [self GetIvarValueSafely:self ivarNameSuffix:@"課傳"];
+    if (!keChuanContainer) {
+        LogMessage(EchoLogError, @"[天地盘S4] 错误: 无法定位核心数据组件'課傳'。");
+        if (completion) completion(@"[推衍失败: 找不到核心数据组件'課傳']");
+        return;
+    }
+    
+    // 2. 从容器中获取天将数据列表 (猜测ivar名为'天將列表')
+    NSArray *tianJiangDataArray = [self GetIvarValueSafely:keChuanContainer ivarNameSuffix:@"天將列表"];
+    if (!tianJiangDataArray || ![tianJiangDataArray isKindOfClass:[NSArray class]] || tianJiangDataArray.count == 0) {
+        LogMessage(EchoLogError, @"[天地盘S4] 错误: 在'課傳'组件中未找到'天將列表'数据。");
+        if (completion) completion(@"[推衍失败: 未找到天将数据列表]");
+        return;
+    }
+    
+    LogMessage(EchoLogTypeInfo, @"[天地盘S4] 成功定位天将数据列表，共 %lu 项。", (unsigned long)tianJiangDataArray.count);
+    
+    NSMutableString *finalReport = [NSMutableString string];
+    
+    // 3. 遍历数据列表，直接提取每个天将的属性
+    for (id tianJiangObject in tianJiangDataArray) {
+        // 从 `天將摘要視圖` 的 ivar 列表中获取我们需要的属性名
+        NSString *name = [tianJiangObject valueForKey:@"名义"];
+        NSString *jiangYi = [tianJiangObject valueForKey:@"将义"];
+        NSString *suoZhu = [tianJiangObject valueForKey:@"所主"];
+        NSString *jianLin = [tianJiangObject valueForKey:@"兼临"];
+        NSString *riChenGuanXi = [tianJiangObject valueForKey:@"日辰关系"];
+        NSString *zaXiang = [tianJiangObject valueForKey:@"杂象"];
+
+        if (!name || name.length == 0) continue;
+        
+        [finalReport appendFormat:@"- 天将: %@\n", name];
+        
+        if (jiangYi && jiangYi.length > 0) {
+             [finalReport appendFormat:@"  - 将义: %@\n", [jiangYi stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        }
+        if (suoZhu && suoZhu.length > 0) {
+             [finalReport appendFormat:@"  - 所主: %@\n", [suoZhu stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        }
+        if (jianLin && jianLin.length > 0) {
+             [finalReport appendFormat:@"  - 兼临: %@\n", [jianLin stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        }
+        if (riChenGuanXi && riChenGuanXi.length > 0) {
+             [finalReport appendFormat:@"  - 日辰关系: %@\n", [riChenGuanXi stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        }
+        if (zaXiang && zaXiang.length > 0) {
+             [finalReport appendFormat:@"  - 杂象: %@\n", [zaXiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        }
+        [finalReport appendString:@"\n"];
+    }
+    
+    LogMessage(EchoLogTypeSuccess, @"[天地盘S4] 所有天将详情已直接提取并格式化完毕。");
+    
+    NSString *finalResult = [finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (completion) {
+        completion(finalResult);
+    }
+}
 %end
 
 
@@ -4672,4 +4754,5 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
