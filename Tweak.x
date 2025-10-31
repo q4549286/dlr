@@ -3365,6 +3365,11 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
 // (通过伪造带有特定坐标的 UITapGestureRecognizer 来调用目标方法)
 // =========================================================================
 
+// =========================================================================
+// 新增：天地盘天将详情提取核心逻辑 (S3 - V11.0 最终全局搜索版)
+// (根据视图层级树的最终证据，确认天地盘视图不在 ViewController.view 内部，必须全局搜索)
+// =========================================================================
+
 %new
 - (void)extractTianJiangDetailsFromPlate_WithCompletion:(void (^)(NSString *result))completion {
     if (g_isExtractingTianJiangDetail) {
@@ -3380,61 +3385,70 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
     g_tianJiang_completion_handler = [completion copy];
     g_tianJiang_workQueue = [NSMutableArray array];
 
-    // 1. 定位天地盘视图 (使用已验证的成功逻辑)
-    UIView *plateView = nil;
+    // 1. 【核心修正】从整个 App 窗口开始搜索，这是唯一正确的起点
+    UIWindow *keyWindow = GetFrontmostWindow();
+    if (!keyWindow) {
+        LogMessage(EchoLogError, @"[错误] 找不到主窗口 (keyWindow)，无法进行全局搜索。");
+        if(completion) completion(@"[错误: 找不到 keyWindow]");
+        [self processTianJiangQueue_S3]; // 调用以清理状态
+        return;
+    }
+
+    // 2. 在 keyWindow 中寻找天地盘视图的实例
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
         LogMessage(EchoLogError, @"[错误] 找不到 '天地盤視圖類' 类。");
         if(completion) completion(@"[错误: 找不到天地盘视图类]");
-        [self processTianJiangQueue_S3]; return;
+        [self processTianJiangQueue_S3];
+        return;
     }
-    UIWindow *keyWindow = GetFrontmostWindow();
-    if (!keyWindow) {
-        LogMessage(EchoLogError, @"[错误] 找不到主窗口 (keyWindow)。");
-        if(completion) completion(@"[错误: 找不到 keyWindow]");
-        [self processTianJiangQueue_S3]; return;
-    }
+
     NSMutableArray *plateViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
     if (plateViews.count == 0) {
-        LogMessage(EchoLogError, @"[错误] 在主窗口中找不到天地盘视图的实例。");
+        LogMessage(EchoLogError, @"[错误] 在主窗口中未找到 '天地盤視圖類' 的实例。请确认当前界面是否为天地盘界面。");
         if(completion) completion(@"[错误: 在 keyWindow 找不到天地盘实例]");
-        [self processTianJiangQueue_S3]; return;
+        [self processTianJiangQueue_S3];
+        return;
     }
-    plateView = plateViews.firstObject;
+    UIView *plateView = plateViews.firstObject;
+    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 成功通过全局搜索定位到天地盘视图。");
 
-    // 2.【核心改变】从 CALayer 中提取天将的名字和中心坐标，构建任务队列
-    id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
-    if (!tianJiangDict || ![tianJiangDict isKindOfClass:[NSDictionary class]]) {
-        LogMessage(EchoLogError, @"[错误] 无法获取 '天將宮名列' 或其类型不正确。");
-        if(completion) completion(@"[错误: 无法获取天将CALayer字典]");
-        [self processTianJiangQueue_S3]; return;
+    // 3. 在找到的 plateView 内部，寻找所有可交互的天将 UILabel
+    NSMutableArray<UILabel *> *allLabelsInPlate = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], plateView, allLabelsInPlate);
+
+    NSSet *tianJiangWhitelist = [NSSet setWithObjects:@"贵", @"蛇", @"朱", @"六", @"勾", @"青", @"空", @"白", @"常", @"玄", @"阴", @"后", nil];
+    
+    for (UILabel *label in allLabelsInPlate) {
+        if (label.gestureRecognizers.count > 0 && [tianJiangWhitelist containsObject:label.text]) {
+            NSMutableDictionary *task = [NSMutableDictionary dictionary];
+            [task setObject:label.text forKey:@"title"];
+            [task setObject:label.gestureRecognizers.firstObject forKey:@"gesture"];
+            [g_tianJiang_workQueue addObject:task];
+        }
     }
     
-    NSArray *tianJiangLayers = [tianJiangDict allValues];
-    for (id layer in tianJiangLayers) {
-        if (![layer isKindOfClass:[CALayer class]]) continue;
-        
-        NSString *tianJiangName = [self GetStringFromLayer:layer];
-        // 获取 CALayer 在 plateView 中的中心坐标
-        CGPoint centerInPlateView = [plateView.layer convertPoint:((CALayer *)layer).position fromLayer:((CALayer *)layer).superlayer];
+    // 4. 按角度排序并启动队列
+    CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
+    [g_tianJiang_workQueue sortUsingComparator:^NSComparisonResult(NSDictionary *task1, NSDictionary *task2) {
+        UIGestureRecognizer *g1 = task1[@"gesture"]; UIGestureRecognizer *g2 = task2[@"gesture"];
+        CGPoint p1 = [g1.view.superview convertPoint:g1.view.center toView:nil];
+        CGPoint p2 = [g2.view.superview convertPoint:g2.view.center toView:nil];
+        CGFloat angle1 = atan2(p1.y - center.y, p1.x - center.x);
+        CGFloat angle2 = atan2(p2.y - center.y, p2.x - center.x);
+        return [@(angle1) compare:@(angle2)];
+    }];
 
-        NSMutableDictionary *task = [NSMutableDictionary dictionary];
-        [task setObject:tianJiangName forKey:@"title"];
-        [task setObject:[NSValue valueWithCGPoint:centerInPlateView] forKey:@"point"];
-        [g_tianJiang_workQueue addObject:task];
-    }
-    
-    // 3. 检查队列并开始处理
     if (g_tianJiang_workQueue.count == 0) {
-        LogMessage(EchoLogTypeWarning, @"[天地盘天将] 未能从 CALayer 中构建任何天将任务。");
-        if(completion) completion(@"");
-        [self processTianJiangQueue_S3]; return;
+        LogMessage(EchoLogTypeWarning, @"[最终失败] 已成功定位到天地盘视图，但其内部依然未找到任何可交互的UILabel。确认该视图使用CALayer绘图，此功能无法通过模拟点击实现。");
+        if(completion) completion(@"[提取失败] 天地盘使用底层绘图，无法模拟点击。");
+        [self processTianJiangQueue_S3];
+        return;
     }
     
-    // 添加哨兵任务
     [g_tianJiang_workQueue insertObject:[@{@"title": @"START_NODE", @"result":@"ok"} mutableCopy] atIndex:0];
-    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成 (共 %lu 项)，将通过伪造手势进行调用。", (unsigned long)g_tianJiang_workQueue.count-1);
+    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_tianJiang_workQueue.count-1);
     
     // 启动处理流程
     [self processTianJiangQueue_S3];
@@ -4929,6 +4943,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
