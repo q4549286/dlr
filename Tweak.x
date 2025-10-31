@@ -1,85 +1,3 @@
-#import <UIKit/UIKit.h>
-#import <objc/runtime.h>
-#import <substrate.h>
-
-// ... (顶部的全局UI与辅助函数部分保持不变) ...
-static UIView *g_inspectorView = nil;
-static UITextView *g_logTextView = nil;
-
-static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
-    if (!object || !ivarNameSuffix) return nil;
-    unsigned int ivarCount;
-    Ivar *ivars = class_copyIvarList([object class], &ivarCount);
-    if (!ivars) { return nil; }
-    id value = nil;
-    for (unsigned int i = 0; i < ivarCount; i++) {
-        Ivar ivar = ivars[i];
-        const char *name = ivar_getName(ivar);
-        if (name) {
-            NSString *ivarNameStr = [NSString stringWithUTF8String:name];
-            if ([ivarNameStr hasSuffix:ivarNameSuffix]) {
-                value = object_getIvar(object, ivar);
-                break;
-            }
-        }
-    }
-    free(ivars);
-    return value;
-}
-
-static NSString *GetStringFromLayer(id layer) {
-    if (layer && [layer respondsToSelector:@selector(string)]) {
-        id stringValue = [layer valueForKey:@"string"];
-        if ([stringValue isKindOfClass:[NSString class]]) { return stringValue; }
-        if ([stringValue isKindOfClass:[NSAttributedString class]]) { return ((NSAttributedString *)stringValue).string; }
-    }
-    return @"[非文本Layer]";
-}
-
-static void LogToScreen(NSString *format, ...) {
-    if (!g_logTextView) return;
-    va_list args;
-    va_start(args, format);
-    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args);
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *newText = [NSString stringWithFormat:@"%@\n%@", message, g_logTextView.text];
-        g_logTextView.text = newText;
-        NSLog(@"[Inspector] %@", message);
-    });
-}
-
-
-// =========================================================================
-// 2. UIViewController Hook & 核心逻辑 (安全调试版)
-// =========================================================================
-
-@interface UIViewController (EchoInspector)
-- (void)inspectTianDiPanData;
-@end
-
-%hook UIViewController
-
-- (void)viewDidLoad {
-    %orig;
-    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
-    if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            // 确保只添加一次按钮
-            if ([self.view.window viewWithTag:888999]) return;
-            UIButton *inspectorButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            inspectorButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
-            inspectorButton.tag = 888999;
-            [inspectorButton setTitle:@"检查原始数据" forState:UIControlStateNormal];
-            inspectorButton.backgroundColor = [UIColor systemIndigoColor];
-            [inspectorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            inspectorButton.layer.cornerRadius = 18;
-            [inspectorButton addTarget:self action:@selector(inspectTianDiPanData) forControlEvents:UIControlEventTouchUpInside];
-            [self.view.window addSubview:inspectorButton];
-        });
-    }
-}
-
 %new
 - (void)inspectTianDiPanData {
     // 创建或销毁日志窗口
@@ -115,25 +33,48 @@ static void LogToScreen(NSString *format, ...) {
     }
     LogToScreen(@"[DEBUG] 成功找到类定义。");
 
-    // 修改查找方式，使其更健壮
+    // ===================================================================
+    // 【核心修正】: 使用兼容新旧iOS的API来查找视图
+    // ===================================================================
     UIView *plateView = nil;
-    for (UIWindow *window in [UIApplication sharedApplication].windows) {
-        for (UIView *view in window.subviews) {
-            // 递归查找
+    NSMutableArray *windowsToSearch = [NSMutableArray array];
+
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                [windowsToSearch addObjectsFromArray:scene.windows];
+            }
+        }
+    }
+    
+    // 如果新API没找到，或者系统版本低于iOS 13，使用旧API作为后备
+    if (windowsToSearch.count == 0) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        if ([UIApplication sharedApplication].windows) {
+            [windowsToSearch addObjectsFromArray:[UIApplication sharedApplication].windows];
+        }
+        #pragma clang diagnostic pop
+    }
+
+    for (UIWindow *window in windowsToSearch) {
+        // 使用递归函数来深度查找
+        void (^__block findViewRecursive)(UIView *);
+        findViewRecursive = ^(UIView *view) {
+            if (plateView) return; // 找到就停止
             if ([view isKindOfClass:plateViewClass]) {
                 plateView = view;
-                break;
+                return;
             }
             for (UIView *subview in view.subviews) {
-                 if ([subview isKindOfClass:plateViewClass]) {
-                    plateView = subview;
-                    break;
-                }
+                findViewRecursive(subview);
             }
-            if (plateView) break;
-        }
+        };
+        findViewRecursive(window);
         if (plateView) break;
     }
+    // ======================= 修正结束 ========================
+
 
     if (!plateView) {
         LogToScreen(@"[CRITICAL] 遍历所有窗口也找不到 '六壬大占.天地盤視圖類' 的实例。");
@@ -141,36 +82,29 @@ static void LogToScreen(NSString *format, ...) {
     }
     LogToScreen(@"[SUCCESS] 成功定位到天地盘视图实例: <%p>", plateView);
 
-    // 2. 定义要检查的变量名后缀
+    // ... 后续的读取和打印逻辑保持不变 ...
     NSArray *ivarSuffixes = @[@"地宮宮名列", @"天神宮名列", @"天將宮名列"];
 
-    // 3. 循环读取并打印
     for (NSString *suffix in ivarSuffixes) {
         LogToScreen(@"\n--- [TASK] 正在读取后缀为 '%@' 的变量 ---", suffix);
         id dataObject = GetIvarValueSafely(plateView, suffix);
         
-        // 【关键安全检查 1】
-        // 只打印指针地址，这是最安全的操作，不会导致崩溃
         LogToScreen(@"[DEBUG] GetIvarValueSafely 返回的指针地址是: %p", dataObject);
 
-        // 【关键安全检查 2】
-        // 如果指针为 nil，就直接跳过，不再进行后续操作
         if (!dataObject) {
             LogToScreen(@"[ERROR] 读取失败: 变量值为 nil。跳过此变量。");
             continue;
         }
 
-        // 只有在指针有效时，才尝试进一步操作
         LogToScreen(@"[SUCCESS] 成功读取到非空值。尝试分析...");
 
-        // 【崩溃点隔离】我们怀疑这里会崩溃，所以把它放在 try-catch 块里
         @try {
             LogToScreen(@"[DEBUG] 尝试获取变量类型...");
             NSString *className = NSStringFromClass([dataObject class]);
             LogToScreen(@"[INFO] 变量类型: %@", className);
             
             if ([dataObject isKindOfClass:[NSDictionary class]]) {
-                NSDictionary *dataDict = (NSDictionary *)dataObject;
+                NSDictionary *dataDict = (NSDictionary *)dataObejct;
                 LogToScreen(@"[INFO] 确认是 NSDictionary，包含 %lu 个条目:", (unsigned long)dataDict.count);
                 
                 int i = 0;
@@ -194,15 +128,4 @@ static void LogToScreen(NSString *format, ...) {
     }
     
     LogToScreen(@"\n--- [COMPLETE] 检查完毕 ---");
-}
-
-%end
-
-// =========================================================================
-// 3. 初始化
-// =========================================================================
-%ctor {
-    @autoreleasepool {
-        NSLog(@"[EchoRawDataInspector] 原始数据检查脚本 (安全调试版) 已加载。");
-    }
 }
