@@ -16,33 +16,13 @@
 @end
 
 // =========================================================================
-// 2. 全局变量与辅助函数 (必须在所有 %hook 之外)
+// 2. 全局变量与辅助函数
 // =========================================================================
 static UIView *g_debuggerView = nil;
 static UITextView *g_logTextView = nil;
 static BOOL g_isPerformingFakeClick = NO;
 
-static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
-    if (!object || !ivarNameSuffix) return nil;
-    unsigned int ivarCount;
-    Ivar *ivars = class_copyIvarList([object class], &ivarCount);
-    if (!ivars) { free(ivars); return nil; }
-    id value = nil;
-    for (unsigned int i = 0; i < ivarCount; i++) {
-        Ivar ivar = ivars[i];
-        const char *name = ivar_getName(ivar);
-        if (name) {
-            NSString *ivarNameStr = [NSString stringWithUTF8String:name];
-            if ([ivarNameStr hasSuffix:ivarNameSuffix]) {
-                value = object_getIvar(object, ivar);
-                break;
-            }
-        }
-    }
-    free(ivars);
-    return value;
-}
-
+// 辅助函数保持不变
 static void LogToScreen(NSString *format, ...) {
     if (!g_logTextView) return;
     va_list args;
@@ -59,12 +39,35 @@ static void LogToScreen(NSString *format, ...) {
 }
 
 // =========================================================================
-// 3. 核心Hook
+// 3. 核心Hook (合并所有Hook到一个地方)
 // =========================================================================
 
-// 【修正】将 Hook 目标类名改为更可能正确的格式
+@interface UIViewController (EchoDebugger)
+- (void)startDebugTest;
+@end
+
+// 【最终修正】将所有针对同一个类的Hook合并到一个 %hook 块中
 %hook 六壬大占_ViewController
 
+// --- viewDidLoad 的 Hook ---
+- (void)viewDidLoad {
+    %orig;
+    // 因为我们已经在了正确的类里，所以不需要再检查 targetClass
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if ([self.view.window viewWithTag:666777]) return;
+        UIButton *debuggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        debuggerButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
+        debuggerButton.tag = 666777;
+        [debuggerButton setTitle:@"Hook调试" forState:UIControlStateNormal];
+        debuggerButton.backgroundColor = [UIColor systemOrangeColor];
+        [debuggerButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        debuggerButton.layer.cornerRadius = 18;
+        [debuggerButton addTarget:self action:@selector(startDebugTest) forControlEvents:UIControlEventTouchUpInside];
+        [self.view.window addSubview:debuggerButton];
+    });
+}
+
+// --- 目标方法的 Hook ---
 - (void)顯示天地盤觸摸WithSender:(UIGestureRecognizer *)sender {
     LogToScreen(@"\n--- HOOK TRIGGERED: 顯示天地盤觸摸WithSender: ---");
     
@@ -88,34 +91,7 @@ static void LogToScreen(NSString *format, ...) {
     LogToScreen(@"[EXEC] %orig returned.");
 }
 
-%end
-
-
-@interface UIViewController (EchoDebugger)
-- (void)startDebugTest;
-@end
-
-%hook UIViewController
-
-- (void)viewDidLoad {
-    %orig;
-    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
-    if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if ([self.view.window viewWithTag:666777]) return;
-            UIButton *debuggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            debuggerButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
-            debuggerButton.tag = 666777;
-            [debuggerButton setTitle:@"Hook调试" forState:UIControlStateNormal];
-            debuggerButton.backgroundColor = [UIColor systemOrangeColor];
-            [debuggerButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            debuggerButton.layer.cornerRadius = 18;
-            [debuggerButton addTarget:self action:@selector(startDebugTest) forControlEvents:UIControlEventTouchUpInside];
-            [self.view.window addSubview:debuggerButton];
-        });
-    }
-}
-
+// --- 我们自己新增的方法 ---
 %new
 - (void)startDebugTest {
     if (g_debuggerView) {
@@ -137,9 +113,11 @@ static void LogToScreen(NSString *format, ...) {
 
     LogToScreen(@"[DEBUG MODE] Starting test...");
 
+    // 因为我们就在 ViewController 实例里，所以 self 就是 vc
     UIViewController *vc = self;
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     __block UIView *plateView = nil;
+    
     void (^__block __weak weak_findViewRecursive)(UIView *);
     void (^findViewRecursive)(UIView *);
     weak_findViewRecursive = findViewRecursive = ^(UIView *view) {
@@ -174,10 +152,13 @@ static void LogToScreen(NSString *format, ...) {
     LogToScreen(@"[ACTION] performSelector returned.");
 }
 
-%end
+%end // %hook 六壬大占_ViewController 结束
 
+// =========================================================================
+// 4. 初始化
+// =========================================================================
 %ctor {
     @autoreleasepool {
-        NSLog(@"[EchoUltimateHookDebugger] Final Syntax Corrected Version Loaded.");
+        NSLog(@"[EchoUltimateHookDebugger] Final Merged Version Loaded.");
     }
 }
