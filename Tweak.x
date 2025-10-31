@@ -4842,27 +4842,20 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         
         for (NSString *ivarName in ivarNames) {
             // 使用 MSHookIvar 安全地读取 Swift 变量的值
-            // 注意：因为是 Swift 类，变量名可能被混淆，我们先尝试原始名字
             id value = nil;
             @try {
-                 value = MSHookIvar<id>(self, [ivarName cStringUsingEncoding:NSUTF8StringEncoding]);
+                 // 对于 Swift 类，直接使用 MSHookIvar 读取 Objective-C 兼容的属性
+                 // Swift 的 ivar 名字在底层可能被混淆，但暴露给 OC 的属性通常可以直接访问
+                 value = [self valueForKey:ivarName];
             } @catch (NSException *exception) {
-                // 如果直接读取失败，尝试 Swift 混淆后的名字
-                NSString *mangledName = [NSString stringWithFormat:@"_$_%@Sg", ivarName]; // 这是一个常见的混淆模式
-                 @try {
-                    value = MSHookIvar<id>(self, [mangledName cStringUsingEncoding:NSUTF8StringEncoding]);
-                 } @catch (NSException *innerException) {
-                    LogMessage(EchoLogTypeWarning, @"[Ivar读取] 尝试读取 '%@' 和 '%@' 均失败。", ivarName, mangledName);
-                 }
+                LogMessage(EchoLogTypeWarning, @"[Ivar读取] 尝试通过 KVC 读取 '%@' 失败: %@", ivarName, exception.reason);
             }
 
             if (value && [value isKindOfClass:[NSString class]] && ((NSString *)value).length > 0) {
-                // 简单地将所有文本拼接起来
                 [extractedDetail appendFormat:@"%@\n", (NSString *)value];
             }
         }
         
-        // 如果拼接后内容不为空，则任务成功
         if (extractedDetail.length > 0) {
             NSMutableDictionary *currentTask = g_tianJiang_workQueue.firstObject;
             [currentTask setObject:extractedDetail forKey:@"result"];
@@ -4873,19 +4866,17 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
             [currentTask setObject:@"[Ivar读取失败]" forKey:@"result"];
         }
         
-        // 立即关闭这个（我们实际上看不到的）弹窗
-        // 我们需要找到主 ViewController 来执行 dismiss
         UIViewController *presentingVC = self.presentingViewController;
         [presentingVC dismissViewControllerAnimated:NO completion:^{
-            // 在关闭动画完成后，再继续处理下一个任务，确保时序正确
             if ([presentingVC respondsToSelector:@selector(processTianJiangQueue_S3)]) {
-                [presentingVC performSelector:@selector(processTianJiangQueue_S3)];
+                SUPPRESS_LEAK_WARNING([presentingVC performSelector:@selector(processTianJiangQueue_S3)]);
             }
         }];
     }
 }
 
 %end
+
 
 %ctor {
     @autoreleasepool {
@@ -4894,11 +4885,12 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     }
 }
 
+
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
     if (!rootView) return @"[错误: 根视图为空]";
     
     NSMutableArray *stackViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UIStackView class], rootView, stackViews);
+    FindSubviewsOfClassRecursive(rootView, rootView, stackViews);
     
     if (stackViews.count == 0) {
         return @"[错误: 未在课体范式弹窗中找到 UIStackView]";
