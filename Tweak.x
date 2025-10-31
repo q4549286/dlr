@@ -2,20 +2,15 @@
 #import <objc/runtime.h>
 #import <substrate.h>
 
-// =========================================================================
-// 1. 全局UI与辅助函数
-// =========================================================================
+// ... (顶部的全局UI与辅助函数部分保持不变) ...
 static UIView *g_inspectorView = nil;
 static UITextView *g_logTextView = nil;
 
-// 一个辅助函数，用于从实例中安全地获取 Ivar 值
 static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
     if (!object || !ivarNameSuffix) return nil;
     unsigned int ivarCount;
     Ivar *ivars = class_copyIvarList([object class], &ivarCount);
-    if (!ivars) {
-        return nil;
-    }
+    if (!ivars) { return nil; }
     id value = nil;
     for (unsigned int i = 0; i < ivarCount; i++) {
         Ivar ivar = ivars[i];
@@ -32,29 +27,21 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
     return value;
 }
 
-// 一个辅助函数，用于从 CALayer 中提取字符串
 static NSString *GetStringFromLayer(id layer) {
     if (layer && [layer respondsToSelector:@selector(string)]) {
         id stringValue = [layer valueForKey:@"string"];
-        if ([stringValue isKindOfClass:[NSString class]]) {
-            return stringValue;
-        }
-        if ([stringValue isKindOfClass:[NSAttributedString class]]) {
-            return ((NSAttributedString *)stringValue).string;
-        }
+        if ([stringValue isKindOfClass:[NSString class]]) { return stringValue; }
+        if ([stringValue isKindOfClass:[NSAttributedString class]]) { return ((NSAttributedString *)stringValue).string; }
     }
     return @"[非文本Layer]";
 }
 
-// 日志函数
 static void LogToScreen(NSString *format, ...) {
     if (!g_logTextView) return;
-    
     va_list args;
     va_start(args, format);
     NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
     va_end(args);
-    
     dispatch_async(dispatch_get_main_queue(), ^{
         NSString *newText = [NSString stringWithFormat:@"%@\n%@", message, g_logTextView.text];
         g_logTextView.text = newText;
@@ -64,7 +51,7 @@ static void LogToScreen(NSString *format, ...) {
 
 
 // =========================================================================
-// 2. UIViewController Hook & 核心逻辑
+// 2. UIViewController Hook & 核心逻辑 (安全调试版)
 // =========================================================================
 
 @interface UIViewController (EchoInspector)
@@ -73,14 +60,16 @@ static void LogToScreen(NSString *format, ...) {
 
 %hook UIViewController
 
-// 在主界面加载完成后，添加一个触发按钮
 - (void)viewDidLoad {
     %orig;
     Class targetClass = NSClassFromString(@"六壬大占.ViewController");
     if (targetClass && [self isKindOfClass:targetClass]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            // 确保只添加一次按钮
+            if ([self.view.window viewWithTag:888999]) return;
             UIButton *inspectorButton = [UIButton buttonWithType:UIButtonTypeSystem];
             inspectorButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
+            inspectorButton.tag = 888999;
             [inspectorButton setTitle:@"检查原始数据" forState:UIControlStateNormal];
             inspectorButton.backgroundColor = [UIColor systemIndigoColor];
             [inspectorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -116,78 +105,95 @@ static void LogToScreen(NSString *format, ...) {
     [g_inspectorView addSubview:g_logTextView];
     [self.view.window addSubview:g_inspectorView];
 
-    LogToScreen(@"开始检查天地盘原始数据...");
+    LogToScreen(@"[DEBUG] 开始执行 inspectTianDiPanData...");
 
     // 1. 找到天地盘视图实例
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
-        LogToScreen(@"错误: 找不到类 '六壬大占.天地盤視圖類'");
+        LogToScreen(@"[CRITICAL] 找不到类 '六壬大占.天地盤視圖類'");
         return;
     }
+    LogToScreen(@"[DEBUG] 成功找到类定义。");
 
+    // 修改查找方式，使其更健壮
     UIView *plateView = nil;
-    for (UIView *subview in self.view.window.subviews) {
-        if ([subview isKindOfClass:plateViewClass]) {
-            plateView = subview;
-            break;
-        }
-    }
-    
-    if (!plateView) {
-        // 如果在window里找不到，就在当前view里找
-         for (UIView *subview in self.view.subviews) {
-            if ([subview isKindOfClass:plateViewClass]) {
-                plateView = subview;
+    for (UIWindow *window in [UIApplication sharedApplication].windows) {
+        for (UIView *view in window.subviews) {
+            // 递归查找
+            if ([view isKindOfClass:plateViewClass]) {
+                plateView = view;
                 break;
             }
+            for (UIView *subview in view.subviews) {
+                 if ([subview isKindOfClass:plateViewClass]) {
+                    plateView = subview;
+                    break;
+                }
+            }
+            if (plateView) break;
         }
+        if (plateView) break;
     }
 
     if (!plateView) {
-        LogToScreen(@"错误: 找不到 '六壬大占.天地盤視圖類' 的实例。");
+        LogToScreen(@"[CRITICAL] 遍历所有窗口也找不到 '六壬大占.天地盤視圖類' 的实例。");
         return;
     }
-    LogToScreen(@"成功定位到天地盘视图实例: <%p>", plateView);
+    LogToScreen(@"[SUCCESS] 成功定位到天地盘视图实例: <%p>", plateView);
 
     // 2. 定义要检查的变量名后缀
     NSArray *ivarSuffixes = @[@"地宮宮名列", @"天神宮名列", @"天將宮名列"];
 
     // 3. 循环读取并打印
     for (NSString *suffix in ivarSuffixes) {
-        LogToScreen(@"\n--- 正在读取后缀为 '%@' 的变量 ---", suffix);
+        LogToScreen(@"\n--- [TASK] 正在读取后缀为 '%@' 的变量 ---", suffix);
         id dataObject = GetIvarValueSafely(plateView, suffix);
         
+        // 【关键安全检查 1】
+        // 只打印指针地址，这是最安全的操作，不会导致崩溃
+        LogToScreen(@"[DEBUG] GetIvarValueSafely 返回的指针地址是: %p", dataObject);
+
+        // 【关键安全检查 2】
+        // 如果指针为 nil，就直接跳过，不再进行后续操作
         if (!dataObject) {
-            LogToScreen(@"读取失败: 变量值为 nil");
+            LogToScreen(@"[ERROR] 读取失败: 变量值为 nil。跳过此变量。");
             continue;
         }
 
-        LogToScreen(@"变量类型: %@", NSStringFromClass([dataObject class]));
-        
-        // 假设这些变量都是字典 (根据原脚本的 allValues 推断)
-        if ([dataObject isKindOfClass:[NSDictionary class]]) {
-            NSDictionary *dataDict = (NSDictionary *)dataObject;
-            LogToScreen(@"字典包含 %lu 个条目:", (unsigned long)dataDict.count);
+        // 只有在指针有效时，才尝试进一步操作
+        LogToScreen(@"[SUCCESS] 成功读取到非空值。尝试分析...");
+
+        // 【崩溃点隔离】我们怀疑这里会崩溃，所以把它放在 try-catch 块里
+        @try {
+            LogToScreen(@"[DEBUG] 尝试获取变量类型...");
+            NSString *className = NSStringFromClass([dataObject class]);
+            LogToScreen(@"[INFO] 变量类型: %@", className);
             
-            // 遍历字典中的所有 CALayer
-            int i = 0;
-            for (id key in dataDict) {
-                CALayer *layer = dataDict[key];
-                NSString *text = GetStringFromLayer(layer);
-                // 获取 presentationLayer (动画过程中的图层) 或原始图层
-                CALayer *pLayer = [layer presentationLayer] ?: layer; 
+            if ([dataObject isKindOfClass:[NSDictionary class]]) {
+                NSDictionary *dataDict = (NSDictionary *)dataObject;
+                LogToScreen(@"[INFO] 确认是 NSDictionary，包含 %lu 个条目:", (unsigned long)dataDict.count);
                 
-                LogToScreen(@"  [%d] Key: %@ -> Text: '%@'", i, key, text);
-                LogToScreen(@"      - Position: {%.1f, %.1f}", pLayer.position.x, pLayer.position.y);
-                LogToScreen(@"      - Bounds: {%.1f, %.1f, %.1f, %.1f}", pLayer.bounds.origin.x, pLayer.bounds.origin.y, pLayer.bounds.size.width, pLayer.bounds.size.height);
-                i++;
+                int i = 0;
+                for (id key in dataDict) {
+                    CALayer *layer = dataDict[key];
+                    NSString *text = GetStringFromLayer(layer);
+                    CALayer *pLayer = [layer presentationLayer] ?: layer; 
+                    
+                    LogToScreen(@"  [%d] Key: %@ -> Text: '%@'", i, key, text);
+                    LogToScreen(@"      - Position: {%.1f, %.1f}", pLayer.position.x, pLayer.position.y);
+                    i++;
+                }
+            } else {
+                LogToScreen(@"[WARNING] 变量不是预期的 NSDictionary 类型。");
             }
-        } else {
-            LogToScreen(@"警告: 变量不是预期的 NSDictionary 类型。");
+        } @catch (NSException *exception) {
+            LogToScreen(@"\n\n[CRASH DETECTED!] 在分析变量 '%@' 时发生崩溃!", suffix);
+            LogToScreen(@"[CRASH INFO] 原因: %@", exception.reason);
+            LogToScreen(@"[CRASH INFO] 详细信息: %@", exception.userInfo);
         }
     }
     
-    LogToScreen(@"\n--- 检查完毕 ---");
+    LogToScreen(@"\n--- [COMPLETE] 检查完毕 ---");
 }
 
 %end
@@ -197,6 +203,6 @@ static void LogToScreen(NSString *format, ...) {
 // =========================================================================
 %ctor {
     @autoreleasepool {
-        NSLog(@"[EchoRawDataInspector] 原始数据检查脚本已加载。");
+        NSLog(@"[EchoRawDataInspector] 原始数据检查脚本 (安全调试版) 已加载。");
     }
 }
