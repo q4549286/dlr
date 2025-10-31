@@ -70,7 +70,15 @@ static NSString *g_currentItemToExtract = nil;
 static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 static NSString *g_lastGeneratedReport = nil;
+// 新增：天地盘详解提取状态
+static BOOL g_isExtractingTianDiPanDetail = NO;
+static NSMutableArray *g_tianDiPan_workQueue = nil;
+static NSMutableArray *g_tianDiPan_resultsArray = nil;
+static void (^g_tianDiPan_completion_handler)(NSString *result) = nil;
 
+// 新增：为新按钮添加一个Tag
+// 在 kButtonTag_AIPromptToggle 常量下面添加
+static const NSInteger kButtonTag_TianDiPanDetail   = 306;
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES;
 static BOOL g_shouldExtractBenMing = YES; // <<<<<<<<<<<< 新增本命开关状态
@@ -3049,7 +3057,53 @@ else if (g_s2_isExtractingKeChuanDetail) {
         });
         return;
     }
+}// ... 在 g_s2_isExtractingKeChuanDetail 的 } 之后， g_isExtractingNianming 的 else if 之前添加
+else if (g_isExtractingTianDiPanDetail) {
+    NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+    if ([vcClassName containsString:@"天将摘要视图"]) {
+        // 1. 找到了目标弹窗，开始提取数据
+        UIView *contentView = vcToPresent.view;
+        NSMutableArray<UILabel *> *labels = [NSMutableArray array];
+        
+        // 截图显示内容在 StackView 里，我们直接从 contentView 找所有 Label 即可
+        FindSubviewsOfClassRecursive([UILabel class], contentView, labels);
+        
+        // 按Y坐标排序以保证文本顺序
+        [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ 
+            return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)]; 
+        }];
+
+        NSMutableArray<NSString *> *textParts = [NSMutableArray array];
+        for (UILabel *label in labels) {
+            if (label.text && label.text.length > 0) {
+                [textParts addObject:label.text];
+            }
+        }
+        
+        NSString *fullText = [textParts componentsJoinedByString:@"\n"];
+        
+        // 2. 将提取到的数据格式化并存入结果数组
+        // 我们从队列里取出当前任务的标题信息
+        NSString *currentGong = g_tianDiPan_workQueue.firstObject[@"gong"] ?: @"未知宫";
+        NSString *currentJiang = g_tianDiPan_workQueue.firstObject[@"jiang"] ?: @"未知将";
+        
+        // 使用解析器清洗文本
+        NSString *parsedDetail = parseTianJiangDetailBlock(fullText);
+        
+        NSString *formattedResult = [NSString stringWithFormat:@"- %@宫 天将(%@):\n%@", currentGong, currentJiang, parsedDetail];
+        
+        [g_tianDiPan_resultsArray addObject:formattedResult];
+        
+        // 3. 异步调用下一个任务的处理
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self processTianDiPanQueue];
+        });
+        
+        // 4. 阻止弹窗显示
+        return; 
+    }
 }
+// ... 后面是 else if (g_isExtractingNianming) ...
 // V2 REPLACEMENT BLOCK - END
     else if (g_isExtractingNianming) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
@@ -3513,16 +3567,21 @@ currentY += compactButtonHeight + 15;
     [card2 addSubview:sec2Title];
     card2InnerY += 22 + 15;
     
+   // 在 createOrShowMainControlPanel 函数内
+// ...
     NSArray *allToolButtons = @[
         @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)},
         @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
         @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)},
+        // 在这里添加新按钮
+        @{@"title": @"天地盘详解", @"icon": @"circle.grid.3x3.fill", @"tag": @(kButtonTag_TianDiPanDetail)},
         @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)},
         @{@"title": @"神煞系统", @"icon": @"shield.lefthalf.filled", @"tag": @(kButtonTag_ShenSha)},
         @{@"title": @"毕法要诀", @"icon": @"book.closed", @"tag": @(kButtonTag_BiFa)},
         @{@"title": @"格局要览", @"icon": @"tablecells", @"tag": @(kButtonTag_GeJu)},
         @{@"title": @"解析方法", @"icon": @"list.number", @"tag": @(kButtonTag_FangFa)}
     ];
+// ...
     for (int i = 0; i < allToolButtons.count; i++) {
         NSDictionary *config = allToolButtons[i];
         UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
@@ -4447,6 +4506,190 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         [self processKeChuanQueue_Truth_S2]; 
     }
 }
+#pragma mark - TianDiPan Detail Extraction (V1.0)
+
+// 新函数 1: 弹窗内容解析器
+/**
+ @brief 解析“天将摘要视图”弹窗内的原始文本。
+ @param rawText 从弹窗UILabel中提取的完整文本。
+ @return 格式化后的、只包含关键信息的字符串。
+*/
+static NSString* parseTianJiangDetailBlock(NSString *rawText) {
+    if (!rawText || rawText.length == 0) return @"";
+
+    NSMutableString *structuredResult = [NSMutableString string];
+    NSArray<NSString *> *lines = [rawText componentsSeparatedByString:@"\n"];
+    
+    for (NSString *line in lines) {
+        NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (trimmedLine.length == 0) continue;
+        
+        // 使用正则表达式移除句末的解释性断语，例如 "，主..." 或 "。此为..."
+        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(主|为|象|其|此|故).*$" options:0 error:nil];
+        NSString *cleanLine = [regex stringByReplacingMatchesInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length) withTemplate:@""];
+        
+        // 提取关键信息
+        if ([cleanLine containsString:@"旺衰"]) {
+            [structuredResult appendFormat:@"  - %@\n", cleanLine];
+        } else if ([cleanLine containsString:@"临宫"]) {
+            [structuredResult appendFormat:@"  - %@\n", cleanLine];
+        } else if ([cleanLine containsString:@"乘将"]) {
+            [structuredResult appendFormat:@"  - %@\n", cleanLine];
+        }
+        // 你可以根据需要添加更多关键词来提取其他信息
+    }
+
+    if (structuredResult.length == 0) {
+        // 如果没有匹配到特定关键词，则返回第一行作为核心摘要
+        return [NSString stringWithFormat:@"  - 核心: %@", lines.firstObject];
+    }
+
+    return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
+
+// 新函数 2: 队列处理函数
+%new
+- (void)processTianDiPanQueue {
+    // 检查任务是否完成
+    if (g_tianDiPan_workQueue.count == 0) {
+        LogMessage(EchoLogTypeTask, @"[完成] 所有天地盘天将详情推衍完毕。");
+        
+        // 组合最终报告
+        NSString *finalResult = [g_tianDiPan_resultsArray componentsJoinedByString:@"\n\n"];
+        
+        if (g_tianDiPan_completion_handler) {
+            g_tianDiPan_completion_handler(finalResult);
+        }
+        
+        // 清理状态
+        g_isExtractingTianDiPanDetail = NO;
+        g_tianDiPan_workQueue = nil;
+        g_tianDiPan_resultsArray = nil;
+        g_tianDiPan_completion_handler = nil;
+        [self hideProgressHUD];
+        return;
+    }
+
+    // 从队列中取出一个任务
+    NSDictionary *task = g_tianDiPan_workQueue.firstObject;
+    [g_tianDiPan_workQueue removeObjectAtIndex:0];
+    
+    NSString *gongName = task[@"gong"];
+    NSString *jiangName = task[@"jiang"];
+    UIGestureRecognizer *gesture = task[@"gesture"];
+
+    LogMessage(EchoLogTypeInfo, @"[天地盘] 正在推衍: %@宫 - 天将(%@)...", gongName, jiangName);
+    [self updateProgressHUD:[NSString stringWithFormat:@"推衍天地盘: %@宫", gongName]];
+
+    // 触发手势
+    // 这是触发点击的核心，通过找到手势的目标和动作并直接调用
+    // 这种方式比模拟触摸事件更稳定
+    id target = [self GetIvarValueSafely:gesture ivarNameSuffix:@"_targets"].firstObject;
+    if (target) {
+        id realTarget = [target valueForKey:@"target"];
+        SEL action = NSSelectorFromString([target valueForKey:@"action"]);
+        if (realTarget && action && [realTarget respondsToSelector:action]) {
+            SUPPRESS_LEAK_WARNING([realTarget performSelector:action withObject:gesture]);
+        } else {
+            LogMessage(EchoLogError, @"[天地盘] 无法触发 %@ 的手势。", jiangName);
+            [g_tianDiPan_resultsArray addObject:[NSString stringWithFormat:@"- %@宫 天将(%@):\n  [推衍失败: 无法触发手势]", gongName, jiangName]];
+            [self processTianDiPanQueue]; // 继续下一个
+        }
+    } else {
+         LogMessage(EchoLogError, @"[天地盘] 无法找到 %@ 的手势目标。", jiangName);
+         [g_tianDiPan_resultsArray addObject:[NSString stringWithFormat:@"- %@宫 天将(%@):\n  [推衍失败: 找不到手势目标]", gongName, jiangName]];
+         [self processTianDiPanQueue]; // 继续下一个
+    }
+}
+
+
+// 新函数 3: 任务启动函数
+%new
+- (void)startExtraction_TianDiPan_Details:(void (^)(NSString *result))completion {
+    if (g_isExtractingTianDiPanDetail) {
+        LogMessage(EchoLogError, @"[错误] 天地盘推衍任务已在进行中。");
+        return;
+    }
+    
+    LogMessage(EchoLogTypeTask, @"[任务启动] 开始推衍“天地盘天将详解”...");
+    [self showProgressHUD:@"扫描天地盘..."];
+    
+    // 初始化状态
+    g_isExtractingTianDiPanDetail = YES;
+    g_tianDiPan_workQueue = [NSMutableArray array];
+    g_tianDiPan_resultsArray = [NSMutableArray array];
+    g_tianDiPan_completion_handler = [completion copy];
+    
+    // 1. 找到天地盘视图
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
+    if (!plateViewClass) {
+        LogMessage(EchoLogError, @"[错误] 找不到 天地盤視圖 类。");
+        if(completion) completion(@"[推衍失败: 找不到天地盘视图类]");
+        g_isExtractingTianDiPanDetail = NO;
+        [self hideProgressHUD];
+        return;
+    }
+    NSMutableArray *plateViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
+    if (plateViews.count == 0) {
+        LogMessage(EchoLogError, @"[错误] 找不到 天地盤視圖 实例。");
+        if(completion) completion(@"[推衍失败: 找不到天地盘视图实例]");
+        g_isExtractingTianDiPanDetail = NO;
+        [self hideProgressHUD];
+        return;
+    }
+    UIView *plateView = plateViews.firstObject;
+
+    // 2. 提取天地盘的文本数据用于匹配
+    NSString *tianDiPanText = [self extractTianDiPanInfo_V18];
+    NSArray *lines = [tianDiPanText componentsSeparatedByString:@"\n"];
+    NSMutableDictionary *gongToJiangMap = [NSMutableDictionary dictionary];
+    for (NSString *line in lines) {
+        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"- (.*?)宫: .*?\\((.*?)\\)" options:0 error:nil];
+        NSTextCheckingResult *match = [regex firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
+        if (match) {
+            NSString *gong = [line substringWithRange:[match rangeAtIndex:1]];
+            NSString *jiang = [line substringWithRange:[match rangeAtIndex:2]];
+            gongToJiangMap[jiang] = gong;
+        }
+    }
+    
+    // 3. 在视图中找到所有UILabel，构建任务队列
+    NSMutableArray<UILabel *> *allLabels = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], plateView, allLabels);
+
+    for (UILabel *label in allLabels) {
+        NSString *labelText = label.text;
+        // 如果这个label的文本是我们之前从天地盘提取出的天将之一
+        if (labelText && gongToJiangMap[labelText]) {
+            // 并且这个label有关联的手势
+            if (label.gestureRecognizers.count > 0) {
+                NSString *gongName = gongToJiangMap[labelText];
+                UIGestureRecognizer *gesture = label.gestureRecognizers.firstObject;
+                
+                [g_tianDiPan_workQueue addObject:@{
+                    @"gong": gongName,
+                    @"jiang": labelText,
+                    @"gesture": gesture
+                }];
+            }
+        }
+    }
+
+    if (g_tianDiPan_workQueue.count == 0) {
+         LogMessage(EchoLogTypeWarning, @"[警告] 未在天地盘上找到任何可点击的天将。");
+         if(completion) completion(@"");
+         g_isExtractingTianDiPanDetail = NO;
+         [self hideProgressHUD];
+         return;
+    }
+    
+    LogMessage(EchoLogTypeInfo, @"[天地盘] 任务队列构建完成，共 %lu 个天将待推衍。", (unsigned long)g_tianDiPan_workQueue.count);
+    
+    // 4. 开始处理队列
+    [self processTianDiPanQueue];
+}
 %new
 - (NSString *)_echo_extractSiKeInfo {
     Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖"); if (!siKeViewClass) return @"";
@@ -4677,6 +4920,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 
 
 给我梳理一下 按照分类 数据提取流程 拦截过程 
+
 
 
 
