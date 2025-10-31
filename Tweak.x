@@ -3296,6 +3296,7 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
 %new
 - (void)processTianJiangQueue_S3 {
     if (!g_isExtractingTianJiangDetail || g_tianJiang_workQueue.count == 0 || ![[g_tianJiang_workQueue.firstObject allKeys] containsObject:@"result"]) {
+        // ... (这部分清理和报告的代码保持不变)
         if (g_isExtractingTianJiangDetail) {
             LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有天将详情推衍完毕。");
             NSMutableString *finalReport = [NSMutableString string];
@@ -3323,37 +3324,44 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
         LogMessage(EchoLogTypeInfo, @"[天地盘天将] 正在参详: %@", nextTask[@"title"]);
         [self updateProgressHUD:[NSString stringWithFormat:@"推演天地盘天将: %@", nextTask[@"title"]]];
 
-        // --- 【核心黑魔法】伪造手势并调用方法 ---
-        SEL targetSelector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-        if (![self respondsToSelector:targetSelector]) {
-            LogMessage(EchoLogError, @"[错误] ViewController 不响应 '顯示天地盤觸摸WithSender:' 方法。");
-            [nextTask setObject:@"[解析失败: 目标方法不存在]" forKey:@"result"];
-            [self processTianJiangQueue_S3];
-            return;
+        // --- 【核心黑魔法 V12】 ---
+        UITapGestureRecognizer *realGesture = nextTask[@"gesture"];
+        id target = [realGesture valueForKey:@"_targets"].firstObject; // 手势的目标通常是 ViewController
+        if (!target) {
+            LogMessage(EchoLogError, @"[错误] 无法获取真实手势的 target。");
+            [nextTask setObject:@"[解析失败: 无法获取 target]" forKey:@"result"];
+            [self processTianJiangQueue_S3]; return;
         }
+        
+        SEL action = NSSelectorFromString(@"action");
+        if (![target respondsToSelector:action]) {
+             LogMessage(EchoLogError, @"[错误] 无法获取真实手势的 action。");
+            [nextTask setObject:@"[解析失败: 无法获取 action]" forKey:@"result"];
+            [self processTianJiangQueue_S3]; return;
+        }
+        
+        SEL targetSelector = [target performSelector:action];
 
-        // 1. 创建一个假的 Gesture Recognizer
-        UITapGestureRecognizer *fakeSender = [[UITapGestureRecognizer alloc] init];
-        
-        // 2. 获取要伪造的坐标
         CGPoint targetPoint = [nextTask[@"point"] CGPointValue];
-        
-        // 3. 用 tag 属性来存储坐标 (这是一个 hack)
-[fakeSender setFake_location:[NSValue valueWithCGPoint:targetPoint]];
-        // 4. 运行时替换 locationInView: 方法
-        Method originalMethod = class_getInstanceMethod([fakeSender class], @selector(locationInView:));
+        [realGesture setFake_location:[NSValue valueWithCGPoint:targetPoint]]; // 使用关联对象设置坐标
+
+        Method originalMethod = class_getInstanceMethod([realGesture class], @selector(locationInView:));
         Method fakeMethod = class_getInstanceMethod([NSObject class], @selector(fake_locationInView:));
-        if (originalMethod && fakeMethod) {
-            method_setImplementation(originalMethod, method_getImplementation(fakeMethod));
-        } else {
-            LogMessage(EchoLogError, @"[黑魔法失败] 无法替换 locationInView: 方法。");
-            [nextTask setObject:@"[解析失败: 无法伪造坐标]" forKey:@"result"];
-            [self processTianJiangQueue_S3];
-            return;
+        
+        IMP originalImp = method_getImplementation(originalMethod);
+        IMP fakeImp = method_getImplementation(fakeMethod);
+        
+        // 替换方法实现
+        method_setImplementation(originalMethod, fakeImp);
+        
+        // 手动触发 action
+        id realTarget = [target performSelector:NSSelectorFromString(@"target")];
+        if (realTarget && [realTarget respondsToSelector:targetSelector]) {
+            SUPPRESS_LEAK_WARNING([realTarget performSelector:targetSelector withObject:realGesture]);
         }
         
-        // 5. 调用目标方法！
-        SUPPRESS_LEAK_WARNING([self performSelector:targetSelector withObject:fakeSender]);
+        // 立即恢复原始方法实现，避免影响正常的用户交互
+        method_setImplementation(originalMethod, originalImp);
 
     } else {
         [self processTianJiangQueue_S3];
@@ -3365,6 +3373,11 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
 // (通过伪造带有特定坐标的 UITapGestureRecognizer 来调用目标方法)
 // =========================================================================
 
+// =========================================================================
+// 新增：天地盘天将详情提取核心逻辑 (S3 - V12.0 真实手势伪造版)
+// (获取天地盘的真实手势，通过伪造其状态来触发点击)
+// =========================================================================
+
 %new
 - (void)extractTianJiangDetailsFromPlate_WithCompletion:(void (^)(NSString *result))completion {
     if (g_isExtractingTianJiangDetail) {
@@ -3373,14 +3386,14 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
     }
 
     LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“天地盘天将详情”...");
-    [self showProgressHUD:@"正在推演天地盘..."];
+    [self showProgressHUD:@"正在准备天地盘..."];
     
     // 初始化状态
     g_isExtractingTianJiangDetail = YES;
     g_tianJiang_completion_handler = [completion copy];
     g_tianJiang_workQueue = [NSMutableArray array];
 
-    // 1. 定位天地盘视图 (使用已验证的成功逻辑)
+    // 1. 定位天地盘视图
     UIView *plateView = nil;
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
@@ -3403,7 +3416,21 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
     }
     plateView = plateViews.firstObject;
 
-    // 2.【核心改变】从 CALayer 中提取天将的名字和中心坐标，构建任务队列
+    // 2. 【核心改变】获取天地盘视图上的真实手势识别器
+    UITapGestureRecognizer *realGesture = nil;
+    for (UIGestureRecognizer *ges in plateView.gestureRecognizers) {
+        if ([ges isKindOfClass:[UITapGestureRecognizer class]]) {
+            realGesture = (UITapGestureRecognizer *)ges;
+            break;
+        }
+    }
+    if (!realGesture) {
+        LogMessage(EchoLogError, @"[错误] 在天地盘视图上找不到 UITapGestureRecognizer。");
+        if(completion) completion(@"[错误: 找不到天地盘手势]");
+        [self processTianJiangQueue_S3]; return;
+    }
+    
+    // 3. 从 CALayer 中提取天将的名字和中心坐标，构建任务队列
     id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
     if (!tianJiangDict || ![tianJiangDict isKindOfClass:[NSDictionary class]]) {
         LogMessage(EchoLogError, @"[错误] 无法获取 '天將宮名列' 或其类型不正确。");
@@ -3416,27 +3443,24 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
         if (![layer isKindOfClass:[CALayer class]]) continue;
         
         NSString *tianJiangName = [self GetStringFromLayer:layer];
-        // 获取 CALayer 在 plateView 中的中心坐标
         CGPoint centerInPlateView = [plateView.layer convertPoint:((CALayer *)layer).position fromLayer:((CALayer *)layer).superlayer];
 
         NSMutableDictionary *task = [NSMutableDictionary dictionary];
         [task setObject:tianJiangName forKey:@"title"];
         [task setObject:[NSValue valueWithCGPoint:centerInPlateView] forKey:@"point"];
+        [task setObject:realGesture forKey:@"gesture"]; // 【核心改变】存储真实的手势对象
         [g_tianJiang_workQueue addObject:task];
     }
     
-    // 3. 检查队列并开始处理
     if (g_tianJiang_workQueue.count == 0) {
         LogMessage(EchoLogTypeWarning, @"[天地盘天将] 未能从 CALayer 中构建任何天将任务。");
         if(completion) completion(@"");
         [self processTianJiangQueue_S3]; return;
     }
     
-    // 添加哨兵任务
     [g_tianJiang_workQueue insertObject:[@{@"title": @"START_NODE", @"result":@"ok"} mutableCopy] atIndex:0];
-    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成 (共 %lu 项)，将通过伪造手势进行调用。", (unsigned long)g_tianJiang_workQueue.count-1);
+    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成 (共 %lu 项)，将通过伪造真实手势状态进行调用。", (unsigned long)g_tianJiang_workQueue.count-1);
     
-    // 启动处理流程
     [self processTianJiangQueue_S3];
 }
 // ... (所有数据提取的核心函数，如 extractNianmingInfoWithCompletion 等，保持不变)
@@ -4929,6 +4953,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
