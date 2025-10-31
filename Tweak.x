@@ -3370,6 +3370,11 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
 // (根据视图层级树的最终证据，确认天地盘视图不在 ViewController.view 内部，必须全局搜索)
 // =========================================================================
 
+// =========================================================================
+// 新增：天地盘天将详情提取核心逻辑 (S3 - V12.0 最终借用手势版)
+// (找到真实手势的 target 和 action，并用伪造的 sender 调用它们)
+// =========================================================================
+
 %new
 - (void)extractTianJiangDetailsFromPlate_WithCompletion:(void (^)(NSString *result))completion {
     if (g_isExtractingTianJiangDetail) {
@@ -3380,77 +3385,83 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
     LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“天地盘天将详情”...");
     [self showProgressHUD:@"正在推演天地盘..."];
     
-    // 初始化状态
     g_isExtractingTianJiangDetail = YES;
     g_tianJiang_completion_handler = [completion copy];
     g_tianJiang_workQueue = [NSMutableArray array];
 
-    // 1. 【核心修正】从整个 App 窗口开始搜索，这是唯一正确的起点
+    // 1. 定位天地盘视图
     UIWindow *keyWindow = GetFrontmostWindow();
-    if (!keyWindow) {
-        LogMessage(EchoLogError, @"[错误] 找不到主窗口 (keyWindow)，无法进行全局搜索。");
-        if(completion) completion(@"[错误: 找不到 keyWindow]");
-        [self processTianJiangQueue_S3]; // 调用以清理状态
-        return;
-    }
-
-    // 2. 在 keyWindow 中寻找天地盘视图的实例
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
-    if (!plateViewClass) {
-        LogMessage(EchoLogError, @"[错误] 找不到 '天地盤視圖類' 类。");
-        if(completion) completion(@"[错误: 找不到天地盘视图类]");
-        [self processTianJiangQueue_S3];
-        return;
+    if (!keyWindow || !plateViewClass) {
+        LogMessage(EchoLogError, @"[错误] 找不到 keyWindow 或 '天地盤視圖類' 类。");
+        if(completion) completion(@"[错误: 无法定位天地盘]");
+        [self processTianJiangQueue_S3]; return;
     }
-
     NSMutableArray *plateViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
     if (plateViews.count == 0) {
-        LogMessage(EchoLogError, @"[错误] 在主窗口中未找到 '天地盤視圖類' 的实例。请确认当前界面是否为天地盘界面。");
+        LogMessage(EchoLogError, @"[错误] 在主窗口中未找到 '天地盤視圖類' 的实例。");
         if(completion) completion(@"[错误: 在 keyWindow 找不到天地盘实例]");
-        [self processTianJiangQueue_S3];
-        return;
+        [self processTianJiangQueue_S3]; return;
     }
     UIView *plateView = plateViews.firstObject;
-    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 成功通过全局搜索定位到天地盘视图。");
 
-    // 3. 在找到的 plateView 内部，寻找所有可交互的天将 UILabel
-    NSMutableArray<UILabel *> *allLabelsInPlate = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UILabel class], plateView, allLabelsInPlate);
-
-    NSSet *tianJiangWhitelist = [NSSet setWithObjects:@"贵", @"蛇", @"朱", @"六", @"勾", @"青", @"空", @"白", @"常", @"玄", @"阴", @"后", nil];
+    // 2.【核心改变】从 CALayer 提取坐标，并从 plateView 中找到真实的手势
+    id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
+    if (!tianJiangDict || ![tianJiangDict isKindOfClass:[NSDictionary class]]) {
+        LogMessage(EchoLogError, @"[错误] 无法获取 '天將宮名列' CALayer 字典。");
+        if(completion) completion(@"[错误: 无法获取天将CALayer]");
+        [self processTianJiangQueue_S3]; return;
+    }
     
-    for (UILabel *label in allLabelsInPlate) {
-        if (label.gestureRecognizers.count > 0 && [tianJiangWhitelist containsObject:label.text]) {
-            NSMutableDictionary *task = [NSMutableDictionary dictionary];
-            [task setObject:label.text forKey:@"title"];
-            [task setObject:label.gestureRecognizers.firstObject forKey:@"gesture"];
-            [g_tianJiang_workQueue addObject:task];
+    UITapGestureRecognizer *realTapGesture = nil;
+    for (UIGestureRecognizer *gesture in plateView.gestureRecognizers) {
+        if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) {
+            realTapGesture = (UITapGestureRecognizer *)gesture;
+            break;
         }
     }
-    
-    // 4. 按角度排序并启动队列
-    CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
-    [g_tianJiang_workQueue sortUsingComparator:^NSComparisonResult(NSDictionary *task1, NSDictionary *task2) {
-        UIGestureRecognizer *g1 = task1[@"gesture"]; UIGestureRecognizer *g2 = task2[@"gesture"];
-        CGPoint p1 = [g1.view.superview convertPoint:g1.view.center toView:nil];
-        CGPoint p2 = [g2.view.superview convertPoint:g2.view.center toView:nil];
-        CGFloat angle1 = atan2(p1.y - center.y, p1.x - center.x);
-        CGFloat angle2 = atan2(p2.y - center.y, p2.x - center.x);
-        return [@(angle1) compare:@(angle2)];
-    }];
+    if (!realTapGesture) {
+        LogMessage(EchoLogError, @"[错误] 在天地盘视图上未找到 UITapGestureRecognizer。");
+        if(completion) completion(@"[错误: 找不到点击手势]");
+        [self processTianJiangQueue_S3]; return;
+    }
 
-    if (g_tianJiang_workQueue.count == 0) {
-        LogMessage(EchoLogTypeWarning, @"[最终失败] 已成功定位到天地盘视图，但其内部依然未找到任何可交互的UILabel。确认该视图使用CALayer绘图，此功能无法通过模拟点击实现。");
-        if(completion) completion(@"[提取失败] 天地盘使用底层绘图，无法模拟点击。");
-        [self processTianJiangQueue_S3];
-        return;
+    // 3. 构建任务队列，包含天将名字、坐标和真实手势的 target/action
+    NSArray *tianJiangLayers = [tianJiangDict allValues];
+    for (id layer in tianJiangLayers) {
+        if (![layer isKindOfClass:[CALayer class]]) continue;
+        
+        NSString *tianJiangName = [self GetStringFromLayer:layer];
+        CGPoint centerInPlateView = [plateView.layer convertPoint:((CALayer *)layer).position fromLayer:((CALayer *)layer).superlayer];
+
+        NSMutableDictionary *task = [NSMutableDictionary dictionary];
+        [task setObject:tianJiangName forKey:@"title"];
+        [task setObject:[NSValue valueWithCGPoint:centerInPlateView] forKey:@"point"];
+        
+        // 我们不直接用手势，而是“借用”它的目标和动作
+        // 这是通过 KVC (Key-Value Coding) 获取私有属性的一种方式
+        NSArray *targets = [realTapGesture valueForKey:@"_targets"];
+        if (targets.count > 0) {
+            id gestureTarget = targets.firstObject;
+            id target = [gestureTarget valueForKey:@"_target"];
+            SEL action = NSSelectorFromString([NSString stringWithFormat:@"%@", [gestureTarget valueForKey:@"_action"]]);
+            
+            [task setObject:target forKey:@"target"];
+            [task setObject:NSStringFromSelector(action) forKey:@"action"];
+        }
+        [g_tianJiang_workQueue addObject:task];
     }
     
-    [g_tianJiang_workQueue insertObject:[@{@"title": @"START_NODE", @"result":@"ok"} mutableCopy] atIndex:0];
-    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_tianJiang_workQueue.count-1);
+    if (g_tianJiang_workQueue.count == 0) {
+        LogMessage(EchoLogTypeWarning, @"[天地盘天将] 未能从 CALayer 中构建任何天将任务。");
+        if(completion) completion(@"");
+        [self processTianJiangQueue_S3]; return;
+    }
     
-    // 启动处理流程
+    // 添加哨兵任务并启动
+    [g_tianJiang_workQueue insertObject:[@{@"title": @"START_NODE", @"result":@"ok"} mutableCopy] atIndex:0];
+    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成，将通过“借用”真实手势的 Target-Action 进行调用。");
     [self processTianJiangQueue_S3];
 }
 // ... (所有数据提取的核心函数，如 extractNianmingInfoWithCompletion 等，保持不变)
@@ -4943,6 +4954,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
