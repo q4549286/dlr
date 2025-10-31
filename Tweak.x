@@ -3323,17 +3323,18 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
         LogMessage(EchoLogTypeInfo, @"[天地盘天将] 正在参详: %@", nextTask[@"title"]);
         [self updateProgressHUD:[NSString stringWithFormat:@"推演天地盘天将: %@", nextTask[@"title"]]];
 
-        // --- 【核心V12】使用“借来”的 Target-Action ---
-        id target = nextTask[@"target"];
-        SEL action = NSSelectorFromString(nextTask[@"action"]);
+        // --- 【核心V13】直接硬编码已知的 target 和 action ---
+        id target = self;
+        SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
 
-        if (!target || !action || ![target respondsToSelector:action]) {
-            LogMessage(EchoLogError, @"[错误] 从真实手势中获取的 Target 或 Action 无效。");
+        if (![target respondsToSelector:action]) {
+            LogMessage(EchoLogError, @"[错误] ViewController (self) 不响应 '顯示天地盤觸摸WithSender:' 方法。");
             [nextTask setObject:@"[解析失败: Target-Action 无效]" forKey:@"result"];
             [self processTianJiangQueue_S3];
             return;
         }
 
+        // 伪造手势的部分保持不变
         UITapGestureRecognizer *fakeSender = [[UITapGestureRecognizer alloc] init];
         CGPoint targetPoint = [nextTask[@"point"] CGPointValue];
         [fakeSender setFake_location:[NSValue valueWithCGPoint:targetPoint]];
@@ -3342,27 +3343,16 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
         Method fakeMethod = class_getInstanceMethod([NSObject class], @selector(fake_locationInView:));
         method_setImplementation(originalMethod, method_getImplementation(fakeMethod));
         
-        // 直接调用真实的目标和动作！
+        // 直接调用我们已知的目标和动作！
         SUPPRESS_LEAK_WARNING([target performSelector:action withObject:fakeSender]);
 
     } else {
         [self processTianJiangQueue_S3];
     }
 }
-
 // =========================================================================
-// 新增：天地盘天将详情提取核心逻辑 (S3 - V10.0 终极伪造手势版)
-// (通过伪造带有特定坐标的 UITapGestureRecognizer 来调用目标方法)
-// =========================================================================
-
-// =========================================================================
-// 新增：天地盘天将详情提取核心逻辑 (S3 - V11.0 最终全局搜索版)
-// (根据视图层级树的最终证据，确认天地盘视图不在 ViewController.view 内部，必须全局搜索)
-// =========================================================================
-
-// =========================================================================
-// 新增：天地盘天将详情提取核心逻辑 (S3 - V12.0 最终借用手势版)
-// (找到真实手势的 target 和 action，并用伪造的 sender 调用它们)
+// 新增：天地盘天将详情提取核心逻辑 (S3 - V13.0 最终硬编码版)
+// (不再使用 KVC 提取 target/action，直接使用已知信息)
 // =========================================================================
 
 %new
@@ -3383,7 +3373,7 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
     UIWindow *keyWindow = GetFrontmostWindow();
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!keyWindow || !plateViewClass) {
-        LogMessage(EchoLogError, @"[错误] 找不到 keyWindow 或 '天地盤視圖類' 类。");
+        LogMessage(EchoLogError, @"[错误] 无法定位天地盘: 找不到 keyWindow 或 '天地盤視圖類' 类。");
         if(completion) completion(@"[错误: 无法定位天地盘]");
         [self processTianJiangQueue_S3]; return;
     }
@@ -3396,7 +3386,7 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
     }
     UIView *plateView = plateViews.firstObject;
 
-    // 2.【核心改变】从 CALayer 提取坐标，并从 plateView 中找到真实的手势
+    // 2.【核心改变】只从 CALayer 提取名字和坐标，不再尝试读取手势的内部属性
     id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
     if (!tianJiangDict || ![tianJiangDict isKindOfClass:[NSDictionary class]]) {
         LogMessage(EchoLogError, @"[错误] 无法获取 '天將宮名列' CALayer 字典。");
@@ -3404,20 +3394,7 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
         [self processTianJiangQueue_S3]; return;
     }
     
-    UITapGestureRecognizer *realTapGesture = nil;
-    for (UIGestureRecognizer *gesture in plateView.gestureRecognizers) {
-        if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) {
-            realTapGesture = (UITapGestureRecognizer *)gesture;
-            break;
-        }
-    }
-    if (!realTapGesture) {
-        LogMessage(EchoLogError, @"[错误] 在天地盘视图上未找到 UITapGestureRecognizer。");
-        if(completion) completion(@"[错误: 找不到点击手势]");
-        [self processTianJiangQueue_S3]; return;
-    }
-
-    // 3. 构建任务队列，包含天将名字、坐标和真实手势的 target/action
+    // 3. 构建任务队列，只包含天将名字和坐标
     NSArray *tianJiangLayers = [tianJiangDict allValues];
     for (id layer in tianJiangLayers) {
         if (![layer isKindOfClass:[CALayer class]]) continue;
@@ -3428,18 +3405,6 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
         NSMutableDictionary *task = [NSMutableDictionary dictionary];
         [task setObject:tianJiangName forKey:@"title"];
         [task setObject:[NSValue valueWithCGPoint:centerInPlateView] forKey:@"point"];
-        
-        // 我们不直接用手势，而是“借用”它的目标和动作
-        // 这是通过 KVC (Key-Value Coding) 获取私有属性的一种方式
-        NSArray *targets = [realTapGesture valueForKey:@"_targets"];
-        if (targets.count > 0) {
-            id gestureTarget = targets.firstObject;
-            id target = [gestureTarget valueForKey:@"_target"];
-            SEL action = NSSelectorFromString([NSString stringWithFormat:@"%@", [gestureTarget valueForKey:@"_action"]]);
-            
-            [task setObject:target forKey:@"target"];
-            [task setObject:NSStringFromSelector(action) forKey:@"action"];
-        }
         [g_tianJiang_workQueue addObject:task];
     }
     
@@ -3451,7 +3416,7 @@ static const void *kFakeLocationKey = &kFakeLocationKey;
     
     // 添加哨兵任务并启动
     [g_tianJiang_workQueue insertObject:[@{@"title": @"START_NODE", @"result":@"ok"} mutableCopy] atIndex:0];
-    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成，将通过“借用”真实手势的 Target-Action 进行调用。");
+    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成，将使用硬编码的 Target-Action 进行调用。");
     [self processTianJiangQueue_S3];
 }
 // ... (所有数据提取的核心函数，如 extractNianmingInfoWithCompletion 等，保持不变)
@@ -4944,6 +4909,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
