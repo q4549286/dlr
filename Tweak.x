@@ -9,7 +9,7 @@ static UIView *g_recorderView = nil;
 static UITextView *g_logTextView = nil;
 
 // 原始函数指针
-static id (*Original_GetIvarValueSafely)(id, NSString *);
+static id (*Original_GetIvarValueSafely)(id, id, NSString *);
 
 // 日志函数
 static void LogToScreen(NSString *format, ...) {
@@ -31,8 +31,9 @@ static void LogToScreen(NSString *format, ...) {
 // 2. Hook 我们自己的辅助函数
 // =========================================================================
 
-static id Tweak_GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
+static id Tweak_GetIvarValueSafely(id self, SEL _cmd, id object, NSString *ivarNameSuffix) {
     LogToScreen(@"\n--- Hooked GetIvarValueSafely ---");
+    LogToScreen(@"[PARAM] self(caller): <%@: %p>", NSStringFromClass([self class]), self);
     LogToScreen(@"[PARAM] object: <%@: %p>", NSStringFromClass([object class]), object);
     LogToScreen(@"[PARAM] ivarNameSuffix: '%@'", ivarNameSuffix);
 
@@ -63,7 +64,6 @@ static id Tweak_GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
                 foundMatch = YES;
                 LogToScreen(@"[STEP 2] SUCCESS! Found matching ivar: '%@' at index %u.", ivarNameStr, i);
                 
-                // 【最危险的操作】
                 LogToScreen(@"[STEP 3] PRE-CRASH CHECK:");
                 LogToScreen(@"         - object pointer: %p", object);
                 LogToScreen(@"         - ivar pointer: %p", ivar);
@@ -97,7 +97,7 @@ static id Tweak_GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
 
 @interface UIViewController (EchoRecorder)
 - (void)triggerSafeInspection;
-- (id)GetIvarValueSafely_original:(NSString *)ivarNameSuffix; // 声明一个方法来调用原始实现
+- (id)GetIvarValueSafely:(id)object withSuffix:(NSString *)ivarNameSuffix; // 改为两个参数
 @end
 
 %hook UIViewController
@@ -143,7 +143,7 @@ static id Tweak_GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
     g_logTextView.editable = NO;
     g_logTextView.text = @"";
     
-    [g_recorderView addSubview:g_logTextView];
+    [g_recorderView addSubview:g_recorderView];
     [self.view.window addSubview:g_recorderView];
 
     LogToScreen(@"[INFO] 准备触发 GetIvarValueSafely...");
@@ -158,27 +158,50 @@ static id Tweak_GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
         if ([view isKindOfClass:plateViewClass]) { plateView = view; return; }
         for (UIView *subview in view.subviews) { weak_findViewRecursive(subview); }
     };
-    for (UIWindow *window in [UIApplication sharedApplication].windows) { // 在主线程调用，暂时忽略警告
-        if (window.hidden == NO) { findViewRecursive(window); if (plateView) break; }
+
+    // ===================================================================
+    // 【最终修正】: 恢复兼容性最好的窗口遍历方法
+    // ===================================================================
+    NSMutableArray *windowsToSearch = [NSMutableArray array];
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                [windowsToSearch addObjectsFromArray:scene.windows];
+            }
+        }
     }
+    
+    if (windowsToSearch.count == 0) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        if ([UIApplication sharedApplication].windows) {
+            [windowsToSearch addObjectsFromArray:[UIApplication sharedApplication].windows];
+        }
+        #pragma clang diagnostic pop
+    }
+
+    for (UIWindow *window in windowsToSearch) {
+        findViewRecursive(window);
+        if (plateView) break;
+    }
+    // ======================= 最终修正结束 ========================
 
     if (!plateView) {
         LogToScreen(@"[CRITICAL] 找不到天地盘视图实例。");
         return;
     }
     
-    // 我们只调用一次，目标是最可能出问题的 '地宮宮名列'
     // 调用会经过我们的Hooked版本
-    [self GetIvarValueSafely_original:@"地宮宮名列"];
+    [self GetIvarValueSafely:plateView withSuffix:@"地宮宮名列"];
 }
 
 // 实际的GetIvarValueSafely实现，将被我们的Hook替换
 %new
-- (id)GetIvarValueSafely_original:(NSString *)ivarNameSuffix {
-    // 这是一个假的实现，只是为了让我们可以调用它。
+- (id)GetIvarValueSafely:(id)object withSuffix:(NSString *)ivarNameSuffix {
+    // 这个方法体是空的，因为它只是一个“靶子”，让我们能用 MSHookMessageEx 来Hook它。
     // 真正的逻辑在 Tweak_GetIvarValueSafely 中。
-    // 我们在这里调用原始的、未被Hook的实现。
-    return Original_GetIvarValueSafely(self, ivarNameSuffix);
+    // 在这里我们甚至不需要调用原始实现，因为我们只是想触发Hook。
+    return nil;
 }
 
 %end
@@ -188,12 +211,8 @@ static id Tweak_GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
 // =========================================================================
 %ctor {
     @autoreleasepool {
-        // 使用 MSHookFunction 来 Hook C 函数
-        // 注意：这里我们假设 GetIvarValueSafely 是一个 C-style 的静态函数
-        // 如果它是一个实例方法，我们需要用 MSHookMessageEx
-        // 为了安全起见，我们先把它当作实例方法来Hook
-        
-        MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(GetIvarValueSafely_original:), (IMP)&Tweak_GetIvarValueSafely, (IMP *)&Original_GetIvarValueSafely);
+        // 这次，我们把它当作一个实例方法来Hook，这更标准、更安全。
+        MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(GetIvarValueSafely:withSuffix:), (IMP)&Tweak_GetIvarValueSafely, (IMP *)&Original_GetIvarValueSafely);
         
         NSLog(@"[EchoCrashRecorder] 终极黑盒记录仪已加载。");
     }
