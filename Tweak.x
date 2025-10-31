@@ -46,10 +46,8 @@ static void LogToScreen(NSString *format, ...) {
     va_end(args);
     dispatch_async(dispatch_get_main_queue(), ^{
         NSString *currentText = g_logTextView.text ?: @"";
-        // 让新日志显示在底部，符合阅读习惯
         NSString *newText = [NSString stringWithFormat:@"%@%@\n", currentText, message];
         g_logTextView.text = newText;
-        // 自动滚动到底部
         [g_logTextView scrollRangeToVisible:NSMakeRange(newText.length, 0)];
         NSLog(@"[Extractor] %@", message);
     });
@@ -76,7 +74,7 @@ static void LogToScreen(NSString *format, ...) {
             extractorButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
             extractorButton.tag = 777888;
             [extractorButton setTitle:@"提取完整数据" forState:UIControlStateNormal];
-            extractorButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0]; // Green
+            extractorButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0];
             [extractorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             extractorButton.layer.cornerRadius = 18;
             [extractorButton addTarget:self action:@selector(extractFullData) forControlEvents:UIControlEventTouchUpInside];
@@ -105,16 +103,16 @@ static void LogToScreen(NSString *format, ...) {
     g_logTextView.textColor = [UIColor whiteColor];
     g_logTextView.font = [UIFont fontWithName:@"Menlo" size:11];
     g_logTextView.editable = NO;
-    g_logTextView.text = @""; // 清空初始文本
+    g_logTextView.text = @"";
     
     [g_extractorView addSubview:g_logTextView];
     [self.view.window addSubview:g_extractorView];
 
     LogToScreen(@"[INFO] 开始提取完整数据...");
 
-    // 1. 定位视图 (已验证是安全的)
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     __block UIView *plateView = nil;
+
     void (^__block __weak weak_findViewRecursive)(UIView *);
     void (^findViewRecursive)(UIView *);
     weak_findViewRecursive = findViewRecursive = ^(UIView *view) {
@@ -122,9 +120,33 @@ static void LogToScreen(NSString *format, ...) {
         if ([view isKindOfClass:plateViewClass]) { plateView = view; return; }
         for (UIView *subview in view.subviews) { weak_findViewRecursive(subview); }
     };
-    for (UIWindow *window in [UIApplication sharedApplication].windows) {
-        if (window.hidden == NO) { findViewRecursive(window); if (plateView) break; }
+
+    // ===================================================================
+    // 【最终修正】: 恢复兼容性最好的窗口遍历方法
+    // ===================================================================
+    NSMutableArray *windowsToSearch = [NSMutableArray array];
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                [windowsToSearch addObjectsFromArray:scene.windows];
+            }
+        }
     }
+    
+    if (windowsToSearch.count == 0) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        if ([UIApplication sharedApplication].windows) {
+            [windowsToSearch addObjectsFromArray:[UIApplication sharedApplication].windows];
+        }
+        #pragma clang diagnostic pop
+    }
+
+    for (UIWindow *window in windowsToSearch) {
+        findViewRecursive(window);
+        if (plateView) break;
+    }
+    // ======================= 最终修正结束 ========================
 
     if (!plateView) {
         LogToScreen(@"[CRITICAL] 找不到天地盘视图实例。");
@@ -132,13 +154,11 @@ static void LogToScreen(NSString *format, ...) {
     }
     LogToScreen(@"[SUCCESS] 成功定位到天地盘视图实例: <%p>", plateView);
 
-    // 2. 定义所有要提取的变量
     NSArray *ivarSuffixes = @[
         @"地宮宮名列", @"天神宮名列", @"天將宮名列",
         @"天盤外經", @"天盤內經", @"天盤將經"
     ];
 
-    // 3. 循环提取并进行详细解析 (已验证是安全的)
     for (NSString *suffix in ivarSuffixes) {
         LogToScreen(@"\n--- [TASK] 正在读取 '%@' ---", suffix);
         id dataObject = GetIvarValueSafely(plateView, suffix);
@@ -151,12 +171,10 @@ static void LogToScreen(NSString *format, ...) {
         @try {
             NSString *className = NSStringFromClass([dataObject class]);
             
-            // --- 处理字典类型 (宫名列) ---
             if ([dataObject isKindOfClass:[NSDictionary class]]) {
                 NSDictionary *dataDict = (NSDictionary *)dataObject;
                 LogToScreen(@"[INFO] 类型: %@, 数量: %lu", className, (unsigned long)dataDict.count);
                 
-                // 为了更好的可读性，对Key进行排序
                 NSArray *sortedKeys = [dataDict.allKeys sortedArrayUsingSelector:@selector(compare:)];
                 
                 for (id key in sortedKeys) {
@@ -165,7 +183,6 @@ static void LogToScreen(NSString *format, ...) {
                     LogToScreen(@"  - Key: %@ -> Text: '%@'", key, text);
                 }
             } 
-            // --- 处理数组类型 (经纬) ---
             else if ([dataObject isKindOfClass:[NSArray class]]) {
                 NSArray *dataArray = (NSArray *)dataObject;
                 LogToScreen(@"[INFO] 类型: %@, 数量: %lu", className, (unsigned long)dataArray.count);
@@ -176,7 +193,6 @@ static void LogToScreen(NSString *format, ...) {
                     LogToScreen(@"  - Index [%d]: '%@'", i, text);
                 }
             }
-            // --- 处理其他未知类型 ---
             else {
                 LogToScreen(@"[WARNING] 未知类型: %@。 描述: %@", className, [dataObject description]);
             }
@@ -192,6 +208,6 @@ static void LogToScreen(NSString *format, ...) {
 
 %ctor {
     @autoreleasepool {
-        NSLog(@"[EchoDataExtractor] 最终数据提取脚本已加载。");
+        NSLog(@"[EchoDataExtractor] 绝对最终版脚本已加载。");
     }
 }
