@@ -4829,8 +4829,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
 %hook 六壬大占_天將摘要視圖
 
 - (void)viewDidLoad {
-    %orig; // 首先，让原始的 viewDidLoad 方法执行，确保所有变量都被赋值
-
     // 检查是否是我们的提取任务在驱动
     if (g_isExtractingTianJiangDetail && g_tianJiang_workQueue.count > 0) {
         
@@ -4921,6 +4919,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
