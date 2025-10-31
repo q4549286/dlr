@@ -3,13 +3,12 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局UI变量与日志函数
+// 1. 全局UI变量与日志函数 (这部分不变)
 // =========================================================================
 
 static UIView *g_probePanelView = nil;
 static UITextView *g_probeLogTextView = nil;
 
-// 一个线程安全的日志函数，用于向我们的UI面板输出信息
 static void ProbeLog(NSString *format, ...) {
     if (!g_probeLogTextView) return;
     
@@ -22,55 +21,112 @@ static void ProbeLog(NSString *format, ...) {
     [formatter setDateFormat:@"HH:mm:ss.SSS"];
     NSString *timestamp = [formatter stringFromDate:[NSDate date]];
 
-    // 确保UI更新在主线程进行
     dispatch_async(dispatch_get_main_queue(), ^{
         NSString *newLogLine = [NSString stringWithFormat:@"[%@] %@\n", timestamp, message];
         g_probeLogTextView.text = [g_probeLogTextView.text stringByAppendingString:newLogLine];
-        
-        // 自动滚动到底部
         NSRange range = NSMakeRange(g_probeLogTextView.text.length - 1, 1);
         [g_probeLogTextView scrollRangeToVisible:range];
     });
 }
 
+
 // =========================================================================
-// 2. UIViewController 扩展，用于实现侦查面板功能
+// 2. Tweak 核心逻辑，包含 UIViewController 扩展
 // =========================================================================
 
-@interface UIViewController (EchoProbe)
-- (void)showProbePanel;
-- (void)closeProbePanel;
-- (void)runTheProbe:(id)sender;
-- (void)clearProbeLog:(id)sender;
-@end
+// <<<<<<<<<<<<<<<< 核心修改点：将所有新方法放入 %hook UIViewController %end 块内 >>>>>>>>>>>>>>>>
+
+%hook UIViewController
+
+// --- 侦查面板的UI交互方法 ---
 
 %new
-@implementation UIViewController (EchoProbe)
+- (void)showProbePanel {
+    UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
+    if (!keyWindow || g_probePanelView) return;
 
+    g_probePanelView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, keyWindow.bounds.size.width, keyWindow.bounds.size.height * 0.6)];
+    g_probePanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
+    g_probePanelView.layer.borderColor = [UIColor cyanColor].CGColor;
+    g_probePanelView.layer.borderWidth = 1.0;
+    
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, g_probePanelView.bounds.size.width, 30)];
+    titleLabel.text = @"Echo 侦查面板";
+    titleLabel.textColor = [UIColor cyanColor];
+    titleLabel.font = [UIFont boldSystemFontOfSize:18];
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    [g_probePanelView addSubview:titleLabel];
+    
+    g_probeLogTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 50, g_probePanelView.bounds.size.width - 20, g_probePanelView.bounds.size.height - 110)];
+    g_probeLogTextView.backgroundColor = [UIColor blackColor];
+    g_probeLogTextView.textColor = [UIColor greenColor];
+    g_probeLogTextView.font = [UIFont fontWithName:@"Menlo" size:11];
+    g_probeLogTextView.editable = NO;
+    g_probeLogTextView.text = @"日志窗口已就绪...\n";
+    [g_probePanelView addSubview:g_probeLogTextView];
+    
+    CGFloat buttonWidth = (g_probePanelView.bounds.size.width - 40) / 3.0;
+    CGFloat buttonY = g_probePanelView.bounds.size.height - 50;
+    
+    UIButton *runButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    runButton.frame = CGRectMake(10, buttonY, buttonWidth, 40);
+    [runButton setTitle:@"开始侦查" forState:UIControlStateNormal];
+    [runButton addTarget:self action:@selector(runTheProbe:) forControlEvents:UIControlEventTouchUpInside];
+    [g_probePanelView addSubview:runButton];
+    
+    UIButton *clearButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    clearButton.frame = CGRectMake(20 + buttonWidth, buttonY, buttonWidth, 40);
+    [clearButton setTitle:@"清空日志" forState:UIControlStateNormal];
+    [clearButton addTarget:self action:@selector(clearProbeLog:) forControlEvents:UIControlEventTouchUpInside];
+    [g_probePanelView addSubview:clearButton];
+
+    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    closeButton.frame = CGRectMake(30 + buttonWidth * 2, buttonY, buttonWidth, 40);
+    [closeButton setTitle:@"关闭" forState:UIControlStateNormal];
+    [closeButton addTarget:self action:@selector(closeProbePanel) forControlEvents:UIControlEventTouchUpInside];
+    [g_probePanelView addSubview:closeButton];
+    
+    [keyWindow addSubview:g_probePanelView];
+}
+
+%new
+- (void)clearProbeLog:(id)sender {
+    if (g_probeLogTextView) {
+        g_probeLogTextView.text = @"";
+    }
+}
+
+%new
+- (void)closeProbePanel {
+    if (g_probePanelView) {
+        [g_probePanelView removeFromSuperview];
+        g_probePanelView = nil;
+        g_probeLogTextView = nil;
+    }
+}
+
+// --- 核心侦查逻辑 ---
+
+%new
 - (void)runTheProbe:(id)sender {
     ProbeLog(@"\n\n[PROBE] ====== 开始新一轮侦查 ====== ");
 
-    // 步骤 1: 向上找到 '六壬大占.ViewController' 的实例
-    UIResponder *responder = (UIResponder *)sender;
     Class targetVCClass = NSClassFromString(@"六壬大占.ViewController");
     if (!targetVCClass) {
         ProbeLog(@"[PROBE] 致命错误: 找不到 '六壬大占.ViewController' 类。");
         return;
     }
     
-    while (responder && ![responder isKindOfClass:targetVCClass]) {
-        responder = [responder nextResponder];
-    }
-
-    if (!responder) {
-        ProbeLog(@"[PROBE] 错误: 无法从按钮向上找到 '六壬大占.ViewController' 实例。");
+    // 因为这段代码本身就在 UIViewController 的一个方法中运行，self 就是一个 UIViewController 实例。
+    // 我们需要确保 self 是我们想要的那个主 ViewController。
+    if (![self isKindOfClass:targetVCClass]) {
+        ProbeLog(@"[PROBE] 错误: 侦查逻辑必须从 '六壬大占.ViewController' 实例触发。当前实例是: %@", [self class]);
         return;
     }
     
-    UIViewController *vc = (UIViewController *)responder;
+    UIViewController *vc = self;
     ProbeLog(@"[PROBE] 成功定位到 ViewController 实例: %@", vc);
 
-    // ================== 目标1：确认 '課傳' 的存在性和类型 ==================
     Ivar keChuanIvar = class_getInstanceVariable([vc class], "課傳");
     if (!keChuanIvar) {
         ProbeLog(@"[PROBE] 未找到 '課傳'，尝试带下划线的 '_課傳'...");
@@ -88,7 +144,6 @@ static void ProbeLog(NSString *format, ...) {
         id keChuanContainer = object_getIvar(vc, keChuanIvar);
         ProbeLog(@"[PROBE]    对象实例: %@", keChuanContainer);
 
-        // ================== 目标2：勘探 '課傳' 对象的内部 ==================
         if (keChuanContainer) {
             unsigned int ivarCount;
             Ivar *ivars = class_copyIvarList([keChuanContainer class], &ivarCount);
@@ -104,7 +159,6 @@ static void ProbeLog(NSString *format, ...) {
                 NSString *ivarTypeStr = [NSString stringWithUTF8String:type];
                 ProbeLog(@"[PROBE]   - 发现内部变量: %@, 类型: %@", ivarNameStr, ivarTypeStr);
                 
-                // 启发式搜索：寻找包含 "天將", "將列表", "generals" 等关键词的变量
                 if ([ivarNameStr localizedCaseInsensitiveContainsString:@"天將"] || [ivarNameStr localizedCaseInsensitiveContainsString:@"將列表"]) {
                      foundPotentialList = YES;
                      ProbeLog(@"[PROBE]     ‼️ 高度可疑目标! 正在深入检查...");
@@ -146,91 +200,15 @@ static void ProbeLog(NSString *format, ...) {
     ProbeLog(@"[PROBE] ====== 侦查结束 ======");
 }
 
-- (void)showProbePanel {
-    UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
-    if (!keyWindow || g_probePanelView) return;
-
-    g_probePanelView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, keyWindow.bounds.size.width, keyWindow.bounds.size.height * 0.6)];
-    g_probePanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
-    g_probePanelView.layer.borderColor = [UIColor cyanColor].CGColor;
-    g_probePanelView.layer.borderWidth = 1.0;
-    
-    // 标题
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, g_probePanelView.bounds.size.width, 30)];
-    titleLabel.text = @"Echo 侦查面板";
-    titleLabel.textColor = [UIColor cyanColor];
-    titleLabel.font = [UIFont boldSystemFontOfSize:18];
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    [g_probePanelView addSubview:titleLabel];
-    
-    // 日志窗口
-    g_probeLogTextView = [[UITextView alloc] initWithFrame:CGRectMake(10, 50, g_probePanelView.bounds.size.width - 20, g_probePanelView.bounds.size.height - 110)];
-    g_probeLogTextView.backgroundColor = [UIColor blackColor];
-    g_probeLogTextView.textColor = [UIColor greenColor];
-    g_probeLogTextView.font = [UIFont fontWithName:@"Menlo" size:11];
-    g_probeLogTextView.editable = NO;
-    g_probeLogTextView.text = @"日志窗口已就绪...\n";
-    [g_probePanelView addSubview:g_probeLogTextView];
-    
-    // 按钮
-    CGFloat buttonWidth = (g_probePanelView.bounds.size.width - 40) / 3.0;
-    CGFloat buttonY = g_probePanelView.bounds.size.height - 50;
-    
-    UIButton *runButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    runButton.frame = CGRectMake(10, buttonY, buttonWidth, 40);
-    [runButton setTitle:@"开始侦查" forState:UIControlStateNormal];
-    [runButton addTarget:self action:@selector(runTheProbe:) forControlEvents:UIControlEventTouchUpInside];
-    [g_probePanelView addSubview:runButton];
-    
-    UIButton *clearButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    clearButton.frame = CGRectMake(20 + buttonWidth, buttonY, buttonWidth, 40);
-    [clearButton setTitle:@"清空日志" forState:UIControlStateNormal];
-    [clearButton addTarget:self action:@selector(clearProbeLog:) forControlEvents:UIControlEventTouchUpInside];
-    [g_probePanelView addSubview:clearButton];
-
-    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    closeButton.frame = CGRectMake(30 + buttonWidth * 2, buttonY, buttonWidth, 40);
-    [closeButton setTitle:@"关闭" forState:UIControlStateNormal];
-    [closeButton addTarget:self action:@selector(closeProbePanel) forControlEvents:UIControlEventTouchUpInside];
-    [g_probePanelView addSubview:closeButton];
-    
-    [keyWindow addSubview:g_probePanelView];
-}
-
-- (void)clearProbeLog:(id)sender {
-    if (g_probeLogTextView) {
-        g_probeLogTextView.text = @"";
-    }
-}
-
-- (void)closeProbePanel {
-    if (g_probePanelView) {
-        [g_probePanelView removeFromSuperview];
-        g_probePanelView = nil;
-        g_probeLogTextView = nil;
-    }
-}
-
-@end
-
-
-// =========================================================================
-// 3. Tweak 入口，用于注入我们的侦查按钮
-// =========================================================================
-
-%hook UIViewController
+// --- Hook viewDidLoad 来添加我们的侦查按钮 ---
 
 - (void)viewDidLoad {
     %orig;
     
-    // 只在主 ViewController 上添加按钮
     if ([self isKindOfClass:NSClassFromString(@"六壬大占.ViewController")]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
-            if (!keyWindow) return;
-
-            // 防止重复添加
-            if ([keyWindow viewWithTag:888888]) return;
+            if (!keyWindow || [keyWindow viewWithTag:888888]) return;
 
             UIButton *probeTriggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
             probeTriggerButton.frame = CGRectMake(10, 45, 80, 36);
@@ -247,6 +225,11 @@ static void ProbeLog(NSString *format, ...) {
 }
 
 %end
+
+
+// =========================================================================
+// 3. Tweak 初始化
+// =========================================================================
 
 %ctor {
     NSLog(@"[EchoProbe] 侦查脚本已加载。");
