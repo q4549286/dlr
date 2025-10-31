@@ -3715,7 +3715,7 @@ currentY += compactButtonHeight + 15;
        case kButtonTag_ClosePanel: [self createOrShowMainControlPanel]; break;
         case kButtonTag_SendLastReportToAI: { NSString *lastReport = g_lastGeneratedReport; if (lastReport && lastReport.length > 0) { [self presentAIActionSheetWithReport:lastReport]; } else { LogMessage(EchoLogTypeWarning, @"课盘缓存为空，请先推衍。"); [self showEchoNotificationWithTitle:@"操作无效" message:@"尚未生成任何课盘。"]; } break; }
         case kButtonTag_StandardReport: [self executeSimpleExtraction]; break;
-        case kButtonTag_DeepDiveReport: [self executeCompositeExtraction]; break;
+        case kButtonTag_DeepDiveReport: [self investigateKeChuanContainer_S4_Debug]; break; // <<<<<< 临时修改这里
         // ... (The rest of the cases for specific extractions)
         case kButtonTag_KeTi: { [self setInteractionBlocked:YES]; [self startS1ExtractionWithTaskType:@"KeTi" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课体范式_详"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
         case kButtonTag_JiuZongMen: { [self setInteractionBlocked:YES]; [self startS1ExtractionWithTaskType:@"JiuZongMen" includeXiangJie:YES completion:^(NSString *result) { dispatch_async(dispatch_get_main_queue(), ^{ __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"九宗门_详"] = result; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport]; g_s1_isExtracting = NO; g_s1_currentTaskType = nil; g_s1_completion_handler = nil; }); }]; break; }
@@ -4824,6 +4824,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
