@@ -3,30 +3,49 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局UI变量、辅助函数与日志函数
+// 1. 全局变量、辅助函数与日志
 // =========================================================================
 
 static UIView *g_probePanelView = nil;
 static UITextView *g_probeLogTextView = nil;
+static UIView *g_probeSelectorView = nil; // 用于捕获点击的透明覆盖层
+static BOOL g_isProbeSelectorActive = NO;
 
-// <<<<<<<<<<<<<<<< 核心修正点 1：添加 GetFrontmostWindow 函数 >>>>>>>>>>>>>>>>
+// 辅助函数：安全地获取实例变量的值 (从你的主脚本中借鉴)
+static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
+    if (!object || !ivarNameSuffix) return nil;
+    unsigned int ivarCount;
+    Ivar *ivars = class_copyIvarList([object class], &ivarCount);
+    if (!ivars) { return nil; }
+    id value = nil;
+    for (unsigned int i = 0; i < ivarCount; i++) {
+        Ivar ivar = ivars[i];
+        const char *name = ivar_getName(ivar);
+        if (name) {
+            NSString *ivarName = [NSString stringWithUTF8String:name];
+            if ([ivarName hasSuffix:ivarNameSuffix]) {
+                value = object_getIvar(object, ivar);
+                break;
+            }
+        }
+    }
+    free(ivars);
+    return value;
+}
+
 static UIWindow* GetFrontmostWindow() {
+    // ... (这个函数保持不变，和之前修正版一样)
     UIWindow *frontmostWindow = nil;
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
                 for (UIWindow *window in scene.windows) {
-                    if (window.isKeyWindow) {
-                        frontmostWindow = window;
-                        break;
-                    }
+                    if (window.isKeyWindow) { frontmostWindow = window; break; }
                 }
                 if (frontmostWindow) break;
             }
         }
     }
-    
-    // 如果上面的新方法没找到，就用旧方法（并抑制警告）
     if (!frontmostWindow) {
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -37,17 +56,15 @@ static UIWindow* GetFrontmostWindow() {
 }
 
 static void ProbeLog(NSString *format, ...) {
+    // ... (这个函数保持不变) ...
     if (!g_probeLogTextView) return;
-    
     va_list args;
     va_start(args, format);
     NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
     va_end(args);
-
     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
     [formatter setDateFormat:@"HH:mm:ss.SSS"];
     NSString *timestamp = [formatter stringFromDate:[NSDate date]];
-
     dispatch_async(dispatch_get_main_queue(), ^{
         NSString *newLogLine = [NSString stringWithFormat:@"[%@] %@\n", timestamp, message];
         g_probeLogTextView.text = [g_probeLogTextView.text stringByAppendingString:newLogLine];
@@ -63,20 +80,125 @@ static void ProbeLog(NSString *format, ...) {
 
 %hook UIViewController
 
+// --- 核心侦查逻辑 ---
+
+%new
+- (void)probeView:(UIView *)tappedView {
+    ProbeLog(@"\n\n[PROBE] ====== 实时侦查报告 ====== ");
+    if (!tappedView) {
+        ProbeLog(@"[PROBE] ❌ 未点击到任何有效视图。");
+        ProbeLog(@"[PROBE] ===========================");
+        return;
+    }
+
+    ProbeLog(@"[PROBE] 🎯 目标视图已锁定。开始向上追溯层级...");
+    
+    int depth = 0;
+    UIView *currentView = tappedView;
+    while (currentView) {
+        NSMutableString *indent = [NSMutableString string];
+        for (int i = 0; i < depth; i++) { [indent appendString:@"  "]; }
+
+        ProbeLog(@"%@↓ [%d] <%@: %p>", indent, depth, [currentView class], currentView);
+        ProbeLog(@"%@   - Frame: %@", indent, NSStringFromCGRect(currentView.frame));
+        
+        // 检查特定类型并打印额外信息
+        if ([currentView isKindOfClass:[UILabel class]]) {
+            ProbeLog(@"%@   - Text: \"%@\"", indent, ((UILabel *)currentView).text);
+        }
+        
+        // 【核心】检查手势识别器
+        if (currentView.gestureRecognizers.count > 0) {
+            ProbeLog(@"%@   - ‼️ 发现手势 (%lu个):", indent, (unsigned long)currentView.gestureRecognizers.count);
+            for (UIGestureRecognizer *gesture in currentView.gestureRecognizers) {
+                ProbeLog(@"%@     - <%@>", indent, [gesture class]);
+                // 使用辅助函数安全地获取私有ivar _targets
+                NSArray *targets = GetIvarValueSafely(gesture, @"_targets");
+                if (targets && targets.count > 0) {
+                    for (id targetActionPair in targets) {
+                        id target = [targetActionPair valueForKey:@"target"];
+                        SEL action = NSSelectorFromString([targetActionPair valueForKey:@"action"]);
+                        ProbeLog(@"%@       - Target: <%@: %p>", indent, [target class], target);
+                        ProbeLog(@"%@       - Action: %@", indent, NSStringFromSelector(action));
+                    }
+                } else {
+                    ProbeLog(@"%@       - (无法获取手势目标)", indent);
+                }
+            }
+        }
+        
+        currentView = currentView.superview;
+        depth++;
+    }
+    ProbeLog(@"[PROBE] ====== 报告结束 ====== ");
+}
+
+// --- 视图选择器模式的控制方法 ---
+
+%new
+- (void)handleProbeTap:(UITapGestureRecognizer *)gesture {
+    UIWindow *keyWindow = GetFrontmostWindow();
+    CGPoint location = [gesture locationInView:keyWindow];
+
+    // 暂时隐藏我们的UI，以防点到自己
+    g_probePanelView.hidden = YES;
+    g_probeSelectorView.hidden = YES;
+
+    UIView *tappedView = [keyWindow hitTest:location withEvent:nil];
+
+    // 恢复UI
+    g_probePanelView.hidden = NO;
+    g_probeSelectorView.hidden = NO;
+
+    [self probeView:tappedView];
+    [self toggleProbeSelectorMode:gesture.view]; // 侦查完毕后自动退出选择模式
+}
+
+%new
+- (void)toggleProbeSelectorMode:(id)sender {
+    g_isProbeSelectorActive = !g_isProbeSelectorActive;
+    UIWindow *keyWindow = GetFrontmostWindow();
+    UIButton *button = (UIButton *)sender;
+
+    if (g_isProbeSelectorActive) {
+        if (!g_probeSelectorView) {
+            g_probeSelectorView = [[UIView alloc] initWithFrame:keyWindow.bounds];
+            g_probeSelectorView.backgroundColor = [UIColor colorWithRed:0.0 green:0.5 blue:1.0 alpha:0.2]; // 淡蓝色半透明，提示用户在选择模式
+            
+            UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleProbeTap:)];
+            [g_probeSelectorView addGestureRecognizer:tap];
+        }
+        [keyWindow addSubview:g_probeSelectorView];
+        [keyWindow bringSubviewToFront:g_probePanelView]; // 确保面板在最上层
+        
+        [button setTitle:@"取消选择" forState:UIControlStateNormal];
+        ProbeLog(@"[PROBE] 🔍 已进入视图选择模式。请点击屏幕上任意元素进行侦查。");
+    } else {
+        if (g_probeSelectorView) {
+            [g_probeSelectorView removeFromSuperview];
+            g_probeSelectorView = nil;
+        }
+        [button setTitle:@"选择视图" forState:UIControlStateNormal];
+        ProbeLog(@"[PROBE] 🛑 已退出视图选择模式。");
+    }
+}
+
+
+// --- 面板UI的创建与销毁 ---
+
 %new
 - (void)showProbePanel {
-    // <<<<<<<<<<<<<<<< 核心修正点 2：使用新函数替换旧API >>>>>>>>>>>>>>>>
-    UIWindow *keyWindow = GetFrontmostWindow(); 
+    UIWindow *keyWindow = GetFrontmostWindow();
     if (!keyWindow || g_probePanelView) return;
 
     g_probePanelView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, keyWindow.bounds.size.width, keyWindow.bounds.size.height * 0.6)];
+    // ... (UI代码和之前一样) ...
     g_probePanelView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
     g_probePanelView.layer.borderColor = [UIColor cyanColor].CGColor;
     g_probePanelView.layer.borderWidth = 1.0;
     
-    // ... (面板UI的其他部分代码无需修改) ...
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, g_probePanelView.bounds.size.width, 30)];
-    titleLabel.text = @"Echo 侦查面板";
+    titleLabel.text = @"Echo 实时侦查面板";
     titleLabel.textColor = [UIColor cyanColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -93,11 +215,11 @@ static void ProbeLog(NSString *format, ...) {
     CGFloat buttonWidth = (g_probePanelView.bounds.size.width - 40) / 3.0;
     CGFloat buttonY = g_probePanelView.bounds.size.height - 50;
     
-    UIButton *runButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    runButton.frame = CGRectMake(10, buttonY, buttonWidth, 40);
-    [runButton setTitle:@"开始侦查" forState:UIControlStateNormal];
-    [runButton addTarget:self action:@selector(runTheProbe:) forControlEvents:UIControlEventTouchUpInside];
-    [g_probePanelView addSubview:runButton];
+    UIButton *selectButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    selectButton.frame = CGRectMake(10, buttonY, buttonWidth, 40);
+    [selectButton setTitle:@"选择视图" forState:UIControlStateNormal];
+    [selectButton addTarget:self action:@selector(toggleProbeSelectorMode:) forControlEvents:UIControlEventTouchUpInside];
+    [g_probePanelView addSubview:selectButton];
     
     UIButton *clearButton = [UIButton buttonWithType:UIButtonTypeSystem];
     clearButton.frame = CGRectMake(20 + buttonWidth, buttonY, buttonWidth, 40);
@@ -115,14 +237,11 @@ static void ProbeLog(NSString *format, ...) {
 }
 
 %new
-- (void)clearProbeLog:(id)sender {
-    if (g_probeLogTextView) {
-        g_probeLogTextView.text = @"";
-    }
-}
+- (void)clearProbeLog:(id)sender { if (g_probeLogTextView) { g_probeLogTextView.text = @""; } }
 
 %new
 - (void)closeProbePanel {
+    if (g_isProbeSelectorActive) { [self toggleProbeSelectorMode:nil]; } // 确保关闭时退出选择模式
     if (g_probePanelView) {
         [g_probePanelView removeFromSuperview];
         g_probePanelView = nil;
@@ -130,104 +249,12 @@ static void ProbeLog(NSString *format, ...) {
     }
 }
 
-%new
-- (void)runTheProbe:(id)sender {
-    // ... (这个函数内部逻辑不变) ...
-    ProbeLog(@"\n\n[PROBE] ====== 开始新一轮侦查 ====== ");
-
-    Class targetVCClass = NSClassFromString(@"六壬大占.ViewController");
-    if (!targetVCClass) {
-        ProbeLog(@"[PROBE] 致命错误: 找不到 '六壬大占.ViewController' 类。");
-        return;
-    }
-    
-    if (![self isKindOfClass:targetVCClass]) {
-        ProbeLog(@"[PROBE] 错误: 侦查逻辑必须从 '六壬大占.ViewController' 实例触发。当前实例是: %@", [self class]);
-        return;
-    }
-    
-    UIViewController *vc = self;
-    ProbeLog(@"[PROBE] 成功定位到 ViewController 实例: %@", vc);
-
-    Ivar keChuanIvar = class_getInstanceVariable([vc class], "課傳");
-    if (!keChuanIvar) {
-        ProbeLog(@"[PROBE] 未找到 '課傳'，尝试带下划线的 '_課傳'...");
-        keChuanIvar = class_getInstanceVariable([vc class], "_課傳");
-    }
-
-    if (keChuanIvar) {
-        const char* ivarName = ivar_getName(keChuanIvar);
-        const char* typeEncoding = ivar_getTypeEncoding(keChuanIvar);
-        NSString *typeName = [NSString stringWithUTF8String:typeEncoding];
-        
-        ProbeLog(@"[PROBE] ✅ 成功! 找到实例变量 '%s'。", ivarName);
-        ProbeLog(@"[PROBE]    类型编码: %@", typeName);
-        
-        id keChuanContainer = object_getIvar(vc, keChuanIvar);
-        ProbeLog(@"[PROBE]    对象实例: %@", keChuanContainer);
-
-        if (keChuanContainer) {
-            unsigned int ivarCount;
-            Ivar *ivars = class_copyIvarList([keChuanContainer class], &ivarCount);
-            ProbeLog(@"[PROBE] --- 正在勘探 '%@' 内部... ---", [keChuanContainer class]);
-            
-            BOOL foundPotentialList = NO;
-            for (unsigned int i = 0; i < ivarCount; i++) {
-                Ivar ivar = ivars[i];
-                const char *name = ivar_getName(ivar);
-                const char *type = ivar_getTypeEncoding(ivar);
-                
-                NSString *ivarNameStr = [NSString stringWithUTF8String:name];
-                NSString *ivarTypeStr = [NSString stringWithUTF8String:type];
-                ProbeLog(@"[PROBE]   - 发现内部变量: %@, 类型: %@", ivarNameStr, ivarTypeStr);
-                
-                if ([ivarNameStr localizedCaseInsensitiveContainsString:@"天將"] || [ivarNameStr localizedCaseInsensitiveContainsString:@"將列表"]) {
-                     foundPotentialList = YES;
-                     ProbeLog(@"[PROBE]     ‼️ 高度可疑目标! 正在深入检查...");
-                     id potentialArray = object_getIvar(keChuanContainer, ivar);
-                     
-                     if ([potentialArray isKindOfClass:[NSArray class]]) {
-                         NSArray *arr = (NSArray *)potentialArray;
-                         ProbeLog(@"[PROBE]     ✅ 确认是 NSArray! 数量: %lu", (unsigned long)arr.count);
-                         if (arr.count > 0) {
-                            ProbeLog(@"[PROBE]     第一个元素: %@", arr.firstObject);
-                            ProbeLog(@"[PROBE]     第一个元素的类: %@", [arr.firstObject class]);
-                         }
-                     } else if (potentialArray) {
-                         ProbeLog(@"[PROBE]     ⚠️ 类型不是NSArray, 而是: %@", [potentialArray class]);
-                     } else {
-                         ProbeLog(@"[PROBE]     ℹ️ 变量当前为 nil。");
-                     }
-                }
-            }
-            free(ivars);
-            
-            if (!foundPotentialList) {
-                ProbeLog(@"[PROBE] --- 在 '%@' 内部未找到明显的目标变量。 ---", [keChuanContainer class]);
-            }
-        }
-
-    } else {
-        ProbeLog(@"[PROBE] ❌ 失败! 在 ViewController 中未找到 '課傳' 或 '_課傳'。");
-        
-        unsigned int allIvarCount;
-        Ivar *allIvars = class_copyIvarList([vc class], &allIvarCount);
-        ProbeLog(@"[PROBE] --- 以下是 ViewController 的所有实例变量列表: ---");
-        for (unsigned int i = 0; i < allIvarCount; i++) {
-            Ivar ivar = allIvars[i];
-            ProbeLog(@"[PROBE]   - %s", ivar_getName(ivar));
-        }
-        free(allIvars);
-    }
-    ProbeLog(@"[PROBE] ====== 侦查结束 ======");
-}
-
+// --- Hook viewDidLoad 来添加我们的侦查按钮 ---
 - (void)viewDidLoad {
     %orig;
     
     if ([self isKindOfClass:NSClassFromString(@"六壬大占.ViewController")]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            // <<<<<<<<<<<<<<<< 核心修正点 3：同样使用新函数 >>>>>>>>>>>>>>>>
             UIWindow *keyWindow = GetFrontmostWindow();
             if (!keyWindow || [keyWindow viewWithTag:888888]) return;
 
@@ -248,5 +275,5 @@ static void ProbeLog(NSString *format, ...) {
 %end
 
 %ctor {
-    NSLog(@"[EchoProbe] 侦查脚本已加载。");
+    NSLog(@"[EchoProbe] 实时侦查脚本已加载。");
 }
