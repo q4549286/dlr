@@ -26,6 +26,7 @@ static const NSInteger kButtonTag_NianMing          = 302;
 static const NSInteger kButtonTag_BiFa              = 303;
 static const NSInteger kButtonTag_GeJu              = 304;
 static const NSInteger kButtonTag_FangFa            = 305;
+static const NSInteger kButtonTag_TianJiangDetail   = 306;
 static const NSInteger kButtonTag_ClearInput        = 999;
 static const NSInteger kButtonTag_ClosePanel        = 998;
 static const NSInteger kButtonTag_SendLastReportToAI = 997;
@@ -70,6 +71,10 @@ static NSString *g_currentItemToExtract = nil;
 static NSMutableArray *g_capturedZhaiYaoArray = nil;
 static NSMutableArray *g_capturedGeJuArray = nil;
 static NSString *g_lastGeneratedReport = nil;
+// 在 g_lastGeneratedReport = nil; 后面添加
+static BOOL g_isExtractingTianJiangDetail = NO;
+static NSMutableArray<NSMutableDictionary *> *g_tianJiang_workQueue = nil;
+static void (^g_tianJiang_completion_handler)(NSString *result) = nil;
 
 // UI State
 static BOOL g_shouldIncludeAIPromptHeader = YES;
@@ -2564,8 +2569,14 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     // 动态编号的可选板块 (无变化)
     // ================================================================
     NSArray<NSDictionary *> *optionalSections = @[
-        @{
-            @"key": @"行年参数", 
+    @{
+        @"key": @"天地盘天将详情",
+        @"title": @"模块三：【天地盘】 - 天将盘情",
+        @"content": SafeString(reportData[@"天地盘天将详情"]),
+        @"prefix": @"// 协议定位：此模块为天地盘十二天将的详细状态报告。\n"
+    },
+    @{
+        @"key": @"行年参数", 
             @"title": @"模块二：【天命系统】 - A级情报", 
             @"content": ({
                 NSString *rawNianmingText = SafeString(reportData[@"行年参数"]);
@@ -3127,7 +3138,46 @@ else if (g_s2_isExtractingKeChuanDetail) {
             return;
         }
     }
-    
+    // ========== 在这里添加新的拦截逻辑 ==========
+if (g_isExtractingTianJiangDetail) {
+    NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+    // 我们只关心天将详情弹窗
+    if ([vcClassName containsString:@"天將摘要視圖"]) {
+        UIView *contentView = vcToPresent.view;
+        
+        // 使用与课传流注相同的提取逻辑，因为它能很好地处理各种控件
+        NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
+        NSMutableArray *allStackViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
+
+        if (allStackViews.count > 0) {
+            UIStackView *mainStackView = allStackViews.firstObject;
+            for (UIView *subview in mainStackView.arrangedSubviews) {
+                if ([subview isKindOfClass:[UILabel class]]) {
+                    NSString *text = ((UILabel *)subview).text;
+                    if (text && text.length > 0) [finalTextParts addObject:text];
+                } 
+                // 这里可以根据需要添加对 TableView 等其他控件的解析
+            }
+        } else {
+            LogMessage(EchoLogError, @"[天地盘天将] 提取失败: 未找到主 UIStackView 容器。");
+            [finalTextParts addObject:@"[提取失败: 视图结构已更改]"];
+        }
+
+        // 将提取到的文本存入结果，并继续处理下一个
+        NSString *extractedDetail = [finalTextParts componentsJoinedByString:@"\n"];
+        // 第一个元素是标题，第二个是内容
+        [g_tianJiang_workQueue.firstObject setObject:extractedDetail forKey:@"result"]; 
+        
+        LogMessage(EchoLogTypeSuccess, @"[天地盘天将] 成功参详 %@ 详情", [g_tianJiang_workQueue.firstObject objectForKey:@"title"]);
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self processTianJiangQueue_S3];
+        });
+        return; // 拦截成功，直接返回，不显示弹窗
+    }
+}
+// ========== 新的拦截逻辑结束 ==========
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
     void (^handleExtraction)(NSString *, NSString *, void(^)(NSString*)) = ^(NSString *taskName, NSString *result, void(^completionBlock)(NSString*)) {
         LogMessage(EchoLogTypeSuccess, @"[解析] 成功推衍 [%@]", taskName);
@@ -3166,7 +3216,156 @@ else if (g_s2_isExtractingKeChuanDetail) {
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
+// =========================================================================
+// 新增：天地盘天将详情提取核心逻辑 (S3 - V2.0 终极健壮版)
+// (这个版本不再需要寻找实例变量名，更加可靠)
+// =========================================================================
 
+%new
+- (void)processTianJiangQueue_S3 {
+    // 检查工作队列是否完成
+    if (!g_isExtractingTianJiangDetail || g_tianJiang_workQueue.count == 0 || ![[g_tianJiang_workQueue.firstObject allKeys] containsObject:@"result"]) {
+        
+        // 如果队列为空，说明已经处理完所有任务
+        if (g_isExtractingTianJiangDetail && g_tianJiang_workQueue.count == 0) {
+            LogMessage(EchoLogError, @"[天地盘天将] 队列为空，但状态未清理，强制结束。");
+        }
+        
+        // 只有在所有任务都完成后才进入这里
+        if (g_isExtractingTianJiangDetail) {
+             LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有天将详情推衍完毕。");
+
+            // 格式化最终结果
+            NSMutableString *finalReport = [NSMutableString string];
+            for (NSDictionary *task in g_tianJiang_workQueue) {
+                // 跳过我们自己添加的哨兵节点
+                if ([task[@"title"] isEqualToString:@"START_NODE"]) continue;
+
+                [finalReport appendFormat:@"- 天将: %@\n", task[@"title"]];
+                // 使用我们之前写的课传解析函数，因为它同样适用
+                NSString *parsedDetail = parseKeChuanDetailBlock(task[@"result"], task[@"title"]);
+                [finalReport appendFormat:@"%@\n\n", parsedDetail];
+            }
+            
+            // 调用回调函数
+            if (g_tianJiang_completion_handler) {
+                g_tianJiang_completion_handler([finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
+            }
+        }
+
+        // 清理状态
+        g_isExtractingTianJiangDetail = NO;
+        g_tianJiang_workQueue = nil;
+        g_tianJiang_completion_handler = nil;
+        [self hideProgressHUD];
+        return;
+    }
+    
+    // 从队列中取出一个任务并执行
+    NSMutableDictionary *task = g_tianJiang_workQueue.firstObject;
+    // 从队列中移除已完成的任务
+    [g_tianJiang_workQueue removeObjectAtIndex:0];
+    
+    // 检查下一个任务是否已存在（即队列是否已空）
+    if(g_tianJiang_workQueue.count > 0){
+        NSMutableDictionary *nextTask = g_tianJiang_workQueue.firstObject;
+        LogMessage(EchoLogTypeInfo, @"[天地盘天将] 正在参详: %@", nextTask[@"title"]);
+        [self updateProgressHUD:[NSString stringWithFormat:@"推演天地盘天将: %@", nextTask[@"title"]]];
+
+        // 触发手势
+        SEL action = NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
+        if ([self respondsToSelector:action]) {
+            SUPPRESS_LEAK_WARNING([self performSelector:action withObject:nextTask[@"gesture"]]);
+        } else {
+            LogMessage(EchoLogError, @"[错误] 方法 %@ 不存在。", NSStringFromSelector(action));
+            [nextTask setObject:@"[解析失败: 方法不存在]" forKey:@"result"];
+            [self processTianJiangQueue_S3];
+        }
+    } else {
+        // 如果是最后一个任务，直接调用自己进入清理流程
+        [self processTianJiangQueue_S3];
+    }
+}
+
+
+%new
+- (void)extractTianJiangDetailsFromPlate_WithCompletion:(void (^)(NSString *result))completion {
+    if (g_isExtractingTianJiangDetail) {
+        LogMessage(EchoLogError, @"[错误] 天地盘天将详情推衍任务已在进行中。");
+        return;
+    }
+
+    LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“天地盘天将详情”...");
+    [self showProgressHUD:@"正在推演天地盘天将..."];
+    
+    // 初始化状态
+    g_isExtractingTianJiangDetail = YES;
+    g_tianJiang_completion_handler = [completion copy];
+    g_tianJiang_workQueue = [NSMutableArray array];
+
+    // 1. 寻找天地盘视图
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
+    if (!plateViewClass) {
+        LogMessage(EchoLogError, @"[错误] 找不到 '天地盤視圖' 类。");
+        if(completion) completion(@"[错误: 找不到天地盘视图类]");
+        [self processTianJiangQueue_S3]; // 调用以清理状态
+        return;
+    }
+
+    NSMutableArray *plateViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
+    if (plateViews.count == 0) {
+        LogMessage(EchoLogError, @"[错误] 找不到 '天地盤視圖' 实例。");
+        if(completion) completion(@"[错误: 找不到天地盘视图实例]");
+        [self processTianJiangQueue_S3]; // 调用以清理状态
+        return;
+    }
+    UIView *plateView = plateViews.firstObject;
+
+    // 2.【核心修改】遍历所有子视图，直接寻找符合条件的天将 UILabel
+    NSMutableArray<UILabel *> *allLabelsInPlate = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], plateView, allLabelsInPlate);
+
+    // 创建一个天将名称的白名单，用于快速匹配
+    NSSet *tianJiangWhitelist = [NSSet setWithObjects:@"贵", @"蛇", @"朱", @"六", @"勾", @"青", @"空", @"白", @"常", @"玄", @"阴", @"后", nil];
+    
+    // 3. 构建工作队列
+    for (UILabel *label in allLabelsInPlate) {
+        // 条件1: 必须有点击手势; 条件2: 文本必须是天将之一
+        if (label.gestureRecognizers.count > 0 && [tianJiangWhitelist containsObject:label.text]) {
+            NSMutableDictionary *task = [NSMutableDictionary dictionary];
+            [task setObject:label.text forKey:@"title"];
+            [task setObject:label.gestureRecognizers.firstObject forKey:@"gesture"];
+            [g_tianJiang_workQueue addObject:task];
+        }
+    }
+    
+    // 根据在圆盘上的角度排序，以确保提取顺序稳定 (从子位开始顺时针)
+    CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
+    [g_tianJiang_workQueue sortUsingComparator:^NSComparisonResult(NSDictionary *task1, NSDictionary *task2) {
+        UIGestureRecognizer *g1 = task1[@"gesture"];
+        UIGestureRecognizer *g2 = task2[@"gesture"];
+        CGPoint p1 = [g1.view.superview convertPoint:g1.view.center toView:nil];
+        CGPoint p2 = [g2.view.superview convertPoint:g2.view.center toView:nil];
+        CGFloat angle1 = atan2(p1.y - center.y, p1.x - center.x);
+        CGFloat angle2 = atan2(p2.y - center.y, p2.x - center.x);
+        return [@(angle1) compare:@(angle2)];
+    }];
+
+    // 4. 检查队列并开始处理
+    if (g_tianJiang_workQueue.count == 0) {
+        LogMessage(EchoLogTypeWarning, @"[天地盘天将] 未找到任何可交互的天将标签。");
+        if(completion) completion(@"");
+        [self processTianJiangQueue_S3]; // 调用以清理状态
+        return;
+    }
+    
+    // 添加一个“哨兵”任务，用于启动和终结队列
+    [g_tianJiang_workQueue insertObject:[@{@"title": @"START_NODE", @"result":@"ok"} mutableCopy] atIndex:0];
+
+    LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_tianJiang_workQueue.count-1);
+    [self processTianJiangQueue_S3];
+}
 %hook UIViewController
 
 - (void)viewDidLoad {
@@ -3513,16 +3712,18 @@ currentY += compactButtonHeight + 15;
     [card2 addSubview:sec2Title];
     card2InnerY += 22 + 15;
     
-    NSArray *allToolButtons = @[
-        @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)},
-        @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
-        @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)},
-        @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)},
-        @{@"title": @"神煞系统", @"icon": @"shield.lefthalf.filled", @"tag": @(kButtonTag_ShenSha)},
-        @{@"title": @"毕法要诀", @"icon": @"book.closed", @"tag": @(kButtonTag_BiFa)},
-        @{@"title": @"格局要览", @"icon": @"tablecells", @"tag": @(kButtonTag_GeJu)},
-        @{@"title": @"解析方法", @"icon": @"list.number", @"tag": @(kButtonTag_FangFa)}
-    ];
+NSArray *allToolButtons = @[
+    @{@"title": @"课体范式", @"icon": @"square.stack.3d.up", @"tag": @(kButtonTag_KeTi)},
+    @{@"title": @"九宗门", @"icon": @"arrow.triangle.branch", @"tag": @(kButtonTag_JiuZongMen)},
+    @{@"title": @"课传流注", @"icon": @"wave.3.right", @"tag": @(kButtonTag_KeChuan)},
+    @{@"title": @"行年参数", @"icon": @"person.crop.circle", @"tag": @(kButtonTag_NianMing)},
+    // 在这里添加下面这行
+    @{@"title": @"天将盘情", @"icon": @"dial.max.fill", @"tag": @(kButtonTag_TianJiangDetail)},
+    @{@"title": @"神煞系统", @"icon": @"shield.lefthalf.filled", @"tag": @(kButtonTag_ShenSha)},
+    @{@"title": @"毕法要诀", @"icon": @"book.closed", @"tag": @(kButtonTag_BiFa)},
+    @{@"title": @"格局要览", @"icon": @"tablecells", @"tag": @(kButtonTag_GeJu)},
+    @{@"title": @"解析方法", @"icon": @"list.number", @"tag": @(kButtonTag_FangFa)}
+];
     for (int i = 0; i < allToolButtons.count; i++) {
         NSDictionary *config = allToolButtons[i];
         UIButton *btn = createButton(config[@"title"], config[@"icon"], [config[@"tag"] integerValue], ECHO_COLOR_AUX_GREY);
@@ -3724,7 +3925,21 @@ currentY += compactButtonHeight + 15;
             break;
         }
         case kButtonTag_NianMing: { [self setInteractionBlocked:YES]; [self extractNianmingInfoWithCompletion:^(NSString *nianmingText) { __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return; [strongSelf setInteractionBlocked:NO]; NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"行年参数"] = nianmingText; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];[strongSelf presentAIActionSheetWithReport:finalReport]; }]; break; }
-        case kButtonTag_BiFa: {
+            case kButtonTag_TianJiangDetail: {
+        [self setInteractionBlocked:YES];
+        [self extractTianJiangDetailsFromPlate_WithCompletion:^(NSString *result) {
+            __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
+            [strongSelf setInteractionBlocked:NO];
+            NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
+            reportData[@"天地盘天将详情"] = result; // 使用一个新的Key
+            NSString *finalReport = formatFinalReport(reportData);
+            g_lastGeneratedReport = [finalReport copy];
+            [strongSelf showEchoNotificationWithTitle:@"推衍完成" message:@"天地盘天将详情已生成"];
+            [strongSelf presentAIActionSheetWithReport:finalReport];
+        }];
+        break;
+    }
+case kButtonTag_BiFa: {
             [self setInteractionBlocked:YES];
             [self extractBiFa_NoPopup_WithCompletion:^(NSString *result) {
                 __strong typeof(weakSelf) strongSelf = weakSelf; if (!strongSelf) return;
@@ -4671,6 +4886,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
