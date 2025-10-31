@@ -22,7 +22,6 @@ static UIView *g_debuggerView = nil;
 static UITextView *g_logTextView = nil;
 static BOOL g_isPerformingFakeClick = NO;
 
-// 辅助函数保持不变
 static void LogToScreen(NSString *format, ...) {
     if (!g_logTextView) return;
     va_list args;
@@ -39,20 +38,19 @@ static void LogToScreen(NSString *format, ...) {
 }
 
 // =========================================================================
-// 3. 核心Hook (合并所有Hook到一个地方)
+// 3. 核心Hook (使用正确的类名)
 // =========================================================================
 
 @interface UIViewController (EchoDebugger)
 - (void)startDebugTest;
 @end
 
-// 【最终修正】将所有针对同一个类的Hook合并到一个 %hook 块中
-%hook 六壬大占_ViewController
+// 【【【【【【 最终核心修正 】】】】】】
+// Theos/Logos 使用 . 来连接 Bundle 和 类名
+%hook 六壬大占.ViewController
 
-// --- viewDidLoad 的 Hook ---
 - (void)viewDidLoad {
     %orig;
-    // 因为我们已经在了正确的类里，所以不需要再检查 targetClass
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if ([self.view.window viewWithTag:666777]) return;
         UIButton *debuggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -67,31 +65,22 @@ static void LogToScreen(NSString *format, ...) {
     });
 }
 
-// --- 目标方法的 Hook ---
 - (void)顯示天地盤觸摸WithSender:(UIGestureRecognizer *)sender {
     LogToScreen(@"\n--- HOOK TRIGGERED: 顯示天地盤觸摸WithSender: ---");
-    
-    if (g_isPerformingFakeClick) {
-        LogToScreen(@"[INFO] Invoked by Tweak.");
-    } else {
-        LogToScreen(@"[INFO] Invoked by user tap.");
-    }
-    
+    if (g_isPerformingFakeClick) { LogToScreen(@"[INFO] Invoked by Tweak."); } 
+    else { LogToScreen(@"[INFO] Invoked by user tap."); }
     LogToScreen(@"[PARAM] Sender Class: %@", NSStringFromClass([sender class]));
-    
     @try {
         CGPoint location = [sender locationInView:self.view];
         LogToScreen(@"[PARAM] Location in vc.view: {%.1f, %.1f}", location.x, location.y);
     } @catch (NSException *exception) {
         LogToScreen(@"[ERROR] Exception while getting location: %@", exception.reason);
     }
-    
     LogToScreen(@"[EXEC] Calling %orig...");
     %orig(sender); 
     LogToScreen(@"[EXEC] %orig returned.");
 }
 
-// --- 我们自己新增的方法 ---
 %new
 - (void)startDebugTest {
     if (g_debuggerView) {
@@ -113,7 +102,6 @@ static void LogToScreen(NSString *format, ...) {
 
     LogToScreen(@"[DEBUG MODE] Starting test...");
 
-    // 因为我们就在 ViewController 实例里，所以 self 就是 vc
     UIViewController *vc = self;
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     __block UIView *plateView = nil;
@@ -152,13 +140,13 @@ static void LogToScreen(NSString *format, ...) {
     LogToScreen(@"[ACTION] performSelector returned.");
 }
 
-%end // %hook 六壬大占_ViewController 结束
+%end
 
 // =========================================================================
 // 4. 初始化
 // =========================================================================
-%ctor {
+@ctor {
     @autoreleasepool {
-        NSLog(@"[EchoUltimateHookDebugger] Final Merged Version Loaded.");
+        NSLog(@"[EchoUltimateHookDebugger] Final ClassName Corrected Version Loaded.");
     }
 }
