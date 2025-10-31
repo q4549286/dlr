@@ -3321,6 +3321,11 @@ if (g_isExtractingTianJiangDetail) {
 }
 
 
+// =========================================================================
+// 新增：天地盘天将详情提取核心逻辑 (S3 - V3.0 最终修正版)
+// (这个版本不再寻找天地盘视图类，直接在 ViewController 的 view 上操作)
+// =========================================================================
+
 %new
 - (void)extractTianJiangDetailsFromPlate_WithCompletion:(void (^)(NSString *result))completion {
     if (g_isExtractingTianJiangDetail) {
@@ -3336,28 +3341,18 @@ if (g_isExtractingTianJiangDetail) {
     g_tianJiang_completion_handler = [completion copy];
     g_tianJiang_workQueue = [NSMutableArray array];
 
-    // 1. 寻找天地盘视图
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
-    if (!plateViewClass) {
-        LogMessage(EchoLogError, @"[错误] 找不到 '天地盤視圖' 类。");
-        if(completion) completion(@"[错误: 找不到天地盘视图类]");
+    // 1. 【核心修正】不再寻找特定类，直接使用 ViewController 的主视图 self.view 作为根视图
+    UIView *rootView = self.view;
+    if (!rootView) {
+        LogMessage(EchoLogError, @"[错误] ViewController 的主视图 (self.view) 为空。");
+        if(completion) completion(@"[错误: ViewController.view 为空]");
         [self processTianJiangQueue_S3]; // 调用以清理状态
         return;
     }
-
-    NSMutableArray *plateViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
-    if (plateViews.count == 0) {
-        LogMessage(EchoLogError, @"[错误] 找不到 '天地盤視圖' 实例。");
-        if(completion) completion(@"[错误: 找不到天地盘视图实例]");
-        [self processTianJiangQueue_S3]; // 调用以清理状态
-        return;
-    }
-    UIView *plateView = plateViews.firstObject;
-
-    // 2.【核心修改】遍历所有子视图，直接寻找符合条件的天将 UILabel
+    
+    // 2. 遍历所有子视图，直接寻找符合条件的天将 UILabel
     NSMutableArray<UILabel *> *allLabelsInPlate = [NSMutableArray array];
-    FindSubviewsOfClassRecursive([UILabel class], plateView, allLabelsInPlate);
+    FindSubviewsOfClassRecursive([UILabel class], rootView, allLabelsInPlate);
 
     // 创建一个天将名称的白名单，用于快速匹配
     NSSet *tianJiangWhitelist = [NSSet setWithObjects:@"贵", @"蛇", @"朱", @"六", @"勾", @"青", @"空", @"白", @"常", @"玄", @"阴", @"后", nil];
@@ -3374,7 +3369,7 @@ if (g_isExtractingTianJiangDetail) {
     }
     
     // 根据在圆盘上的角度排序，以确保提取顺序稳定 (从子位开始顺时针)
-    CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil];
+    CGPoint center = [rootView convertPoint:CGPointMake(CGRectGetMidX(rootView.bounds), CGRectGetMidY(rootView.bounds)) toView:nil];
     [g_tianJiang_workQueue sortUsingComparator:^NSComparisonResult(NSDictionary *task1, NSDictionary *task2) {
         UIGestureRecognizer *g1 = task1[@"gesture"];
         UIGestureRecognizer *g2 = task2[@"gesture"];
@@ -4889,6 +4884,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
