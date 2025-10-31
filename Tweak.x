@@ -3221,6 +3221,36 @@ if (g_isExtractingTianJiangDetail) {
 // (这个版本不再需要寻找实例变量名，更加可靠)
 // =========================================================================
 
+
+%hook UIViewController
+
+- (void)viewDidLoad {
+    %orig;
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindow *keyWindow = GetFrontmostWindow();
+            if (!keyWindow) return;
+            if ([keyWindow viewWithTag:kEchoControlButtonTag]) {
+                [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview];
+            }
+            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
+            controlButton.tag = kEchoControlButtonTag;
+            [controlButton setTitle:@"推衍课盘" forState:UIControlStateNormal];
+            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
+            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            controlButton.layer.cornerRadius = 18;
+            controlButton.layer.shadowColor = [UIColor blackColor].CGColor;
+            controlButton.layer.shadowOffset = CGSizeMake(0, 2);
+            controlButton.layer.shadowOpacity = 0.4;
+            controlButton.layer.shadowRadius = 3;
+            [controlButton addTarget:self action:@selector(createOrShowMainControlPanel) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:controlButton];
+        });
+    }
+}
 %new
 - (void)processTianJiangQueue_S3 {
     // 检查工作队列是否完成
@@ -3366,36 +3396,6 @@ if (g_isExtractingTianJiangDetail) {
     LogMessage(EchoLogTypeInfo, @"[天地盘天将] 任务队列构建完成，总计 %lu 项。", (unsigned long)g_tianJiang_workQueue.count-1);
     [self processTianJiangQueue_S3];
 }
-%hook UIViewController
-
-- (void)viewDidLoad {
-    %orig;
-    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
-    if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIWindow *keyWindow = GetFrontmostWindow();
-            if (!keyWindow) return;
-            if ([keyWindow viewWithTag:kEchoControlButtonTag]) {
-                [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview];
-            }
-            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
-            controlButton.tag = kEchoControlButtonTag;
-            [controlButton setTitle:@"推衍课盘" forState:UIControlStateNormal];
-            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
-            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            controlButton.layer.cornerRadius = 18;
-            controlButton.layer.shadowColor = [UIColor blackColor].CGColor;
-            controlButton.layer.shadowOffset = CGSizeMake(0, 2);
-            controlButton.layer.shadowOpacity = 0.4;
-            controlButton.layer.shadowRadius = 3;
-            [controlButton addTarget:self action:@selector(createOrShowMainControlPanel) forControlEvents:UIControlEventTouchUpInside];
-            [keyWindow addSubview:controlButton];
-        });
-    }
-}
-
 // ... (所有数据提取的核心函数，如 extractNianmingInfoWithCompletion 等，保持不变)
 // =========================================================================
 // ↓↓↓ 使用这个带有自动界面切换功能的最终修正版 ↓↓↓
@@ -4886,6 +4886,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
