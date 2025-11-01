@@ -3359,8 +3359,8 @@ else if (g_s2_isExtractingKeChuanDetail) {
 }
 %new
 - (void)processTianDiPanQueue {
-    // 检查任务是否完成 (逻辑不变)
     if (g_tianDiPan_workQueue.count == g_tianDiPan_resultsArray.count) {
+        // ... [这部分完成逻辑保持不变，从上一个回答中复制过来即可] ...
         LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有 %lu 项节点已全部参详。", (unsigned long)g_tianDiPan_resultsArray.count);
         
         NSMutableString *finalResult = [NSMutableString string];
@@ -3377,39 +3377,58 @@ else if (g_s2_isExtractingKeChuanDetail) {
 
         if (g_tianDiPan_completion_handler) {
             g_tianDiPan_completion_handler([finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
+            g_tianDiPan_completion_handler = nil; // 执行后清空
         }
         
         g_isExtractingTianDiPanDetail = NO;
         g_tianDiPan_workQueue = nil;
         g_tianDiPan_resultsArray = nil;
-        g_tianDiPan_completion_handler = nil;
         
         [self setInteractionBlocked:NO];
         return;
     }
 
-    // ====================== 核心修正点 ======================
-    // 处理下一个任务
+    // ====================== V4 核心修正点 ======================
+    // 处理下一个任务，并采用安全试探策略
     NSUInteger currentIndex = g_tianDiPan_resultsArray.count;
     if (currentIndex >= g_tianDiPan_workQueue.count) {
-        LogMessage(EchoLogError, @"[天地盘详解] 错误: 任务队列与结果数组索引不匹配，提前终止。");
+        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 任务队列与结果数组索引不匹配，提前终止。");
         [self processTianDiPanQueue];
         return;
     }
     
     NSDictionary *task = g_tianDiPan_workQueue[currentIndex];
-    NSString *targetName = task[@"targetName"]; // 我们现在用 targetName
     
-    LogMessage(EchoLogTypeInfo, @"[天地盘详解] 正在参详: %@", task[@"title"]);
+    // 从任务中同时获取 CALayer 对象和它的名字
+    id targetLayer = task[@"targetLayer"];
+    NSString *targetName = task[@"targetName"];
+    
+    LogMessage(EchoLogTypeInfo, @"[天地盘详解V4] 正在参详: %@", task[@"title"]);
     
     SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
     
-    // 将 CALayer 的名字 (NSString) 作为 Sender 传递
-    if ([self respondsToSelector:selector] && targetName) {
-        SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:targetName]);
+    if ([self respondsToSelector:selector]) {
+        // **安全试探**：优先尝试发送 CALayer 对象
+        if (targetLayer && [targetLayer isKindOfClass:[CALayer class]]) {
+            LogMessage(EchoLogTypeInfo, @"[天地盘详解V4] 尝试策略 A: 发送 CALayer 对象...");
+            SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:targetLayer]);
+        }
+        // 如果没有 CALayer 对象，或者它不是 CALayer 类型，则回退到发送名字
+        else if (targetName && [targetName isKindOfClass:[NSString class]]) {
+            LogMessage(EchoLogTypeInfo, @"[天地盘详解V4] 尝试策略 B: 发送 NSString 对象...");
+            SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:targetName]);
+        }
+        // 如果两种都没有，则任务失败
+        else {
+            LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 任务中既没有 CALayer 也没有有效名字。跳过...");
+            [g_tianDiPan_resultsArray addObject:@"[触发失败: 无有效目标]"];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self processTianDiPanQueue];
+            });
+        }
     } else {
-        LogMessage(EchoLogError, @"[天地盘详解] 错误: 无法触发点击或目标Name为空。跳过...");
-        [g_tianDiPan_resultsArray addObject:@"[触发失败]"];
+        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 找不到'顯示天地盤觸摸WithSender:'方法。跳过...");
+        [g_tianDiPan_resultsArray addObject:@"[触发失败: 方法不存在]"];
         dispatch_async(dispatch_get_main_queue(), ^{
             [self processTianDiPanQueue];
         });
@@ -3423,20 +3442,22 @@ else if (g_s2_isExtractingKeChuanDetail) {
         return;
     }
     
-    LogMessage(EchoLogTypeTask, @"[任务启动] V3 - 开始推演“天地盘神将详解”...");
-    [self setInteractionBlocked:YES];
+    LogMessage(EchoLogTypeTask, @"[任务启动] V4 - 开始推演“天地盘神将详解”...");
+    // 只有当这是独立任务时才显示遮罩和进度条
+    if (!completion) {
+        [self setInteractionBlocked:YES];
+    }
 
-    // 初始化状态
     g_isExtractingTianDiPanDetail = YES;
     g_tianDiPan_workQueue = [NSMutableArray array];
     g_tianDiPan_resultsArray = [NSMutableArray array];
-    g_tianDiPan_completion_handler = [completion copy];
+    g_tianDipan_completion_handler = [completion copy]; // 注意变量名修正
     
-    // 修正: 使用正确的备用类名
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
-        LogMessage(EchoLogError, @"[天地盘详解V3] 错误: 找不到天地盘视图类。");
-        if(completion) completion(@"[错误: 找不到视图类]");
+        // ... [错误处理代码与V3相同] ...
+        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 找不到天地盘视图类。");
+        if(completion) { completion(@"[错误: 找不到视图类]"); }
         [self setInteractionBlocked:NO];
         return;
     }
@@ -3444,55 +3465,56 @@ else if (g_s2_isExtractingKeChuanDetail) {
     NSMutableArray *plateViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) {
-        LogMessage(EchoLogError, @"[天地盘详解V3] 错误: 找不到天地盘视图实例。");
-        if(completion) completion(@"[错误: 找不到视图实例]");
+        // ... [错误处理代码与V3相同] ...
+        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 找不到天地盘视图实例。");
+        if(completion) { completion(@"[错误: 找不到视图实例]"); }
         [self setInteractionBlocked:NO];
         return;
     }
     UIView *plateView = plateViews.firstObject;
     
-    // ====================== V3 核心修正点 ======================
-    // 直接从实例变量获取包含“名字->CALayer”映射的字典
-    
     id tianShenDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天神宮名列"];
     id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
     
     if (![tianShenDict isKindOfClass:[NSDictionary class]] || ![tianJiangDict isKindOfClass:[NSDictionary class]]) {
-        LogMessage(EchoLogError, @"[天地盘详解V3] 错误: 未能获取天神/天将字典，或类型不正确。");
-        if(completion) completion(@"[错误: 未获取核心数据]");
+        // ... [错误处理代码与V3相同] ...
+        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 未能获取天神/天将字典，或类型不正确。");
+        if(completion) { completion(@"[错误: 未获取核心数据]"); }
         [self setInteractionBlocked:NO];
         return;
     }
 
-    // 从字典中提取所有的key，这些key就是我们要模拟点击的“名字”
-    NSArray *tianShenNames = [(NSDictionary *)tianShenDict allKeys];
-    NSArray *tianJiangNames = [(NSDictionary *)tianJiangDict allKeys];
+    // ====================== V4 核心修正点 ======================
+    // 构建任务队列时，同时保存 key (名字) 和 value (CALayer)
     
-    // 构建任务队列，targetName 就是字典的 key
-    for (NSString *shenName in tianShenNames) {
-        if ([shenName isKindOfClass:[NSString class]] && shenName.length > 0) {
+    [(NSDictionary *)tianShenDict enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
+        if ([key isKindOfClass:[NSString class]] && [obj isKindOfClass:[CALayer class]]) {
+            NSString *shenName = (NSString *)key;
+            CALayer *layer = (CALayer *)obj;
             NSString *title = [NSString stringWithFormat:@"天盘神(%@)", shenName];
-            [g_tianDiPan_workQueue addObject:[@{@"targetName": shenName, @"title": title} mutableCopy]];
+            [g_tianDiPan_workQueue addObject:[@{@"targetName": shenName, @"targetLayer": layer, @"title": title} mutableCopy]];
         }
-    }
-    for (NSString *jiangName in tianJiangNames) {
-        if ([jiangName isKindOfClass:[NSString class]] && jiangName.length > 0) {
+    }];
+    
+    [(NSDictionary *)tianJiangDict enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
+        if ([key isKindOfClass:[NSString class]] && [obj isKindOfClass:[CALayer class]]) {
+            NSString *jiangName = (NSString *)key;
+            CALayer *layer = (CALayer *)obj;
             NSString *title = [NSString stringWithFormat:@"天将(%@)", jiangName];
-            [g_tianDiPan_workQueue addObject:[@{@"targetName": jiangName, @"title": title} mutableCopy]];
+            [g_tianDiPan_workQueue addObject:[@{@"targetName": jiangName, @"targetLayer": layer, @"title": title} mutableCopy]];
         }
-    }
+    }];
 
     if (g_tianDiPan_workQueue.count == 0) {
-        LogMessage(EchoLogTypeWarning, @"[天地盘详解V3] 任务队列为空，未能从字典中提取任何神将名称。");
+        LogMessage(EchoLogTypeWarning, @"[天地盘详解V4] 任务队列为空，未能从字典中提取任何神将名称和图层。");
         g_isExtractingTianDiPanDetail = NO;
-        if(completion) completion(@"[任务队列为空]");
+        if(completion) { completion(@"[任务队列为空]"); }
         [self setInteractionBlocked:NO];
         return;
     }
     
-    LogMessage(EchoLogTypeInfo, @"[天地盘详解V3] 任务队列构建完成，共 %lu 项。", (unsigned long)g_tianDiPan_workQueue.count);
+    LogMessage(EchoLogTypeInfo, @"[天地盘详解V4] 任务队列构建完成，共 %lu 项。", (unsigned long)g_tianDiPan_workQueue.count);
     
-    // 启动处理流程
     [self processTianDiPanQueue];
 }
 %new 
@@ -4916,6 +4938,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
