@@ -3423,7 +3423,7 @@ else if (g_s2_isExtractingKeChuanDetail) {
         return;
     }
     
-    LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“天地盘神将详解”...");
+    LogMessage(EchoLogTypeTask, @"[任务启动] V3 - 开始推演“天地盘神将详解”...");
     [self setInteractionBlocked:YES];
 
     // 初始化状态
@@ -3432,10 +3432,10 @@ else if (g_s2_isExtractingKeChuanDetail) {
     g_tianDiPan_resultsArray = [NSMutableArray array];
     g_tianDiPan_completion_handler = [completion copy];
     
-    // Fix 1: 使用正确的备用类名
+    // 修正: 使用正确的备用类名
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
-        LogMessage(EchoLogError, @"[天地盘详解] 错误: 找不到天地盘视图类。");
+        LogMessage(EchoLogError, @"[天地盘详解V3] 错误: 找不到天地盘视图类。");
         if(completion) completion(@"[错误: 找不到视图类]");
         [self setInteractionBlocked:NO];
         return;
@@ -3444,58 +3444,53 @@ else if (g_s2_isExtractingKeChuanDetail) {
     NSMutableArray *plateViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) {
-        LogMessage(EchoLogError, @"[天地盘详解] 错误: 找不到天地盘视图实例。");
+        LogMessage(EchoLogError, @"[天地盘详解V3] 错误: 找不到天地盘视图实例。");
         if(completion) completion(@"[错误: 找不到视图实例]");
         [self setInteractionBlocked:NO];
         return;
     }
     UIView *plateView = plateViews.firstObject;
     
-    // 直接从实例变量获取CALayer数组
+    // ====================== V3 核心修正点 ======================
+    // 直接从实例变量获取包含“名字->CALayer”映射的字典
+    
     id tianShenDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天神宮名列"];
     id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
     
-    if (!tianShenDict || !tianJiangDict) {
-        LogMessage(EchoLogError, @"[天地盘详解] 错误: 未能从视图获取天神或天将的数据字典。");
+    if (![tianShenDict isKindOfClass:[NSDictionary class]] || ![tianJiangDict isKindOfClass:[NSDictionary class]]) {
+        LogMessage(EchoLogError, @"[天地盘详解V3] 错误: 未能获取天神/天将字典，或类型不正确。");
         if(completion) completion(@"[错误: 未获取核心数据]");
         [self setInteractionBlocked:NO];
         return;
     }
 
-    NSArray *tianShenLayers = [tianShenDict allValues];
-    NSArray *tianJiangLayers = [tianJiangDict allValues];
-
-    // ====================== 核心修正点 ======================
-    // 我们不再寻找UILabel，而是直接使用CALayer的名字(name)作为触发对象
+    // 从字典中提取所有的key，这些key就是我们要模拟点击的“名字”
+    NSArray *tianShenNames = [(NSDictionary *)tianShenDict allKeys];
+    NSArray *tianJiangNames = [(NSDictionary *)tianJiangDict allKeys];
     
-    for (CALayer *layer in tianShenLayers) {
-        if ([layer respondsToSelector:@selector(name)]) {
-            NSString *layerName = [layer name];
-            if (layerName && layerName.length > 0) {
-                NSString *title = [NSString stringWithFormat:@"天盘神(%@)", [self GetStringFromLayer:layer]];
-                [g_tianDiPan_workQueue addObject:[@{@"targetName": layerName, @"title": title} mutableCopy]];
-            }
+    // 构建任务队列，targetName 就是字典的 key
+    for (NSString *shenName in tianShenNames) {
+        if ([shenName isKindOfClass:[NSString class]] && shenName.length > 0) {
+            NSString *title = [NSString stringWithFormat:@"天盘神(%@)", shenName];
+            [g_tianDiPan_workQueue addObject:[@{@"targetName": shenName, @"title": title} mutableCopy]];
         }
     }
-    for (CALayer *layer in tianJiangLayers) {
-        if ([layer respondsToSelector:@selector(name)]) {
-            NSString *layerName = [layer name];
-            if (layerName && layerName.length > 0) {
-                NSString *title = [NSString stringWithFormat:@"天将(%@)", [self GetStringFromLayer:layer]];
-                [g_tianDiPan_workQueue addObject:[@{@"targetName": layerName, @"title": title} mutableCopy]];
-            }
+    for (NSString *jiangName in tianJiangNames) {
+        if ([jiangName isKindOfClass:[NSString class]] && jiangName.length > 0) {
+            NSString *title = [NSString stringWithFormat:@"天将(%@)", jiangName];
+            [g_tianDiPan_workQueue addObject:[@{@"targetName": jiangName, @"title": title} mutableCopy]];
         }
     }
 
     if (g_tianDiPan_workQueue.count == 0) {
-        LogMessage(EchoLogTypeWarning, @"[天地盘详解] 未找到任何可点击的天盘/天将元素 (未能从CALayer获取name)。");
+        LogMessage(EchoLogTypeWarning, @"[天地盘详解V3] 任务队列为空，未能从字典中提取任何神将名称。");
         g_isExtractingTianDiPanDetail = NO;
-        if(completion) completion(@"[未找到可点击元素]");
+        if(completion) completion(@"[任务队列为空]");
         [self setInteractionBlocked:NO];
         return;
     }
     
-    LogMessage(EchoLogTypeInfo, @"[天地盘详解] 任务队列构建完成，共 %lu 项。", (unsigned long)g_tianDiPan_workQueue.count);
+    LogMessage(EchoLogTypeInfo, @"[天地盘详解V3] 任务队列构建完成，共 %lu 项。", (unsigned long)g_tianDiPan_workQueue.count);
     
     // 启动处理流程
     [self processTianDiPanQueue];
@@ -4921,6 +4916,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
