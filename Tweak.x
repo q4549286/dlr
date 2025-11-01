@@ -111,9 +111,9 @@ static BOOL g_isTesting = NO;
         Log(@"Step 1: 状态旗标设置成功。");
 
         Log(@"Step 2: 开始定位目标类...");
-        Class plateViewClass = NSClassFromString(@"六壬大占.天地盘视图类");
+        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
         if (!plateViewClass) {
-            Log(@"!! FATAL: NSClassFromString未能找到 '六壬大占.天地盘视图类'。测试终止。");
+            Log(@"!! FATAL: NSClassFromString未能找到 '六壬大占.天地盤視圖類'。测试终止。");
             g_isTesting = NO; return;
         }
         Log(@"Step 2: 成功获取目标类: %@", plateViewClass);
@@ -194,3 +194,4 @@ static BOOL g_isTesting = NO;
 %ctor {
     Log(@"最终测试脚本V2已加载。");
 }
+
