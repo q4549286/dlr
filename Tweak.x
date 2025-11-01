@@ -2,121 +2,175 @@
 #import <objc/runtime.h>
 #import <substrate.h>
 
-#define LOG_PREFIX @"[EchoSpy V2] "
+// =========================================================================
+// 1. 日志和辅助函数
+// =========================================================================
+#define LOG_PREFIX @"[EchoFinalTestV5] "
 #define Log(format, ...) NSLog(LOG_PREFIX format, ##__VA_ARGS__)
 
+#define SUPPRESS_LEAK_WARNING(code) \
+    _Pragma("clang diagnostic push") \
+    _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
+    code; \
+    _Pragma("clang diagnostic pop")
+
+static UIWindow* GetFrontmostWindow() { /* ... 代码保持不变 ... */ }
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { /* ... 代码保持不变 ... */ }
+
+@interface EchoFakeGestureRecognizer : UITapGestureRecognizer
+@property (nonatomic, assign) CGPoint fakeLocation;
+@end
+@implementation EchoFakeGestureRecognizer
+- (CGPoint)locationInView:(UIView *)view { return self.fakeLocation; }
+@end
+
 // =========================================================================
-// 1. 声明和定义窃听函数
+// 2. 接口声明
 // =========================================================================
+@interface UIViewController (EchoFinalTest)
+- (void)runFinalTest;
+- (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
+@end
 
-// --- 声明原始方法实现的指针 ---
-static void (*Original_ViewController_displayTouch)(id, SEL, id);
-static void (*Original_PlateView_touchesBegan)(id, SEL, NSSet<UITouch *> *, UIEvent *);
-static void (*Original_PlateView_touchesEnded)(id, SEL, NSSet<UITouch *> *, UIEvent *);
+// =========================================================================
+// 3. 核心 Hook
+// =========================================================================
+%hook UIViewController
 
-
-// --- 窃听函数 1: 监控 ViewController 的方法调用 ---
-static void Tweak_ViewController_displayTouch(id self, SEL _cmd, id sender) {
-    Log(@"<<<<< CAPTURED: ViewController's '顯示天地盤觸摸WithSender:' was called! >>>>>");
-    Log(@"  - Sender Class: %@", sender ? NSStringFromClass([sender class]) : @"nil");
-    Log(@"  - Sender Description: %@", sender ? [sender description] : @"nil");
-
-    if ([sender isKindOfClass:[UIGestureRecognizer class]]) {
-        UIGestureRecognizer *gesture = (UIGestureRecognizer *)sender;
-        CGPoint location = [gesture locationInView:gesture.view];
-        Log(@"  - It's a Gesture! Location: (%.2f, %.2f)", location.x, location.y);
+- (void)viewDidLoad {
+    %orig;
+    if ([NSStringFromClass([self class]) hasSuffix:@"ViewController"]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            testButton.frame = CGRectMake([UIScreen mainScreen].bounds.size.width - 120, 190, 110, 36);
+            [testButton setTitle:@"终极测试V5" forState:UIControlStateNormal];
+            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            testButton.backgroundColor = [UIColor blackColor];
+            [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            testButton.layer.cornerRadius = 18;
+            testButton.layer.borderColor = [UIColor whiteColor].CGColor;
+            testButton.layer.borderWidth = 1.0;
+            [testButton addTarget:self action:@selector(runFinalTest) forControlEvents:UIControlEventTouchUpInside];
+            [GetFrontmostWindow() addSubview:testButton];
+            Log(@"最终测试按钮V5已添加。");
+        });
     }
-    
-    Log(@"<<<<< Now calling original method... >>>>>");
-    if (Original_ViewController_displayTouch) {
-        Original_ViewController_displayTouch(self, _cmd, sender);
-    }
-    Log(@"<<<<< Original method finished. >>>>>");
 }
 
-// --- 窃听函数 2: 监控 天地盘视图 的触摸开始事件 ---
-static void Tweak_PlateView_touchesBegan(id self, SEL _cmd, NSSet<UITouch *> *touches, UIEvent *event) {
-    Log(@">>>>> EVENT START: PlateView received 'touchesBegan:withEvent:'! <<<<<");
-    UITouch *touch = [touches anyObject];
-    if (touch) {
-        CGPoint location = [touch locationInView:(UIView *)self];
-        Log(@"  - Touch Location: (%.2f, %.2f)", location.x, location.y);
-        Log(@"  - Touch Phase: %ld (Should be 0 for Began)", (long)touch.phase);
-    }
+%new
+- (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix { /* ... 代码保持不变 ... */ }
+
+%new
+- (void)runFinalTest {
+    Log(@"================== 最终安全测试V5开始 ==================");
     
-    Log(@">>>>> Now calling original touchesBegan... >>>>>");
-    if (Original_PlateView_touchesBegan) {
-        Original_PlateView_touchesBegan(self, _cmd, touches, event);
-    }
-    Log(@">>>>> Original touchesBegan finished. >>>>>");
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @try {
+            Log(@"Step 1: 进入主执行块。");
+            
+            // --- 查找视图 (已验证稳定) ---
+            UIWindow *keyWindow = GetFrontmostWindow();
+            Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
+            NSMutableArray *plateViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
+            if (plateViews.count == 0) { Log(@"!! FATAL: 未能找到天地盘实例。"); return; }
+            UIView *plateView = plateViews.firstObject;
+            Log(@"Step 2: 成功找到实例。");
+
+            // --- 获取字典 (已验证稳定) ---
+            id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
+            if (![tianJiangDict isKindOfClass:[NSDictionary class]] || ((NSDictionary *)tianJiangDict).count == 0) {
+                Log(@"!! FATAL: 未能获取天将字典。"); return;
+            }
+            Log(@"Step 3: 成功获取天将字典。");
+
+            // ========== V9 核心修正：纯C方式提取 ==========
+            Log(@"Step 4: 准备以纯C方式提取键值对...");
+            NSMutableArray *workQueue = [NSMutableArray array];
+            
+            @autoreleasepool {
+                CFDictionaryRef cfDict = (__bridge CFDictionaryRef)tianJiangDict;
+                CFIndex count = CFDictionaryGetCount(cfDict);
+                void const **keys = (void const **)malloc(sizeof(void *) * count);
+                void const **values = (void const **)malloc(sizeof(void *) * count);
+                
+                // 这一步直接从内存中获取所有指针，不涉及OC的copy或迭代
+                CFDictionaryGetKeysAndValues(cfDict, keys, values);
+
+                Log(@"Step 4a: 已获取C指针数组，数量: %ld", count);
+
+                for (CFIndex i = 0; i < count; i++) {
+                    // 使用 __bridge_transfer 来获取所有权，并让ARC管理内存
+                    id key = (__bridge_transfer id)keys[i];
+                    id obj = (__bridge_transfer id)values[i];
+                    
+                    if (key && obj) {
+                        [workQueue addObject:@{ @"targetLayer": obj, @"name": key }];
+                    }
+                }
+                
+                // 注意：因为用了 __bridge_transfer，我们不需要 free(keys) 和 free(values) 了，
+                // ARC会接管它们的内存管理。如果用 __bridge，则需要手动 free。
+                // 为了绝对安全，我们还是用 __bridge 并手动 free。
+            }
+
+            // ---- 重写为更安全的版本 ----
+            CFDictionaryRef cfDict_safer = (__bridge CFDictionaryRef)tianJiangDict;
+            CFIndex count_safer = CFDictionaryGetCount(cfDict_safer);
+            void const **keys_safer = (void const **)malloc(sizeof(void *) * count_safer);
+            void const **values_safer = (void const **)malloc(sizeof(void *) * count_safer);
+            CFDictionaryGetKeysAndValues(cfDict_safer, keys_safer, values_safer);
+            
+            for (CFIndex i = 0; i < count_safer; i++) {
+                id key = (__bridge id)keys_safer[i];
+                id obj = (__bridge id)values_safer[i];
+                if (key && obj) {
+                     [workQueue addObject:@{ @"targetLayer": obj, @"name": key }];
+                }
+            }
+            free(keys_safer);
+            free(values_safer);
+            
+            Log(@"Step 4b: 任务队列构建成功，包含 %lu 个任务。", (unsigned long)workQueue.count);
+
+            if (workQueue.count == 0) { Log(@"!! FATAL: 任务队列为空。"); return; }
+            
+            // --- 后续调用逻辑 (已验证稳定) ---
+            Log(@"Step 5: 选取第一个任务...");
+            NSDictionary *task = workQueue.firstObject;
+            CALayer *targetLayer = task[@"targetLayer"];
+            NSString *targetName = task[@"name"];
+
+            if (![targetLayer isKindOfClass:[CALayer class]] || ![targetName isKindOfClass:[NSString class]]) {
+                Log(@"!! FATAL: 队列中的对象类型不正确."); return;
+            }
+            CGPoint targetPosition = targetLayer.position;
+            Log(@"Step 5: 目标: '%@', 坐标: (%.2f, %.2f)", targetName, targetPosition.x, targetPosition.y);
+            
+            Log(@"Step 6: 准备调用...");
+            SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+            if (![self respondsToSelector:selector]) { Log(@"!! FATAL: ViewController 不响应目标方法。"); return; }
+            
+            EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
+            fakeGesture.fakeLocation = targetPosition;
+            Log(@"Step 7: 伪造手势已创建，即将调用...");
+
+            SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:fakeGesture]);
+            
+            Log(@"--- CALL SUCCEEDED! --- The app did not crash.");
+
+        } @catch (NSException *exception) {
+            Log(@"!!!!!! CATASTROPHIC FAILURE !!!!!! Exception: %@, Reason: %@", exception.name, exception.reason);
+        } @finally {
+            Log(@"================== 最终安全测试V5结束 ==================");
+        }
+    });
 }
-
-// --- 窃听函数 3: 监控 天地盘视图 的触摸结束事件 ---
-static void Tweak_PlateView_touchesEnded(id self, SEL _cmd, NSSet<UITouch *> *touches, UIEvent *event) {
-    Log(@"<<<<< EVENT END: PlateView received 'touchesEnded:withEvent:'! >>>>>");
-    UITouch *touch = [touches anyObject];
-    if (touch) {
-        CGPoint location = [touch locationInView:(UIView *)self];
-        Log(@"  - Touch Location: (%.2f, %.2f)", location.x, location.y);
-        Log(@"  - Touch Phase: %ld (Should be 3 for Ended)", (long)touch.phase);
-    }
-    
-    Log(@"<<<<< Now calling original touchesEnded... >>>>>");
-    if (Original_PlateView_touchesEnded) {
-        Original_PlateView_touchesEnded(self, _cmd, touches, event);
-    }
-    Log(@"<<<<< Original touchesEnded finished. >>>>>");
-}
-
-
-// =========================================================================
-// 2. 在 %ctor 中应用所有 Hook
-// =========================================================================
+%end
 
 %ctor {
-    @autoreleasepool {
-        Log(@"Applying Spy V2 Hooks...");
-
-        // --- Hook 1: ViewController ---
-        Class vcClass = NSClassFromString(@"六壬大占.ViewController");
-        if (vcClass) {
-            SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-            Method method = class_getInstanceMethod(vcClass, selector);
-            if (method) {
-                MSHookMessageEx(vcClass, selector, (IMP)&Tweak_ViewController_displayTouch, (IMP *)&Original_ViewController_displayTouch);
-                Log(@"Hook 1 SUCCESS: ViewController method hooked.");
-            } else {
-                Log(@"Hook 1 FAILED: Method '顯示天地盤觸摸WithSender:' not found.");
-            }
-        } else {
-            Log(@"Hook 1 FAILED: Class '六壬大占.ViewController' not found.");
-        }
-
-        // --- Hook 2 & 3: 天地盤視圖類 ---
-        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
-        if (plateViewClass) {
-            // Hook touchesBegan
-            SEL beganSelector = @selector(touchesBegan:withEvent:);
-            Method beganMethod = class_getInstanceMethod(plateViewClass, beganSelector);
-            if (beganMethod) {
-                MSHookMessageEx(plateViewClass, beganSelector, (IMP)&Tweak_PlateView_touchesBegan, (IMP *)&Original_PlateView_touchesBegan);
-                Log(@"Hook 2 SUCCESS: PlateView 'touchesBegan' hooked.");
-            } else {
-                Log(@"Hook 2 FAILED: Method 'touchesBegan:withEvent:' not found.");
-            }
-
-            // Hook touchesEnded
-            SEL endedSelector = @selector(touchesEnded:withEvent:);
-            Method endedMethod = class_getInstanceMethod(plateViewClass, endedSelector);
-            if (endedMethod) {
-                MSHookMessageEx(plateViewClass, endedSelector, (IMP)&Tweak_PlateView_touchesEnded, (IMP *)&Original_PlateView_touchesEnded);
-                Log(@"Hook 3 SUCCESS: PlateView 'touchesEnded' hooked.");
-            } else {
-                Log(@"Hook 3 FAILED: Method 'touchesEnded:withEvent:' not found.");
-            }
-        } else {
-            Log(@"Hook 2/3 FAILED: Class '六壬大占.天地盤視圖類' not found.");
-        }
-    }
+    Log(@"最终测试脚本V5已加载。");
+    // 确保GetFrontmostWindow和FindSubviewsOfClassRecursive被链接
+    GetFrontmostWindow(); 
+    FindSubviewsOfClassRecursive(nil, nil, nil);
 }
-
