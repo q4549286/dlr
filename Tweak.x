@@ -3451,7 +3451,7 @@ else if (g_s2_isExtractingKeChuanDetail) {
     g_isExtractingTianDiPanDetail = YES;
     g_tianDiPan_workQueue = [NSMutableArray array];
     g_tianDiPan_resultsArray = [NSMutableArray array];
-    g_tianDipan_completion_handler = [completion copy]; // 注意变量名修正
+    g_tianDiPan_completion_handler = [completion copy]; // 注意变量名修正
     
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
@@ -4938,6 +4938,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
