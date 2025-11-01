@@ -3,16 +3,13 @@
 #import <substrate.h>
 
 // =========================================================================
-//  Echo Tweak v30.0 - API Runtime Edition
+//  Echo Tweak v30.1 - API Runtime Hook Edition
 // =========================================================================
 
 #pragma mark - Global UI & State
 static const NSInteger kEchoControlButtonTag = 556699;
 static NSString *g_lastGeneratedReport = nil;
 #define ECHO_COLOR_MAIN_BLUE [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0]
-
-// Forward declaration for the Swift class, we'll use its mangled name
-@class _TtC12å…­å£¬å¤§å  14ViewController;
 
 // Helper to get the key window
 static UIWindow* GetFrontmostWindow() {
@@ -34,38 +31,14 @@ static UIWindow* GetFrontmostWindow() {
     return frontmostWindow;
 }
 
-#pragma mark - Core Tweak Logic
+#pragma mark - New Method Implementations (as C Functions)
 
-%hook _TtC12å…­å£¬å¤§å  14ViewController
-
-// We hook viewDidLoad to add our button
-- (void)viewDidLoad {
-    %orig;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *keyWindow = GetFrontmostWindow();
-        if (!keyWindow || [keyWindow viewWithTag:kEchoControlButtonTag]) return;
-
-        UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 180, 45, 170, 36);
-        controlButton.tag = kEchoControlButtonTag;
-        [controlButton setTitle:@"推衍课盘 (API)" forState:UIControlStateNormal];
-        controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-        controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
-        [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        controlButton.layer.cornerRadius = 18;
-        [controlButton addTarget:self action:@selector(runUltimateAPIExtraction) forControlEvents:UIControlEventTouchUpInside];
-        [keyWindow addSubview:controlButton];
-    });
-}
-
-// This is our new, powerful extraction method. It requires NO header files.
-%new
-- (void)runUltimateAPIExtraction {
+// This is the implementation for our new, powerful extraction method.
+// It's a C function that takes 'self' and '_cmd' like a real Objective-C method.
+static void runUltimateAPIExtraction_IMP(id self, SEL _cmd) {
     NSLog(@"[Echo API] Extraction initiated.");
     
     // 1. Get the Core Data Model instance using MSHookIvar.
-    // We use 'id' because we don't have the header file to know the type at compile time.
-    // The variable name is the "garbled" version of "總體演示器".
     id kePanModel = MSHookIvar<id>(self, "ç¸½é«”æ¼”ç¤ºå™¨");
 
     if (!kePanModel) {
@@ -76,12 +49,9 @@ static UIWindow* GetFrontmostWindow() {
 
     // 2. Prepare the report string.
     NSMutableString *report = [NSMutableString string];
-    [report appendString:@"----- 标准化课盘 (API直取 v1.0) -----\n\n"];
+    [report appendString:@"----- 标准化课盘 (API直取 v1.1) -----\n\n"];
     
     // 3. Extract data using Key-Value Coding (valueForKey:).
-    // This is the safest way to get properties from a Swift object at runtime without headers.
-    // The keys are the "garbled" property names from the header file.
-    
     @try {
         id siZhu = [kePanModel valueForKey:@"å››æŸ±"];
         id xun = [kePanModel valueForKey:@"æ—¬"];
@@ -90,7 +60,6 @@ static UIWindow* GetFrontmostWindow() {
         id sanChuan = [kePanModel valueForKey:@"ä¸‰å‚³"];
         id jiuZongMen = [kePanModel valueForKey:@"ä¹ å®—é–€èª²è±¡"];
         
-        // Use the 'description' property of each object to get a formatted string
         NSString *siZhuDesc = [siZhu description] ?: @"[未获取]";
         NSString *xunDesc = [xun description] ?: @"[未获取]";
         NSString *tianDiPanDesc = [tianDiPan description] ?: @"[未获取]";
@@ -118,13 +87,68 @@ static UIWindow* GetFrontmostWindow() {
     
     NSLog(@"[Echo API] Extraction complete. Report copied to clipboard.");
     
-    // You can add your notification pop-up here if you want
-    // For example: [self showEchoNotificationWithTitle:@"API提取完成" message:@"课盘已直接从内存提取。"];
+    // You can add your notification pop-up here. For example:
+    // SEL showNotificationSelector = NSSelectorFromString(@"showEchoNotificationWithTitle:message:");
+    // if ([self respondsToSelector:showNotificationSelector]) {
+    //     [self performSelector:showNotificationSelector withObject:@"API提取完成" withObject:@"课盘已直接从内存提取。"];
+    // }
 }
 
-%end
+// A pointer to store the original implementation of viewDidLoad
+static void (*Original_viewDidLoad)(id, SEL);
 
-// Ctor to initialize the hook
+// Our new implementation for viewDidLoad
+static void New_viewDidLoad(id self, SEL _cmd) {
+    // Call the original viewDidLoad first
+    Original_viewDidLoad(self, _cmd);
+    
+    // Now, add our button
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIWindow *keyWindow = GetFrontmostWindow();
+        if (!keyWindow || [keyWindow viewWithTag:kEchoControlButtonTag]) return;
+
+        UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 180, 45, 170, 36);
+        controlButton.tag = kEchoControlButtonTag;
+        [controlButton setTitle:@"推衍课盘 (API)" forState:UIControlStateNormal];
+        controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+        controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
+        [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        controlButton.layer.cornerRadius = 18;
+        
+        // The action now calls the method we dynamically added
+        [controlButton addTarget:self action:@selector(runUltimateAPIExtraction) forControlEvents:UIControlEventTouchUpInside];
+        
+        [keyWindow addSubview:controlButton];
+    });
+}
+
+
+#pragma mark - Tweak Constructor
+
 %ctor {
-    %init;
+    @autoreleasepool {
+        NSLog(@"[Echo API] Tweak constructor firing...");
+
+        // 1. Get the target class at RUNTIME using its mangled name string
+        const char *vcClassNameMangled = "_TtC12å…­å£¬å¤§å  14ViewController";
+        Class vcClass = objc_getClass(vcClassNameMangled);
+
+        if (vcClass) {
+            NSLog(@"[Echo API] Successfully found ViewController class at runtime.");
+
+            // 2. Add our new method to the class at RUNTIME
+            SEL newMethodSelector = @selector(runUltimateAPIExtraction);
+            class_addMethod(vcClass, newMethodSelector, (IMP)runUltimateAPIExtraction_IMP, "v@:");
+            NSLog(@"[Echo API] Injected new method -runUltimateAPIExtraction.");
+
+            // 3. Hook viewDidLoad at RUNTIME using MSHookMessageEx
+            SEL viewDidLoadSelector = @selector(viewDidLoad);
+            MSHookMessageEx(vcClass, viewDidLoadSelector, (IMP)&New_viewDidLoad, (IMP *)&Original_viewDidLoad);
+            NSLog(@"[Echo API] Hooked viewDidLoad method.");
+
+        } else {
+            NSLog(@"[Echo API] FATAL: Could not find ViewController class at runtime. Tweak will not activate.");
+        }
+    }
 }
