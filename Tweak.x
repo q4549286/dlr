@@ -55,6 +55,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)startFullExtraction;
 @end
 
+// 【【【 最终结构修正 】】】
 %hook 六壬大占.ViewController
 
 - (void)viewDidLoad {
@@ -98,10 +99,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     __block UIView *plateView = nil;
     
-    void (^findViewRecursive)(UIView *) = ^(UIView *view) {
+    // 使用弱引用 self 防止 block 循环引用
+    __weak typeof(self) weakSelf = self;
+    void (^__block findViewRecursive)(UIView *) = ^(UIView *view) {
         if (plateView) return; 
         if ([view isKindOfClass:plateViewClass]) { plateView = view; return; }
-        for (UIView *subview in view.subviews) { findViewRecursive(subview); }
+        for (UIView *subview in view.subviews) {
+             findViewRecursive(subview);
+        }
     };
     findViewRecursive(self.view.window);
     
@@ -128,13 +133,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         CALayer *shenLayer = tianShenDict[key];
         CALayer *jiangLayer = tianJiangDict[key];
         
-        // 我们需要点击天将的位置，因为它在最上层
+        if (!shenLayer || !jiangLayer) continue;
+
         CGPoint layerPosition = [jiangLayer.superlayer convertPoint:jiangLayer.position toLayer:plateView.layer];
         
-        NSString *shenText = [shenLayer.string isKindOfClass:[NSAttributedString class]] ? ((NSAttributedString*)shenLayer.string).string : shenLayer.string;
-        NSString *jiangText = [jiangLayer.string isKindOfClass:[NSAttributedString class]] ? ((NSAttributedString*)jiangLayer.string).string : jiangLayer.string;
+        id shenString = [shenLayer valueForKey:@"string"];
+        id jiangString = [jiangLayer valueForKey:@"string"];
 
-        NSString *fullName = [NSString stringWithFormat:@"%@(%@)", shenText, jiangText];
+        NSString *shenText = [shenString isKindOfClass:[NSAttributedString class]] ? ((NSAttributedString*)shenString).string : shenString;
+        NSString *jiangText = [jiangString isKindOfClass:[NSAttributedString class]] ? ((NSAttributedString*)jiangString).string : jiangString;
+
+        NSString *fullName = [NSString stringWithFormat:@"%@(%@)", shenText ?: @"?", jiangText ?: @"?"];
         [tasks addObject:@{@"name": fullName, @"position": [NSValue valueWithCGPoint:layerPosition]}];
     }
     
@@ -148,7 +157,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     __block NSInteger currentTaskIndex = 0;
     
     processNextTask = [^{
-        if (currentTaskIndex >= tasks.count) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || currentTaskIndex >= tasks.count) {
             LogToScreen(@"\n--- [COMPLETE] 所有12个宫位详情提取完毕 ---");
             processNextTask = nil;
             return;
@@ -172,20 +182,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             currentTaskIndex++;
             
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                processNextTask();
+                if(processNextTask) processNextTask();
             });
         };
         
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [vc performSelector:clickSelector withObject:fakeGesture];
+        [strongSelf performSelector:clickSelector withObject:fakeGesture];
         #pragma clang diagnostic pop
     } copy];
     
     processNextTask();
 }
 
-%end
+%end // %hook 六壬大占.ViewController
 
 %ctor {
     @autoreleasepool {
@@ -193,7 +203,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[EchoTianDiPanExtractor] Final Production Version Loaded.");
     }
 }
-
 
 // =========================================================================
 // 辅助函数实现
@@ -219,21 +228,6 @@ static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
     return value;
 }
 
-static void LogToScreen(NSString *format, ...) {
-    if (!g_logTextView) return;
-    va_list args;
-    va_start(args, format);
-    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
-    va_end(args);
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *currentText = g_logTextView.text ?: @"";
-        NSString *newText = [NSString stringWithFormat:@"%@%@\n", currentText, message];
-        g_logTextView.text = newText;
-        [g_logTextView scrollRangeToVisible:NSMakeRange(newText.length, 0)];
-        NSLog(@"[Extractor] %@", message);
-    });
-}
-
 static NSString* extractTextFromPopup(UIView *popupView) {
     NSMutableArray *allLabels = [NSMutableArray array];
     
@@ -253,11 +247,4 @@ static NSString* extractTextFromPopup(UIView *popupView) {
         return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)];
     }];
 
-    NSMutableString *result = [NSMutableString string];
-    for (UILabel *label in allLabels) {
-        if (label.text && label.text.length > 0) {
-            [result appendFormat:@"%@\n", label.text];
-        }
-    }
-    return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-}
+    NSMut
