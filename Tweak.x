@@ -282,8 +282,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         // 使用 KVC 强行设置私有 Ivar
         [gesture setValue:[NSValue valueWithCGPoint:targetPosition] forKey:@"_locationInView"];
         
-        // 获取 target 和 action
-        id target = [gesture valueForKey:@"_targets"].firstObject; // 更稳健的获取方式
+        // MARK: 错误修正 1
+        // `valueForKey:`返回`id`，需要强制转换为`NSArray`才能使用`.firstObject`
+        id targets = [gesture valueForKey:@"_targets"];
+        if (![targets respondsToSelector:@selector(firstObject)]) {
+             EchoLog(EchoLogError, @"手势识别器的'targets'属性不是一个有效的数组。");
+             [self ECHO_processTianDiPanQueue];
+             return;
+        }
+        id target = [(NSArray *)targets firstObject]; 
+        
         id targetIvar = [self ECHO_getIvarValueSafely:target ivarNameSuffix:@"_target"];
         SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
         
@@ -343,7 +351,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             }
         }
     } else {
-        EchoLog(EchoLogWarning, @"在弹窗中未找到主 UIStackView，将尝试全局 UILabel 提取。");
+        // MARK: 错误修正 2
+        // 笔误 EchoLogWarning -> EchoLogTypeWarning
+        EchoLog(EchoLogTypeWarning, @"在弹窗中未找到主 UIStackView，将尝试全局 UILabel 提取。");
         NSMutableArray *allLabels = [NSMutableArray array];
         FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
         for(UILabel *l in allLabels) { if (l.text.length > 0) [finalTextParts addObject:l.text]; }
@@ -357,17 +367,19 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (NSArray<NSDictionary *> *)ECHO_getTianDiPanClickableTargets {
     @try {
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
-        if (!plateViewClass) { EchoLog(EchoLogError, "定位失败: 找不到视图类"); return nil; }
+        // MARK: 错误修正 3 (批量)
+        // C 字符串 "..." -> OC 字符串 @"..."
+        if (!plateViewClass) { EchoLog(EchoLogError, @"定位失败: 找不到视图类"); return nil; }
 
         NSMutableArray *plateViews = [NSMutableArray array];
         FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
-        if (plateViews.count == 0) { EchoLog(EchoLogError, "定位失败: 找不到视图实例"); return nil; }
+        if (plateViews.count == 0) { EchoLog(EchoLogError, @"定位失败: 找不到视图实例"); return nil; }
 
         UIView *plateView = plateViews.firstObject;
         id diGongDict = [self ECHO_getIvarValueSafely:plateView ivarNameSuffix:@"地宮宮名列"];
         id tianJiangDict = [self ECHO_getIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
 
-        if (!diGongDict || !tianJiangDict) { EchoLog(EchoLogError, "定位失败: 未能获取核心数据字典"); return nil; }
+        if (!diGongDict || !tianJiangDict) { EchoLog(EchoLogError, @"定位失败: 未能获取核心数据字典"); return nil; }
 
         NSMutableArray<NSDictionary *> *targets = [NSMutableArray array];
         
@@ -376,7 +388,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             CALayer *layer = diGongDict[key];
             if (layer && [layer isKindOfClass:[CALayer class]]) {
                 NSString *name = [self ECHO_getStringFromLayer:layer];
-                CGPoint position = [plateView convertPoint:layer.position fromView:layer.superview];
+                // MARK: 错误修正 4 (批量) & 逻辑优化
+                // CALayer没有superview，但我们可以用convertPoint:fromLayer:并传入nil来从窗口坐标系转换，更稳定。
+                // 我们需要的是layer在其父layer中的position，然后将这个点从父layer的坐标系转换到plateView的坐标系。
+                CGPoint pointInSuperlayer = layer.position;
+                CGPoint position = [plateView.layer convertPoint:pointInSuperlayer fromLayer:layer.superlayer];
                 [targets addObject:@{
                     @"name": name,
                     @"type": @"gongWei",
@@ -390,7 +406,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             CALayer *layer = tianJiangDict[key];
             if (layer && [layer isKindOfClass:[CALayer class]]) {
                 NSString *name = [self ECHO_getStringFromLayer:layer];
-                CGPoint position = [plateView convertPoint:layer.position fromView:layer.superview];
+                CGPoint pointInSuperlayer = layer.position;
+                CGPoint position = [plateView.layer convertPoint:pointInSuperlayer fromLayer:layer.superlayer];
                 [targets addObject:@{
                     @"name": name,
                     @"type": @"tianJiang",
@@ -402,7 +419,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return [targets copy];
         
     } @catch (NSException *exception) {
-        EchoLog(EchoLogError, "定位异常: %@", exception.reason);
+        // MARK: 错误修正 5
+        EchoLog(EchoLogError, @"定位异常: %@", exception.reason);
         return nil;
     }
 }
@@ -414,7 +432,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (!object || !ivarNameSuffix) return nil;
     unsigned int ivarCount;
     Ivar *ivars = class_copyIvarList([object class], &ivarCount);
-    if (!ivars) return nil;
+    if (!ivars) { free(ivars); return nil; }
     id value = nil;
     for (unsigned int i = 0; i < ivarCount; i++) {
         const char *name = ivar_getName(ivars[i]);
@@ -447,6 +465,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[EchoTDP] 天地盘独立提取脚本已加载。");
+        NSLog(@"[EchoTDP] 天地盘独立提取脚本 v1.1 (已修复) 已加载。");
     }
 }
