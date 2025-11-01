@@ -3,7 +3,7 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局变量与日志系统 (简化版)
+// 1. 全局变量与辅助函数 (修正版)
 // =========================================================================
 
 static UIView *g_mainControlPanelView = nil;
@@ -11,8 +11,8 @@ static UITextView *g_logTextView = nil;
 
 // 任务控制相关的全局变量
 static BOOL g_isTestRunning = NO;
-static NSMutableArray *g_testWorkQueue = nil;      // 存储要触发的手势
-static NSMutableArray<NSString *> *g_testResults = nil; // 存储提取到的弹窗文本
+static NSMutableArray *g_testWorkQueue = nil;
+static NSMutableArray<NSString *> *g_testResults = nil;
 
 // 一个简化的日志函数
 static void LogMessage(NSString *format, ...) {
@@ -28,10 +28,34 @@ static void LogMessage(NSString *format, ...) {
         NSString *logPrefix = [NSString stringWithFormat:@"[%@] ", [formatter stringFromDate:[NSDate date]]];
         NSString *logLine = [NSString stringWithFormat:@"%@%@\n", logPrefix, message];
         
-        // 在日志视图顶部添加新日志
         g_logTextView.text = [logLine stringByAppendingString:g_logTextView.text];
         NSLog(@"[Echo独立测试脚本] %@", message);
     });
+}
+
+// 获取当前最顶层窗口的辅助函数 (兼容新版iOS)
+static UIWindow* GetFrontmostWindow() {
+    UIWindow *frontmostWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *window in scene.windows) {
+                    if (window.isKeyWindow) {
+                        frontmostWindow = window;
+                        break;
+                    }
+                }
+                if (frontmostWindow) break;
+            }
+        }
+    }
+    if (!frontmostWindow) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        frontmostWindow = [UIApplication sharedApplication].keyWindow;
+        #pragma clang diagnostic pop
+    }
+    return frontmostWindow;
 }
 
 // 递归查找手势的辅助函数
@@ -47,13 +71,14 @@ static void FindGesturesOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// 递归查找弹窗内所有UILabel文本的辅助函数
+// 递归查找弹窗内所有UILabel文本的辅助函数 (已修正)
 static NSString* ExtractAllLabelsFromView(UIView *view) {
     if (!view) return @"[View is nil]";
     NSMutableArray<UILabel *> *labels = [NSMutableArray array];
     
-    // 递归查找所有UILabel
-    void (^findLabels)(UIView *) = ^(UIView *currentView) {
+    // __block 修正了递归Block的编译错误
+    __block void (^findLabels)(UIView *);
+    findLabels = ^(UIView *currentView) {
         if ([currentView isKindOfClass:[UILabel class]]) {
             [labels addObject:(UILabel *)currentView];
         }
@@ -63,7 +88,6 @@ static NSString* ExtractAllLabelsFromView(UIView *view) {
     };
     findLabels(view);
     
-    // 按垂直位置排序
     [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
         if (obj1.frame.origin.y < obj2.frame.origin.y) return NSOrderedAscending;
         if (obj1.frame.origin.y > obj2.frame.origin.y) return NSOrderedDescending;
@@ -87,43 +111,38 @@ static NSString* ExtractAllLabelsFromView(UIView *view) {
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     
-    // 只有当我们的测试在运行时，才执行拦截逻辑
     if (g_isTestRunning) {
         // 使用正确的中文类名进行判断
         Class tianJiangPopupClass = NSClassFromString(@"_TtC12六壬大占18天將摘要視圖");
-        Class tianDiPanPopupClass = NSClassFromString(@"_TtC12六壬大占27天地盤宮位摘要視圖");
 
+        // 移除了未使用的 tianDiPanPopupClass
         if (tianJiangPopupClass && [vcToPresent isKindOfClass:tianJiangPopupClass]) {
             LogMessage(@"成功拦截到 [天将摘要视图] 弹窗！");
             
-            // 确保视图已加载
             [vcToPresent loadViewIfNeeded];
             
-            // 从弹窗视图中提取所有文本
             NSString *extractedText = ExtractAllLabelsFromView(vcToPresent.view);
             [g_testResults addObject:extractedText];
             LogMessage(@"提取内容:\n---\n%@\n---", extractedText);
 
-            // 提取完毕，立刻处理下一个任务
             dispatch_async(dispatch_get_main_queue(), ^{
-                // self 在这里就是 ViewController 的实例
                 [self performSelector:@selector(processTestQueue)];
             });
             
-            // 关键：返回，不让弹窗显示出来
             return;
         }
     }
 
-    // 如果不是我们的目标弹窗，或者测试未运行，就执行原始的弹窗方法
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
 
 // =========================================================================
-// 3. Tweak核心逻辑
+// 3. Tweak核心逻辑 (修正版)
 // =========================================================================
-%hook _TtC12六壬大占14ViewController
+// 关键修正: 为了让Theos预处理器正确识别Swift类, %hook指令我们暂时用回乱码名
+// 这仅仅是给编译器看的"密码"，代码内部我们全部使用正确的中文名
+%hook _TtC12å…­å£¬å¤§å  14ViewController
 
 // ---- 3.1 核心测试流程 ----
 %new
@@ -134,12 +153,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     LogMessage(@"[测试启动] 开始提取天地盘上的'天将'详情...");
     
-    // 1. 初始化状态
     g_isTestRunning = YES;
     g_testWorkQueue = [NSMutableArray array];
     g_testResults = [NSMutableArray array];
 
-    // 2. 定位天地盘视图
     UIView *tianDiPanView = MSHookIvar<UIView *>(self, "天地盤視圖");
     if (!tianDiPanView) {
         LogMessage(@"[致命错误] 找不到'天地盤視圖'实例！测试中止。");
@@ -148,7 +165,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     LogMessage(@"成功定位到'天地盤視圖'。");
 
-    // 3. 定义并查找“天将触摸手势”类
+    // 使用正确的中文类名字符串
     Class tianJiangGestureClass = NSClassFromString(@"_TtCC12六壬大占14ViewController18天將觸摸手勢");
     if (!tianJiangGestureClass) {
         LogMessage(@"[致命错误] 找不到'天将触摸手势'类！请确认类名正确。测试中止。");
@@ -157,7 +174,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     LogMessage(@"成功找到'天将触摸手势'类定义。");
 
-    // 4. 找出所有天将手势，构建任务队列
     FindGesturesOfClassRecursive(tianJiangGestureClass, tianDiPanView, g_testWorkQueue);
 
     if (g_testWorkQueue.count == 0) {
@@ -168,18 +184,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     LogMessage(@"成功定位到 %lu 个'天将'手势，任务队列已创建。", (unsigned long)g_testWorkQueue.count);
 
-    // 5. 启动队列处理
     [self processTestQueue];
 }
 
 // ---- 3.2 队列处理函数 ----
 %new
 - (void)processTestQueue {
-    // 如果队列为空，说明所有任务已完成
     if (g_testWorkQueue.count == 0) {
         LogMessage(@"[测试完成] 所有 %lu 个天将详情已提取完毕！", (unsigned long)g_testResults.count);
         
-        // 可以在这里组合最终结果打印
         NSMutableString *finalReport = [NSMutableString string];
         [finalReport appendString:@"\n\n======= 最终提取结果 =======\n"];
         for (NSString *result in g_testResults) {
@@ -191,20 +204,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
 
-    // 1. 从队列中取出下一个手势
     UIGestureRecognizer *gesture = g_testWorkQueue.firstObject;
     [g_testWorkQueue removeObjectAtIndex:0];
     
-    // 从手势的"位"属性中获取它的身份
     id positionInfo = [gesture valueForKey:@"位"];
     LogMessage(@"[任务 %lu/%lu] 正在触发手势: 天将 - %@", (unsigned long)(g_testResults.count + 1), (unsigned long)(g_testResults.count + g_testWorkQueue.count + 1), positionInfo);
 
-    // 2. 获取手势的目标和动作
-    // UIGestureRecognizer的私有属性_targets存储了target-action信息
     NSArray *targets = [gesture valueForKey:@"_targets"];
     if (!targets || targets.count == 0) {
         LogMessage(@"[错误] 手势没有target！跳过。");
-        [self processTestQueue]; // 继续下一个
+        [self processTestQueue];
         return;
     }
     
@@ -212,17 +221,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     id realTarget = [targetActionPair valueForKey:@"_target"];
     SEL realAction = NSSelectorFromString([targetActionPair valueForKey:@"_action"]);
 
-    // 3. 直接调用 Target-Action，完美模拟用户点击
     if (realTarget && realAction && [realTarget respondsToSelector:realAction]) {
-        // 因为我们拦截了弹窗，所以这个调用会触发Tweak_presentViewController，
-        // 然后在拦截器内部会再次调用 [self processTestQueue] 来处理下一个任务。
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         [realTarget performSelector:realAction withObject:gesture];
         #pragma clang diagnostic pop
     } else {
         LogMessage(@"[错误] 无法触发手势，target或action无效。跳过。");
-        [self processTestQueue]; // 继续下一个
+        [self processTestQueue];
     }
 }
 
@@ -236,11 +242,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
     
-    UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
+    UIWindow *keyWindow = GetFrontmostWindow(); // 使用修正后的辅助函数
+    if (!keyWindow) { return; }
+
     g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds];
     g_mainControlPanelView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.8];
     [keyWindow addSubview:g_mainControlPanelView];
     
+    // ... UI布局代码保持不变 ...
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 50, keyWindow.bounds.size.width - 40, 30)];
     titleLabel.text = @"Echo 独立测试脚本";
     titleLabel.textColor = [UIColor whiteColor];
@@ -277,17 +286,19 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)viewDidLoad {
     %orig;
     
-    // 延迟一点，确保UI都加载完了
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIWindow *keyWindow = GetFrontmostWindow();
+        if (!keyWindow) return;
+
         UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        controlButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
+        controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
         [controlButton setTitle:@"推衍课盘(测试)" forState:UIControlStateNormal];
         controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
         controlButton.backgroundColor = [UIColor systemOrangeColor];
         [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         controlButton.layer.cornerRadius = 18;
         [controlButton addTarget:self action:@selector(createOrShowTestControlPanel) forControlEvents:UIControlEventTouchUpInside];
-        [self.view.window addSubview:controlButton];
+        [keyWindow addSubview:controlButton];
     });
 }
 
