@@ -3373,7 +3373,6 @@ else if (g_s2_isExtractingKeChuanDetail) {
 - (void)processTianDiPanQueue {
     if (g_tianDiPan_workQueue.count == g_tianDiPan_resultsArray.count) {
         LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有节点已参详。");
-        // ... (完成后的报告生成逻辑保持不变) ...
         NSMutableString *finalResult = [NSMutableString string];
         NSArray *tasks = [g_tianDiPan_workQueue copy];
         for (NSUInteger i = 0; i < g_tianDiPan_resultsArray.count; i++) {
@@ -3393,10 +3392,10 @@ else if (g_s2_isExtractingKeChuanDetail) {
         return;
     }
     
-    // ====================== V5 核心逻辑 ======================
     NSUInteger currentIndex = g_tianDiPan_resultsArray.count;
     if (currentIndex >= g_tianDiPan_workQueue.count) {
-        LogError(@"[天地盘详解V5] 错误: 索引不匹配，提前终止。");
+        // ========== 修正点 1 ==========
+        LogMessage(EchoLogError, @"[天地盘详解V5] 错误: 索引不匹配，提前终止。");
         [self processTianDiPanQueue]; return;
     }
     
@@ -3408,22 +3407,17 @@ else if (g_s2_isExtractingKeChuanDetail) {
     SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
     
     if ([self respondsToSelector:selector]) {
-        // 1. 创建我们的伪造手势对象
         EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
-        
-        // 2. 将我们想点击的坐标“喂”给它
         fakeGesture.fakeLocation = targetPosition;
-        
-        // 3. 将这个伪造的手势作为 Sender 传递，绝对不会闪退！
         SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:fakeGesture]);
     } else {
-        LogError(@"[天地盘详解V5] 错误: 无法触发点击。");
+        // ========== 修正点 2 ==========
+        LogMessage(EchoLogError, @"[天地盘详解V5] 错误: 无法触发点击。");
         [g_tianDiPan_resultsArray addObject:@"[触发失败]"];
         dispatch_async(dispatch_get_main_queue(), ^{
             [self processTianDiPanQueue];
         });
     }
-    // =========================================================
 }
 
 %new
@@ -3443,14 +3437,16 @@ else if (g_s2_isExtractingKeChuanDetail) {
     
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
-        LogError(@"[天地盘详解V5] 错误: 找不到天地盘视图类。");
+        // ========== 修正点 3 ==========
+        LogMessage(EchoLogError, @"[天地盘详解V5] 错误: 找不到天地盘视图类。");
         if(completion) completion(@"[错误: 找不到视图类]"); [self setInteractionBlocked:NO]; return;
     }
     
     NSMutableArray *plateViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) {
-        LogError(@"[天地盘详解V5] 错误: 找不到天地盘视图实例。");
+        // ========== 修正点 4 ==========
+        LogMessage(EchoLogError, @"[天地盘详解V5] 错误: 找不到天地盘视图实例。");
         if(completion) completion(@"[错误: 找不到视图实例]"); [self setInteractionBlocked:NO]; return;
     }
     UIView *plateView = plateViews.firstObject;
@@ -3459,25 +3455,18 @@ else if (g_s2_isExtractingKeChuanDetail) {
     id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
     
     if (![tianShenDict isKindOfClass:[NSDictionary class]] || ![tianJiangDict isKindOfClass:[NSDictionary class]]) {
-        LogError(@"[天地盘详解V5] 错误: 未能获取天神/天将字典。");
+        // ========== 修正点 5 ==========
+        LogMessage(EchoLogError, @"[天地盘详解V5] 错误: 未能获取天神/天将字典。");
         if(completion) completion(@"[错误: 未获取核心数据]"); [self setInteractionBlocked:NO]; return;
     }
 
-    // ====================== V5 核心逻辑 ======================
-    // 遍历字典，获取 CALayer 和它的坐标 (position)
-    
     void (^buildQueue)(NSDictionary *, NSString *) = ^(NSDictionary *dict, NSString *type) {
         [dict enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
             if ([key isKindOfClass:[NSString class]] && [obj isKindOfClass:[CALayer class]]) {
                 NSString *name = (NSString *)key;
                 CALayer *layer = (CALayer *)obj;
-                
-                // CALayer 的 position 是其中心点相对于父视图的坐标
                 CGPoint position = layer.position;
-                
                 NSString *title = [NSString stringWithFormat:@"%@(%@)", type, name];
-                
-                // 将坐标和标题存入任务队列
                 [g_tianDiPan_workQueue addObject:[@{
                     @"targetPosition": [NSValue valueWithCGPoint:position],
                     @"title": title
@@ -3488,7 +3477,6 @@ else if (g_s2_isExtractingKeChuanDetail) {
 
     buildQueue(tianShenDict, @"天盘神");
     buildQueue(tianJiangDict, @"天将");
-    // =========================================================
 
     if (g_tianDiPan_workQueue.count == 0) {
         LogMessage(EchoLogTypeWarning, @"[天地盘详解V5] 任务队列为空。");
@@ -4920,6 +4908,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
