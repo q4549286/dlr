@@ -10,13 +10,13 @@ static NSMutableArray<CALayer *> *g_tianDiPanWorkQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPanTitleQueue = nil;
 static NSMutableDictionary<NSString *, NSString *> *g_tianDiPanResults = nil;
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static UIView *g_test_plateView = nil; // 【修复】新增一个全局变量来存储天地盘视图实例
+static UIView *g_test_plateView = nil;
 
 // =========================================================================
 // 2. 核心辅助类与函数
 // =========================================================================
 
-// 伪手势识别器
+// 【修复】伪手势类，无需修改
 @interface EchoFakeTapGestureRecognizer : UITapGestureRecognizer
 @property (nonatomic, weak) UIView *targetView;
 @property (nonatomic, assign) CGPoint mockedLocationInTargetView;
@@ -129,7 +129,7 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
 // 启动提取流程
 %new
 - (void)startExtraction_TianDiPanDetails {
-    if (g_isExtractingTianDiPanDetail) { NSLog(@"[EchoTest] 提取任务正在进行中，请稍候。"); return; }
+    if (g_isExtractingTianDiPanDetail) { NSLog(@"[EchoTest] 提取任务正在进行中。"); return; }
     NSLog(@"[EchoTest] 任务启动：开始深度推衍“天地盘”...");
     
     g_isExtractingTianDiPanDetail = YES;
@@ -144,14 +144,13 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
     FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) { NSLog(@"[EchoTest] 错误: 找不到天地盘视图实例。"); g_isExtractingTianDiPanDetail = NO; return; }
     
-    // 【修复】将找到的 plateView 存入全局变量
     g_test_plateView = plateViews.firstObject;
 
     id diGongDict = GetIvarValueSafely(g_test_plateView, @"地宮宮名列");
     id tianShenDict = GetIvarValueSafely(g_test_plateView, @"天神宮名列");
     id tianJiangDict = GetIvarValueSafely(g_test_plateView, @"天將宮名列");
 
-    if (!diGongDict || !tianShenDict || !tianJiangDict) { NSLog(@"[EchoTest] 错误: 无法获取一个或多个宫名列表。"); g_isExtractingTianDiPanDetail = NO; g_test_plateView = nil; return; }
+    if (!diGongDict || !tianShenDict || !tianJiangDict) { NSLog(@"[EchoTest] 错误: 无法获取宫名列表。"); g_isExtractingTianDiPanDetail = NO; g_test_plateView = nil; return; }
 
     void (^addLayersToQueue)(NSDictionary *, NSString *) = ^(NSDictionary *layerDict, NSString *type) {
         for (NSString *key in layerDict) {
@@ -186,7 +185,7 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
         g_isExtractingTianDiPanDetail = NO;
         g_tianDiPanWorkQueue = nil;
         g_tianDiPanTitleQueue = nil;
-        g_test_plateView = nil; // 【修复】清理全局变量
+        g_test_plateView = nil;
         
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"测试完成" message:[NSString stringWithFormat:@"已成功提取 %lu 条天地盘详情，请检查Xcode或Console日志。", (unsigned long)g_tianDiPanResults.count] preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
@@ -199,31 +198,37 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
     CALayer *targetLayer = g_tianDiPanWorkQueue.firstObject;
     [g_tianDiPanWorkQueue removeObjectAtIndex:0];
     
-    // 【修复】直接使用全局变量，不再从 delegate 推断
     UIView *plateView = g_test_plateView;
-    if (!plateView) {
-        NSLog(@"[EchoTest] 严重错误: 全局天地盘视图丢失，终止任务。");
-        g_isExtractingTianDiPanDetail = NO;
-        // ... 在此可以添加更多清理代码 ...
-        return;
-    }
+    if (!plateView) { NSLog(@"[EchoTest] 严重错误: 全局天地盘视图丢失。"); g_isExtractingTianDiPanDetail = NO; return; }
     
     CGPoint targetPosition = targetLayer.position;
 
-    EchoFakeTapGestureRecognizer *fakeGesture = [[EchoFakeTapGestureRecognizer alloc] init];
+    // ======================【终极闪退修复核心】======================
+    // 1. 创建一个使用标准初始化方法的伪手势
+    EchoFakeTapGestureRecognizer *fakeGesture = [[EchoFakeTapGestureRecognizer alloc] initWithTarget:nil action:NULL];
     fakeGesture.targetView = plateView;
     fakeGesture.mockedLocationInTargetView = targetPosition;
+
+    // 2. (关键) 短暂地将它添加到视图上，使其完成内部状态的初始化
+    [plateView addGestureRecognizer:fakeGesture];
+    // ===============================================================
 
     SEL selector = NSSelectorFromString(@"顯示天地盤詳情WithSender:");
     if ([self respondsToSelector:selector]) {
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        // 3. 调用目标方法，此时 fakeGesture 是一个“状态合法”的对象
         [self performSelector:selector withObject:fakeGesture];
         #pragma clang diagnostic pop
     } else {
         NSLog(@"[EchoTest] 错误: 找不到目标方法 '顯示天地盤詳情WithSender:'");
         [self processTianDiPanDetailsQueue];
     }
+    
+    // ======================【清理】======================
+    // 4. (关键) 无论调用成功与否，立即从视图中移除伪手势，避免任何副作用
+    [plateView removeGestureRecognizer:fakeGesture];
+    // ===============================================================
 }
 
 %end
@@ -240,6 +245,6 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
             (IMP)&Tweak_presentViewController,
             (IMP *)&Original_presentViewController
         );
-        NSLog(@"[EchoTest] 天地盘详情提取测试脚本已加载 (v1.3 已修正编译错误)。");
+        NSLog(@"[EchoTest] 天地盘详情提取测试脚本已加载 (v1.4 闪退终极修复)。");
     }
 }
