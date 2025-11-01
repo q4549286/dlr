@@ -18,7 +18,29 @@ static SEL g_real_gesture_action = NULL;
 // =========================================================================
 // 2. 核心辅助类与函数
 // =========================================================================
-@interface EchoFakeTapGestureRecognizer : UITapGestureRecognizer @end @implementation EchoFakeTapGestureRecognizer @end
+
+// ======================【编译错误修复核心】======================
+//
+//        ↓↓↓  恢复了被遗漏的属性和方法实现  ↓↓↓
+//
+@interface EchoFakeTapGestureRecognizer : UITapGestureRecognizer
+@property (nonatomic, weak) UIView *targetView;
+@property (nonatomic, assign) CGPoint mockedLocationInTargetView;
+@end
+
+@implementation EchoFakeTapGestureRecognizer
+- (CGPoint)locationInView:(UIView *)view {
+    if (view == self.targetView) { 
+        return self.mockedLocationInTargetView; 
+    }
+    return [super locationInView:view];
+}
+@end
+//
+//        ↑↑↑  恢复了被遗漏的属性和方法实现  ↑↑↑
+//
+// ===============================================================
+
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) { if (!object || !ivarNameSuffix) return nil; unsigned int ivarCount; Ivar *ivars = class_copyIvarList([object class], &ivarCount); if (!ivars) { free(ivars); return nil; } id value = nil; for (unsigned int i = 0; i < ivarCount; i++) { Ivar ivar = ivars[i]; const char *name = ivar_getName(ivar); if (name) { NSString *ivarName = [NSString stringWithUTF8String:name]; if ([ivarName hasSuffix:ivarNameSuffix]) { value = object_getIvar(object, ivar); break; } } } free(ivars); return value; }
 static NSString* extractTextFromGenericPopupView(UIView *popupView) { NSMutableArray<UILabel *> *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], popupView, allLabels); [allLabels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }]; NSMutableString *result = [NSMutableString string]; for (UILabel *label in allLabels) { if (label.text && label.text.length > 0) { [result appendFormat:@"%@\n", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; } } return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; }
@@ -77,25 +99,15 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
     }
     if (!realTapGesture) { g_isExtractingTianDiPanDetail = NO; return; }
     
-    // ======================【KVC崩溃终极修复】======================
     id targets = [realTapGesture valueForKey:@"_targets"];
     if ([targets isKindOfClass:[NSArray class]] && [targets count] > 0) {
-        id targetProxy = [targets firstObject]; // 这是 UIGestureRecognizerTarget 对象
-        
-        // target 似乎可以用KVC安全获取
+        id targetProxy = [targets firstObject];
         g_real_gesture_target = [targetProxy valueForKey:@"_target"]; 
-        
-        // action 不能用KVC，我们直接读取实例变量
         Ivar actionIvar = class_getInstanceVariable([targetProxy class], "_action");
         if (actionIvar) {
-            // SEL 不是对象，它是一个指针。我们需要直接读取这个指针的值。
-            // object_getIvar 返回的是 id，对于非对象类型不适用。
-            // 正确的方式是获取 Ivar 的内存偏移量，然后从对象指针开始计算。
-            // 这是一个不安全但必要的操作。
             g_real_gesture_action = (*(SEL*)((__bridge void*)targetProxy + ivar_getOffset(actionIvar)));
         }
     }
-    // ===============================================================
 
     if (!g_real_gesture_target || !g_real_gesture_action) { NSLog(@"[EchoTest] 错误: 无法从真实手势中获取target或action。"); g_isExtractingTianDiPanDetail = NO; return; }
 
@@ -111,6 +123,7 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
                 fakeGesture.targetView = g_test_plateView;
                 fakeGesture.mockedLocationInTargetView = layer.position;
                 [g_test_plateView addGestureRecognizer:fakeGesture];
+
                 [g_tianDiPanGestureQueue addObject:fakeGesture];
                 [g_tianDiPanTitleQueue addObject:[NSString stringWithFormat:@"%@ - %@", type, key]];
             }
@@ -162,6 +175,6 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[EchoTest] 天地盘详情提取测试脚本已加载 (v2.2 运行时修正版)。");
+        NSLog(@"[EchoTest] 天地盘详情提取测试脚本已加载 (v2.3 编译修复版)。");
     }
 }
