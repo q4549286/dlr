@@ -32,6 +32,7 @@ static const NSInteger kButtonTag_ClosePanel        = 998;
 static const NSInteger kButtonTag_SendLastReportToAI = 997;
 static const NSInteger kButtonTag_AIPromptToggle    = 996;
 
+
 // Colors
 #define ECHO_COLOR_MAIN_BLUE        [UIColor colorWithRed:0.17 green:0.31 blue:0.51 alpha:1.0] // #2B4F81
 #define ECHO_COLOR_MAIN_TEAL        [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0] // #3A7D7C
@@ -78,7 +79,6 @@ static BOOL g_shouldExtractBenMing = YES; // <<<<<<<<<<<< 新增本命开关状�
 static BOOL g_shouldExtractAuxiliarySystems = NO; // <<<<<< 新增辅助系统开关，默认关闭
 static BOOL g_isExtractingTianDiPanDetail = NO;
 static NSMutableArray<NSMutableDictionary *> *g_tianDiPan_workQueue = nil;
-static BOOL g_isSpyingOnSender = YES; // 开启窃听模式的开关
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static void (^g_tianDiPan_completion_handler)(NSString *result) = nil;
 
@@ -2955,7 +2955,6 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static void (*Original_顯示天地盤觸摸)(id, SEL, id);
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     if (g_isExtractingTimeInfo) {
         UIViewController *contentVC = nil;
@@ -4876,84 +4875,15 @@ return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewl
     });
 }
 %end
-// =========================================================
-// ↓↓↓ 窃听器 HOOK ↓↓↓
-// =========================================================
-static void Tweak_顯示天地盤觸摸(id self, SEL _cmd, id sender) {
-    // 如果窃听开关打开，就打印所有信息
-    if (g_isSpyingOnSender) {
-        NSLog(@"[Echo Spy] >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
-        NSLog(@"[Echo Spy] Method '顯示天地盤觸摸WithSender:' was called!");
-        NSLog(@"[Echo Spy] Sender Class: %@", NSStringFromClass([sender class]));
-        NSLog(@"[Echo Spy] Sender Description: %@", [sender description]);
 
-        // 尝试挖掘更多信息
-        if ([sender isKindOfClass:[UIGestureRecognizer class]]) {
-            UIGestureRecognizer *gesture = (UIGestureRecognizer *)sender;
-            NSLog(@"[Echo Spy] It's a UIGestureRecognizer!");
-            NSLog(@"[Echo Spy] Gesture State: %ld", (long)gesture.state);
-            if ([gesture respondsToSelector:@selector(locationInView:)]) {
-                 CGPoint location = [gesture locationInView:gesture.view];
-                 NSLog(@"[Echo Spy] Gesture Location in its view: %@", NSStringFromCGPoint(location));
-            }
-        }
-        
-        // 使用运行时获取所有属性
-        unsigned int outCount, i;
-        objc_property_t *properties = class_copyPropertyList([sender class], &outCount);
-        if (outCount > 0) {
-            NSLog(@"[Echo Spy] Sender Properties:");
-            for(i = 0; i < outCount; i++) {
-                objc_property_t property = properties[i];
-                const char *propName = property_getName(property);
-                if(propName) {
-                    NSString *propertyName = [NSString stringWithUTF8String:propName];
-                    @try {
-                        id value = [sender valueForKey:propertyName];
-                        NSLog(@"[Echo Spy]   - %@: %@", propertyName, value);
-                    } @catch (NSException *exception) {
-                        NSLog(@"[Echo Spy]   - %@: (Could not get value)", propertyName);
-                    }
-                }
-            }
-            free(properties);
-        }
-        NSLog(@"[Echo Spy] <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
-    }
-
-    // 调用原始方法，确保App正常运行
-    Original_顯示天地盤觸摸(self, _cmd, sender);
-}
 
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        
-        // ====================== 关键修正 ======================
-        // 使用你指出的、正确的 Objective-C 类名
-
-        // 修正窃听器Hook的目标类 (针对 ViewController)
-        Class vcClass = NSClassFromString(@"六壬大占.ViewController");
-        if (vcClass) {
-            // 如果要重新尝试Hook ViewController 的方法，就放在这里
-            // 例如： MSHookMessageEx(vcClass, @selector(顯示天地盤觸摸WithSender:), ...);
-        } else {
-            NSLog(@"[Echo Tweak] CRITICAL ERROR: Could not find class '六壬大占.ViewController'");
-        }
-
-        // 修正窃听器Hook的目标类 (针对 天地盘视图类)
-        // 这个类名也可能需要修正
-        Class plateViewClass = NSClassFromString(@"六壬大占.天地盘视图类");
-        if (plateViewClass) {
-            MSHookMessageEx(plateViewClass, @selector(touchesBegan:withEvent:), (IMP)&Tweak_touchesBegan, (IMP *)&Original_touchesBegan);
-        } else {
-             NSLog(@"[Echo Spy V2] Error: Could not find class '六壬大占.天地盘视图类'");
-        }
-        // =======================================================
-        
-        NSLog(@"[Echo推衍课盘] Hooking complete.");
+        NSLog(@"[Echo推衍课盘] v19.0 已加载。");
     }
 }
+
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
     if (!rootView) return @"[错误: 根视图为空]";
     
@@ -4989,7 +4919,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-
 
 
 
