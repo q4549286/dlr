@@ -38,48 +38,74 @@ static void LogToScreen(NSString *format, ...) {
 }
 
 // =========================================================================
-// 3. 核心Hook (使用正确的类名)
+// 3. 核心Hook (回归最稳妥的 UIViewController Hook)
 // =========================================================================
 
 @interface UIViewController (EchoDebugger)
 - (void)startDebugTest;
 @end
 
-// 【【【【【【 最终核心修正 】】】】】】
-// Theos/Logos 使用 . 来连接 Bundle 和 类名
-%hook 六壬大占.ViewController
+%hook UIViewController
 
 - (void)viewDidLoad {
     %orig;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if ([self.view.window viewWithTag:666777]) return;
-        UIButton *debuggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        debuggerButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
-        debuggerButton.tag = 666777;
-        [debuggerButton setTitle:@"Hook调试" forState:UIControlStateNormal];
-        debuggerButton.backgroundColor = [UIColor systemOrangeColor];
-        [debuggerButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        debuggerButton.layer.cornerRadius = 18;
-        [debuggerButton addTarget:self action:@selector(startDebugTest) forControlEvents:UIControlEventTouchUpInside];
-        [self.view.window addSubview:debuggerButton];
-    });
+    
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if ([self.view.window viewWithTag:666777]) return;
+            UIButton *debuggerButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            debuggerButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
+            debuggerButton.tag = 666777;
+            [debuggerButton setTitle:@"Hook调试" forState:UIControlStateNormal];
+            debuggerButton.backgroundColor = [UIColor systemOrangeColor];
+            [debuggerButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            debuggerButton.layer.cornerRadius = 18;
+            [debuggerButton addTarget:self action:@selector(startDebugTest) forControlEvents:UIControlEventTouchUpInside];
+            [self.view.window addSubview:debuggerButton];
+        });
+    }
 }
 
-- (void)顯示天地盤觸摸WithSender:(UIGestureRecognizer *)sender {
-    LogToScreen(@"\n--- HOOK TRIGGERED: 顯示天地盤觸摸WithSender: ---");
-    if (g_isPerformingFakeClick) { LogToScreen(@"[INFO] Invoked by Tweak."); } 
-    else { LogToScreen(@"[INFO] Invoked by user tap."); }
-    LogToScreen(@"[PARAM] Sender Class: %@", NSStringFromClass([sender class]));
-    @try {
-        CGPoint location = [sender locationInView:self.view];
-        LogToScreen(@"[PARAM] Location in vc.view: {%.1f, %.1f}", location.x, location.y);
-    } @catch (NSException *exception) {
-        LogToScreen(@"[ERROR] Exception while getting location: %@", exception.reason);
+// Hook 一个通用的方法，然后在内部判断
+- (void)viewDidAppear:(BOOL)animated {
+    %orig(animated);
+    
+    // 动态添加一个方法，来处理我们的目标逻辑
+    // 这样可以避免直接在通用的 viewDidAppear 里写 hook 逻辑
+    SEL targetSelector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    
+    if (targetClass && [self isKindOfClass:targetClass] && [self respondsToSelector:targetSelector]) {
+        // 使用 Method Swizzling 来替换实现
+        // 这是一个一次性的操作
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            Method originalMethod = class_getInstanceMethod(targetClass, targetSelector);
+            IMP originalImp = method_getImplementation(originalMethod);
+
+            IMP swizzledImp = imp_implementationWithBlock(^(id _self, UIGestureRecognizer *sender){
+                LogToScreen(@"\n--- SWIZZLE TRIGGERED: 顯示天地盤觸摸WithSender: ---");
+                if (g_isPerformingFakeClick) { LogToScreen(@"[INFO] Invoked by Tweak."); } 
+                else { LogToScreen(@"[INFO] Invoked by user tap."); }
+                LogToScreen(@"[PARAM] Sender Class: %@", NSStringFromClass([sender class]));
+                @try {
+                    CGPoint location = [sender locationInView:[_self view]];
+                    LogToScreen(@"[PARAM] Location in vc.view: {%.1f, %.1f}", location.x, location.y);
+                } @catch (NSException *exception) {
+                    LogToScreen(@"[ERROR] Exception while getting location: %@", exception.reason);
+                }
+                LogToScreen(@"[EXEC] Calling original implementation...");
+                ((void (*)(id, SEL, id))originalImp)(_self, targetSelector, sender);
+                LogToScreen(@"[EXEC] Original implementation returned.");
+            });
+            
+            method_setImplementation(originalMethod, swizzledImp);
+            NSLog(@"[Debugger] Swizzled 顯示天地盤觸摸WithSender: successfully.");
+        });
     }
-    LogToScreen(@"[EXEC] Calling %orig...");
-    %orig(sender); 
-    LogToScreen(@"[EXEC] %orig returned.");
 }
+
 
 %new
 - (void)startDebugTest {
@@ -147,6 +173,6 @@ static void LogToScreen(NSString *format, ...) {
 // =========================================================================
 @ctor {
     @autoreleasepool {
-        NSLog(@"[EchoUltimateHookDebugger] Final ClassName Corrected Version Loaded.");
+        NSLog(@"[EchoUltimateHookDebugger] Final Fallback Version Loaded.");
     }
 }
