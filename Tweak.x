@@ -1,18 +1,19 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#import <objc/message.h> // 【新】引入消息发送头文件
 #import <substrate.h>
 
 // =========================================================================
 // 1. 全局状态管理
 // =========================================================================
 static BOOL g_isExtractingTianDiPanDetail = NO;
-static NSMutableArray<UIGestureRecognizer *> *g_tianDiPanGestureQueue = nil; // 【新】队列存储我们创建的、状态完整的手势
+static NSMutableArray<UIGestureRecognizer *> *g_tianDiPanGestureQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPanTitleQueue = nil;
 static NSMutableDictionary<NSString *, NSString *> *g_tianDiPanResults = nil;
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static UIView *g_test_plateView = nil; // 存储天地盘视图实例
-static id g_real_gesture_target = nil; // 存储真实的目标
-static SEL g_real_gesture_action = NULL; // 存储真实的方法
+static UIView *g_test_plateView = nil;
+static id g_real_gesture_target = nil;
+static SEL g_real_gesture_action = NULL;
 
 // =========================================================================
 // 2. 核心辅助类与函数
@@ -104,11 +105,10 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
         for (NSString *key in layerDict) {
             CALayer *layer = layerDict[key];
             if (layer && [layer isKindOfClass:[CALayer class]]) {
-                // 为每个Layer创建一个“合法”的伪手势
                 EchoFakeTapGestureRecognizer *fakeGesture = [[EchoFakeTapGestureRecognizer alloc] initWithTarget:g_real_gesture_target action:g_real_gesture_action];
                 fakeGesture.targetView = g_test_plateView;
                 fakeGesture.mockedLocationInTargetView = layer.position;
-                [g_test_plateView addGestureRecognizer:fakeGesture]; // 添加到视图使其“激活”
+                [g_test_plateView addGestureRecognizer:fakeGesture];
 
                 [g_tianDiPanGestureQueue addObject:fakeGesture];
                 [g_tianDiPanTitleQueue addObject:[NSString stringWithFormat:@"%@ - %@", type, key]];
@@ -132,13 +132,7 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
         for (NSString *key in sortedKeys) { NSLog(@"\n--- %@ ---\n%@", key, g_tianDiPanResults[key]); }
         NSLog(@"[EchoTest] =======================================");
 
-        // 清理我们添加的所有手势
-        for(UIGestureRecognizer *gesture in g_test_plateView.gestureRecognizers) {
-            if ([gesture isKindOfClass:[EchoFakeTapGestureRecognizer class]]) {
-                [g_test_plateView removeGestureRecognizer:gesture];
-            }
-        }
-        // 恢复原始手势
+        for(UIGestureRecognizer *gesture in g_test_plateView.gestureRecognizers) { if ([gesture isKindOfClass:[EchoFakeTapGestureRecognizer class]]) { [g_test_plateView removeGestureRecognizer:gesture]; } }
         UITapGestureRecognizer *realTapGesture = nil;
         for (UIGestureRecognizer *gesture in g_test_plateView.gestureRecognizers) { if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) { realTapGesture = (UITapGestureRecognizer *)gesture; break; } }
         if (realTapGesture) realTapGesture.enabled = YES;
@@ -154,18 +148,24 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
     UIGestureRecognizer *targetGesture = g_tianDiPanGestureQueue.firstObject;
     [g_tianDiPanGestureQueue removeObjectAtIndex:0];
     
-    // ======================【终极闪退修复核心】======================
+    // ======================【终极闪退修复核心 V2.0】======================
     //
-    // 1. (关键) 使用KVC强制设置手势状态为 Ended，模拟一次完整的点击
+    // 1. 强制设置手势状态为 Ended，模拟一次完整的点击结束
     //
-    [targetGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
+    @try {
+        [targetGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
+    } @catch (NSException *exception) {
+        NSLog(@"[EchoTest] KVC设置state失败: %@。这可能不是闪退的原因。", exception.reason);
+    }
     //
-    // 2. 调用手势绑定的真实 Target 和 Action
+    // 2. 【关键修复】使用 objc_msgSend 绕过编译检查，直接调用方法
     //
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-    [g_real_gesture_target performSelector:g_real_gesture_action withObject:targetGesture];
-    #pragma clang diagnostic pop
+    if (g_real_gesture_target && g_real_gesture_action) {
+        // 定义一个函数指针，其类型与目标方法 (void)method:(id)sender 完全匹配
+        void (*action_msgSend)(id, SEL, id) = (void (*)(id, SEL, id))objc_msgSend;
+        // 直接调用
+        action_msgSend(g_real_gesture_target, g_real_gesture_action, targetGesture);
+    }
     //
     // ===============================================================
 }
@@ -175,6 +175,6 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[EchoTest] 天地盘详情提取测试脚本已加载 (v1.9 状态模拟终极版)。");
+        NSLog(@"[EchoTest] 天地盘详情提取测试脚本已加载 (v2.0 运行时直接调用版)。");
     }
 }
