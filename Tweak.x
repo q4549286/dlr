@@ -3,7 +3,7 @@
 #import <substrate.h>
 
 // =========================================================================
-//  Echo Tweak v30.3 - API Runtime Hook (viewDidAppear Fix)
+//  Echo Tweak v30.4 - Hybrid Hook Final
 // =========================================================================
 
 #pragma mark - Global UI & State
@@ -31,7 +31,7 @@ static UIWindow* GetFrontmostWindow() {
     return frontmostWindow;
 }
 
-#pragma mark - New Method Implementations (as C Functions)
+#pragma mark - API Extraction Logic (as a C function)
 
 // The extraction logic itself is correct and remains unchanged.
 static void runUltimateAPIExtraction_IMP(id self, SEL _cmd) {
@@ -41,13 +41,13 @@ static void runUltimateAPIExtraction_IMP(id self, SEL _cmd) {
     id kePanModel = ivar ? object_getIvar(self, ivar) : nil;
 
     if (!kePanModel) {
-        NSLog(@"[Echo API] FATAL: Could not get 'kePanModel' instance!");
+        NSLog(@"[Echo API] FATAL: Could not get 'kePanModel' instance via object_getIvar!");
         return;
     }
     NSLog(@"[Echo API] Successfully accessed the core data model: %@", kePanModel);
 
     NSMutableString *report = [NSMutableString string];
-    [report appendString:@"----- 标准化课盘 (API直取 v1.3) -----\n\n"];
+    [report appendString:@"----- 标准化课盘 (API直取 v1.4) -----\n\n"];
     
     @try {
         id siZhu = [kePanModel valueForKey:@"å››æŸ±"];
@@ -82,65 +82,54 @@ static void runUltimateAPIExtraction_IMP(id self, SEL _cmd) {
     NSLog(@"[Echo API] Extraction complete. Report copied to clipboard.");
 }
 
-// A pointer to store the original implementation of viewDidAppear:
-static void (*Original_viewDidAppear)(id, SEL, BOOL);
 
-// Our new implementation for viewDidAppear:, which is called EVERY time the view shows up.
-static void New_viewDidAppear(id self, SEL _cmd, BOOL animated) {
-    // Call the original viewDidAppear first
-    Original_viewDidAppear(self, _cmd, animated);
+#pragma mark - Tweak Hooking Logic
+
+%hook UIViewController
+
+// We hook the generic UIViewController's viewDidAppear:
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+
+    // Define the mangled name of our target ViewController
+    NSString *targetClassName = @"_TtC12å…­å£¬å¤§å  14ViewController";
     
-    // Use a small delay to ensure the UI is settled
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *keyWindow = GetFrontmostWindow();
-        if (!keyWindow) return;
+    // Check if the current view controller is the one we want to modify
+    if ([NSStringFromClass([self class]) isEqualToString:targetClassName]) {
 
-        // Check if our button already exists
-        UIView *existingButton = [keyWindow viewWithTag:kEchoControlButtonTag];
-        if (existingButton) {
-            // If it exists, just bring it to the front to make sure it's visible
-            [keyWindow bringSubviewToFront:existingButton];
-        } else {
-            // If it doesn't exist, create and add it
-            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 180, 45, 170, 36);
-            controlButton.tag = kEchoControlButtonTag;
-            [controlButton setTitle:@"推衍课盘 (API)" forState:UIControlStateNormal];
-            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
-            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            controlButton.layer.cornerRadius = 18;
-            [controlButton addTarget:self action:@selector(runUltimateAPIExtraction) forControlEvents:UIControlEventTouchUpInside];
-            [keyWindow addSubview:controlButton];
-        }
-    });
-}
-
-
-#pragma mark - Tweak Constructor
-
-%ctor {
-    @autoreleasepool {
-        NSLog(@"[Echo API] Tweak constructor firing (v30.3)...");
-
-        const char *vcClassNameMangled = "_TtC12å…­å£¬å¤§å  14ViewController";
-        Class vcClass = objc_getClass(vcClassNameMangled);
-
-        if (vcClass) {
-            NSLog(@"[Echo API] Successfully found ViewController class at runtime.");
-
-            // Add our new method to the class at RUNTIME
+        // --- Method Injection (runs only once) ---
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            NSLog(@"[Echo Hybrid] Target ViewController appeared for the first time. Injecting method...");
+            Class vcClass = [self class];
             SEL newMethodSelector = @selector(runUltimateAPIExtraction);
             class_addMethod(vcClass, newMethodSelector, (IMP)runUltimateAPIExtraction_IMP, "v@:");
-            NSLog(@"[Echo API] Injected new method -runUltimateAPIExtraction.");
+            NSLog(@"[Echo Hybrid] Injected -runUltimateAPIExtraction into %@", targetClassName);
+        });
 
-            // Hook viewDidAppear: at RUNTIME using MSHookMessageEx
-            SEL viewDidAppearSelector = @selector(viewDidAppear:);
-            MSHookMessageEx(vcClass, viewDidAppearSelector, (IMP)&New_viewDidAppear, (IMP *)&Original_viewDidAppear);
-            NSLog(@"[Echo API] Hooked viewDidAppear: method.");
+        // --- Button Creation/Update (runs every time) ---
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindow *keyWindow = GetFrontmostWindow();
+            if (!keyWindow) return;
 
-        } else {
-            NSLog(@"[Echo API] FATAL: Could not find ViewController class at runtime. Tweak will not activate.");
-        }
+            UIView *existingButton = [keyWindow viewWithTag:kEchoControlButtonTag];
+            if (existingButton) {
+                [keyWindow bringSubviewToFront:existingButton];
+            } else {
+                NSLog(@"[Echo Hybrid] Button not found, creating new one.");
+                UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
+                controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 180, 45, 170, 36);
+                controlButton.tag = kEchoControlButtonTag;
+                [controlButton setTitle:@"推衍课盘 (API)" forState:UIControlStateNormal];
+                controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+                controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
+                [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+                controlButton.layer.cornerRadius = 18;
+                [controlButton addTarget:self action:@selector(runUltimateAPIExtraction) forControlEvents:UIControlEventTouchUpInside];
+                [keyWindow addSubview:controlButton];
+            }
+        });
     }
 }
+
+%end
