@@ -3,7 +3,7 @@
 #import <substrate.h>
 
 // =========================================================================
-//  Echo Tweak v30.2 - API Runtime Hook Final
+//  Echo Tweak v30.3 - API Runtime Hook (viewDidAppear Fix)
 // =========================================================================
 
 #pragma mark - Global UI & State
@@ -33,26 +33,22 @@ static UIWindow* GetFrontmostWindow() {
 
 #pragma mark - New Method Implementations (as C Functions)
 
-// This is the implementation for our new, powerful extraction method.
+// The extraction logic itself is correct and remains unchanged.
 static void runUltimateAPIExtraction_IMP(id self, SEL _cmd) {
     NSLog(@"[Echo API] Extraction initiated.");
     
-    // 1. Get the Core Data Model instance using standard ObjC runtime functions.
-    // THIS IS THE CORRECTED PART.
     Ivar ivar = class_getInstanceVariable([self class], "ç¸½é«”æ¼”ç¤ºå™¨");
     id kePanModel = ivar ? object_getIvar(self, ivar) : nil;
 
     if (!kePanModel) {
-        NSLog(@"[Echo API] FATAL: Could not get 'kePanModel' instance via object_getIvar!");
+        NSLog(@"[Echo API] FATAL: Could not get 'kePanModel' instance!");
         return;
     }
     NSLog(@"[Echo API] Successfully accessed the core data model: %@", kePanModel);
 
-    // 2. Prepare the report string.
     NSMutableString *report = [NSMutableString string];
-    [report appendString:@"----- 标准化课盘 (API直取 v1.2) -----\n\n"];
+    [report appendString:@"----- 标准化课盘 (API直取 v1.3) -----\n\n"];
     
-    // 3. Extract data using Key-Value Coding (valueForKey:).
     @try {
         id siZhu = [kePanModel valueForKey:@"å››æŸ±"];
         id xun = [kePanModel valueForKey:@"æ—¬"];
@@ -80,40 +76,43 @@ static void runUltimateAPIExtraction_IMP(id self, SEL _cmd) {
         [report appendFormat:@"\n\n--- EXTRACTION ERROR ---\n%@", exception];
     }
     
-    // 4. Finalize and output
     NSString *finalReport = [report stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    
     g_lastGeneratedReport = [finalReport copy];
     [UIPasteboard generalPasteboard].string = finalReport;
-    
     NSLog(@"[Echo API] Extraction complete. Report copied to clipboard.");
 }
 
-// A pointer to store the original implementation of viewDidLoad
-static void (*Original_viewDidLoad)(id, SEL);
+// A pointer to store the original implementation of viewDidAppear:
+static void (*Original_viewDidAppear)(id, SEL, BOOL);
 
-// Our new implementation for viewDidLoad
-static void New_viewDidLoad(id self, SEL _cmd) {
-    // Call the original viewDidLoad first
-    Original_viewDidLoad(self, _cmd);
+// Our new implementation for viewDidAppear:, which is called EVERY time the view shows up.
+static void New_viewDidAppear(id self, SEL _cmd, BOOL animated) {
+    // Call the original viewDidAppear first
+    Original_viewDidAppear(self, _cmd, animated);
     
-    // Now, add our button
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // Use a small delay to ensure the UI is settled
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         UIWindow *keyWindow = GetFrontmostWindow();
-        if (!keyWindow || [keyWindow viewWithTag:kEchoControlButtonTag]) return;
+        if (!keyWindow) return;
 
-        UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 180, 45, 170, 36);
-        controlButton.tag = kEchoControlButtonTag;
-        [controlButton setTitle:@"推衍课盘 (API)" forState:UIControlStateNormal];
-        controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-        controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
-        [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        controlButton.layer.cornerRadius = 18;
-        
-        [controlButton addTarget:self action:@selector(runUltimateAPIExtraction) forControlEvents:UIControlEventTouchUpInside];
-        
-        [keyWindow addSubview:controlButton];
+        // Check if our button already exists
+        UIView *existingButton = [keyWindow viewWithTag:kEchoControlButtonTag];
+        if (existingButton) {
+            // If it exists, just bring it to the front to make sure it's visible
+            [keyWindow bringSubviewToFront:existingButton];
+        } else {
+            // If it doesn't exist, create and add it
+            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 180, 45, 170, 36);
+            controlButton.tag = kEchoControlButtonTag;
+            [controlButton setTitle:@"推衍课盘 (API)" forState:UIControlStateNormal];
+            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
+            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            controlButton.layer.cornerRadius = 18;
+            [controlButton addTarget:self action:@selector(runUltimateAPIExtraction) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:controlButton];
+        }
     });
 }
 
@@ -122,24 +121,23 @@ static void New_viewDidLoad(id self, SEL _cmd) {
 
 %ctor {
     @autoreleasepool {
-        NSLog(@"[Echo API] Tweak constructor firing (v30.2)...");
+        NSLog(@"[Echo API] Tweak constructor firing (v30.3)...");
 
-        // 1. Get the target class at RUNTIME using its mangled name string
         const char *vcClassNameMangled = "_TtC12å…­å£¬å¤§å  14ViewController";
         Class vcClass = objc_getClass(vcClassNameMangled);
 
         if (vcClass) {
             NSLog(@"[Echo API] Successfully found ViewController class at runtime.");
 
-            // 2. Add our new method to the class at RUNTIME
+            // Add our new method to the class at RUNTIME
             SEL newMethodSelector = @selector(runUltimateAPIExtraction);
             class_addMethod(vcClass, newMethodSelector, (IMP)runUltimateAPIExtraction_IMP, "v@:");
             NSLog(@"[Echo API] Injected new method -runUltimateAPIExtraction.");
 
-            // 3. Hook viewDidLoad at RUNTIME using MSHookMessageEx
-            SEL viewDidLoadSelector = @selector(viewDidLoad);
-            MSHookMessageEx(vcClass, viewDidLoadSelector, (IMP)&New_viewDidLoad, (IMP *)&Original_viewDidLoad);
-            NSLog(@"[Echo API] Hooked viewDidLoad method.");
+            // Hook viewDidAppear: at RUNTIME using MSHookMessageEx
+            SEL viewDidAppearSelector = @selector(viewDidAppear:);
+            MSHookMessageEx(vcClass, viewDidAppearSelector, (IMP)&New_viewDidAppear, (IMP *)&Original_viewDidAppear);
+            NSLog(@"[Echo API] Hooked viewDidAppear: method.");
 
         } else {
             NSLog(@"[Echo API] FATAL: Could not find ViewController class at runtime. Tweak will not activate.");
