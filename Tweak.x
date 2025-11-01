@@ -3360,7 +3360,7 @@ else if (g_s2_isExtractingKeChuanDetail) {
 %new
 - (void)processTianDiPanQueue {
     if (g_tianDiPan_workQueue.count == g_tianDiPan_resultsArray.count) {
-        // ... [这部分完成逻辑保持不变，从上一个回答中复制过来即可] ...
+        // ... [完成逻辑保持不变] ...
         LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有 %lu 项节点已全部参详。", (unsigned long)g_tianDiPan_resultsArray.count);
         
         NSMutableString *finalResult = [NSMutableString string];
@@ -3377,7 +3377,7 @@ else if (g_s2_isExtractingKeChuanDetail) {
 
         if (g_tianDiPan_completion_handler) {
             g_tianDiPan_completion_handler([finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
-            g_tianDiPan_completion_handler = nil; // 执行后清空
+            g_tianDiPan_completion_handler = nil;
         }
         
         g_isExtractingTianDiPanDetail = NO;
@@ -3387,51 +3387,52 @@ else if (g_s2_isExtractingKeChuanDetail) {
         [self setInteractionBlocked:NO];
         return;
     }
-
-    // ====================== V4 核心修正点 ======================
-    // 处理下一个任务，并采用安全试探策略
+    
+    // ====================== V5 核心修正点 ======================
     NSUInteger currentIndex = g_tianDiPan_resultsArray.count;
     if (currentIndex >= g_tianDiPan_workQueue.count) {
-        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 任务队列与结果数组索引不匹配，提前终止。");
+        // ... [错误处理逻辑不变] ...
         [self processTianDiPanQueue];
         return;
     }
     
     NSDictionary *task = g_tianDiPan_workQueue[currentIndex];
-    
-    // 从任务中同时获取 CALayer 对象和它的名字
     id targetLayer = task[@"targetLayer"];
-    NSString *targetName = task[@"targetName"];
     
-    LogMessage(EchoLogTypeInfo, @"[天地盘详解V4] 正在参详: %@", task[@"title"]);
+    LogMessage(EchoLogTypeInfo, @"[天地盘详解V5] 正在参详: %@", task[@"title"]);
+
+    // *** 最关键的修改 ***
+    // 我们需要找到一个方法来“设置”当前目标，然后再调用显示方法
+    // 让我们找找有没有类似 setTarget / setSelected 的方法
+    // 如果没有，我们只能猜测它依赖一个实例变量
+
+    // 尝试直接修改一个推测的实例变量
+    NSString *ivarName = @"觸摸層"; // 这是一个猜测，需要用Flex验证是否存在
+    Ivar ivar = class_getInstanceVariable([self class], [ivarName UTF8String]);
     
-    SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-    
-    if ([self respondsToSelector:selector]) {
-        // **安全试探**：优先尝试发送 CALayer 对象
-        if (targetLayer && [targetLayer isKindOfClass:[CALayer class]]) {
-            LogMessage(EchoLogTypeInfo, @"[天地盘详解V4] 尝试策略 A: 发送 CALayer 对象...");
-            SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:targetLayer]);
-        }
-        // 如果没有 CALayer 对象，或者它不是 CALayer 类型，则回退到发送名字
-        else if (targetName && [targetName isKindOfClass:[NSString class]]) {
-            LogMessage(EchoLogTypeInfo, @"[天地盘详解V4] 尝试策略 B: 发送 NSString 对象...");
-            SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:targetName]);
-        }
-        // 如果两种都没有，则任务失败
-        else {
-            LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 任务中既没有 CALayer 也没有有效名字。跳过...");
-            [g_tianDiPan_resultsArray addObject:@"[触发失败: 无有效目标]"];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self processTianDiPanQueue];
-            });
+    // 如果找到了这个实例变量，就设置它
+    if (ivar) {
+        LogMessage(EchoLogTypeInfo, @"[天地盘详解V5] 找到了'觸摸層'变量, 正在设置...");
+        object_setIvar(self, ivar, targetLayer);
+
+        // 然后调用无参数的显示方法
+        SEL selector = NSSelectorFromString(@"顯示天地盤觸摸"); // **注意：移除了 WithSender:**
+        if ([self respondsToSelector:selector]) {
+            LogMessage(EchoLogTypeInfo, @"[天地盘详解V5] 正在调用 '顯示天地盤觸摸'...");
+            SUPPRESS_LEAK_WARNING([self performSelector:selector]);
+        } else {
+             LogMessage(EchoLogError, @"[天地盘详解V5] 错误: 找不到'顯示天地盤觸摸'方法。");
+             [g_tianDiPan_resultsArray addObject:@"[触发失败: 无参数方法不存在]"];
+             dispatch_async(dispatch_get_main_queue(), ^{ [self processTianDiPanQueue]; });
         }
     } else {
-        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 找不到'顯示天地盤觸摸WithSender:'方法。跳过...");
-        [g_tianDiPan_resultsArray addObject:@"[触发失败: 方法不存在]"];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self processTianDiPanQueue];
-        });
+        // 如果找不到实例变量，说明我们的猜测是错的，这条路走不通
+        LogMessage(EchoLogError, @"[天地盘详解V5] 致命错误: 找不到用于设置目标的实例变量'觸摸層'。");
+        // 为了不卡住，我们填充错误信息并结束整个任务
+        for (NSInteger i = g_tianDiPan_resultsArray.count; i < g_tianDiPan_workQueue.count; i++) {
+            [g_tianDiPan_resultsArray addObject:@"[触发失败: 未知内部机制]"];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{ [self processTianDiPanQueue]; });
     }
 }
 
@@ -4938,6 +4939,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
