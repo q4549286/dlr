@@ -6,8 +6,14 @@
 // 1. 日志和辅助函数
 // =========================================================================
 
-#define LOG_PREFIX @"[EchoScout] "
+#define LOG_PREFIX @"[EchoSafeClick] "
 #define Log(format, ...) NSLog(LOG_PREFIX format, ##__VA_ARGS__)
+
+#define SUPPRESS_LEAK_WARNING(code) \
+    _Pragma("clang diagnostic push") \
+    _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
+    code; \
+    _Pragma("clang diagnostic pop")
 
 static UIWindow* GetFrontmostWindow() {
     UIWindow *frontmostWindow = nil;
@@ -34,13 +40,23 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
+// 伪造手势类
+@interface EchoFakeGestureRecognizer : UITapGestureRecognizer
+@property (nonatomic, assign) CGPoint fakeLocation;
+@end
+@implementation EchoFakeGestureRecognizer
+- (CGPoint)locationInView:(UIView *)view { return self.fakeLocation; }
+@end
+
+
 // =========================================================================
 // 2. 接口声明
 // =========================================================================
 
-@interface UIViewController (EchoScout)
-- (void)runScoutMission;
+@interface UIViewController (EchoSafeClick)
+- (void)runSafeClickTest;
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
+- (NSString *)GetStringFromLayer:(id)layer;
 @end
 
 // =========================================================================
@@ -51,19 +67,18 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 
 - (void)viewDidLoad {
     %orig;
-    // 使用 hasSuffix 确保我们只匹配主 ViewController，而不是其他也叫 ViewController 的类
     if ([NSStringFromClass([self class]) hasSuffix:@"ViewController"]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIButton *scoutButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            scoutButton.frame = CGRectMake([UIScreen mainScreen].bounds.size.width - 120, 45, 110, 36);
-            [scoutButton setTitle:@"信息侦察" forState:UIControlStateNormal];
-            scoutButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            scoutButton.backgroundColor = [UIColor systemGreenColor];
-            [scoutButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            scoutButton.layer.cornerRadius = 18;
-            [scoutButton addTarget:self action:@selector(runScoutMission) forControlEvents:UIControlEventTouchUpInside];
-            [GetFrontmostWindow() addSubview:scoutButton];
-            Log(@"侦察兵已就位。");
+            UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            testButton.frame = CGRectMake([UIScreen mainScreen].bounds.size.width - 150, 45, 140, 36);
+            [testButton setTitle:@"天地盘安全点击" forState:UIControlStateNormal];
+            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            testButton.backgroundColor = [UIColor systemBlueColor];
+            [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            testButton.layer.cornerRadius = 18;
+            [testButton addTarget:self action:@selector(runSafeClickTest) forControlEvents:UIControlEventTouchUpInside];
+            [GetFrontmostWindow() addSubview:testButton];
+            Log(@"安全点击测试按钮已添加。");
         });
     }
 }
@@ -78,14 +93,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         for (unsigned int i = 0; i < ivarCount; i++) {
             const char *name = ivar_getName(ivars[i]);
             if (name && [[NSString stringWithUTF8String:name] hasSuffix:ivarNameSuffix]) {
-                // 安全地获取值
-                // 使用 object_getIvar 可能会因为类型不匹配而出问题，但对于字典通常是安全的
-                @try {
-                    value = object_getIvar(object, ivars[i]);
-                } @catch (NSException *e) {
-                    Log(@"!! 安全警告: 获取 ivar '%s' 时发生异常: %@", name, e);
-                    value = nil;
-                }
+                value = object_getIvar(object, ivars[i]);
                 break;
             }
         }
@@ -95,100 +103,89 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 }
 
 %new
-- (void)runScoutMission {
-    Log(@">>>>> 开始执行信息侦察任务 <<<<<");
-    
-    // --- 侦察点 1: 确认 ViewController 自身 ---
-    Log(@"侦察点 1: self (ViewController) 信息");
-    Log(@"  - self 的类名: %@", NSStringFromClass([self class]));
-    Log(@"  - self 的描述: %@", self);
-
-    // --- 侦察点 2: 查找天地盘视图 ---
-    Log(@"侦察点 2: 查找 '六壬大占.天地盤視圖類'...");
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
-    if (!plateViewClass) {
-        Log(@"  - 结果: 失败! NSClassFromString 无法找到该类。");
-        // 尝试备用名称
-        plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
-         if (!plateViewClass) {
-             Log(@"  - 备用结果: 失败! NSClassFromString 也无法找到繁体名称。");
-         } else {
-             Log(@"  - 备用结果: 成功! 通过繁体名称找到了类: %@", plateViewClass);
-         }
-    } else {
-        Log(@"  - 结果: 成功! 找到了类: %@", plateViewClass);
+- (NSString *)GetStringFromLayer:(id)layer {
+    if (layer && [layer respondsToSelector:@selector(string)]) {
+        id stringValue = [layer valueForKey:@"string"];
+        if ([stringValue isKindOfClass:[NSString class]]) return stringValue;
+        if ([stringValue isKindOfClass:[NSAttributedString class]]) return ((NSAttributedString *)stringValue).string;
     }
-
-    if (!plateViewClass) {
-        Log(@"!!!!! 任务失败: 无法定位天地盤視圖類，后续侦察无法进行。");
-        Log(@">>>>> 侦察任务结束 <<<<<");
-        return;
-    }
-    
-    NSMutableArray *plateViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
-    if (plateViews.count == 0) {
-        Log(@"  - 搜索实例结果: 失败! 在 self.view 中未找到该类的实例。");
-        Log(@"!!!!! 任务失败: 无法定位天地盘视图实例，后续侦察无法进行。");
-        Log(@">>>>> 侦察任务结束 <<<<<");
-        return;
-    }
-    UIView *plateView = plateViews.firstObject;
-    Log(@"  - 搜索实例结果: 成功! 找到实例: %@", plateView);
-
-    // --- 侦察点 3: 检查天地盘视图的实例变量 ---
-    Log(@"侦察点 3: 检查天地盘实例变量...");
-    id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
-    if (tianJiangDict) {
-        Log(@"  - '天將宮名列': 找到了!");
-        Log(@"    - 类型: %@", NSStringFromClass([tianJiangDict class]));
-        if ([tianJiangDict isKindOfClass:[NSDictionary class]]) {
-            Log(@"    - 条目数量: %lu", (unsigned long)((NSDictionary *)tianJiangDict).count);
-            // 安全地打印前几个键值对
-            __block int count = 0;
-            [(NSDictionary *)tianJiangDict enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
-                if (count < 3) {
-                    Log(@"      - Key: %@ (类型: %@), Value: %@ (类型: %@)", key, NSStringFromClass([key class]), obj, NSStringFromClass([obj class]));
-                }
-                count++;
-                if (count >= 3) *stop = YES;
-            }];
-        }
-    } else {
-        Log(@"  - '天將宮名列': 未找到!");
-    }
-
-    id tianShenDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天神宮名列"];
-     if (tianShenDict) {
-        Log(@"  - '天神宮名列': 找到了!");
-        Log(@"    - 类型: %@", NSStringFromClass([tianShenDict class]));
-        if ([tianShenDict isKindOfClass:[NSDictionary class]]) {
-            Log(@"    - 条目数量: %lu", (unsigned long)((NSDictionary *)tianShenDict).count);
-        }
-    } else {
-        Log(@"  - '天神宮名列': 未找到!");
-    }
-
-    // --- 侦察点 4: 检查 ViewController 的目标方法 ---
-    Log(@"侦察点 4: 检查目标方法 '顯示天地盤觸摸WithSender:'...");
-    SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-    if ([self respondsToSelector:selector]) {
-        Log(@"  - 结果: 成功! self (ViewController) 确实响应此方法。");
-        Method method = class_getInstanceMethod([self class], selector);
-        if (method) {
-            const char* typeEncoding = method_getTypeEncoding(method);
-            Log(@"    - 方法签名编码 (Type Encoding): %s", typeEncoding);
-        }
-    } else {
-        Log(@"  - 结果: 失败! self (ViewController) 不响应此方法。");
-    }
-    
-    Log(@">>>>> 信息侦察任务完成 <<<<<");
+    return @"?";
 }
 
+%new
+- (void)runSafeClickTest {
+    Log(@">>>>> 开始执行天地盘安全点击测试 <<<<<");
+    
+    @try {
+        // 1. 查找天地盘视图
+        Class plateViewClass = NSClassFromString(@"六壬大占.天地盘视图类");
+        if (!plateViewClass) {
+            Log(@"!! 失败: 找不到 '六壬大占.天地盘视图类'");
+            return;
+        }
+        NSMutableArray *plateViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
+        if (plateViews.count == 0) {
+            Log(@"!! 失败: 找不到天地盘视图实例");
+            return;
+        }
+        UIView *plateView = plateViews.firstObject;
+        Log(@"Step 1: 成功找到天地盘视图: %@", plateView);
+
+        // 2. 安全地获取天将图层字典
+        id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
+        if (!tianJiangDict) {
+            Log(@"!! 失败: 无法获取'天將宮名列'变量");
+            return;
+        }
+        // 我们现在知道它不是NSDictionary，但它响应 allValues
+        if (![tianJiangDict respondsToSelector:@selector(allValues)]) {
+            Log(@"!! 失败: '天將宮名列'对象不响应 allValues");
+            return;
+        }
+        NSArray *tianJiangLayers = [tianJiangDict allValues];
+        Log(@"Step 2: 成功获取天将 CALayer 列表，数量: %lu", (unsigned long)tianJiangLayers.count);
+
+        // 3. 选取第一个天将 CALayer 作为测试目标
+        CALayer *targetLayer = nil;
+        for (id obj in tianJiangLayers) {
+            if ([obj isKindOfClass:[CALayer class]]) {
+                targetLayer = (CALayer *)obj;
+                break;
+            }
+        }
+        if (!targetLayer) {
+            Log(@"!! 失败: 在列表中未找到任何 CALayer 对象");
+            return;
+        }
+        CGPoint targetPosition = targetLayer.position;
+        Log(@"Step 3: 成功选取目标 CALayer: %@, 文本: '%@', 坐标: (%.2f, %.2f)", targetLayer, [self GetStringFromLayer:targetLayer], targetPosition.x, targetPosition.y);
+        
+        // 4. 检查目标方法
+        SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+        if (![self respondsToSelector:selector]) {
+            Log(@"!! 失败: ViewController 不响应目标方法");
+            return;
+        }
+        Log(@"Step 4: 确认目标方法存在");
+
+        // 5. 创建伪造手势并调用
+        Log(@"Step 5: 创建并配置伪造手势...");
+        EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
+        fakeGesture.fakeLocation = targetPosition;
+
+        Log(@"--- 即将使用伪造手势调用目标方法... ---");
+        SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:fakeGesture]);
+        Log(@"--- 调用完成！如果App没有崩溃，并且弹出了窗口，则测试成功！ ---");
+
+    } @catch (NSException *exception) {
+        Log(@"!!!!!! 测试过程中捕获到异常 !!!!!!: %@, 原因: %@", exception.name, exception.reason);
+    } @finally {
+        Log(@">>>>> 安全点击测试结束 <<<<<");
+    }
+}
 %end
 
 %ctor {
-    Log(@"侦察兵脚本已加载。");
+    Log(@"安全点击测试脚本已加载。");
 }
-
