@@ -244,7 +244,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             task[@"name"], task[@"type"]);
 
     // 找到天地盘视图和它的手势识别器
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
         EchoLog(EchoLogError, @"找不到天地盘视图类，无法继续。");
         [self ECHO_processTianDiPanQueue]; // 跳过这个任务
@@ -366,7 +366,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (NSArray<NSDictionary *> *)ECHO_getTianDiPanClickableTargets {
     @try {
-        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
+        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
         // MARK: 错误修正 3 (批量)
         // C 字符串 "..." -> OC 字符串 @"..."
         if (!plateViewClass) { EchoLog(EchoLogError, @"定位失败: 找不到视图类"); return nil; }
@@ -468,3 +468,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[EchoTDP] 天地盘独立提取脚本 v1.1 (已修复) 已加载。");
     }
 }
+
