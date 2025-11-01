@@ -78,6 +78,7 @@ static BOOL g_shouldExtractBenMing = YES; // <<<<<<<<<<<< 新增本命开关状�
 static BOOL g_shouldExtractAuxiliarySystems = NO; // <<<<<< 新增辅助系统开关，默认关闭
 static BOOL g_isExtractingTianDiPanDetail = NO;
 static NSMutableArray<NSMutableDictionary *> *g_tianDiPan_workQueue = nil;
+static BOOL g_isSpyingOnSender = YES; // 开启窃听模式的开关
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static void (^g_tianDiPan_completion_handler)(NSString *result) = nil;
 
@@ -2860,7 +2861,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)startExtraction_TianDiPan_Detail_WithCompletion:(void (^)(NSString *result))completion;
 - (void)processTianDiPanQueue;
-- (void)launchTianDiPanDetailExtractionOnViewController:(UIViewController *)vc plateView:(UIView *)plateView;
 - (void)setInteractionBlocked:(BOOL)blocked;
 @end
 
@@ -2955,6 +2955,7 @@ static NSString* extractFromComplexTableViewPopup(UIView *contentView) {
 
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie);
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
+static void (*Original_顯示天地盤觸摸)(id, SEL, id);
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     if (g_isExtractingTimeInfo) {
         UIViewController *contentVC = nil;
@@ -3359,103 +3360,63 @@ else if (g_s2_isExtractingKeChuanDetail) {
     }); // <<<<<<<<<<<< 核心修正 END: 整个原有逻辑都在这个 dispatch_after 内部
 }
 %new
-// 新的总攻方法
-- (void)launchTianDiPanDetailExtractionOnViewController:(UIViewController *)vc plateView:(UIView *)plateView {
-    [self setInteractionBlocked:YES];
-
-    id tianShenDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天神宮名列"];
-    id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
-    
-    if (![tianShenDict isKindOfClass:[NSDictionary class]] || ![tianJiangDict isKindOfClass:[NSDictionary class]]) {
-        LogMessage(EchoLogError, @"[天地盘详解V5] 错误: 未能获取天神/天将字典。");
-        // ... (错误处理和清理) ...
-        g_isExtractingTianDiPanDetail = NO;
-        [self setInteractionBlocked:NO];
-        if(g_tianDiPan_completion_handler) g_tianDiPan_completion_handler(@"[错误: 未获取核心数据]");
-        return;
-    }
-
-    // 构建任务队列，这次我们把 ViewController 的引用也放进去
-    [(NSDictionary *)tianShenDict enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
-        if ([key isKindOfClass:[NSString class]] && [obj isKindOfClass:[CALayer class]]) {
-            NSString *title = [NSString stringWithFormat:@"天盘神(%@)", key];
-            [g_tianDiPan_workQueue addObject:[@{@"vc": vc, @"targetLayer": obj, @"title": title} mutableCopy]];
-        }
-    }];
-    [(NSDictionary *)tianJiangDict enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
-        if ([key isKindOfClass:[NSString class]] && [obj isKindOfClass:[CALayer class]]) {
-            NSString *title = [NSString stringWithFormat:@"天将(%@)", key];
-            [g_tianDiPan_workQueue addObject:[@{@"vc": vc, @"targetLayer": obj, @"title": title} mutableCopy]];
-        }
-    }];
-
-    if (g_tianDiPan_workQueue.count == 0) {
-        LogMessage(EchoLogTypeWarning, @"[天地盘详解V5] 任务队列为空。");
-        // ... (错误处理和清理) ...
-        g_isExtractingTianDiPanDetail = NO;
-        [self setInteractionBlocked:NO];
-        if(g_tianDiPan_completion_handler) g_tianDiPan_completion_handler(@"[任务队列为空]");
-        return;
-    }
-    
-    LogMessage(EchoLogTypeInfo, @"[天地盘详解V5] 任务队列构建完成，共 %lu 项。", (unsigned long)g_tianDiPan_workQueue.count);
-    
-    // 启动处理流程
-    [self processTianDiPanQueue];
-}
-
-// 修正后的 process 方法
-%new
 - (void)processTianDiPanQueue {
-    // 完成逻辑不变
+    // 检查任务是否完成 (逻辑不变)
     if (g_tianDiPan_workQueue.count == g_tianDiPan_resultsArray.count) {
-        LogMessage(EchoLogTypeTask, @"[完成] V5 天地盘所有节点已参详。");
+        LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有 %lu 项节点已全部参详。", (unsigned long)g_tianDiPan_resultsArray.count);
+        
         NSMutableString *finalResult = [NSMutableString string];
         NSArray *tasks = [g_tianDiPan_workQueue copy];
+
         for (NSUInteger i = 0; i < g_tianDiPan_resultsArray.count; i++) {
-            if (i < tasks.count) {
-                NSString *title = tasks[i][@"title"];
-                NSString *rawBlock = g_tianDiPan_resultsArray[i];
-                NSString *parsedBlock = parseKeChuanDetailBlock(rawBlock, title);
-                [finalResult appendFormat:@"- 对象: %@\n%@\n\n", title, parsedBlock];
-            }
+             if (i < tasks.count) {
+                 NSString *title = tasks[i][@"title"];
+                 NSString *rawBlock = g_tianDiPan_resultsArray[i];
+                 NSString *parsedBlock = parseKeChuanDetailBlock(rawBlock, title);
+                 [finalResult appendFormat:@"- 对象: %@\n%@\n\n", title, parsedBlock];
+             }
         }
+
         if (g_tianDiPan_completion_handler) {
             g_tianDiPan_completion_handler([finalResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
         }
+        
         g_isExtractingTianDiPanDetail = NO;
         g_tianDiPan_workQueue = nil;
         g_tianDiPan_resultsArray = nil;
         g_tianDiPan_completion_handler = nil;
+        
         [self setInteractionBlocked:NO];
         return;
     }
     
-    // 核心修正：从任务中获取 ViewController 引用
+    // ====================== V4 核心修正 ======================
+    // 处理下一个任务
     NSUInteger currentIndex = g_tianDiPan_resultsArray.count;
     if (currentIndex >= g_tianDiPan_workQueue.count) {
-        // ... (错误处理) ...
-        [self processTianDiPanQueue]; return;
+        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 任务队列与结果数组索引不匹配，提前终止。");
+        [self processTianDiPanQueue];
+        return;
     }
     
     NSDictionary *task = g_tianDiPan_workQueue[currentIndex];
-    UIViewController *vc = task[@"vc"]; // 获取 ViewController
-    id targetLayer = task[@"targetLayer"]; // 获取 CALayer
+    id targetLayer = task[@"targetLayer"]; // 我们现在用 targetLayer，它是 id 类型 (实际是 CALayer*)
     
-    LogMessage(EchoLogTypeInfo, @"[天地盘详解V5] 正在参详: %@", task[@"title"]);
+    LogMessage(EchoLogTypeInfo, @"[天地盘详解V4] 正在参详: %@", task[@"title"]);
     
     SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
     
-    if ([vc respondsToSelector:selector] && targetLayer) {
-        // 使用正确的对象 (vc) 来调用方法
-        SUPPRESS_LEAK_WARNING([vc performSelector:selector withObject:targetLayer]);
+    // 将 CALayer 对象本身作为 Sender 传递
+    if ([self respondsToSelector:selector] && targetLayer) {
+        SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:targetLayer]);
     } else {
-        LogMessage(EchoLogError, @"[天地盘详解V5] 错误: VC无法响应或目标Layer为空。");
+        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 无法触发点击或目标Layer为空。跳过...");
         [g_tianDiPan_resultsArray addObject:@"[触发失败]"];
         dispatch_async(dispatch_get_main_queue(), ^{
             [self processTianDiPanQueue];
         });
     }
+    // =========================================================
 }
 
 %new
@@ -3465,34 +3426,78 @@ else if (g_s2_isExtractingKeChuanDetail) {
         return;
     }
     
-    LogMessage(EchoLogTypeTask, @"[任务启动] V5 - 开始推演“天地盘神将详解”...");
-    
+    LogMessage(EchoLogTypeTask, @"[任务启动] V4 - 开始推演“天地盘神将详解”...");
+    [self setInteractionBlocked:YES];
+
     // 初始化状态
     g_isExtractingTianDiPanDetail = YES;
-    g_tianDiPan_workQueue = [NSMutableArray array]; // 仍然需要，用于保存标题
+    g_tianDiPan_workQueue = [NSMutableArray array];
     g_tianDiPan_resultsArray = [NSMutableArray array];
     g_tianDiPan_completion_handler = [completion copy];
     
-    // 找到天地盘视图实例
+    // 修正: 使用正确的备用类名
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
-        LogMessage(EchoLogError, @"[天地盘详解V5] 错误: 找不到天地盘视图类。");
+        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 找不到天地盘视图类。");
         if(completion) completion(@"[错误: 找不到视图类]");
+        [self setInteractionBlocked:NO];
         return;
     }
     
     NSMutableArray *plateViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) {
-        LogMessage(EchoLogError, @"[天地盘详解V5] 错误: 找不到天地盘视图实例。");
+        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 找不到天地盘视图实例。");
         if(completion) completion(@"[错误: 找不到视图实例]");
+        [self setInteractionBlocked:NO];
         return;
     }
     UIView *plateView = plateViews.firstObject;
+    
+    id tianShenDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天神宮名列"];
+    id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
+    
+    if (![tianShenDict isKindOfClass:[NSDictionary class]] || ![tianJiangDict isKindOfClass:[NSDictionary class]]) {
+        LogMessage(EchoLogError, @"[天地盘详解V4] 错误: 未能获取天神/天将字典，或类型不正确。");
+        if(completion) completion(@"[错误: 未获取核心数据]");
+        [self setInteractionBlocked:NO];
+        return;
+    }
 
-    // 直接在主线程调用“总攻”方法，并把 ViewController (self) 和 天地盘视图 (plateView) 传过去
-    // 我们不再在这个函数里构建队列，而是在“总攻”函数里做
-    [self launchTianDiPanDetailExtractionOnViewController:self plateView:plateView];
+    // ====================== V4 核心修正 ======================
+    // 遍历天神字典
+    [(NSDictionary *)tianShenDict enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
+        if ([key isKindOfClass:[NSString class]] && [obj isKindOfClass:[CALayer class]]) {
+            NSString *shenName = (NSString *)key;
+            CALayer *shenLayer = (CALayer *)obj;
+            NSString *title = [NSString stringWithFormat:@"天盘神(%@)", shenName];
+            [g_tianDiPan_workQueue addObject:[@{@"targetLayer": shenLayer, @"title": title} mutableCopy]];
+        }
+    }];
+
+    // 遍历天将字典
+    [(NSDictionary *)tianJiangDict enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
+        if ([key isKindOfClass:[NSString class]] && [obj isKindOfClass:[CALayer class]]) {
+            NSString *jiangName = (NSString *)key;
+            CALayer *jiangLayer = (CALayer *)obj;
+            NSString *title = [NSString stringWithFormat:@"天将(%@)", jiangName];
+            [g_tianDiPan_workQueue addObject:[@{@"targetLayer": jiangLayer, @"title": title} mutableCopy]];
+        }
+    }];
+    // =========================================================
+
+    if (g_tianDiPan_workQueue.count == 0) {
+        LogMessage(EchoLogTypeWarning, @"[天地盘详解V4] 任务队列为空，未能从字典中提取任何神将Layer。");
+        g_isExtractingTianDiPanDetail = NO;
+        if(completion) completion(@"[任务队列为空]");
+        [self setInteractionBlocked:NO];
+        return;
+    }
+    
+    LogMessage(EchoLogTypeInfo, @"[天地盘详解V4] 任务队列构建完成，共 %lu 项。", (unsigned long)g_tianDiPan_workQueue.count);
+    
+    // 启动处理流程
+    [self processTianDiPanQueue];
 }
 %new 
 - (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion {
@@ -4871,18 +4876,84 @@ return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewl
     });
 }
 %end
+// =========================================================
+// ↓↓↓ 窃听器 HOOK ↓↓↓
+// =========================================================
+static void Tweak_顯示天地盤觸摸(id self, SEL _cmd, id sender) {
+    // 如果窃听开关打开，就打印所有信息
+    if (g_isSpyingOnSender) {
+        NSLog(@"[Echo Spy] >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+        NSLog(@"[Echo Spy] Method '顯示天地盤觸摸WithSender:' was called!");
+        NSLog(@"[Echo Spy] Sender Class: %@", NSStringFromClass([sender class]));
+        NSLog(@"[Echo Spy] Sender Description: %@", [sender description]);
 
+        // 尝试挖掘更多信息
+        if ([sender isKindOfClass:[UIGestureRecognizer class]]) {
+            UIGestureRecognizer *gesture = (UIGestureRecognizer *)sender;
+            NSLog(@"[Echo Spy] It's a UIGestureRecognizer!");
+            NSLog(@"[Echo Spy] Gesture State: %ld", (long)gesture.state);
+            if ([gesture respondsToSelector:@selector(locationInView:)]) {
+                 CGPoint location = [gesture locationInView:gesture.view];
+                 NSLog(@"[Echo Spy] Gesture Location in its view: %@", NSStringFromCGPoint(location));
+            }
+        }
+        
+        // 使用运行时获取所有属性
+        unsigned int outCount, i;
+        objc_property_t *properties = class_copyPropertyList([sender class], &outCount);
+        if (outCount > 0) {
+            NSLog(@"[Echo Spy] Sender Properties:");
+            for(i = 0; i < outCount; i++) {
+                objc_property_t property = properties[i];
+                const char *propName = property_getName(property);
+                if(propName) {
+                    NSString *propertyName = [NSString stringWithUTF8String:propName];
+                    @try {
+                        id value = [sender valueForKey:propertyName];
+                        NSLog(@"[Echo Spy]   - %@: %@", propertyName, value);
+                    } @catch (NSException *exception) {
+                        NSLog(@"[Echo Spy]   - %@: (Could not get value)", propertyName);
+                    }
+                }
+            }
+            free(properties);
+        }
+        NSLog(@"[Echo Spy] <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+    }
+
+    // 调用原始方法，确保App正常运行
+    Original_顯示天地盤觸摸(self, _cmd, sender);
+}
 
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-
-        // ↑↑↑ 添加上面这块代码 ↑↑↑
         
-        NSLog(@"[Echo推衍课盘] v19.0 已加载。");
+        // ====================== 关键修正 ======================
+        // 使用你指出的、正确的 Objective-C 类名
+
+        // 修正窃听器Hook的目标类 (针对 ViewController)
+        Class vcClass = NSClassFromString(@"六壬大占.ViewController");
+        if (vcClass) {
+            // 如果要重新尝试Hook ViewController 的方法，就放在这里
+            // 例如： MSHookMessageEx(vcClass, @selector(顯示天地盤觸摸WithSender:), ...);
+        } else {
+            NSLog(@"[Echo Tweak] CRITICAL ERROR: Could not find class '六壬大占.ViewController'");
+        }
+
+        // 修正窃听器Hook的目标类 (针对 天地盘视图类)
+        // 这个类名也可能需要修正
+        Class plateViewClass = NSClassFromString(@"六壬大占.天地盘视图类");
+        if (plateViewClass) {
+            MSHookMessageEx(plateViewClass, @selector(touchesBegan:withEvent:), (IMP)&Tweak_touchesBegan, (IMP *)&Original_touchesBegan);
+        } else {
+             NSLog(@"[Echo Spy V2] Error: Could not find class '六壬大占.天地盘视图类'");
+        }
+        // =======================================================
+        
+        NSLog(@"[Echo推衍课盘] Hooking complete.");
     }
 }
-
 static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiangJie) {
     if (!rootView) return @"[错误: 根视图为空]";
     
@@ -4918,8 +4989,6 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-
-
 
 
 
