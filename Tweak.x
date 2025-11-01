@@ -3,7 +3,7 @@
 #import <substrate.h>
 
 // =========================================================================
-//  Echo Tweak v30.1 - API Runtime Hook Edition
+//  Echo Tweak v30.2 - API Runtime Hook Final
 // =========================================================================
 
 #pragma mark - Global UI & State
@@ -34,22 +34,23 @@ static UIWindow* GetFrontmostWindow() {
 #pragma mark - New Method Implementations (as C Functions)
 
 // This is the implementation for our new, powerful extraction method.
-// It's a C function that takes 'self' and '_cmd' like a real Objective-C method.
 static void runUltimateAPIExtraction_IMP(id self, SEL _cmd) {
     NSLog(@"[Echo API] Extraction initiated.");
     
-    // 1. Get the Core Data Model instance using MSHookIvar.
-    id kePanModel = MSHookIvar<id>(self, "ç¸½é«”æ¼”ç¤ºå™¨");
+    // 1. Get the Core Data Model instance using standard ObjC runtime functions.
+    // THIS IS THE CORRECTED PART.
+    Ivar ivar = class_getInstanceVariable([self class], "ç¸½é«”æ¼”ç¤ºå™¨");
+    id kePanModel = ivar ? object_getIvar(self, ivar) : nil;
 
     if (!kePanModel) {
-        NSLog(@"[Echo API] FATAL: Could not get 'kePanModel' instance!");
+        NSLog(@"[Echo API] FATAL: Could not get 'kePanModel' instance via object_getIvar!");
         return;
     }
     NSLog(@"[Echo API] Successfully accessed the core data model: %@", kePanModel);
 
     // 2. Prepare the report string.
     NSMutableString *report = [NSMutableString string];
-    [report appendString:@"----- 标准化课盘 (API直取 v1.1) -----\n\n"];
+    [report appendString:@"----- 标准化课盘 (API直取 v1.2) -----\n\n"];
     
     // 3. Extract data using Key-Value Coding (valueForKey:).
     @try {
@@ -86,12 +87,6 @@ static void runUltimateAPIExtraction_IMP(id self, SEL _cmd) {
     [UIPasteboard generalPasteboard].string = finalReport;
     
     NSLog(@"[Echo API] Extraction complete. Report copied to clipboard.");
-    
-    // You can add your notification pop-up here. For example:
-    // SEL showNotificationSelector = NSSelectorFromString(@"showEchoNotificationWithTitle:message:");
-    // if ([self respondsToSelector:showNotificationSelector]) {
-    //     [self performSelector:showNotificationSelector withObject:@"API提取完成" withObject:@"课盘已直接从内存提取。"];
-    // }
 }
 
 // A pointer to store the original implementation of viewDidLoad
@@ -116,7 +111,6 @@ static void New_viewDidLoad(id self, SEL _cmd) {
         [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         controlButton.layer.cornerRadius = 18;
         
-        // The action now calls the method we dynamically added
         [controlButton addTarget:self action:@selector(runUltimateAPIExtraction) forControlEvents:UIControlEventTouchUpInside];
         
         [keyWindow addSubview:controlButton];
@@ -128,7 +122,7 @@ static void New_viewDidLoad(id self, SEL _cmd) {
 
 %ctor {
     @autoreleasepool {
-        NSLog(@"[Echo API] Tweak constructor firing...");
+        NSLog(@"[Echo API] Tweak constructor firing (v30.2)...");
 
         // 1. Get the target class at RUNTIME using its mangled name string
         const char *vcClassNameMangled = "_TtC12å…­å£¬å¤§å  14ViewController";
