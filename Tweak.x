@@ -5,8 +5,15 @@
 // =========================================================================
 // 1. 日志和辅助函数
 // =========================================================================
-#define LOG_PREFIX @"[EchoBlackbox] "
+
+#define LOG_PREFIX @"[EchoFinalTest] "
 #define Log(format, ...) NSLog(LOG_PREFIX format, ##__VA_ARGS__)
+
+#define SUPPRESS_LEAK_WARNING(code) \
+    _Pragma("clang diagnostic push") \
+    _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
+    code; \
+    _Pragma("clang diagnostic pop")
 
 static UIWindow* GetFrontmostWindow() {
     UIWindow *frontmostWindow = nil;
@@ -33,57 +40,46 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); }
 }
 
+// 伪造手势类
+@interface EchoFakeGestureRecognizer : UITapGestureRecognizer
+@property (nonatomic, assign) CGPoint fakeLocation;
+@end
+@implementation EchoFakeGestureRecognizer
+- (CGPoint)locationInView:(UIView *)view { return self.fakeLocation; }
+@end
+
+
 // =========================================================================
 // 2. 接口声明和全局变量
 // =========================================================================
-@interface UIViewController (EchoBlackbox)
-- (void)startMonitoringTimer;
-- (void)stopMonitoringTimer;
-- (void)monitorTask:(NSTimer *)timer;
+static BOOL g_isTesting = NO;
+
+@interface UIViewController (EchoFinalTest)
+- (void)runFinalTest;
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
 @end
 
-static NSTimer *g_monitoringTimer = nil;
+// =========================================================================
+// 3. 核心 Hook
+// =========================================================================
 
-// =========================================================================
-// 3. 嗅探器 Hook (用于在你手动点击时触发)
-// =========================================================================
-static void (*Original_displayTianDiPanTouch)(id self, SEL _cmd, id sender);
-
-static void Tweak_displayTianDiPanTouch(id self, SEL _cmd, id sender) {
-    Log(@"========== REAL TOUCH DETECTED ==========");
-    Log(@"Sender Class: %@", [sender class]);
-    Log(@"Sender Description: %@", [sender description]);
-    if ([sender isKindOfClass:[UIGestureRecognizer class]]) {
-        UIGestureRecognizer *g = (UIGestureRecognizer *)sender;
-        CGPoint p = [g locationInView:g.view];
-        Log(@"Gesture Location: (%.2f, %.2f)", p.x, p.y);
-    }
-    Log(@"=========================================");
-    
-    if (Original_displayTianDiPanTouch) {
-        Original_displayTianDiPanTouch(self, _cmd, sender);
-    }
-}
-
-// =========================================================================
-// 4. 主 Hook
-// =========================================================================
 %hook UIViewController
 
-- (void)viewDidAppear:(BOOL)animated {
+- (void)viewDidLoad {
     %orig;
     if ([NSStringFromClass([self class]) hasSuffix:@"ViewController"]) {
-        Log(@"Target ViewController appeared. Starting monitor.");
-        [self startMonitoringTimer];
-    }
-}
-
-- (void)viewWillDisappear:(BOOL)animated {
-    %orig;
-    if ([NSStringFromClass([self class]) hasSuffix:@"ViewController"]) {
-        Log(@"Target ViewController will disappear. Stopping monitor.");
-        [self stopMonitoringTimer];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            testButton.frame = CGRectMake([UIScreen mainScreen].bounds.size.width - 120, 45, 110, 36);
+            [testButton setTitle:@"最终测试" forState:UIControlStateNormal];
+            testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            testButton.backgroundColor = [UIColor systemRedColor];
+            [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            testButton.layer.cornerRadius = 18;
+            [testButton addTarget:self action:@selector(runFinalTest) forControlEvents:UIControlEventTouchUpInside];
+            [GetFrontmostWindow() addSubview:testButton];
+            Log(@"最终测试按钮已添加。");
+        });
     }
 }
 
@@ -107,80 +103,99 @@ static void Tweak_displayTianDiPanTouch(id self, SEL _cmd, id sender) {
 }
 
 %new
-- (void)startMonitoringTimer {
-    if (g_monitoringTimer) {
-        [g_monitoringTimer invalidate];
-        g_monitoringTimer = nil;
-    }
-    g_monitoringTimer = [NSTimer scheduledTimerWithTimeInterval:2.0
-                                                         target:self
-                                                       selector:@selector(monitorTask:)
-                                                       userInfo:nil
-                                                        repeats:YES];
-    Log(@"Monitoring timer started.");
-}
-
-%new
-- (void)stopMonitoringTimer {
-    if (g_monitoringTimer) {
-        [g_monitoringTimer invalidate];
-        g_monitoringTimer = nil;
-        Log(@"Monitoring timer stopped.");
-    }
-}
-
-%new
-- (void)monitorTask:(NSTimer *)timer {
-    Log(@"--- Monitor Task Running ---");
+- (void)runFinalTest {
+    Log(@"================== 最终安全测试开始 ==================");
+    
     @try {
-        UIWindow *keyWindow = GetFrontmostWindow();
-        if (!keyWindow) {
-            Log(@"Monitor: Could not get key window.");
+        if (g_isTesting) {
+            Log(@"测试已在进行中，请勿重复点击。");
             return;
         }
-        
+        g_isTesting = YES;
+        Log(@"Step 1: 状态旗标设置成功。");
+
+        // 移除了 [self setInteractionBlocked:YES];
+
+        Log(@"Step 2: 开始定位目标类...");
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
         if (!plateViewClass) {
-            Log(@"Monitor: Could not find class '六壬大占.天地盤視圖類'.");
+            Log(@"!! FATAL: NSClassFromString未能找到 '六壬大占.天地盤視圖類'。测试终止。");
+            g_isTesting = NO;
             return;
         }
+        Log(@"Step 2: 成功获取目标类: %@", plateViewClass);
 
+        Log(@"Step 3: 开始在视图层级中搜索实例...");
         NSMutableArray *plateViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
-
-        if (plateViews.count > 0) {
-            UIView *plateView = plateViews.firstObject;
-            
-            id tianShenDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天神宮名列"];
-            id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
-            
-            Log(@"--- DUMPING DICTIONARIES ---");
-            Log(@"天神宫名列 (tianShenDict): %@", tianShenDict); // 这会调用 description
-            Log(@"天将宫名列 (tianJiangDict): %@", tianJiangDict); // 这会调用 description
-            Log(@"--------------------------");
-            
-        } else {
-            Log(@"Monitor: '天地盘视图类' not found in current view hierarchy.");
+        FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
+        if (plateViews.count == 0) {
+            Log(@"!! FATAL: 未能在 self.view 中找到目标实例。测试终止。");
+            g_isTesting = NO;
+            return;
         }
+        UIView *plateView = plateViews.firstObject;
+        Log(@"Step 3: 成功找到目标实例: %@", plateView);
+
+        Log(@"Step 4: 开始获取'天将宫名列'实例变量...");
+        id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
+        if (![tianJiangDict isKindOfClass:[NSDictionary class]] || ((NSDictionary *)tianJiangDict).count == 0) {
+            Log(@"!! FATAL: 未能获取天将字典，或字典为空。测试终止。");
+            g_isTesting = NO;
+            return;
+        }
+        Log(@"Step 4: 成功获取天将字典，包含 %lu 个对象。", (unsigned long)((NSDictionary *)tianJiangDict).count);
+
+        Log(@"Step 5: 开始构建任务队列...");
+        NSMutableArray *workQueue = [NSMutableArray array];
+        [(NSDictionary *)tianJiangDict enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
+            if ([key isKindOfClass:[NSString class]] && [obj isKindOfClass:[CALayer class]]) {
+                [workQueue addObject:@{ @"targetLayer": (CALayer *)obj, @"name": (NSString *)key }];
+            }
+        }];
+        if (workQueue.count == 0) {
+            Log(@"!! FATAL: 任务队列构建失败，字典中没有找到有效的 CALayer。测试终止。");
+             g_isTesting = NO;
+            return;
+        }
+        Log(@"Step 5: 任务队列构建成功，包含 %lu 个任务。", (unsigned long)workQueue.count);
+
+        Log(@"Step 6: 选取第一个任务进行单次调用测试...");
+        NSDictionary *task = workQueue.firstObject;
+        CALayer *targetLayer = task[@"targetLayer"];
+        NSString *targetName = task[@"name"];
+        CGPoint targetPosition = targetLayer.position;
+        Log(@"Step 6: 目标: '%@', 坐标: (%.2f, %.2f)", targetName, targetPosition.x, targetPosition.y);
+        
+        Log(@"Step 7: 准备调用方法 '顯示天地盤觸摸WithSender:'...");
+        SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+        if (![self respondsToSelector:selector]) {
+            Log(@"!! FATAL: ViewController 不响应目标方法。测试终止。");
+            g_isTesting = NO;
+            return;
+        }
+        Log(@"Step 7: 确认方法存在。准备创建伪造手势...");
+
+        EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
+        fakeGesture.fakeLocation = targetPosition;
+        Log(@"Step 8: 伪造手势已创建。即将执行 performSelector...");
+
+        // 在调用前添加最后一条日志
+        Log(@"--- PRE-FLIGHT CHECK COMPLETE. INITIATING CALL... ---");
+
+        SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:fakeGesture]);
+        
+        // 如果能执行到这里，说明没有崩溃
+        Log(@"--- CALL SUCCEEDED! --- The app did not crash on performSelector.");
+
     } @catch (NSException *exception) {
-        Log(@"!!!!!! EXCEPTION in monitor task: %@, Reason: %@", exception.name, exception.reason);
+        Log(@"!!!!!! CATASTROPHIC FAILURE !!!!!! An exception was caught: %@, Reason: %@", exception.name, exception.reason);
+    } @finally {
+        g_isTesting = NO;
+        Log(@"================== 最终安全测试结束 ==================");
     }
 }
-
 %end
 
-// =========================================================================
-// 5. %ctor 安装 Hook
-// =========================================================================
 %ctor {
-    @autoreleasepool {
-        Class vcClass = NSClassFromString(@"六壬大占.ViewController");
-        if (vcClass) {
-            MSHookMessageEx(vcClass, NSSelectorFromString(@"顯示天地盤觸摸WithSender:"), (IMP)&Tweak_displayTianDiPanTouch, (IMP *)&Original_displayTianDiPanTouch);
-            Log(@"'顯示天地盤觸摸WithSender:' hook installed.");
-        } else {
-            Log(@"ERROR: Could not find '六壬大占.ViewController' to install touch hook.");
-        }
-        Log(@"Blackbox script loaded.");
-    }
+    Log(@"最终测试脚本已加载。");
 }
