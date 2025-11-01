@@ -1903,6 +1903,7 @@ return           @"# 【四经合一 · 终极统一场论】\n"
 // =========================================================================
 // ↓↓↓ 把这个辅助函数粘贴在这里 ↓↓↓
 // =========================================================================
+static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle);
 
 // 一个辅助函数，用于从句子中提取特定关键词后的内容
 static NSString* extractValueAfterKeyword(NSString *line, NSString *keyword) {
@@ -2857,6 +2858,8 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 - (void)extractFangFa_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractQiZheng_NoPopup_WithCompletion:(void (^)(NSString *))completion;
 - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion;
+- (void)startExtraction_TianDiPan_Detail_WithCompletion:(void (^)(NSString *result))completion;
+- (void)processTianDiPanQueue;
 - (void)setInteractionBlocked:(BOOL)blocked;
 @end
 
@@ -3357,28 +3360,16 @@ else if (g_s2_isExtractingKeChuanDetail) {
 %new
 - (void)processTianDiPanQueue {
     // 检查任务是否完成
-    if (g_tianDiPan_workQueue.count == 0) {
-        LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有24项节点已全部参详。");
+    if (g_tianDiPan_workQueue.count == g_tianDiPan_resultsArray.count) {
+        LogMessage(EchoLogTypeTask, @"[完成] 天地盘所有 %lu 项节点已全部参详。", (unsigned long)g_tianDiPan_resultsArray.count);
         
         NSMutableString *finalResult = [NSMutableString string];
-        for (NSUInteger i = 0; i < g_tianDiPan_resultsArray.count; i++) {
-            NSString *rawBlock = g_tianDiPan_resultsArray[i];
-            
-            // 复用课传的解析器，因为它很强大
-            // 我们从任务队列中取出原始标题
-            NSString *title = g_tianDiPan_workQueue[i][@"title"]; // 注意：这里队列已空，需要提前保存标题
-            // 为了简单起见，我们直接在拼接时使用
-            // 在实际应用中，你可能需要一个单独的标题队列
-        }
+        // 获取所有任务的标题
+        NSArray *tasks = [g_tianDiPan_workQueue copy];
 
-        // 我们需要一个标题队列，现在来补上
-        // (在 startExtraction... 函数中我们会创建这个标题队列)
-        // 假设 g_tianDiPan_titleQueue 存在
-        NSMutableArray *titleQueue = [g_tianDiPan_workQueue valueForKeyPath:@"title"];
-        
         for (NSUInteger i = 0; i < g_tianDiPan_resultsArray.count; i++) {
-             if (i < titleQueue.count) {
-                 NSString *title = titleQueue[i];
+             if (i < tasks.count) {
+                 NSString *title = tasks[i][@"title"];
                  NSString *rawBlock = g_tianDiPan_resultsArray[i];
                  NSString *parsedBlock = parseKeChuanDetailBlock(rawBlock, title); // 复用强大的解析器
                  [finalResult appendFormat:@"- 对象: %@\n%@\n\n", title, parsedBlock];
@@ -3399,9 +3390,16 @@ else if (g_s2_isExtractingKeChuanDetail) {
         return;
     }
 
-    // 处理下一个任务
-    NSMutableDictionary *task = g_tianDiPan_workQueue.firstObject;
-    [g_tianDiPan_workQueue removeObjectAtIndex:0];
+    // 处理下一个任务 (从当前结果数量的索引开始)
+    NSUInteger currentIndex = g_tianDiPan_resultsArray.count;
+    if (currentIndex >= g_tianDiPan_workQueue.count) {
+        // 如果出现不匹配，直接结束任务
+        LogMessage(EchoLogError, @"[天地盘详解] 错误: 任务队列与结果数组索引不匹配，提前终止。");
+        [self processTianDiPanQueue]; // 调用自身以进入完成逻辑
+        return;
+    }
+    
+    NSDictionary *task = g_tianDiPan_workQueue[currentIndex];
     
     LogMessage(EchoLogTypeInfo, @"[天地盘详解] 正在参详: %@", task[@"title"]);
     
@@ -3413,7 +3411,9 @@ else if (g_s2_isExtractingKeChuanDetail) {
     } else {
         LogMessage(EchoLogError, @"[天地盘详解] 错误: 无法触发点击或目标Label为空。跳过...");
         [g_tianDiPan_resultsArray addObject:@"[触发失败]"];
-        [self processTianDiPanQueue]; // 继续下一个
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self processTianDiPanQueue]; // 异步继续下一个
+        });
     }
 }
 
@@ -3427,14 +3427,11 @@ else if (g_s2_isExtractingKeChuanDetail) {
     LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“天地盘神将详解”...");
     [self setInteractionBlocked:YES];
 
-    // 初始化状态
     g_isExtractingTianDiPanDetail = YES;
     g_tianDiPan_workQueue = [NSMutableArray array];
     g_tianDiPan_resultsArray = [NSMutableArray array];
     g_tianDiPan_completion_handler = [completion copy];
     
-    // --- 复用 extractTianDiPanInfo_V18 的核心逻辑来找到目标 ---
-    // 1. 找到天地盘视图和所有的UILabel
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
     if (!plateViewClass) { LogMessage(EchoLogError,@"找不到视图类"); if(completion)completion(@""); return; }
     NSMutableArray *plateViews = [NSMutableArray array];
@@ -3445,38 +3442,25 @@ else if (g_s2_isExtractingKeChuanDetail) {
     NSMutableArray *allLabels = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UILabel class], plateView, allLabels);
 
-    // 2. 获取几何数据（与V18函数一样）
-    // ... (此处省略V18中的几何计算，直接用最终的palaceData) ...
-    // 为了效率，我们直接调用V18来获取结构化数据
-    // 然后再映射回UILabel
-    // 【简化版逻辑】: 我们直接遍历所有Label，如果它不是地盘十二支，就认为它是可点击的
-    // 这不够精确，精确的做法是结合几何数据。下面是精确版的实现：
-
-    // 运行V18的几何分析部分，拿到palaceData
-    // (此处为V18函数的简化版，只为获取数据)
-    // ... [此处应粘贴V18函数从@try到生成palaceData的全部代码] ...
-    // 为了避免代码重复，我们假设已经拿到了V18排好序的palaceData
-    // (在实际项目中，你应该将V18的逻辑拆分为数据获取和格式化两部分)
-
-    // 我们用一个更健壮的方法：直接从ivar获取所有图层
-    id diGongDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"地宮宮名列"];
     id tianShenDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天神宮名列"];
     id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
     
-    NSArray *diGongLayers=[diGongDict allValues];
     NSArray *tianShenLayers=[tianShenDict allValues];
     NSArray *tianJiangLayers=[tianJiangDict allValues];
 
-    // 创建一个从CALayer的string到UILabel的映射
     NSMutableDictionary *textToLabelMap = [NSMutableDictionary dictionary];
     for (UILabel *label in allLabels) {
         NSString *text = label.text;
         if (text) {
-            textToLabelMap[text] = label;
+             // 建立一个文本到UILabel的映射，用于后续查找
+             textToLabelMap[text] = label;
         }
     }
-
-    // 构建任务队列
+    
+    // 创建一个从CALayer的string到UILabel的映射的更健壮版本
+    // 因为文本可能会重复（比如多个“天空”），我们需要一个更好的方式
+    // 但在这个场景下，天盘神和天将的名称通常不重复，所以简单映射可行
+    
     for (CALayer *layer in tianShenLayers) {
         NSString *text = [self GetStringFromLayer:layer];
         UILabel *label = textToLabelMap[text];
@@ -3504,7 +3488,6 @@ else if (g_s2_isExtractingKeChuanDetail) {
     
     LogMessage(EchoLogTypeInfo, @"[天地盘详解] 任务队列构建完成，共 %lu 项。", (unsigned long)g_tianDiPan_workQueue.count);
     
-    // 启动处理流程
     [self processTianDiPanQueue];
 }
 %new 
@@ -4928,6 +4911,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
