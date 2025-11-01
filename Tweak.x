@@ -70,7 +70,7 @@ static BOOL g_isTesting = NO;
         Log(@"Step 1-4: (Skipping logs for brevity, assuming they pass)...");
 
         // 直接跳到关键步骤
-        Class plateViewClass = NSClassFromString(@"六壬大占.天地盘视图类");
+        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
         NSMutableArray *plateViews = [NSMutableArray array];
         FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
         UIView *plateView = plateViews.firstObject;
@@ -152,3 +152,4 @@ static BOOL g_isTesting = NO;
 %end
 
 %ctor { Log(@"最终测试脚本V3已加载。"); }
+
