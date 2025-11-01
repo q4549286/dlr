@@ -3,19 +3,17 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局变量与辅助函数 (v4 最终修正版)
+// 1. 全局变量与辅助函数 (v5 最终修正版)
 // =========================================================================
 
 static UIView *g_mainControlPanelView = nil;
 static UITextView *g_logTextView = nil;
 
-// 任务控制相关的全局变量
 static BOOL g_isTestRunning = NO;
 static NSMutableArray *g_testWorkQueue = nil;
 static NSMutableArray<NSString *> *g_testResults = nil;
-static void (^g_testCompletionHandler)(NSString *result) = nil;
 
-// 一个简化的日志函数
+// 日志函数 (保持不变)
 static void LogMessage(NSString *format, ...) {
     if (!g_logTextView) return;
     va_list args;
@@ -34,7 +32,7 @@ static void LogMessage(NSString *format, ...) {
     });
 }
 
-// 获取当前最顶层窗口的辅助函数 (兼容新版iOS)
+// 获取窗口函数 (保持不变)
 static UIWindow* GetFrontmostWindow() {
     UIWindow *frontmostWindow = nil;
     if (@available(iOS 13.0, *)) {
@@ -59,7 +57,7 @@ static UIWindow* GetFrontmostWindow() {
     return frontmostWindow;
 }
 
-// 递归查找手势的辅助函数
+// 查找手势函数 (保持不变)
 static void FindGesturesOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
     if (!view || !aClass || !storage) return;
     for (UIGestureRecognizer *gesture in view.gestureRecognizers) {
@@ -72,8 +70,7 @@ static void FindGesturesOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 }
 
-// --- 递归查找UILabel的辅助函数 (v4 最终修正) ---
-// 改为静态C函数，彻底避免Block循环引用问题
+// 提取Label文本函数 (保持不变)
 static void FindAllLabelsRecursive(UIView *view, NSMutableArray<UILabel *> *labels) {
     if ([view isKindOfClass:[UILabel class]]) {
         [labels addObject:(UILabel *)view];
@@ -82,7 +79,6 @@ static void FindAllLabelsRecursive(UIView *view, NSMutableArray<UILabel *> *labe
         FindAllLabelsRecursive(subview, labels);
     }
 }
-
 static NSString* ExtractAllLabelsFromView(UIView *view) {
     if (!view) return @"[View is nil]";
     NSMutableArray<UILabel *> *labels = [NSMutableArray array];
@@ -110,7 +106,7 @@ static NSString* ExtractAllLabelsFromView(UIView *view) {
 
 
 // =========================================================================
-// 2. 核心Hook：拦截弹窗
+// 2. 核心Hook：拦截弹窗 (保持不变)
 // =========================================================================
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
@@ -122,37 +118,52 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
         if ((tianJiangPopupClass && [vcToPresent isKindOfClass:tianJiangPopupClass]) || (tianDiPanPopupClass && [vcToPresent isKindOfClass:tianDiPanPopupClass])) {
             LogMessage(@"成功拦截到弹窗: %@", NSStringFromClass([vcToPresent class]));
-            
             [vcToPresent loadViewIfNeeded];
-            
             NSString *extractedText = ExtractAllLabelsFromView(vcToPresent.view);
             [g_testResults addObject:extractedText];
             LogMessage(@"提取内容:\n---\n%@\n---", extractedText);
-
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self performSelector:@selector(processTestQueue)];
             });
-            
             return;
         }
     }
-
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
 // =========================================================================
-// 3. Tweak核心逻辑 (v4 终极修正版)
+// 3. Tweak核心逻辑 (v5 终极修正版)
 // =========================================================================
 
-// --- 把所有新方法都定义在一个独立的Category里，这样更干净 ---
-@interface UIViewController (EchoTest)
-- (void)runTianJiangExtractionTest;
-- (void)processTestQueue;
-- (void)createOrShowTestControlPanel;
-@end
+// --- 关键修正：在这里声明我们的Hook组 ---
+%group EchoTestTweak
 
-@implementation UIViewController (EchoTest)
+// --- 我们只Hook目标类的方法 ---
+%hook _TtC12六壬大占14ViewController
 
+- (void)viewDidLoad {
+    %orig;
+    
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIWindow *keyWindow = GetFrontmostWindow();
+        if (!keyWindow) return;
+        if ([keyWindow viewWithTag:888888]) return;
+
+        UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        controlButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
+        controlButton.tag = 888888;
+        [controlButton setTitle:@"推衍课盘(测试)" forState:UIControlStateNormal];
+        controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+        controlButton.backgroundColor = [UIColor systemOrangeColor];
+        [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        controlButton.layer.cornerRadius = 18;
+        [controlButton addTarget:self action:@selector(createOrShowTestControlPanel) forControlEvents:UIControlEventTouchUpInside];
+        [keyWindow addSubview:controlButton];
+    });
+}
+
+// --- 把所有新方法都定义在这里 ---
+%new
 - (void)runTianJiangExtractionTest {
     if (g_isTestRunning) {
         LogMessage(@"测试已在运行中，请勿重复点击。");
@@ -193,6 +204,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [self processTestQueue];
 }
 
+%new
 - (void)processTestQueue {
     if (g_testWorkQueue.count == 0) {
         LogMessage(@"[测试完成] 所有 %lu 个天将详情已提取完毕！", (unsigned long)g_testResults.count);
@@ -223,7 +235,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     id targetActionPair = targets.firstObject;
     id realTarget = [targetActionPair valueForKey:@"_target"];
-    // SEL realAction = NSSelectorFromString([targetActionPair valueForKey:@"_action"]); // 这行有风险，action可能不是string
+    // SEL realAction = NSSelectorFromString([targetActionPair valueForKey:@"_action"]); // 这行有风险
     SEL realAction = NSSelectorFromString(NSStringFromSelector((SEL)[targetActionPair valueForKey:@"_action"]));
 
 
@@ -238,6 +250,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
+%new
 - (void)createOrShowTestControlPanel {
     if (g_mainControlPanelView && g_mainControlPanelView.superview) {
         [g_mainControlPanelView removeFromSuperview];
@@ -285,31 +298,23 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [g_mainControlPanelView addSubview:closeButton];
 }
 
-@end
+%end // 结束我们的Hook组
+
+%end // (这是一个好习惯，虽然在这里不是必须的)
 
 
 // =========================================================================
-// 4. 构造器：应用Hook (v4 终极修正版)
+// 4. 构造器：应用Hook (v5 终极修正版)
 // =========================================================================
+
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
 
-        // 使用%init在运行时动态Hook我们的目标ViewController
-        // 这样可以完全避免在%hook指令中使用任何形式的中文或乱码
-        Class vcClass = objc_getClass("_TtC12六壬大占14ViewController");
-        if (vcClass) {
-            %init(EchoTestTweak); // 初始化我们的Hook组
-            // 为这个类动态添加我们的Category中定义的方法
-            class_addMethod(vcClass, @selector(runTianJiangExtractionTest), (IMP)[UIViewController instanceMethodForSelector:@selector(runTianJiangExtractionTest)], "v@:");
-            class_addMethod(vcClass, @selector(processTestQueue), (IMP)[UIViewController instanceMethodForSelector:@selector(processTestQueue)], "v@:");
-            class_addMethod(vcClass, @selector(createOrShowTestControlPanel), (IMP)[UIViewController instanceMethodForSelector:@selector(createOrShowTestControlPanel)], "v@:");
-
-             % MSHookMessageEx(vcClass, @selector(viewDidLoad), %imp(ViewController, viewDidLoad), (IMP *)NULL);
-            
-            NSLog(@"[Echo独立测试脚本] 已加载并动态Hook成功。");
-        } else {
-            NSLog(@"[Echo独立测试脚本] 错误：无法在运行时找到 _TtC12六壬大占14ViewController 类！");
-        }
+        // 使用%init在运行时动态地启用我们的Hook组
+        // 这会把EchoTestTweak组里定义的所有Hook和%new方法应用到指定的类上
+        %init(EchoTestTweak, _TtC12六壬大占14ViewController = objc_getClass("_TtC12六壬大占14ViewController"));
+        
+        NSLog(@"[Echo独立测试脚本] 已加载并动态Hook成功。");
     }
 }
