@@ -92,8 +92,8 @@ static void Tweak_PlateView_touchesEnded(id self, SEL _cmd, NSSet<UITouch *> *to
             Log(@"Hook 1 FAILED: Class '六壬大占.ViewController' not found.");
         }
 
-        // --- Hook 2 & 3: 天地盘视图类 ---
-        Class plateViewClass = NSClassFromString(@"六壬大占.天地盘视图类");
+        // --- Hook 2 & 3: 天地盤視圖類 ---
+        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
         if (plateViewClass) {
             // Hook touchesBegan
             SEL beganSelector = @selector(touchesBegan:withEvent:);
@@ -115,7 +115,8 @@ static void Tweak_PlateView_touchesEnded(id self, SEL _cmd, NSSet<UITouch *> *to
                 Log(@"Hook 3 FAILED: Method 'touchesEnded:withEvent:' not found.");
             }
         } else {
-            Log(@"Hook 2/3 FAILED: Class '六壬大占.天地盘视图类' not found.");
+            Log(@"Hook 2/3 FAILED: Class '六壬大占.天地盤視圖類' not found.");
         }
     }
 }
+
