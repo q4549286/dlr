@@ -5,16 +5,9 @@
 // =========================================================================
 // 1. 日志和辅助函数
 // =========================================================================
-#define LOG_PREFIX @"[EchoFinalTestV3.1] " // 更新日志前缀
+#define LOG_PREFIX @"[EchoFinalTestV4] "
 #define Log(format, ...) NSLog(LOG_PREFIX format, ##__VA_ARGS__)
 
-#define SUPPRESS_LEAK_WARNING(code) \
-    _Pragma("clang diagnostic push") \
-    _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
-    code; \
-    _Pragma("clang diagnostic pop")
-
-// ========== 修正点 1: 恢复函数体 ==========
 static UIWindow* GetFrontmostWindow() {
     UIWindow *frontmostWindow = nil;
     if (@available(iOS 13.0, *)) {
@@ -48,10 +41,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 @end
 
 // =========================================================================
-// 2. 接口声明和全局变量
+// 2. 接口声明
 // =========================================================================
-static BOOL g_isTesting = NO;
-
 @interface UIViewController (EchoFinalTest)
 - (void)runFinalTest;
 - (id)GetIvarValueSafely:(id)object ivarNameSuffix:(NSString *)ivarNameSuffix;
@@ -67,16 +58,15 @@ static BOOL g_isTesting = NO;
     if ([NSStringFromClass([self class]) hasSuffix:@"ViewController"]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            testButton.frame = CGRectMake([UIScreen mainScreen].bounds.size.width - 120, 90, 110, 36);
-            [testButton setTitle:@"终极测试V3.1" forState:UIControlStateNormal];
-            // ========== 修正点 2: 移除多余的连字符 ==========
+            testButton.frame = CGRectMake([UIScreen mainScreen].bounds.size.width - 120, 140, 110, 36);
+            [testButton setTitle:@"终极测试V4" forState:UIControlStateNormal];
             testButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-            testButton.backgroundColor = [UIColor systemBlueColor];
+            testButton.backgroundColor = [UIColor purpleColor];
             [testButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             testButton.layer.cornerRadius = 18;
             [testButton addTarget:self action:@selector(runFinalTest) forControlEvents:UIControlEventTouchUpInside];
             [GetFrontmostWindow() addSubview:testButton];
-            Log(@"最终测试按钮V3.1已添加。");
+            Log(@"最终测试按钮V4已添加。");
         });
     }
 }
@@ -102,108 +92,103 @@ static BOOL g_isTesting = NO;
 
 %new
 - (void)runFinalTest {
-    Log(@"================== 最终安全测试V3.1开始 ==================");
+    Log(@"================== 最终安全测试V4开始 ==================");
     
-    @try {
-        if (g_isTesting) { Log(@"测试已在进行中..."); return; }
-        g_isTesting = YES;
-        Log(@"Step 1: 状态旗标设置成功。");
+    // 将所有操作延迟到下一个RunLoop，避免UI状态冲突
+    dispatch_async(dispatch_get_main_queue(), ^{
+        @try {
+            Log(@"Step 1: 进入主执行块。");
 
-        Log(@"Step 2: 开始定位目标类...");
-        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
-        if (!plateViewClass) {
-            Log(@"!! FATAL: NSClassFromString未能找到 '六壬大占.天地盤視圖類'。测试终止。");
-            g_isTesting = NO; return;
-        }
-        Log(@"Step 2: 成功获取目标类: %@", plateViewClass);
-
-        Log(@"Step 3: 开始在视图层级中搜索实例...");
-        NSMutableArray *plateViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
-        if (plateViews.count == 0) {
-            Log(@"!! FATAL: 未能在 self.view 中找到目标实例。测试终止。");
-            g_isTesting = NO; return;
-        }
-        UIView *plateView = plateViews.firstObject;
-        Log(@"Step 3: 成功找到目标实例: %@", plateView);
-
-        Log(@"Step 4: 开始获取'天将宫名列'实例变量...");
-        id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
-        if (![tianJiangDict isKindOfClass:[NSDictionary class]] || ((NSDictionary *)tianJiangDict).count == 0) {
-            Log(@"!! FATAL: 未能获取天将字典，或字典为空。测试终止。");
-            g_isTesting = NO; return;
-        }
-        Log(@"Step 4: 成功获取天将字典，包含 %lu 个对象。", (unsigned long)((NSDictionary *)tianJiangDict).count);
-        
-        Log(@"Step 5: 准备构建任务队列 (硬核安全模式)...");
-        NSDictionary *safeDictCopy = [(NSDictionary *)tianJiangDict copy];
-        NSMutableArray *workQueue = [NSMutableArray array];
-        
-        CFDictionaryRef cfDict = (__bridge CFDictionaryRef)safeDictCopy;
-        CFIndex count = CFDictionaryGetCount(cfDict);
-        void const **keys = (void const **)malloc(sizeof(void *) * count);
-        void const **values = (void const **)malloc(sizeof(void *) * count);
-        CFDictionaryGetKeysAndValues(cfDict, keys, values);
-
-        Log(@"Step 5a: 已获取 C-level 键值对，总数: %ld", count);
-
-        for (CFIndex i = 0; i < count; i++) {
-            @try {
-                id key = (__bridge id)keys[i];
-                id obj = (__bridge id)values[i];
-                
-                if (key && obj && [key isKindOfClass:[NSString class]] && [obj isKindOfClass:[CALayer class]]) {
-                    [workQueue addObject:@{ @"targetLayer": (CALayer *)obj, @"name": (NSString *)key }];
-                } else {
-                    Log(@"Step 5b (Warning): 在索引 %ld 处发现无效键值对. Key class: %@, Obj class: %@", i, [key class], [obj class]);
-                }
-            } @catch (NSException *exception) {
-                Log(@"Step 5c (CRITICAL): 在遍历索引 %ld 时捕获到异常: %@", i, exception);
+            // ========== 修正点 1: 全局搜索 ==========
+            Log(@"Step 2: 开始全局搜索'天地盘视图类'...");
+            UIWindow *keyWindow = GetFrontmostWindow();
+            if (!keyWindow) {
+                Log(@"!! FATAL: 无法获取 Key Window。测试终止。");
+                return;
             }
+            // 使用繁体类名
+            Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
+            if (!plateViewClass) {
+                Log(@"!! FATAL: NSClassFromString未能找到 '六壬大占.天地盤視圖類'。测试终止。");
+                return;
+            }
+
+            NSMutableArray *plateViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
+            if (plateViews.count == 0) {
+                Log(@"!! FATAL: 未能在 Key Window 中找到目标实例。测试终止。");
+                return;
+            }
+            UIView *plateView = plateViews.firstObject;
+            Log(@"Step 2: 成功在 Key Window 中找到实例: %@", plateView);
+
+            Log(@"Step 3: 开始获取'天将宫名列'...");
+            id tianJiangDict = [self GetIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
+            if (![tianJiangDict isKindOfClass:[NSDictionary class]] || ((NSDictionary *)tianJiangDict).count == 0) {
+                Log(@"!! FATAL: 未能获取天将字典，或字典为空。测试终止。");
+                return;
+            }
+            Log(@"Step 3: 成功获取天将字典。");
+
+            // ========== 修正点 2: 使用 @autoreleasepool 和强引用 ==========
+            Log(@"Step 4: 进入线程和内存安全区...");
+            __block NSMutableArray *workQueue = [NSMutableArray array];
+            
+            @autoreleasepool {
+                // 创建一个强引用的副本，确保在 block 执行期间不会被释放
+                NSDictionary *strongDictCopy = [tianJiangDict copy];
+                
+                [strongDictCopy enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
+                    if (key && obj) { // 做最基础的非nil检查
+                        [workQueue addObject:@{ @"targetLayer": obj, @"name": key }];
+                    }
+                }];
+            }
+            Log(@"Step 4: 任务队列构建完成，包含 %lu 个任务。", (unsigned long)workQueue.count);
+            
+            if (workQueue.count == 0) {
+                Log(@"!! FATAL: 任务队列为空。测试终止。");
+                return;
+            }
+            
+            Log(@"Step 5: 选取第一个任务进行测试...");
+            NSDictionary *task = workQueue.firstObject;
+            CALayer *targetLayer = task[@"targetLayer"];
+            NSString *targetName = task[@"name"];
+            
+            // 再次验证对象有效性
+            if (![targetLayer isKindOfClass:[CALayer class]] || ![targetName isKindOfClass:[NSString class]]) {
+                Log(@"!! FATAL: 队列中的对象类型不正确. Layer: %@, Name: %@", [targetLayer class], [targetName class]);
+                return;
+            }
+
+            CGPoint targetPosition = targetLayer.position;
+            Log(@"Step 5: 目标: '%@', 坐标: (%.2f, %.2f)", targetName, targetPosition.x, targetPosition.y);
+            
+            Log(@"Step 6: 准备调用...");
+            SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+            if (![self respondsToSelector:selector]) {
+                Log(@"!! FATAL: ViewController 不响应目标方法。");
+                return;
+            }
+            
+            EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
+            fakeGesture.fakeLocation = targetPosition;
+            Log(@"Step 7: 伪造手势已创建，即将调用...");
+
+            SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:fakeGesture]);
+            
+            Log(@"--- CALL SUCCEEDED! --- The app did not crash.");
+
+        } @catch (NSException *exception) {
+            Log(@"!!!!!! CATASTROPHIC FAILURE !!!!!! Exception: %@, Reason: %@", exception.name, exception.reason);
+        } @finally {
+            Log(@"================== 最终安全测试V4结束 ==================");
         }
-        
-        free(keys);
-        free(values);
-
-        if (workQueue.count == 0) {
-            Log(@"!! FATAL: 任务队列构建失败。测试终止。");
-             g_isTesting = NO; return;
-        }
-        Log(@"Step 5d: 任务队列构建成功，包含 %lu 个任务。", (unsigned long)workQueue.count);
-
-        Log(@"Step 6: 选取第一个任务进行单次调用测试...");
-        NSDictionary *task = workQueue.firstObject;
-        CALayer *targetLayer = task[@"targetLayer"];
-        NSString *targetName = task[@"name"];
-        CGPoint targetPosition = targetLayer.position;
-        Log(@"Step 6: 目标: '%@', 坐标: (%.2f, %.2f)", targetName, targetPosition.x, targetPosition.y);
-        
-        Log(@"Step 7: 准备调用方法 '顯示天地盤觸摸WithSender:'...");
-        SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-        if (![self respondsToSelector:selector]) {
-            Log(@"!! FATAL: ViewController 不响应目标方法。测试终止。");
-            g_isTesting = NO; return;
-        }
-        Log(@"Step 7: 确认方法存在。准备创建伪造手势...");
-
-        EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
-        fakeGesture.fakeLocation = targetPosition;
-        Log(@"Step 8: 伪造手势已创建。即将执行 performSelector...");
-
-        Log(@"--- PRE-FLIGHT CHECK COMPLETE. INITIATING CALL... ---");
-        SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:fakeGesture]);
-        Log(@"--- CALL SUCCEEDED! --- The app did not crash on performSelector.");
-
-    } @catch (NSException *exception) {
-        Log(@"!!!!!! CATASTROPHIC FAILURE !!!!!! An exception was caught: %@, Reason: %@", exception.name, exception.reason);
-    } @finally {
-        g_isTesting = NO;
-        Log(@"================== 最终安全测试V3.1结束 ==================");
-    }
+    });
 }
 %end
 
 %ctor {
-    Log(@"最终测试脚本V3.1已加载。");
+    Log(@"最终测试脚本V4已加载。");
 }
-
