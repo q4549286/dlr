@@ -213,7 +213,7 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
     [plateView addGestureRecognizer:fakeGesture];
     // ===============================================================
 
-    SEL selector = NSSelectorFromString(@"顯示天地盤詳情WithSender:");
+    SEL selector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
     if ([self respondsToSelector:selector]) {
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
@@ -221,7 +221,7 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
         [self performSelector:selector withObject:fakeGesture];
         #pragma clang diagnostic pop
     } else {
-        NSLog(@"[EchoTest] 错误: 找不到目标方法 '顯示天地盤詳情WithSender:'");
+        NSLog(@"[EchoTest] 错误: 找不到目标方法 '顯示天地盤觸摸WithSender:'");
         [self processTianDiPanDetailsQueue];
     }
     
@@ -248,3 +248,4 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
         NSLog(@"[EchoTest] 天地盘详情提取测试脚本已加载 (v1.4 闪退终极修复)。");
     }
 }
+
