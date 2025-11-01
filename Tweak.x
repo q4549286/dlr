@@ -6,20 +6,20 @@
 // 1. 全局状态管理
 // =========================================================================
 static BOOL g_isExtractingTianDiPanDetail = NO;
-static NSMutableArray<UIButton *> *g_tianDiPanButtonQueue = nil; // 【新】队列现在存储安全的UIButton
+static NSMutableArray<UIButton *> *g_tianDiPanButtonQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPanTitleQueue = nil;
 static NSMutableDictionary<NSString *, NSString *> *g_tianDiPanResults = nil;
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static UIView *g_overlayContainerView = nil; // 【新】用于存放我们创建的36个按钮
+static UIView *g_overlayContainerView = nil;
 
 // =========================================================================
-// 2. 辅助函数
+// 2. 核心辅助类与函数
 // =========================================================================
+@interface EchoFakeTapGestureRecognizer : UITapGestureRecognizer @end @implementation EchoFakeTapGestureRecognizer @end // We keep this empty class for potential future use, but it's not used in this version.
 static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
 static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) { if (!object || !ivarNameSuffix) return nil; unsigned int ivarCount; Ivar *ivars = class_copyIvarList([object class], &ivarCount); if (!ivars) { free(ivars); return nil; } id value = nil; for (unsigned int i = 0; i < ivarCount; i++) { Ivar ivar = ivars[i]; const char *name = ivar_getName(ivar); if (name) { NSString *ivarName = [NSString stringWithUTF8String:name]; if ([ivarName hasSuffix:ivarNameSuffix]) { value = object_getIvar(object, ivar); break; } } } free(ivars); return value; }
 static NSString* extractTextFromGenericPopupView(UIView *popupView) { NSMutableArray<UILabel *> *allLabels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], popupView, allLabels); [allLabels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) { return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)]; }]; NSMutableString *result = [NSMutableString string]; for (UILabel *label in allLabels) { if (label.text && label.text.length > 0) { [result appendFormat:@"%@\n", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]]; } } return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; }
 
-// 前向声明
 @interface UIViewController (EchoTest)
 - (void)handleTianDiPanTestButtonTap;
 - (void)startExtraction_TianDiPanDetails;
@@ -74,20 +74,28 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
     }
     if (!realTapGesture) { /* 错误处理 */ g_isExtractingTianDiPanDetail = NO; return; }
     
-    // 【新】从真实手势中“偷”出目标和方法
-    id target = nil; SEL action = NULL;
-    id targetWrapper = [realTapGesture valueForKey:@"_targets"];
-    if ([targetWrapper count] > 0) {
-        id firstTarget = targetWrapper[0];
-        target = [firstTarget valueForKey:@"_target"];
-        action = NSSelectorFromString(NSStringFromSelector((SEL)[firstTarget valueForKey:@"_action"]));
+    // ======================【编译错误修复核心】======================
+    id target = nil; 
+    SEL action = NULL;
+    // 使用 valueForKey 访问私有属性 _targets (这是一个包含 UIGestureRecognizerTarget 对象的数组)
+    id targets = [realTapGesture valueForKey:@"_targets"];
+    if ([targets isKindOfClass:[NSArray class]] && [targets count] > 0) {
+        id targetProxy = [targets firstObject];
+        // 从 UIGestureRecognizerTarget 对象中获取真正的 target
+        target = [targetProxy valueForKey:@"_target"]; 
+        // 从 UIGestureRecognizerTarget 对象中获取被 NSValue 包装的 action
+        NSValue *actionValue = [targetProxy valueForKey:@"_action"];
+        if (actionValue) {
+            // 使用 pointerValue 安全地“解包”出 SEL
+            action = [actionValue pointerValue];
+        }
     }
+    // ===============================================================
+
     if (!target || !action) { NSLog(@"[EchoTest] 错误: 无法从真实手势中获取target或action。"); g_isExtractingTianDiPanDetail = NO; return; }
 
-    // 【新】禁用原始手势，避免冲突
     realTapGesture.enabled = NO;
 
-    // 【新】创建覆盖层
     g_overlayContainerView = [[UIView alloc] initWithFrame:plateView.bounds];
     g_overlayContainerView.backgroundColor = [UIColor clearColor];
     [plateView addSubview:g_overlayContainerView];
@@ -99,8 +107,8 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
             CALayer *layer = layerDict[key];
             if (layer && [layer isKindOfClass:[CALayer class]]) {
                 UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
-                button.frame = layer.frame; // 使用 CALayer 的 frame
-                // 关键：将“偷”来的目标和方法绑定到我们的新按钮上
+                button.frame = layer.frame;
+                // 将“偷”来的目标和方法绑定到我们的新按钮上
                 [button addTarget:target action:action forControlEvents:UIControlEventTouchUpInside];
                 
                 [g_overlayContainerView addSubview:button];
@@ -126,7 +134,6 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
         for (NSString *key in sortedKeys) { NSLog(@"\n--- %@ ---\n%@", key, g_tianDiPanResults[key]); }
         NSLog(@"[EchoTest] =======================================");
 
-        // 【新】清理工作：恢复原始手势，移除覆盖层
         UITapGestureRecognizer *realTapGesture = nil;
         if (g_overlayContainerView.superview) {
             for (UIGestureRecognizer *gesture in g_overlayContainerView.superview.gestureRecognizers) { if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) { realTapGesture = (UITapGestureRecognizer *)gesture; break; } }
@@ -134,8 +141,7 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
             [g_overlayContainerView removeFromSuperview];
         }
 
-        g_isExtractingTianDiPanDetail = NO;
-        g_tianDiPanButtonQueue = nil; g_tianDiPanTitleQueue = nil; g_tianDiPanResults = nil; g_overlayContainerView = nil;
+        g_isExtractingTianDiPanDetail = NO; g_tianDiPanButtonQueue = nil; g_tianDiPanTitleQueue = nil; g_tianDiPanResults = nil; g_overlayContainerView = nil;
         
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"测试完成" message:[NSString stringWithFormat:@"已成功提取 %lu 条详情，请检查日志。", (unsigned long)sortedKeys.count] preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
@@ -146,7 +152,6 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
     UIButton *targetButton = g_tianDiPanButtonQueue.firstObject;
     [g_tianDiPanButtonQueue removeObjectAtIndex:0];
     
-    // 【新】最安全的方式：模拟真实的按钮点击事件
     [targetButton sendActionsForControlEvents:UIControlEventTouchUpInside];
 }
 
@@ -155,6 +160,6 @@ static void Tweak_presentViewController(UIViewController *self, SEL _cmd, UIView
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[EchoTest] 天地盘详情提取测试脚本已加载 (v1.7 绝对安全版)。");
+        NSLog(@"[EchoTest] 天地盘详情提取测试脚本已加载 (v1.8 ARC修复版)。");
     }
 }
