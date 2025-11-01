@@ -118,9 +118,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     
     @try {
         // 1. 查找天地盘视图
-        Class plateViewClass = NSClassFromString(@"六壬大占.天地盘视图类");
+        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
         if (!plateViewClass) {
-            Log(@"!! 失败: 找不到 '六壬大占.天地盘视图类'");
+            Log(@"!! 失败: 找不到 '六壬大占.天地盤視圖類'");
             return;
         }
         NSMutableArray *plateViews = [NSMutableArray array];
@@ -189,3 +189,4 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 %ctor {
     Log(@"安全点击测试脚本已加载。");
 }
+
