@@ -104,8 +104,8 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     Log(@"  - self 的描述: %@", self);
 
     // --- 侦察点 2: 查找天地盘视图 ---
-    Log(@"侦察点 2: 查找 '六壬大占.天地盘视图类'...");
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盘视图类");
+    Log(@"侦察点 2: 查找 '六壬大占.天地盤視圖類'...");
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
         Log(@"  - 结果: 失败! NSClassFromString 无法找到该类。");
         // 尝试备用名称
@@ -120,7 +120,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     }
 
     if (!plateViewClass) {
-        Log(@"!!!!! 任务失败: 无法定位天地盘视图类，后续侦察无法进行。");
+        Log(@"!!!!! 任务失败: 无法定位天地盤視圖類，后续侦察无法进行。");
         Log(@">>>>> 侦察任务结束 <<<<<");
         return;
     }
@@ -191,3 +191,4 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 %ctor {
     Log(@"侦察兵脚本已加载。");
 }
+
