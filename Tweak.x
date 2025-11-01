@@ -3,246 +3,298 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 全局变量、常量与辅助函数
+// 1. 全局状态与辅助函数
 // =========================================================================
-#pragma mark - Globals & Constants
-static const NSInteger kEchoExtractorButtonTag = 777888;
-static BOOL g_isExtractingTianDiPanDetails = NO;
-static NSMutableArray *g_tianDiPanWorkQueue = nil;
-static NSMutableDictionary *g_tianDiPanResults = nil;
-static void (^g_tianDiPanCompletionHandler)(NSDictionary *) = nil;
-static CGPoint g_mockTouchLocation; // 用于存储伪造的点击位置
 
-#pragma mark - Helper Functions
-// GetIvarValueSafely 和 GetStringFromLayer 保持不变
-static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) { /* ... 保持原样 ... */ }
-static NSString *GetStringFromLayer(id layer) { /* ... 保持原样 ... */ }
-
-// Fake Gesture Recognizer and Swizzling
-@interface MockTapGestureRecognizer : UITapGestureRecognizer @end
-@implementation MockTapGestureRecognizer
-// 我们将要 swizzle 这个方法
-- (CGPoint)locationInView:(UIView *)view {
-    return g_mockTouchLocation;
-}
-@end
-
-// =========================================================================
-// 2. 核心 Hook (presentViewController)
-// =========================================================================
+// 状态标志，用于控制提取流程和Hook行为
+static BOOL g_isExtractingDetails = NO;
+// 任务队列，存放待提取的宫位名称 (e.g., "子", "丑", ...)
+static NSMutableArray<NSString *> *g_extractionWorkQueue = nil;
+// 结果存储，将宫位名称映射到其提取出的详情文本
+static NSMutableDictionary<NSString *, NSString *> *g_extractionResults = nil;
+// 当前正在处理的宫位，用于在Hook中正确关联结果
+static NSString *g_currentPalaceBeingProcessed = nil;
+// 指向原始 presentViewController 方法的指针
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 
-static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    if (g_isExtractingTianDiPanDetails) {
-        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        // 根据你之前的经验，弹窗的类名可能是 "課傳摘要視圖" 或类似的
-        if ([vcClassName containsString:@"摘要視圖"]) {
-            NSLog(@"[Extractor] 成功拦截到天地盘详情弹窗: %@", vcClassName);
+// 弹窗，用于显示进度
+static UIAlertController *g_progressAlert = nil;
+
+#define SUPPRESS_LEAK_WARNING(code) \
+    _Pragma("clang diagnostic push") \
+    _Pragma("clang diagnostic ignored \"-Warc-performSelector-leaks\"") \
+    code; \
+    _Pragma("clang diagnostic pop")
+
+// 递归查找指定类的所有子视图
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) {
+    if (!view || !storage) return;
+    if ([view isKindOfClass:aClass]) {
+        [storage addObject:view];
+    }
+    for (UIView *subview in view.subviews) {
+        FindSubviewsOfClassRecursive(aClass, subview, storage);
+    }
+}
+
+// 安全地获取对象的实例变量值
+static id GetIvarValueSafely(id object, NSString *ivarName) {
+    if (!object || !ivarName) return nil;
+    Ivar ivar = class_getInstanceVariable([object class], [ivarName UTF8String]);
+    if (!ivar) return nil;
+    return object_getIvar(object, ivar);
+}
+
+// 从 CALayer 中提取字符串
+static NSString* GetStringFromLayer(id layer) {
+    if (layer && [layer respondsToSelector:@selector(string)]) {
+        id stringValue = [layer valueForKey:@"string"];
+        if ([stringValue isKindOfClass:[NSString class]]) return stringValue;
+        if ([stringValue isKindOfClass:[NSAttributedString class]]) return ((NSAttributedString *)stringValue).string;
+    }
+    return @"";
+}
+
+// 从弹出的详情视图中提取所有文本
+static NSString* extractTextFromPopupView(UIView *popupView) {
+    NSMutableArray<UILabel *> *labels = [NSMutableArray array];
+    FindSubviewsOfClassRecursive([UILabel class], popupView, labels);
+    
+    // 按垂直位置排序，确保文本顺序正确
+    [labels sortUsingComparator:^NSComparisonResult(UILabel *obj1, UILabel *obj2) {
+        return [@(obj1.frame.origin.y) compare:@(obj2.frame.origin.y)];
+    }];
+    
+    NSMutableString *result = [NSMutableString string];
+    for (UILabel *label in labels) {
+        if (label.text && label.text.length > 0) {
+            [result appendFormat:@"%@\n", [label.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        }
+    }
+    return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
+
+// =========================================================================
+// 2. 核心Hook与方法实现
+// =========================================================================
+
+%hook UIViewController
+
+// 新增一个方法，用于处理按钮点击事件
+%new
+- (void)handleExtractTianDiPanDetailsTapped {
+    if (g_isExtractingDetails) {
+        NSLog(@"[TDP Extractor] 提取任务已在进行中，请稍候。");
+        return;
+    }
+    
+    NSLog(@"[TDP Extractor] 任务启动...");
+
+    // 1. 初始化状态
+    g_isExtractingDetails = YES;
+    g_extractionWorkQueue = [NSMutableArray array];
+    g_extractionResults = [NSMutableDictionary dictionary];
+    g_currentPalaceBeingProcessed = nil;
+
+    // 2. 找到天地盘视图，并从中获取12宫的名称列表
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
+    if (!plateViewClass) {
+        NSLog(@"[TDP Extractor] 错误: 找不到 '六壬大占.天地盤視圖' 类。");
+        g_isExtractingDetails = NO;
+        return;
+    }
+    
+    NSMutableArray *plateViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
+    if (plateViews.count == 0) {
+        NSLog(@"[TDP Extractor] 错误: 在当前视图中找不到天地盘实例。");
+        g_isExtractingDetails = NO;
+        return;
+    }
+    UIView *plateView = plateViews.firstObject;
+
+    // 3. (关键) 确认ViewController响应我们猜测的“精确制导”方法
+    // 根据FLEX分析，方法名很可能是 `顯示指定地宮詳情:`
+    SEL directShowSelector = NSSelectorFromString(@"顯示指定地宮詳情:");
+    if (![self respondsToSelector:directShowSelector]) {
+        NSLog(@"[TDP Extractor] 致命错误: ViewController上找不到方法 '顯示指定地宮詳情:'。无法继续。");
+        // 在这里可以弹出一个错误提示给用户
+        UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"提取失败" message:@"Tweak与当前App版本不兼容（找不到关键方法）。" preferredStyle:UIAlertControllerStyleAlert];
+        [errorAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:errorAlert animated:YES completion:nil];
+        g_isExtractingDetails = NO;
+        return;
+    }
+
+    // 4. 从实例变量中获取宫位名称列表，构建任务队列
+    // 注意：这里的实例变量名 `地宮宮名列` 是从你的FLEX截图中直接获得的
+    NSDictionary *diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
+    if (!diGongDict) {
+        NSLog(@"[TDP Extractor] 错误: 无法从天地盘视图获取 '地宮宮名列' 实例变量。");
+        g_isExtractingDetails = NO;
+        return;
+    }
+    
+    for (id key in diGongDict) {
+        CALayer *layer = diGongDict[key];
+        NSString *palaceName = GetStringFromLayer(layer);
+        if (palaceName.length > 0) {
+            [g_extractionWorkQueue addObject:palaceName];
+        }
+    }
+
+    if (g_extractionWorkQueue.count != 12) {
+        NSLog(@"[TDP Extractor] 警告: 获取到的宫位数量不是12个 (%lu)，流程可能不完整。", (unsigned long)g_extractionWorkQueue.count);
+    }
+    
+    NSLog(@"[TDP Extractor] 任务队列构建完成，包含 %lu 个宫位。", (unsigned long)g_extractionWorkQueue.count);
+
+    // 5. 显示进度提示并开始处理队列
+    g_progressAlert = [UIAlertController alertControllerWithTitle:@"正在提取天地盘详情..." message:@"请稍候 (0/12)" preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:g_progressAlert animated:YES completion:^{
+        [self processNextPalaceInQueue];
+    }];
+}
+
+// 新增一个方法，用于循环处理任务队列
+%new
+- (void)processNextPalaceInQueue {
+    // 终止条件：队列为空，任务完成
+    if (g_extractionWorkQueue.count == 0) {
+        NSLog(@"[TDP Extractor] 所有宫位提取完成。");
+        
+        // 格式化最终报告
+        NSMutableString *finalReport = [NSMutableString stringWithString:@"// ======== 天地盘十二宫详情 ========\n\n"];
+        NSArray *palaceOrder = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"];
+        for (NSString *palaceName in palaceOrder) {
+            NSString *details = g_extractionResults[palaceName] ?: @"[提取失败]";
+            [finalReport appendFormat:@"//--- %@宫 详情 ---\n%@\n\n", palaceName, details];
+        }
+
+        // 复制到剪贴板
+        [UIPasteboard generalPasteboard].string = finalReport;
+
+        // 关闭进度提示，显示成功信息
+        [g_progressAlert dismissViewControllerAnimated:YES completion:^{
+            UIAlertController *doneAlert = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"天地盘12宫详情已全部复制到剪贴板。" preferredStyle:UIAlertControllerStyleAlert];
+            [doneAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:doneAlert animated:YES completion:nil];
+        }];
+
+        // 重置状态
+        g_isExtractingDetails = NO;
+        g_extractionWorkQueue = nil;
+        g_extractionResults = nil;
+        g_currentPalaceBeingProcessed = nil;
+        g_progressAlert = nil;
+        
+        return;
+    }
+
+    // 从队列中取出一个任务
+    NSString *palaceName = g_extractionWorkQueue.firstObject;
+    [g_extractionWorkQueue removeObjectAtIndex:0];
+    g_currentPalaceBeingProcessed = palaceName;
+
+    // 更新进度
+    if (g_progressAlert) {
+        g_progressAlert.message = [NSString stringWithFormat:@"请稍候 (%lu/12)", (unsigned long)(12 - g_extractionWorkQueue.count)];
+    }
+    
+    NSLog(@"[TDP Extractor] 正在处理: %@宫", palaceName);
+    
+    // (关键) 直接调用App的内部方法来显示详情
+    SEL directShowSelector = NSSelectorFromString(@"顯示指定地宮詳情:");
+    SUPPRESS_LEAK_WARNING([self performSelector:directShowSelector withObject:palaceName]);
+}
+
+
+// 在主界面加载时，添加我们的触发按钮
+- (void)viewDidLoad {
+    %orig;
+
+    // 确保只在目标ViewController上添加按钮
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        // 使用dispatch_after确保UI已完全加载
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIButton *extractButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            extractButton.frame = CGRectMake(self.view.bounds.size.width - 160, 45, 150, 36);
+            [extractButton setTitle:@"提取天地盘详情" forState:UIControlStateNormal];
+            extractButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.4 blue:0.7 alpha:1.0];
+            [extractButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            extractButton.layer.cornerRadius = 18;
+            extractButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+            [extractButton addTarget:self action:@selector(handleExtractTianDiPanDetailsTapped) forControlEvents:UIControlEventTouchUpInside];
             
-            // 延迟执行以确保视图加载完成
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            // 添加阴影，使其更显眼
+            extractButton.layer.shadowColor = [UIColor blackColor].CGColor;
+            extractButton.layer.shadowOffset = CGSizeMake(0, 2);
+            extractButton.layer.shadowOpacity = 0.5;
+            extractButton.layer.shadowRadius = 3;
+            
+            [self.view addSubview:extractButton];
+            [self.view bringSubviewToFront:extractButton];
+        });
+    }
+}
+
+%end
+
+
+// =========================================================================
+// 3. 拦截器实现
+// =========================================================================
+
+// 这是整个流程的魔法核心：拦截弹窗
+static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
+    // 检查是否是我们的提取任务触发的弹窗
+    if (g_isExtractingDetails && g_currentPalaceBeingProcessed) {
+        // 进一步确认弹窗的类型是否正确
+        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+        if ([vcClassName containsString:@"詳情視圖"]) {
+            NSLog(@"[TDP Extractor] 成功拦截到 %@宫 的详情弹窗。", g_currentPalaceBeingProcessed);
+            
+            // 延迟一小段时间，确保弹窗的视图内容已经加载完毕
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                // 从弹窗视图中提取文本
+                NSString *extractedText = extractTextFromPopupView(vcToPresent.view);
                 
-                // --- 在这里添加你的弹窗内容提取逻辑 ---
-                // 复用你之前写好的课传流注提取逻辑
-                NSMutableArray<NSString *> *textParts = [NSMutableArray array];
-                NSMutableArray *labels = [NSMutableArray array];
-                FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, labels);
-                for (UILabel *label in labels) {
-                    if (label.text.length > 0) {
-                        [textParts addObject:label.text];
-                    }
-                }
-                NSString *extractedText = [textParts componentsJoinedByString:@"\n"];
-                // --- 提取逻辑结束 ---
-
-                if (g_tianDiPanWorkQueue.count > 0) {
-                    NSString *currentTaskKey = g_tianDiPanWorkQueue.firstObject[@"key"];
-                    g_tianDiPanResults[currentTaskKey] = extractedText;
-                    NSLog(@"[Extractor] 任务 '%@' 数据提取成功。", currentTaskKey);
-                }
-
-                // 立即关闭弹窗，并继续下一个任务
-                [vcToPresent dismissViewControllerAnimated:NO completion:^{
-                    if ([self respondsToSelector:@selector(processTianDiPanQueue)]) {
-                        [self performSelector:@selector(processTianDiPanQueue)];
-                    }
-                }];
+                // 将结果存入字典
+                g_extractionResults[g_currentPalaceBeingProcessed] = extractedText;
+                
+                // 清理当前宫位标记
+                g_currentPalaceBeingProcessed = nil;
+                
+                // 继续处理下一个宫位
+                [self processNextPalaceInQueue];
             });
-            // 阻止原始的 present 调用，避免动画
+            
+            // (关键) 直接返回，不调用原始的 presentViewController 方法，这样用户就看不到弹窗了
             return;
         }
     }
-    // 如果不是我们想要的弹窗，就执行原始逻辑
+    
+    // 如果不是我们的任务，就执行原始的弹窗逻辑
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
 
 // =========================================================================
-// 3. UIViewController 扩展
+// 4. Tweak初始化
 // =========================================================================
-@interface UIViewController (EchoExtractor)
-- (void)startTianDiPanExtraction;
-- (void)processTianDiPanQueue;
-@end
 
-%hook UIViewController
-
-- (void)viewDidLoad {
-    %orig;
-    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
-    if (targetClass && [self isKindOfClass:targetClass]) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if ([self.view.window viewWithTag:kEchoExtractorButtonTag]) return;
-            UIButton *extractorButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            extractorButton.frame = CGRectMake(10, 45, 160, 36);
-            extractorButton.tag = kEchoExtractorButtonTag;
-            [extractorButton setTitle:@"提取天地盘详情" forState:UIControlStateNormal];
-            extractorButton.backgroundColor = [UIColor systemGreenColor];
-            [extractorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            extractorButton.layer.cornerRadius = 18;
-            [extractorButton addTarget:self action:@selector(startTianDiPanExtraction) forControlEvents:UIControlEventTouchUpInside];
-            [self.view.window addSubview:extractorButton];
-        });
-    }
-}
-
-%new
-- (void)startTianDiPanExtraction {
-    if (g_isExtractingTianDiPanDetails) {
-        NSLog(@"[Extractor] 提取任务已在进行中。");
-        return;
-    }
-    
-    g_isExtractingTianDiPanDetails = YES;
-    g_tianDiPanWorkQueue = [NSMutableArray array];
-    g_tianDiPanResults = [NSMutableDictionary dictionary];
-    g_tianDiPanCompletionHandler = ^(NSDictionary *results){
-        // 在这里处理最终的所有结果
-        NSMutableString *finalReport = [NSMutableString string];
-        [finalReport appendString:@"// ====== 天地盘宫位详情 ======\n\n"];
-        for (NSString *key in [results.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
-            [finalReport appendFormat:@"--- %@ ---\n%@\n\n", key, results[key]];
-        }
-        
-        // 复制到剪贴板
-        [UIPasteboard generalPasteboard].string = finalReport;
-        NSLog(@"[Extractor] 全部完成！结果已复制到剪贴板。");
-        
-        // 清理状态
-        g_isExtractingTianDiPanDetails = NO;
-        g_tianDiPanWorkQueue = nil;
-        g_tianDiPanResults = nil;
-        g_tianDiPanCompletionHandler = nil;
-    };
-
-    NSLog(@"[Extractor] 开始提取天地盘详情...");
-
-    // 1. 定位天地盘视图
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
-    __block UIView *plateView = nil;
-    // ... (此处省略和诊断脚本里一样的视图查找逻辑)
-    // 假设已经找到了 plateView
-    
-    // 2. 读取包含 CALayer 的字典
-    NSDictionary *diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
-    NSDictionary *tianShenDict = GetIvarValueSafely(plateView, @"天神宮名列");
-    NSDictionary *tianJiangDict = GetIvarValueSafely(plateView, @"天將宮名列");
-    
-    if (!diGongDict || !tianShenDict || !tianJiangDict) {
-        NSLog(@"[Extractor] CRITICAL: 无法读取核心数据字典。");
-        g_isExtractingTianDiPanDetails = NO;
-        return;
-    }
-
-    // 3. 构建任务队列
-    // 我们假设这三个字典的 key 是相同的 (例如地支名)
-    for (NSString *key in diGongDict.allKeys) {
-        CALayer *diGongLayer = diGongDict[key];
-        CALayer *tianShenLayer = tianShenDict[key];
-        CALayer *tianJiangLayer = tianJiangDict[key];
-
-        // 我们需要点击天神 (天盘地支)
-        if (tianShenLayer) {
-            // 计算 layer 在其父视图中的中心点
-            CGPoint centerPoint = CGPointMake(CGRectGetMidX(tianShenLayer.frame), CGRectGetMidY(tianShenLayer.frame));
-            
-            NSString *taskKey = [NSString stringWithFormat:@"%@宫-%@(%@)", GetStringFromLayer(diGongLayer), GetStringFromLayer(tianShenLayer), GetStringFromLayer(tianJiangLayer)];
-
-            [g_tianDiPanWorkQueue addObject:@{
-                @"key": taskKey,
-                @"location": [NSValue valueWithCGPoint:centerPoint]
-            }];
-        }
-    }
-    
-    NSLog(@"[Extractor] 任务队列构建完成，共 %lu 项。", (unsigned long)g_tianDiPanWorkQueue.count);
-
-    // 4. 开始处理队列
-    [self processTianDiPanQueue];
-}
-
-%new
-- (void)processTianDiPanQueue {
-    if (!g_isExtractingTianDiPanDetails || g_tianDiPanWorkQueue.count == 0) {
-        if (g_tianDiPanCompletionHandler) {
-            g_tianDiPanCompletionHandler(g_tianDiPanResults);
-        }
-        return;
-    }
-
-    NSDictionary *task = g_tianDiPanWorkQueue.firstObject;
-    // [g_tianDiPanWorkQueue removeObjectAtIndex:0]; // 暂时不移除，等成功后再移除
-
-    NSLog(@"[Extractor] 正在处理任务: %@", task[@"key"]);
-
-    // 1. 找到天地盘视图实例
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
-    // ... (再次执行视图查找逻辑)
-    // 假设已找到 plateView
-
-    if (!plateView) {
-        NSLog(@"[Extractor] CRITICAL: 在处理队列时找不到天地盘视图。");
-        g_isExtractingTianDiPanDetails = NO;
-        return;
-    }
-
-    // 2. 准备伪造手势
-    SEL actionSelector = NSSelectorFromString(@"處理點擊WithSender:");
-    if (![plateView respondsToSelector:actionSelector]) {
-        NSLog(@"[Extractor] CRITICAL: 视图不响应 '處理點擊WithSender:' 方法。");
-        g_isExtractingTianDiPanDetails = NO;
-        return;
-    }
-
-    g_mockTouchLocation = [task[@"location"] CGPointValue];
-    
-    // 3. 创建并执行
-    // 注意：这里我们直接创建一个 MockTapGestureRecognizer 的实例
-    MockTapGestureRecognizer *mockGesture = [[MockTapGestureRecognizer alloc] init];
-
-    // 因为 locationInView: 已经被我们重写，所以 App 调用它时会得到我们设置的 g_mockTouchLocation
-    
-    // 【核心】调用方法
-    // 使用 NSInvocation 来安全地调用，避免编译器警告
-    NSMethodSignature *signature = [plateView methodSignatureForSelector:actionSelector];
-    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
-    [invocation setTarget:plateView];
-    [invocation setSelector:actionSelector];
-    [invocation setArgument:&mockGesture atIndex:2]; // 参数从 index 2 开始
-    [invocation invoke];
-    
-    // 从队列中移除已处理的任务
-    [g_tianDiPanWorkQueue removeObjectAtIndex:0];
-}
-
-%end
-
-// =========================================================================
-// 4. 初始化
-// =========================================================================
 %ctor {
     @autoreleasepool {
-        MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[EchoTianDiPanExtractor] 天地盘详情提取器已加载。");
+        // Hook UIViewController 的 presentViewController 方法
+        MSHookMessageEx(
+            NSClassFromString(@"UIViewController"),
+            @selector(presentViewController:animated:completion:),
+            (IMP)&Tweak_presentViewController,
+            (IMP *)&Original_presentViewController
+        );
+        
+        NSLog(@"[TDP Extractor] 天地盘详情提取Tweak已加载。");
     }
 }
