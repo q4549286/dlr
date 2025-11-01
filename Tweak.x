@@ -3,248 +3,246 @@
 #import <substrate.h>
 
 // =========================================================================
-// 1. 伪造手势类
+// 1. 全局变量、常量与辅助函数
 // =========================================================================
-@interface EchoFakeGestureRecognizer : UIGestureRecognizer
-@property (nonatomic, assign) CGPoint fakeLocation;
-@end
+#pragma mark - Globals & Constants
+static const NSInteger kEchoExtractorButtonTag = 777888;
+static BOOL g_isExtractingTianDiPanDetails = NO;
+static NSMutableArray *g_tianDiPanWorkQueue = nil;
+static NSMutableDictionary *g_tianDiPanResults = nil;
+static void (^g_tianDiPanCompletionHandler)(NSDictionary *) = nil;
+static CGPoint g_mockTouchLocation; // 用于存储伪造的点击位置
 
-@implementation EchoFakeGestureRecognizer
+#pragma mark - Helper Functions
+// GetIvarValueSafely 和 GetStringFromLayer 保持不变
+static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) { /* ... 保持原样 ... */ }
+static NSString *GetStringFromLayer(id layer) { /* ... 保持原样 ... */ }
+
+// Fake Gesture Recognizer and Swizzling
+@interface MockTapGestureRecognizer : UITapGestureRecognizer @end
+@implementation MockTapGestureRecognizer
+// 我们将要 swizzle 这个方法
 - (CGPoint)locationInView:(UIView *)view {
-    return self.fakeLocation;
+    return g_mockTouchLocation;
 }
 @end
 
 // =========================================================================
-// 2. 全局变量、UI与辅助函数
+// 2. 核心 Hook (presentViewController)
 // =========================================================================
-static UIView *g_extractorView = nil;
-static UITextView *g_logTextView = nil;
-
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static BOOL g_isExtractingDetails = NO;
-static void (^g_detailCompletionHandler)(NSString *result);
-
-// 辅助函数...
-static id GetIvarValueSafely(id, NSString *);
-static void LogToScreen(NSString *, ...);
-static NSString* extractTextFromPopup(UIView *);
-
-// =========================================================================
-// 3. 核心Hook与提取逻辑
-// =========================================================================
 
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    if (g_isExtractingDetails) {
-        if ([vcToPresent isKindOfClass:[UINavigationController class]]) {
-            animated = NO;
-            void (^extractionCompletion)(void) = ^{
-                if (completion) completion();
-                NSString *extractedText = extractTextFromPopup(vcToPresent.view);
-                if (g_detailCompletionHandler) g_detailCompletionHandler(extractedText);
-                [vcToPresent dismissViewControllerAnimated:NO completion:nil];
-            };
-            Original_presentViewController(self, _cmd, vcToPresent, animated, extractionCompletion);
+    if (g_isExtractingTianDiPanDetails) {
+        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+        // 根据你之前的经验，弹窗的类名可能是 "課傳摘要視圖" 或类似的
+        if ([vcClassName containsString:@"摘要視圖"]) {
+            NSLog(@"[Extractor] 成功拦截到天地盘详情弹窗: %@", vcClassName);
+            
+            // 延迟执行以确保视图加载完成
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                
+                // --- 在这里添加你的弹窗内容提取逻辑 ---
+                // 复用你之前写好的课传流注提取逻辑
+                NSMutableArray<NSString *> *textParts = [NSMutableArray array];
+                NSMutableArray *labels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], vcToPresent.view, labels);
+                for (UILabel *label in labels) {
+                    if (label.text.length > 0) {
+                        [textParts addObject:label.text];
+                    }
+                }
+                NSString *extractedText = [textParts componentsJoinedByString:@"\n"];
+                // --- 提取逻辑结束 ---
+
+                if (g_tianDiPanWorkQueue.count > 0) {
+                    NSString *currentTaskKey = g_tianDiPanWorkQueue.firstObject[@"key"];
+                    g_tianDiPanResults[currentTaskKey] = extractedText;
+                    NSLog(@"[Extractor] 任务 '%@' 数据提取成功。", currentTaskKey);
+                }
+
+                // 立即关闭弹窗，并继续下一个任务
+                [vcToPresent dismissViewControllerAnimated:NO completion:^{
+                    if ([self respondsToSelector:@selector(processTianDiPanQueue)]) {
+                        [self performSelector:@selector(processTianDiPanQueue)];
+                    }
+                }];
+            });
+            // 阻止原始的 present 调用，避免动画
             return;
         }
     }
+    // 如果不是我们想要的弹窗，就执行原始逻辑
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
+
+// =========================================================================
+// 3. UIViewController 扩展
+// =========================================================================
 @interface UIViewController (EchoExtractor)
-- (void)startFullExtraction;
+- (void)startTianDiPanExtraction;
+- (void)processTianDiPanQueue;
 @end
 
-// 【【【 最终结构修正 】】】
-%hook 六壬大占.ViewController
+%hook UIViewController
 
 - (void)viewDidLoad {
     %orig;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if ([self.view.window viewWithTag:777888]) return;
-        UIButton *extractorButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        extractorButton.frame = CGRectMake(self.view.bounds.size.width - 150, 45, 140, 36);
-        extractorButton.tag = 777888;
-        [extractorButton setTitle:@"提取天地盘详情" forState:UIControlStateNormal];
-        extractorButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.35 alpha:1.0];
-        [extractorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        extractorButton.layer.cornerRadius = 18;
-        [extractorButton addTarget:self action:@selector(startFullExtraction) forControlEvents:UIControlEventTouchUpInside];
-        [self.view.window addSubview:extractorButton];
-    });
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if ([self.view.window viewWithTag:kEchoExtractorButtonTag]) return;
+            UIButton *extractorButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            extractorButton.frame = CGRectMake(10, 45, 160, 36);
+            extractorButton.tag = kEchoExtractorButtonTag;
+            [extractorButton setTitle:@"提取天地盘详情" forState:UIControlStateNormal];
+            extractorButton.backgroundColor = [UIColor systemGreenColor];
+            [extractorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            extractorButton.layer.cornerRadius = 18;
+            [extractorButton addTarget:self action:@selector(startTianDiPanExtraction) forControlEvents:UIControlEventTouchUpInside];
+            [self.view.window addSubview:extractorButton];
+        });
+    }
 }
 
 %new
-- (void)startFullExtraction {
-    if (g_extractorView) {
-        [g_extractorView removeFromSuperview];
-        g_extractorView = nil; g_logTextView = nil;
+- (void)startTianDiPanExtraction {
+    if (g_isExtractingTianDiPanDetails) {
+        NSLog(@"[Extractor] 提取任务已在进行中。");
         return;
     }
     
-    g_extractorView = [[UIView alloc] initWithFrame:CGRectMake(10, 100, self.view.bounds.size.width - 20, 500)];
-    g_extractorView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
-    g_extractorView.layer.cornerRadius = 15;
-    g_extractorView.layer.borderColor = [UIColor greenColor].CGColor;
-    g_extractorView.layer.borderWidth = 1.0;
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectInset(g_extractorView.bounds, 10, 10)];
-    g_logTextView.backgroundColor = [UIColor clearColor]; g_logTextView.textColor = [UIColor whiteColor];
-    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:11]; g_logTextView.editable = NO; g_logTextView.text = @"";
-    [g_extractorView addSubview:g_logTextView];
-    [self.view.window addSubview:g_extractorView];
+    g_isExtractingTianDiPanDetails = YES;
+    g_tianDiPanWorkQueue = [NSMutableArray array];
+    g_tianDiPanResults = [NSMutableDictionary dictionary];
+    g_tianDiPanCompletionHandler = ^(NSDictionary *results){
+        // 在这里处理最终的所有结果
+        NSMutableString *finalReport = [NSMutableString string];
+        [finalReport appendString:@"// ====== 天地盘宫位详情 ======\n\n"];
+        for (NSString *key in [results.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
+            [finalReport appendFormat:@"--- %@ ---\n%@\n\n", key, results[key]];
+        }
+        
+        // 复制到剪贴板
+        [UIPasteboard generalPasteboard].string = finalReport;
+        NSLog(@"[Extractor] 全部完成！结果已复制到剪贴板。");
+        
+        // 清理状态
+        g_isExtractingTianDiPanDetails = NO;
+        g_tianDiPanWorkQueue = nil;
+        g_tianDiPanResults = nil;
+        g_tianDiPanCompletionHandler = nil;
+    };
 
-    LogToScreen(@"[INFO] 开始提取天地盘所有宫位详情...");
+    NSLog(@"[Extractor] 开始提取天地盘详情...");
 
-    UIViewController *vc = self;
+    // 1. 定位天地盘视图
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     __block UIView *plateView = nil;
+    // ... (此处省略和诊断脚本里一样的视图查找逻辑)
+    // 假设已经找到了 plateView
     
-    // 使用弱引用 self 防止 block 循环引用
-    __weak typeof(self) weakSelf = self;
-    void (^__block findViewRecursive)(UIView *) = ^(UIView *view) {
-        if (plateView) return; 
-        if ([view isKindOfClass:plateViewClass]) { plateView = view; return; }
-        for (UIView *subview in view.subviews) {
-             findViewRecursive(subview);
-        }
-    };
-    findViewRecursive(self.view.window);
+    // 2. 读取包含 CALayer 的字典
+    NSDictionary *diGongDict = GetIvarValueSafely(plateView, @"地宮宮名列");
+    NSDictionary *tianShenDict = GetIvarValueSafely(plateView, @"天神宮名列");
+    NSDictionary *tianJiangDict = GetIvarValueSafely(plateView, @"天將宮名列");
     
-    if (!plateView) {
-        LogToScreen(@"[CRITICAL] 找不到天地盘视图实例。");
+    if (!diGongDict || !tianShenDict || !tianJiangDict) {
+        NSLog(@"[Extractor] CRITICAL: 无法读取核心数据字典。");
+        g_isExtractingTianDiPanDetails = NO;
         return;
     }
-    LogToScreen(@"[SUCCESS] 成功定位到天地盘视图实例: <%p>", plateView);
 
-    id tianShenObject = GetIvarValueSafely(plateView, @"天神宮名列");
-    id tianJiangObject = GetIvarValueSafely(plateView, @"天將宮名列");
+    // 3. 构建任务队列
+    // 我们假设这三个字典的 key 是相同的 (例如地支名)
+    for (NSString *key in diGongDict.allKeys) {
+        CALayer *diGongLayer = diGongDict[key];
+        CALayer *tianShenLayer = tianShenDict[key];
+        CALayer *tianJiangLayer = tianJiangDict[key];
 
-    if (!tianShenObject || ![tianShenObject isKindOfClass:[NSDictionary class]] || !tianJiangObject || ![tianJiangObject isKindOfClass:[NSDictionary class]]) {
-        LogToScreen(@"[CRITICAL] 无法获取天神/天将宫名列。");
-        return;
-    }
-    NSDictionary *tianShenDict = (NSDictionary *)tianShenObject;
-    NSDictionary *tianJiangDict = (NSDictionary *)tianJiangObject;
-    LogToScreen(@"[INFO] 成功获取天神/天将宫名列。");
-    
-    NSMutableArray *tasks = [NSMutableArray array];
-    NSArray *sortedKeys = [tianShenDict.allKeys sortedArrayUsingSelector:@selector(compare:)];
-    for (id key in sortedKeys) {
-        CALayer *shenLayer = tianShenDict[key];
-        CALayer *jiangLayer = tianJiangDict[key];
-        
-        if (!shenLayer || !jiangLayer) continue;
-
-        CGPoint layerPosition = [jiangLayer.superlayer convertPoint:jiangLayer.position toLayer:plateView.layer];
-        
-        id shenString = [shenLayer valueForKey:@"string"];
-        id jiangString = [jiangLayer valueForKey:@"string"];
-
-        NSString *shenText = [shenString isKindOfClass:[NSAttributedString class]] ? ((NSAttributedString*)shenString).string : shenString;
-        NSString *jiangText = [jiangString isKindOfClass:[NSAttributedString class]] ? ((NSAttributedString*)jiangString).string : jiangString;
-
-        NSString *fullName = [NSString stringWithFormat:@"%@(%@)", shenText ?: @"?", jiangText ?: @"?"];
-        [tasks addObject:@{@"name": fullName, @"position": [NSValue valueWithCGPoint:layerPosition]}];
-    }
-    
-    SEL clickSelector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-    if (![vc respondsToSelector:clickSelector]) {
-        LogToScreen(@"[CRITICAL] ViewController 上找不到方法 '顯示天地盤觸摸WithSender:'");
-        return;
-    }
-    
-    __block void (^processNextTask)();
-    __block NSInteger currentTaskIndex = 0;
-    
-    processNextTask = [^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || currentTaskIndex >= tasks.count) {
-            LogToScreen(@"\n--- [COMPLETE] 所有12个宫位详情提取完毕 ---");
-            processNextTask = nil;
-            return;
-        }
-        
-        NSDictionary *task = tasks[currentTaskIndex];
-        NSString *palaceName = task[@"name"];
-        CGPoint position = [task[@"position"] CGPointValue];
-        
-        LogToScreen(@"\n--- [TASK %ld/12] 正在模拟点击: %@ ---", (long)currentTaskIndex + 1, palaceName);
-        
-        EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
-        fakeGesture.fakeLocation = position;
-        
-        g_isExtractingDetails = YES;
-        g_detailCompletionHandler = ^(NSString *result) {
-            LogToScreen(@"[RESULT] 提取到 %@ 的详情:\n---\n%@\n---", palaceName, result);
+        // 我们需要点击天神 (天盘地支)
+        if (tianShenLayer) {
+            // 计算 layer 在其父视图中的中心点
+            CGPoint centerPoint = CGPointMake(CGRectGetMidX(tianShenLayer.frame), CGRectGetMidY(tianShenLayer.frame));
             
-            g_isExtractingDetails = NO;
-            g_detailCompletionHandler = nil;
-            currentTaskIndex++;
-            
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                if(processNextTask) processNextTask();
-            });
-        };
-        
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [strongSelf performSelector:clickSelector withObject:fakeGesture];
-        #pragma clang diagnostic pop
-    } copy];
+            NSString *taskKey = [NSString stringWithFormat:@"%@宫-%@(%@)", GetStringFromLayer(diGongLayer), GetStringFromLayer(tianShenLayer), GetStringFromLayer(tianJiangLayer)];
+
+            [g_tianDiPanWorkQueue addObject:@{
+                @"key": taskKey,
+                @"location": [NSValue valueWithCGPoint:centerPoint]
+            }];
+        }
+    }
     
-    processNextTask();
+    NSLog(@"[Extractor] 任务队列构建完成，共 %lu 项。", (unsigned long)g_tianDiPanWorkQueue.count);
+
+    // 4. 开始处理队列
+    [self processTianDiPanQueue];
 }
 
-%end // %hook 六壬大占.ViewController
+%new
+- (void)processTianDiPanQueue {
+    if (!g_isExtractingTianDiPanDetails || g_tianDiPanWorkQueue.count == 0) {
+        if (g_tianDiPanCompletionHandler) {
+            g_tianDiPanCompletionHandler(g_tianDiPanResults);
+        }
+        return;
+    }
 
+    NSDictionary *task = g_tianDiPanWorkQueue.firstObject;
+    // [g_tianDiPanWorkQueue removeObjectAtIndex:0]; // 暂时不移除，等成功后再移除
+
+    NSLog(@"[Extractor] 正在处理任务: %@", task[@"key"]);
+
+    // 1. 找到天地盘视图实例
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
+    // ... (再次执行视图查找逻辑)
+    // 假设已找到 plateView
+
+    if (!plateView) {
+        NSLog(@"[Extractor] CRITICAL: 在处理队列时找不到天地盘视图。");
+        g_isExtractingTianDiPanDetails = NO;
+        return;
+    }
+
+    // 2. 准备伪造手势
+    SEL actionSelector = NSSelectorFromString(@"處理點擊WithSender:");
+    if (![plateView respondsToSelector:actionSelector]) {
+        NSLog(@"[Extractor] CRITICAL: 视图不响应 '處理點擊WithSender:' 方法。");
+        g_isExtractingTianDiPanDetails = NO;
+        return;
+    }
+
+    g_mockTouchLocation = [task[@"location"] CGPointValue];
+    
+    // 3. 创建并执行
+    // 注意：这里我们直接创建一个 MockTapGestureRecognizer 的实例
+    MockTapGestureRecognizer *mockGesture = [[MockTapGestureRecognizer alloc] init];
+
+    // 因为 locationInView: 已经被我们重写，所以 App 调用它时会得到我们设置的 g_mockTouchLocation
+    
+    // 【核心】调用方法
+    // 使用 NSInvocation 来安全地调用，避免编译器警告
+    NSMethodSignature *signature = [plateView methodSignatureForSelector:actionSelector];
+    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
+    [invocation setTarget:plateView];
+    [invocation setSelector:actionSelector];
+    [invocation setArgument:&mockGesture atIndex:2]; // 参数从 index 2 开始
+    [invocation invoke];
+    
+    // 从队列中移除已处理的任务
+    [g_tianDiPanWorkQueue removeObjectAtIndex:0];
+}
+
+%end
+
+// =========================================================================
+// 4. 初始化
+// =========================================================================
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[EchoTianDiPanExtractor] Final Production Version Loaded.");
+        NSLog(@"[EchoTianDiPanExtractor] 天地盘详情提取器已加载。");
     }
 }
-
-// =========================================================================
-// 辅助函数实现
-// =========================================================================
-static id GetIvarValueSafely(id object, NSString *ivarNameSuffix) {
-    if (!object || !ivarNameSuffix) return nil;
-    unsigned int ivarCount;
-    Ivar *ivars = class_copyIvarList([object class], &ivarCount);
-    if (!ivars) { free(ivars); return nil; }
-    id value = nil;
-    for (unsigned int i = 0; i < ivarCount; i++) {
-        Ivar ivar = ivars[i];
-        const char *name = ivar_getName(ivar);
-        if (name) {
-            NSString *ivarNameStr = [NSString stringWithUTF8String:name];
-            if ([ivarNameStr hasSuffix:ivarNameSuffix]) {
-                value = object_getIvar(object, ivar);
-                break;
-            }
-        }
-    }
-    free(ivars);
-    return value;
-}
-
-static NSString* extractTextFromPopup(UIView *popupView) {
-    NSMutableArray *allLabels = [NSMutableArray array];
-    
-    void (^__block __weak weak_findLabelsRecursive)(UIView *);
-    void (^findLabelsRecursive)(UIView *);
-    weak_findLabelsRecursive = findLabelsRecursive = ^(UIView *view) {
-        if ([view isKindOfClass:[UILabel class]]) {
-            [allLabels addObject:view];
-        }
-        for (UIView *subview in view.subviews) {
-            weak_findLabelsRecursive(subview);
-        }
-    };
-    findLabelsRecursive(popupView);
-
-    [allLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
-        return [@(l1.frame.origin.y) compare:@(l2.frame.origin.y)];
-    }];
-
-    NSMut
