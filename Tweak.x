@@ -38,7 +38,7 @@ static void LogToScreen(NSString *format, ...) {
 }
 
 // =========================================================================
-// 3. 核心Hook (回归最稳妥的 UIViewController Hook)
+// 3. 核心Hook
 // =========================================================================
 
 @interface UIViewController (EchoDebugger)
@@ -66,46 +66,6 @@ static void LogToScreen(NSString *format, ...) {
         });
     }
 }
-
-// Hook 一个通用的方法，然后在内部判断
-- (void)viewDidAppear:(BOOL)animated {
-    %orig(animated);
-    
-    // 动态添加一个方法，来处理我们的目标逻辑
-    // 这样可以避免直接在通用的 viewDidAppear 里写 hook 逻辑
-    SEL targetSelector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
-    
-    if (targetClass && [self isKindOfClass:targetClass] && [self respondsToSelector:targetSelector]) {
-        // 使用 Method Swizzling 来替换实现
-        // 这是一个一次性的操作
-        static dispatch_once_t onceToken;
-        dispatch_once(&onceToken, ^{
-            Method originalMethod = class_getInstanceMethod(targetClass, targetSelector);
-            IMP originalImp = method_getImplementation(originalMethod);
-
-            IMP swizzledImp = imp_implementationWithBlock(^(id _self, UIGestureRecognizer *sender){
-                LogToScreen(@"\n--- SWIZZLE TRIGGERED: 顯示天地盤觸摸WithSender: ---");
-                if (g_isPerformingFakeClick) { LogToScreen(@"[INFO] Invoked by Tweak."); } 
-                else { LogToScreen(@"[INFO] Invoked by user tap."); }
-                LogToScreen(@"[PARAM] Sender Class: %@", NSStringFromClass([sender class]));
-                @try {
-                    CGPoint location = [sender locationInView:[_self view]];
-                    LogToScreen(@"[PARAM] Location in vc.view: {%.1f, %.1f}", location.x, location.y);
-                } @catch (NSException *exception) {
-                    LogToScreen(@"[ERROR] Exception while getting location: %@", exception.reason);
-                }
-                LogToScreen(@"[EXEC] Calling original implementation...");
-                ((void (*)(id, SEL, id))originalImp)(_self, targetSelector, sender);
-                LogToScreen(@"[EXEC] Original implementation returned.");
-            });
-            
-            method_setImplementation(originalMethod, swizzledImp);
-            NSLog(@"[Debugger] Swizzled 顯示天地盤觸摸WithSender: successfully.");
-        });
-    }
-}
-
 
 %new
 - (void)startDebugTest {
@@ -169,10 +129,43 @@ static void LogToScreen(NSString *format, ...) {
 %end
 
 // =========================================================================
-// 4. 初始化
+// 4. 初始化 (严格按照原始结构)
 // =========================================================================
-@ctor {
+%ctor {
     @autoreleasepool {
-        NSLog(@"[EchoUltimateHookDebugger] Final Fallback Version Loaded.");
+        // 使用 Method Swizzling 来动态替换方法，这是最稳妥的方式
+        Class vcClass = NSClassFromString(@"六壬大占.ViewController");
+        if (vcClass) {
+            SEL originalSelector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+            Method originalMethod = class_getInstanceMethod(vcClass, originalSelector);
+            
+            if (originalMethod) {
+                IMP originalImp = method_getImplementation(originalMethod);
+                
+                IMP swizzledImp = imp_implementationWithBlock(^(id _self, UIGestureRecognizer *sender){
+                    LogToScreen(@"\n--- SWIZZLE TRIGGERED: 顯示天地盤觸摸WithSender: ---");
+                    if (g_isPerformingFakeClick) { LogToScreen(@"[INFO] Invoked by Tweak."); } 
+                    else { LogToScreen(@"[INFO] Invoked by user tap."); }
+                    LogToScreen(@"[PARAM] Sender Class: %@", NSStringFromClass([sender class]));
+                    @try {
+                        CGPoint location = [sender locationInView:[_self view]];
+                        LogToScreen(@"[PARAM] Location in vc.view: {%.1f, %.1f}", location.x, location.y);
+                    } @catch (NSException *exception) {
+                        LogToScreen(@"[ERROR] Exception while getting location: %@", exception.reason);
+                    }
+                    LogToScreen(@"[EXEC] Calling original implementation...");
+                    // 调用原始实现
+                    ((void (*)(id, SEL, id))originalImp)(_self, originalSelector, sender);
+                    LogToScreen(@"[EXEC] Original implementation returned.");
+                });
+                
+                method_setImplementation(originalMethod, swizzledImp);
+                NSLog(@"[Debugger] Swizzled 顯示天地盤觸摸WithSender: successfully.");
+            } else {
+                NSLog(@"[Debugger] ERROR: Could not find method 顯示天地盤觸摸WithSender: to swizzle.");
+            }
+        } else {
+             NSLog(@"[Debugger] ERROR: Could not find class 六壬大占.ViewController.");
+        }
     }
 }
