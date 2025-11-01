@@ -3432,7 +3432,7 @@ else if (g_s2_isExtractingKeChuanDetail) {
     g_tianDiPan_resultsArray = [NSMutableArray array];
     g_tianDiPan_completion_handler = [completion copy];
     
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) { LogMessage(EchoLogError,@"找不到视图类"); if(completion)completion(@""); return; }
     NSMutableArray *plateViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
@@ -4911,6 +4911,7 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
     
     return [cleanedResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 
 
