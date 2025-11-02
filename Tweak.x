@@ -3,6 +3,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <substrate.h>
 
+// ... (所有全局变量、辅助函数、坐标数据库都保持不变) ...
 // =========================================================================
 // 1. 全局变量、常量定义与辅助函数
 // =========================================================================
@@ -30,30 +31,18 @@ static NSArray *g_tianDiPan_fixedCoordinates = nil;
 static void initializeTianDiPanCoordinates() {
     if (g_tianDiPan_fixedCoordinates) return;
     g_tianDiPan_fixedCoordinates = @[
-        @{@"name": @"天将-午位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 108.57)]},
-        @{@"name": @"天将-巳位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(144.48, 118.19)]},
-        @{@"name": @"天将-辰位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(118.19, 144.48)]},
-        @{@"name": @"天将-卯位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(108.57, 180.39)]},
-        @{@"name": @"天将-寅位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(118.19, 216.29)]},
-        @{@"name": @"天将-丑位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(144.48, 242.58)]},
-        @{@"name": @"天将-子位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 252.20)]},
-        @{@"name": @"天将-亥位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 242.58)]},
-        @{@"name": @"天将-戌位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(242.58, 216.29)]},
-        @{@"name": @"天将-酉位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(252.20, 180.38)]},
-        @{@"name": @"天将-申位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(242.58, 144.48)]},
-        @{@"name": @"天将-未位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 118.19)]},
-        @{@"name": @"上神-午位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 134.00)]},
-        @{@"name": @"上神-巳位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 145.00)]},
-        @{@"name": @"上神-辰位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 168.00)]},
-        @{@"name": @"上神-卯位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(134.00, 180.39)]},
-        @{@"name": @"上神-寅位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 200.00)]},
-        @{@"name": @"上神-丑位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 220.00)]},
-        @{@"name": @"上神-子位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 226.00)]},
-        @{@"name": @"上神-亥位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 220.00)]},
-        @{@"name": @"上神-戌位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 200.00)]},
-        @{@"name": @"上神-酉位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(226.00, 180.39)]},
-        @{@"name": @"上神-申位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 168.00)]},
-        @{@"name": @"上神-未位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 145.00)]},
+        @{@"name": @"天将-午位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 108.57)]}, @{@"name": @"天将-巳位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(144.48, 118.19)]},
+        @{@"name": @"天将-辰位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(118.19, 144.48)]}, @{@"name": @"天将-卯位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(108.57, 180.39)]},
+        @{@"name": @"天将-寅位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(118.19, 216.29)]}, @{@"name": @"天将-丑位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(144.48, 242.58)]},
+        @{@"name": @"天将-子位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 252.20)]}, @{@"name": @"天将-亥位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 242.58)]},
+        @{@"name": @"天将-戌位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(242.58, 216.29)]}, @{@"name": @"天将-酉位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(252.20, 180.38)]},
+        @{@"name": @"天将-申位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(242.58, 144.48)]}, @{@"name": @"天将-未位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 118.19)]},
+        @{@"name": @"上神-午位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 134.00)]}, @{@"name": @"上神-巳位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 145.00)]},
+        @{@"name": @"上神-辰位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 168.00)]}, @{@"name": @"上神-卯位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(134.00, 180.39)]},
+        @{@"name": @"上神-寅位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 200.00)]}, @{@"name": @"上神-丑位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 220.00)]},
+        @{@"name": @"上神-子位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 226.00)]}, @{@"name": @"上神-亥位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 220.00)]},
+        @{@"name": @"上神-戌位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 200.00)]}, @{@"name": @"上神-酉位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(226.00, 180.39)]},
+        @{@"name": @"上神-申位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 168.00)]}, @{@"name": @"上神-未位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 145.00)]},
     ];
 }
 
@@ -61,7 +50,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-Ultimate] %@", message);
+    NSLog(@"[Echo-StateFix] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -122,41 +111,32 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 - (void)processTianDiPanQueue;
 @end
 
-static void (*Original_UIView_didMoveToWindow)(id, SEL);
-%new
-static void Hooked_UIView_didMoveToWindow(id self, SEL _cmd) {
-    %orig; // Call original implementation first
-
-    if (g_isExtractingTianDiPanDetail && self.window && [NSStringFromClass([self class]) isEqualToString:@"_UIPopoverView"]) {
-        LogMessage(EchoLogTypeDebug, @"[Hooked_UIView_didMoveToWindow] 拦截到 _UIPopoverView! Instance: <%p>", self);
-        UIView *popoverView = (UIView *)self;
-        
-        // Ensure it's not already processed
-        if (popoverView.alpha == 0.0f) { // Simple check, could use an associated object for more robustness
-            LogMessage(EchoLogTypeDebug, @"_UIPopoverView 已经在处理中或已隐藏, 跳过.");
+// <<<< 恢复使用 presentViewController Hook，因为 Popover 的猜测是错误的 >>>>
+static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
+static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
+    if (g_isExtractingTianDiPanDetail) {
+        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+        if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"]) {
+            LogMessage(EchoLogTypeDebug, @"拦截到 ViewController: %@", vcClassName);
+            vcToPresent.view.alpha = 0.0f;
+            
+            Original_presentViewController(self, _cmd, vcToPresent, NO, ^(void){
+                dispatch_async(dispatch_get_main_queue(), ^{
+                     NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
+                     [g_tianDiPan_resultsArray addObject:extractedText];
+                     [vcToPresent dismissViewControllerAnimated:NO completion:^{
+                         if (g_mainViewController) {
+                            [g_mainViewController processTianDiPanQueue];
+                         }
+                     }];
+                });
+                if(completion) completion();
+            });
             return;
         }
-        
-        popoverView.alpha = 0.0f; // Make it invisible immediately
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            LogMessage(EchoLogTypeDebug, @"_UIPopoverView 延迟提取中...");
-            NSString *extractedText = extractDataFromStackViewPopup(popoverView);
-            [g_tianDiPan_resultsArray addObject:extractedText];
-            LogMessage(EchoLogTypeDebug, @"_UIPopoverView 提取完成，移除视图。");
-            [popoverView removeFromSuperview]; // Immediately remove it
-
-            if (g_mainViewController) {
-                [g_mainViewController processTianDiPanQueue];
-            } else {
-                LogMessage(EchoLogError, @"错误: g_mainViewController 为 nil, 无法继续处理队列.");
-                g_isExtractingTianDiPanDetail = NO;
-            }
-        });
     }
+    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
-
-// The original presentViewController hook is now removed for this module.
 
 %hook UIViewController
 
@@ -164,7 +144,7 @@ static void Hooked_UIView_didMoveToWindow(id self, SEL _cmd) {
     %orig;
     Class c = NSClassFromString(@"六壬大占.ViewController");
     if (c && [self isKindOfClass:c]) {
-        g_mainViewController = self; // <<<< 保存主VC的引用
+        g_mainViewController = self;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
             UIWindow *w=GetFrontmostWindow(); if(!w||[w viewWithTag:kEchoControlButtonTag])return;
             UIButton *b=[UIButton buttonWithType:UIButtonTypeSystem]; b.frame=CGRectMake(w.bounds.size.width-150,45,140,36); b.tag=kEchoControlButtonTag;
@@ -199,7 +179,7 @@ static void Hooked_UIView_didMoveToWindow(id self, SEL _cmd) {
 %new
 - (void)processTianDiPanQueue {
     if (g_tianDiPan_workQueue.count == 0) {
-        if (!g_isExtractingTianDiPanDetail) return; // Avoid double execution
+        if (!g_isExtractingTianDiPanDetail) return;
         g_isExtractingTianDiPanDetail = NO;
         LogMessage(EchoLogTypeSuccess, @"完成: 所有天地盘详情提取完毕。");
         NSMutableString *finalReport = [NSMutableString string];
@@ -211,12 +191,10 @@ static void Hooked_UIView_didMoveToWindow(id self, SEL _cmd) {
             NSMutableString *simplifiedData = [itemData mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedData, NULL, CFSTR("Hant-Hans"), false);
             [finalReport appendFormat:@"-- [%@: %@] --\n%@\n\n", itemType, itemName, simplifiedData];
         }
-
-        [UIPasteboard generalPasteboard].string = finalReport; 
+        [UIPasteboard generalPasteboard].string = finalReport;
         UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"天地盘详情已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
         [ac addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:ac animated:YES completion:nil]; // Using 'self' (g_mainViewController) to present
-        
+        [self presentViewController:ac animated:YES completion:nil];
         g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil;
         return;
     }
@@ -241,8 +219,16 @@ static void Hooked_UIView_didMoveToWindow(id self, SEL _cmd) {
     
     @try {
         [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
+        
+        // ====================== 核心修复点 ======================
+        // Manually set the state to Ended to simulate a successful tap
+        [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
+        // =======================================================
+
+        LogMessage(EchoLogTypeDebug, @"坐标和状态已注入");
+
     } @catch (NSException *exception) {
-        LogMessage(EchoLogError, @"坐标注入失败: %@", exception.reason); [self processTianDiPanQueue]; return;
+        LogMessage(EchoLogError, @"注入失败: %@", exception.reason); [self processTianDiPanQueue]; return;
     }
     
     SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
@@ -262,9 +248,7 @@ static void Hooked_UIView_didMoveToWindow(id self, SEL _cmd) {
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
-        // Hook UIView's didMoveToWindow for _UIPopoverView detection
-        MSHookMessageEx(NSClassFromString(@"UIView"), @selector(didMoveToWindow), (IMP)&Hooked_UIView_didMoveToWindow, (IMP *)&Original_UIView_didMoveToWindow);
-        // Original presentViewController hook is no longer needed for this module's interception
-        NSLog(@"[Echo-Ultimate] 天地盘详情提取工具(最终版)已加载。");
+        MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
+        NSLog(@"[Echo-StateFix] 天地盘详情提取工具(State修正版)已加载。");
     }
 }
