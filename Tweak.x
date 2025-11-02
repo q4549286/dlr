@@ -660,13 +660,38 @@ static NSString* _parseTianJiangDetailInternal(NSString *rawContent) {
     return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 上神详情专属解析器 (v1.2 - 修复诗句过滤)
+// 上神详情专属解析器 (v1.3 - 采用更安全的末行过滤法)
 static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
     
-    NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
-    NSMutableString *result = [NSMutableString string];
+    // [修改点 5 - 修正版] 先处理并移除末尾的诗句行
+    NSMutableArray<NSString *> *lines = [[rawContent componentsSeparatedByString:@"\n"] mutableCopy];
     
+    // 1. 从后向前移除所有空行，以便定位到最后一行有效内容
+    while (lines.count > 0 && [[lines.lastObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] length] == 0) {
+        [lines removeLastObject];
+    }
+    
+    // 2. 如果还有内容，并且最后一行不是以关键描述词开头，则假定其为诗句并移除
+    if (lines.count > 0) {
+        NSString *lastContentLine = [lines.lastObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        // 添加安全检查，确保我们不会删除像"遁干..."这样的有效数据行
+        NSArray *safeKeywords = @[@"遁干", @"得四时", @"临", @"昼乘", @"夜乘"];
+        BOOL isSafeLine = NO;
+        for (NSString *keyword in safeKeywords) {
+            if ([lastContentLine hasPrefix:keyword]) {
+                isSafeLine = YES;
+                break;
+            }
+        }
+        // 只有当最后一行不是已知的安全格式时，才将其移除
+        if (!isSafeLine) {
+            [lines removeLastObject];
+        }
+    }
+    
+    // 后续处理使用已经过滤掉诗句的行
+    NSMutableString *result = [NSMutableString string];
     NSArray *blacklist = @[@"神象", @"诗象", @"星宿", @"禽类", @"身象", @"人类", @"物类", @"方所", @"事类", @"数象"];
     BOOL isFirstTextualLine = YES;
 
@@ -682,17 +707,12 @@ static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
         
         if (isFirstTextualLine) {
             isFirstTextualLine = NO;
-            if (trimmedLine.length > 20 || (![trimmedLine containsString:@"("] && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@":"])) {
+            if (trimmedLine.length > 20 && ![trimmedLine containsString:@"("] && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@":"]) {
                 continue;
             }
         }
 
         if ([trimmedLine hasPrefix:@"一、"] || [trimmedLine hasPrefix:@"二、"]) continue;
-
-        // [修改点 5] 增强诗句过滤规则：如果一行中没有格式化字符（如冒号、括号、空格），则视为诗句并过滤
-        if (trimmedLine.length > 5 && ![trimmedLine containsString:@"("] && ![trimmedLine containsString:@":"] && ![trimmedLine containsString:@" "]) {
-             continue;
-        }
 
         if ([trimmedLine hasPrefix:@"遁干"]) {
             trimmedLine = [[trimmedLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干:"]
@@ -1429,6 +1449,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
