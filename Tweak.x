@@ -1,7 +1,20 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <substrate.h>
+// =========================================================================
+// 新增：一个专门用于模拟点击位置的 UIGestureRecognizer 子类
+// =========================================================================
+@interface EchoFakeGestureRecognizer : UITapGestureRecognizer
+@property (nonatomic, assign) CGPoint fakeLocation;
+@end
 
+@implementation EchoFakeGestureRecognizer
+// 核心：重写这个方法，无论外界怎么问，都返回我们预设的假坐标
+- (CGPoint)locationInView:(UIView *)view {
+    // 直接返回我们设置的假坐标，忽略参数 view
+    return self.fakeLocation;
+}
+@end
 // =========================================================================
 // 全局变量、常量定义与辅助函数 (保持不变)
 // =========================================================================
@@ -48,7 +61,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V17-Final] %@", message);
+    NSLog(@"[Echo-V16-Clone] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -208,55 +221,41 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
+    UIView *plateView = plateViews.firstObject;
     
-    // ====================== 最终解决方案 V17 - 借刀杀人 ======================
-    @try {
-        // 1. 找到 App 自己的那个真实手势对象
-        UITapGestureRecognizer *realGesture = nil;
-        for (UIGestureRecognizer *gesture in ((UIView *)plateViews.firstObject).gestureRecognizers) {
-            if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) {
-                realGesture = (UITapGestureRecognizer *)gesture;
-                break;
-            }
-        }
-        if (!realGesture) {
-            LogMessage(EchoLogError, @"关键错误: 找不到真实的手势识别器实例");
-            [self processTianDiPanQueue];
-            return;
-        }
+    // ====================== 最终解决方案 V17 - 子类重写版 ======================
+    // 不再需要 @try @catch，因为这种方法非常稳定
+    
+    // 1. 实例化我们自定义的手势子类
+    EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
 
-        // 2. 只修改最关键的两个属性
-        [realGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
-        [realGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
-        
-        LogMessage(EchoLogTypeDebug, @"[模拟器] 已修改真实手势 (坐标, 状态)");
+    // 2. 核心：设置我们想要模拟的坐标
+    fakeGesture.fakeLocation = point;
 
-        // 3. 调用 Action，传入被我们修改过的真实手势
-        SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-        if ([self respondsToSelector:action]) {
-            LogMessage(EchoLogTypeDebug, @"[模拟器] 准备调用 action...");
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [self performSelector:action withObject:realGesture];
-            #pragma clang diagnostic pop
-            LogMessage(EchoLogTypeDebug, @"[模拟器] Action 已调用。等待拦截器响应...");
-        } else {
-            LogMessage(EchoLogError, @"[模拟器] 触发失败: Target 无法响应");
-            [self processTianDiPanQueue];
-        }
-
-    } @catch (NSException *exception) {
-        LogMessage(EchoLogError, @"[模拟器] 方案执行失败: %@", exception.reason);
+    // 3. 将手势的目标视图关联一下，让它看起来更真实
+    //    虽然我们的 locationInView: 已经重写，不依赖这个 view，但目标方法内部可能需要
+    [fakeGesture setValue:plateView forKey:@"view"];
+            
+    // 4. 调用 Action
+    SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+    if ([self respondsToSelector:action]) {
+        LogMessage(EchoLogTypeDebug, @"[模拟器] 准备调用 action...");
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        [self performSelector:action withObject:fakeGesture];
+        #pragma clang diagnostic pop
+        LogMessage(EchoLogTypeDebug, @"[模拟器] Action 已调用。等待拦截器响应...");
+    } else {
+        LogMessage(EchoLogError, @"[模拟器] 触发失败: Target 无法响应");
         [self processTianDiPanQueue];
     }
 }
-
 %end
 
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-V17-Final] 天地盘提取工具(借刀杀人版)已加载。");
+        NSLog(@"[Echo-V16-Final] 天地盘详情提取工具(胜利版)已加载。");
     }
 }
