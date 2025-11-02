@@ -3,15 +3,13 @@
 #import <substrate.h>
 
 // =========================================================================
-// 全局变量与辅助函数 (大部分与之前相同)
+// 全局变量与辅助函数
 // =========================================================================
-static UIView *g_mainControlPanelView = nil;
-static UITextView *g_logTextView = nil;
-static BOOL g_isSimulatingClick = NO; // <<<< 新增状态旗标
+static BOOL g_isSimulatingClick = NO;
 
 static void PrintAllIVars(id object, NSString *prefix) {
     unsigned int count;
-    Ivar *ivars = class_copyIvarList([object class], &count);
+    Ivar *ivars = class_copy_ivar_list([object class], &count);
     NSLog(@"[%@] --- Dumping IVars for %@ <%p> ---", prefix, NSStringFromClass([object class]), object);
     for (unsigned int i = 0; i < count; i++) {
         Ivar ivar = ivars[i];
@@ -22,8 +20,13 @@ static void PrintAllIVars(id object, NSString *prefix) {
         NSString *ivarType = [NSString stringWithUTF8String:type];
         
         @try {
-            id value = object_getIvar(object, ivar);
-            NSLog(@"[%@] Ivar: %@ (%@) = %@", prefix, ivarName, ivarType, value);
+            // 对于非对象类型，object_getIvar 可能会崩溃，这里做个简单保护
+            if (type[0] == '@' || type[0] == '#') {
+                 id value = object_getIvar(object, ivar);
+                 NSLog(@"[%@] Ivar: %@ (%@) = %@", prefix, ivarName, ivarType, value);
+            } else {
+                 NSLog(@"[%@] Ivar: %@ (%@) = <Non-Object Type>", prefix, ivarName, ivarType);
+            }
         } @catch (NSException *exception) {
             NSLog(@"[%@] Ivar: %@ (%@) = <Could not read value>", prefix, ivarName, ivarType);
         }
@@ -32,27 +35,31 @@ static void PrintAllIVars(id object, NSString *prefix) {
     free(ivars);
 }
 
+// =========================================================================
+// 核心 Hook 逻辑 (C-style)
+// =========================================================================
+static void (*Original_ViewController_顯示天地盤觸摸WithSender)(id, SEL, id);
+
+static void Tweak_ViewController_顯示天地盤觸摸WithSender(id self, SEL _cmd, id sender) {
+    if (g_isSimulatingClick) {
+        PrintAllIVars(self, @"VC偵察兵-模拟点击");
+    } else {
+        PrintAllIVars(self, @"VC偵察兵-真实点击");
+    }
+    Original_ViewController_顯示天地盤觸摸WithSender(self, _cmd, sender);
+}
+
 
 // =========================================================================
-// 核心 Hook
+// UIViewController Category and Hook
 // =========================================================================
 @interface UIViewController (EchoTDP)
 - (void)createOrShowPanel;
 - (void)simulateClickAction;
 @end
 
-// Hook 目标方法，用于侦察
 %hook UIViewController
-- (void)顯示天地盤觸摸WithSender:(UIGestureRecognizer *)sender {
-    if (g_isSimulatingClick) {
-        PrintAllIVars(self, @"VC偵察兵-模拟点击");
-    } else {
-        PrintAllIVars(self, @"VC偵察兵-真实点击");
-    }
-    %orig; // 让原始逻辑继续执行
-}
 
-// 添加UI的 Hook
 - (void)viewDidLoad {
     %orig;
     Class c = NSClassFromString(@"六壬大占.ViewController");
@@ -63,8 +70,8 @@ static void PrintAllIVars(id object, NSString *prefix) {
             UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
             b.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
             b.tag = 556699;
-            [b setTitle:@"推衍天地盘详情" forState:UIControlStateNormal];
-            b.backgroundColor = [UIColor blueColor];
+            [b setTitle:@"侦察兵" forState:UIControlStateNormal];
+            b.backgroundColor = [UIColor redColor];
             [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             b.layer.cornerRadius = 18;
             [b addTarget:self action:@selector(simulateClickAction) forControlEvents:UIControlEventTouchUpInside];
@@ -76,11 +83,10 @@ static void PrintAllIVars(id object, NSString *prefix) {
 %new
 - (void)simulateClickAction {
     g_isSimulatingClick = YES;
+    NSLog(@"[VC偵察兵] 准备触发模拟点击...");
     
-    // 这里我们只执行一次模拟点击，用于触发日志
     SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
     if ([self respondsToSelector:action]) {
-        // 创建一个空的手势对象，仅用于传递
         UITapGestureRecognizer *fakeGesture = [[UITapGestureRecognizer alloc] init];
         
         #pragma clang diagnostic push
@@ -89,14 +95,24 @@ static void PrintAllIVars(id object, NSString *prefix) {
         #pragma clang diagnostic pop
     }
     
-    // 延时后重置旗标
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         g_isSimulatingClick = NO;
+        NSLog(@"[VC偵察兵] 模拟点击状态已重置。");
     });
 }
+
 %end
 
 
 %ctor {
-    NSLog(@"[VC偵察兵] 已加载。");
+    @autoreleasepool {
+        Class vcClass = NSClassFromString(@"六壬大占.ViewController");
+        if (vcClass) {
+             SEL originalSelector = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+             MSHookMessageEx(vcClass, originalSelector, (IMP)Tweak_ViewController_顯示天地盤觸摸WithSender, (IMP *)&Original_ViewController_顯示天地盤觸摸WithSender);
+             NSLog(@"[VC偵察兵] 已成功 Hook 目标方法。");
+        } else {
+             NSLog(@"[VC偵察兵] 错误: 找不到 ViewController 类。");
+        }
+    }
 }
