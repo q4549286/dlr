@@ -23,7 +23,6 @@ static BOOL g_isExtractingTianDiPanDetail = NO;
 static NSMutableArray *g_tianDiPan_workQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static __weak UIViewController *g_mainViewController = nil;
-static BOOL g_shouldBlockOriginalPresent = NO; // Renamed for clarity
 
 #pragma mark - Coordinate Database
 static NSArray *g_tianDiPan_fixedCoordinates = nil;
@@ -49,7 +48,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V8-Final] %@", message);
+    NSLog(@"[Echo-V8-SyntaxFix] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -110,9 +109,29 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 - (void)processTianDiPanQueue;
 @end
 
-// <<<< 核心 Hook 点 >>>>
-%hook UIViewController
+// <<<< 核心修复点 1: 独立的、正确的 UIView Hook >>>>
+%hook UIView
+- (void)didMoveToWindow {
+    %orig;
+    if (g_isExtractingTianDiPanDetail && self.window && [NSStringFromClass([self class]) isEqualToString:@"_UIPopoverView"]) {
+        LogMessage(EchoLogTypeDebug, @"拦截到 _UIPopoverView!");
+        self.alpha = 0.0f;
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *extractedText = extractDataFromStackViewPopup(self);
+            [g_tianDiPan_resultsArray addObject:extractedText];
+            [self removeFromSuperview];
+            
+            if (g_mainViewController) {
+                [g_mainViewController processTianDiPanQueue];
+            }
+        });
+    }
+}
+%end
 
+
+%hook UIViewController
 - (void)viewDidLoad {
     %orig;
     Class c = NSClassFromString(@"六壬大占.ViewController");
@@ -126,30 +145,6 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
         });
     }
 }
-
-// <<<< The Real Magic >>>>
-- (void)presentViewController:(UIViewController *)viewControllerToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
-    if (g_isExtractingTianDiPanDetail && g_shouldBlockOriginalPresent) {
-        NSString *vcClassName = NSStringFromClass([viewControllerToPresent class]);
-        if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"]) {
-            LogMessage(EchoLogTypeDebug, @"成功在 present 调用前截获 VC: %@", vcClassName);
-            
-            [viewControllerToPresent loadViewIfNeeded];
-            
-            NSString *extractedText = extractDataFromStackViewPopup(viewControllerToPresent.view);
-            [g_tianDiPan_resultsArray addObject:extractedText];
-
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self processTianDiPanQueue];
-            });
-            
-            // We DO NOT call %orig, so the popover never appears.
-            return;
-        }
-    }
-    %orig(viewControllerToPresent, flag, completion);
-}
-
 
 %new
 - (void)createOrShowTDPPanel {
@@ -181,9 +176,7 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
     if (g_tianDiPan_workQueue.count == 0) {
         if (!g_isExtractingTianDiPanDetail) return;
         g_isExtractingTianDiPanDetail = NO;
-        g_shouldBlockOriginalPresent = NO;
         LogMessage(EchoLogTypeSuccess, @"完成: 所有天地盘详情提取完毕。");
-        
         NSMutableString *finalReport = [NSMutableString string];
         [finalReport appendString:@"// 天地盘详情 (完整版)\n\n"];
         for (NSUInteger i = 0; i < g_tianDiPan_fixedCoordinates.count; i++) {
@@ -203,7 +196,6 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
         return;
     }
 
-    g_shouldBlockOriginalPresent = YES; // <<<< Set the flag before triggering
     NSDictionary *task = g_tianDiPan_workQueue.firstObject; [g_tianDiPan_workQueue removeObjectAtIndex:0];
     NSString *name = task[@"name"]; CGPoint point = [task[@"point"] CGPointValue];
     LogMessage(EchoLogTypeInfo, @"正在处理: %@ (%.0f, %.0f)", name, point.x, point.y);
@@ -223,10 +215,23 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
     if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
     
     @try {
+        Class sourceViewClass = NSClassFromString(@"六壬大占.課體視圖");
+        NSMutableArray *sourceViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(sourceViewClass, self.view, sourceViews);
+        if (sourceViews.count == 0) {
+             LogMessage(EchoLogError, @"触发失败: 找不到作为 Popover 源的 '課體視圖'");
+             [self processTianDiPanQueue];
+             return;
+        }
+        UIView *sourceView = sourceViews.firstObject;
+
+        UIView *originalView = singleTapGesture.view;
+        [singleTapGesture setValue:sourceView forKey:@"view"];
+        
         [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
         [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
         
-        LogMessage(EchoLogTypeDebug, @"手势已伪造 (坐标, 状态)");
+        LogMessage(EchoLogTypeDebug, @"手势已完全伪造 (坐标, 状态, 视图)");
 
         SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
         if ([self respondsToSelector:action]) {
@@ -238,8 +243,11 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
             LogMessage(EchoLogError, @"触发失败: Target 无法响应");
             [self processTianDiPanQueue];
         }
+
+        [singleTapGesture setValue:originalView forKey:@"view"];
+
     } @catch (NSException *exception) {
-        LogMessage(EchoLogError, @"方案执行失败: %@", exception.reason);
+        LogMessage(EchoLogError, @"终极方案执行失败: %@", exception.reason);
         [self processTianDiPanQueue];
     }
 }
@@ -249,6 +257,8 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
-        NSLog(@"[Echo-V8-Final] 天地盘详情提取工具(数据拦截版)已加载。");
+        // <<<< 核心修复点 2: 移除无效的 presentViewController Hook >>>>
+        // MSHookMessageEx(...);
+        NSLog(@"[Echo-V8-Final] 天地盘详情提取工具(语法修正版)已加载。");
     }
 }
