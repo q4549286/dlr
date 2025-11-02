@@ -3,7 +3,7 @@
 #import <substrate.h>
 
 // =========================================================================
-// 全局变量、常量定义与辅助函数
+// 全局变量、常量定义与辅助函数 (保持不变)
 // =========================================================================
 #pragma mark - Constants & Colors
 static const NSInteger kEchoControlButtonTag    = 556699;
@@ -48,7 +48,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V9-Final] %@", message);
+    NSLog(@"[Echo-V10-Simple] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -204,37 +204,25 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
     if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
     UIView *plateView = plateViews.firstObject;
     
-    // ====================== 终极解决方案: 完美复刻 Touch 和 Gesture ======================
+    UITapGestureRecognizer *singleTapGesture = nil;
+    for (UIGestureRecognizer *gesture in plateView.gestureRecognizers) {
+        if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) { singleTapGesture = (UITapGestureRecognizer *)gesture; break; }
+    }
+    if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
+    
+    // ====================== 返璞归真方案 ======================
     @try {
-        UITapGestureRecognizer *fakeGesture = [[UITapGestureRecognizer alloc] init];
+        // 只修改最关键的两个属性
+        [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
+        [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
         
-        // 1. 创建一个完美的假 Touch
-        UITouch *fakeTouch = [[UITouch alloc] init];
-        [fakeTouch setValue:plateView.window forKey:@"window"];
-        [fakeTouch setValue:plateView forKey:@"view"];
-        [fakeTouch setValue:@(1) forKey:@"tapCount"];
-        [fakeTouch setValue:@(UITouchPhaseEnded) forKey:@"phase"];
-        // 设置 Touch 的坐标
-        CGPoint windowPoint = [plateView convertPoint:point toView:plateView.window];
-        [fakeTouch setValue:[NSValue valueWithCGPoint:windowPoint] forKey:@"_locationInWindow"];
-        
-        // 2. 将 Touch 注入 Gesture
-        NSSet *touches = [NSSet setWithObject:fakeTouch];
-        [fakeGesture setValue:touches forKey:@"touches"];
-        
-        // 3. 设置 Gesture 的其他属性
-        [fakeGesture setValue:plateView forKey:@"view"];
-        [fakeGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
-        [fakeGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
-        
-        LogMessage(EchoLogTypeDebug, @"手势和Touch已完全伪造");
+        LogMessage(EchoLogTypeDebug, @"手势已简化伪造 (坐标, 状态)");
 
-        // 4. 调用 Action
         SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
         if ([self respondsToSelector:action]) {
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [self performSelector:action withObject:fakeGesture];
+            [self performSelector:action withObject:singleTapGesture];
             #pragma clang diagnostic pop
         } else {
             LogMessage(EchoLogError, @"触发失败: Target 无法响应");
@@ -245,12 +233,14 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
         LogMessage(EchoLogError, @"终极方案执行失败: %@", exception.reason);
         [self processTianDiPanQueue];
     }
+    // =========================================================
 }
+
 %end
 
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
-        NSLog(@"[Echo-V9-Final] 天地盘详情提取工具(完美复刻版)已加载。");
+        NSLog(@"[Echo-V10-Simple] 天地盘详情提取工具(返璞归真版)已加载。");
     }
 }
