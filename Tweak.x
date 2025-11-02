@@ -48,7 +48,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V16-Clone] %@", message);
+    NSLog(@"[Echo-V17-Final] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -208,43 +208,36 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
-    UIView *plateView = plateViews.firstObject;
     
-    // ====================== 最终解决方案 V16 - 像素级复刻 ======================
+    // ====================== 最终解决方案 V17 - 借刀杀人 ======================
     @try {
-        // 1. 创建一个全新的、干净的手势对象
-        UITapGestureRecognizer *fakeGesture = [[UITapGestureRecognizer alloc] init];
+        // 1. 找到 App 自己的那个真实手势对象
+        UITapGestureRecognizer *realGesture = nil;
+        for (UIGestureRecognizer *gesture in ((UIView *)plateViews.firstObject).gestureRecognizers) {
+            if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) {
+                realGesture = (UITapGestureRecognizer *)gesture;
+                break;
+            }
+        }
+        if (!realGesture) {
+            LogMessage(EchoLogError, @"关键错误: 找不到真实的手势识别器实例");
+            [self processTianDiPanQueue];
+            return;
+        }
 
-        // 2. 创建一个完美的假 Touch
-        UITouch *fakeTouch = [[UITouch alloc] init];
-        [fakeTouch setValue:plateView.window forKey:@"window"];
-        [fakeTouch setValue:plateView forKey:@"view"];
-        [fakeTouch setValue:@(1) forKey:@"tapCount"];
-        [fakeTouch setValue:@(UITouchPhaseEnded) forKey:@"phase"];
-        [fakeTouch setValue:plateView forKey:@"responder"];
-        [fakeTouch setValue:@[fakeGesture] forKey:@"gestureRecognizers"];
-
-        // 3. 关键：设置 Touch 的坐标
-        // `_locationInWindow` 是私有变量，必须用 KVC
-        CGPoint windowPoint = [plateView convertPoint:point toView:plateView.window];
-        [fakeTouch setValue:[NSValue valueWithCGPoint:windowPoint] forKey:@"_locationInWindow"];
-
-        // 4. 将 Touch 注入 Gesture (使用我们侦察到的 __NSArrayM 类型)
-        [fakeGesture setValue:[NSMutableArray arrayWithObject:fakeTouch] forKey:@"touches"];
+        // 2. 只修改最关键的两个属性
+        [realGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
+        [realGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
         
-        // 5. 设置 Gesture 的其他属性
-        [fakeGesture setValue:plateView forKey:@"view"];
-        [fakeGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
-        
-        LogMessage(EchoLogTypeDebug, @"[模拟器] 手势已基于蓝图完美复刻");
+        LogMessage(EchoLogTypeDebug, @"[模拟器] 已修改真实手势 (坐标, 状态)");
 
-        // 6. 调用 Action
+        // 3. 调用 Action，传入被我们修改过的真实手势
         SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
         if ([self respondsToSelector:action]) {
             LogMessage(EchoLogTypeDebug, @"[模拟器] 准备调用 action...");
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [self performSelector:action withObject:fakeGesture];
+            [self performSelector:action withObject:realGesture];
             #pragma clang diagnostic pop
             LogMessage(EchoLogTypeDebug, @"[模拟器] Action 已调用。等待拦截器响应...");
         } else {
@@ -253,16 +246,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
 
     } @catch (NSException *exception) {
-        LogMessage(EchoLogError, @"[模拟器] 终极方案执行失败: %@", exception.reason);
+        LogMessage(EchoLogError, @"[模拟器] 方案执行失败: %@", exception.reason);
         [self processTianDiPanQueue];
     }
 }
+
 %end
 
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-V16-Final] 天地盘详情提取工具(胜利版)已加载。");
+        NSLog(@"[Echo-V17-Final] 天地盘提取工具(借刀杀人版)已加载。");
     }
 }
