@@ -872,7 +872,6 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         kong = [[xunInfo substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     } else { kong = xunInfo; }
     
-    // [修改点 1] 动态构建旬空行，避免空括号
     NSMutableString *xunKongLine = [NSMutableString stringWithFormat:@"- 旬空: %@", [kong stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
     if (xun.length > 0) {
         [xunKongLine appendFormat:@" (%@)", xun];
@@ -898,14 +897,12 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     }
     
     // --- 动态编号的、经过解析器处理的模块 ---
-NSArray<NSDictionary *> *optionalSections = @[
-    // 将 type 改为 EchoDataTypeGeneric
-    @{ @"key": @"天地盘详情", @"title": @"天地盘全息情报", @"type": @(EchoDataTypeGeneric)}, 
+    NSArray<NSDictionary *> *optionalSections = @[
+        // [核心修改] 更新标题以反映新的宫位中心结构
+        @{ @"key": @"天地盘详情", @"title": @"天地盘宫位详情", @"type": @(EchoDataTypeGeneric)},
         @{ @"key": @"九宗门_详", @"title": @"格局总览 (九宗门)", @"type": @(EchoDataTypeJiuZongMen)},
         @{ @"key": @"行年参数", @"title": @"模块二：【天命系统】 - A级情报", @"type": @(EchoDataTypeNianming)},
         @{ @"key": @"神煞详情", @"title": @"神煞系统", @"type": @(EchoDataTypeShenSha)},
-   //     @{ @"key": @"七政四余", @"title": @"辅助系统", @"type": @(EchoDataTypeQiZheng)},
-   //     @{ @"key": @"三宫时信息", @"title": @"辅助系统", @"type": @(EchoDataTypeSanGong), @"isSubSection": @YES},
     ];
 
     NSMutableString *auxiliaryContent = [NSMutableString string];
@@ -1386,24 +1383,61 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (g_tianDiPan_workQueue.count == 0) {
         if (!g_isExtractingTianDiPanDetail) return;
         g_isExtractingTianDiPanDetail = NO;
-        LogMessage(EchoLogTypeSuccess, @"完成: 所有天地盘详情提取完毕。");
-// [修复点 1: 在合并前逐个解析天地盘详情]
-NSMutableString *finalReport = [NSMutableString string];
-for (NSUInteger i = 0; i < g_tianDiPan_fixedCoordinates.count; i++) {
-    NSDictionary *itemInfo = g_tianDiPan_fixedCoordinates[i];
-    NSString *itemName = itemInfo[@"name"];
-    NSString *itemType = [itemInfo[@"type"] isEqualToString:@"tianJiang"] ? @"天将详情" : @"上神详情";
-    NSString *rawItemData = (i < g_tianDiPan_resultsArray.count) ? g_tianDiPan_resultsArray[i] : @"[数据提取失败]";
-    
-    // 在这里，对每一块原始数据调用解析器！
-    NSString *parsedItemData = parseTianDiPanDetailBlock(rawItemData);
-    
-    // 使用解析后的数据来构建报告
-    [finalReport appendFormat:@"-- [%@: %@] --\n%@\n\n", itemType, itemName, parsedItemData];
-}
-if(g_tianDiPan_completion_handler) {
-    g_tianDiPan_completion_handler([finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
-}
+        LogMessage(EchoLogTypeSuccess, @"完成: 所有天地盘详情提取完毕，正在重组为宫位报告...");
+
+        NSMutableString *finalReport = [NSMutableString string];
+        if (g_tianDiPan_resultsArray.count == 24) {
+            for (NSUInteger i = 0; i < 12; i++) {
+                // 提取宫位名称 (例如: 从 "天将-午位" 提取 "午")
+                NSString *tianJiangFullName = g_tianDiPan_fixedCoordinates[i][@"name"];
+                NSString *palaceName = [[tianJiangFullName componentsSeparatedByString:@"-"] lastObject];
+                palaceName = [palaceName stringByReplacingOccurrencesOfString:@"位" withString:@""];
+
+                // 获取并解析对应宫位的天将和上神数据
+                NSString *rawTianJiangData = g_tianDiPan_resultsArray[i];
+                NSString *rawShangShenData = g_tianDiPans_resultsArray[i + 12];
+                
+                NSString *parsedTianJiang = parseTianDiPanDetailBlock(rawTianJiangData);
+                NSString *parsedShangShen = parseTianDiPanDetailBlock(rawShangShenData);
+
+                // [核心修改] 提取天将和上神的核心名称用于标题行
+                NSString *fullTianJiangTitle = [[parsedTianJiang componentsSeparatedByString:@"\n"].firstObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+                NSString *shortTianJiangName = [[fullTianJiangTitle componentsSeparatedByString:@" "].firstObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+                
+                NSString *fullShangShenTitle = [[parsedShangShen componentsSeparatedByString:@"\n"].firstObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+                NSString *shortShangShenName = [[fullShangShenTitle componentsSeparatedByString:@" "].firstObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+
+
+                // 为了格式美观，移除解析后内容的第一行（标题行），因为它已经被用在子标题里了
+                NSRange firstLineRangeTJ = [parsedTianJiang rangeOfString:@"\n"];
+                if (firstLineRangeTJ.location != NSNotFound) {
+                    parsedTianJiang = [parsedTianJiang substringFromIndex:firstLineRangeTJ.location + 1];
+                }
+                NSRange firstLineRangeSS = [parsedShangShen rangeOfString:@"\n"];
+                if (firstLineRangeSS.location != NSNotFound) {
+                    parsedShangShen = [parsedShangShen substringFromIndex:firstLineRangeSS.location + 1];
+                }
+
+                // 增加缩进，使结构更清晰
+                parsedTianJiang = [parsedTianJiang stringByReplacingOccurrencesOfString:@"\n" withString:@"\n    "];
+                parsedShangShen = [parsedShangShen stringByReplacingOccurrencesOfString:@"\n" withString:@"\n    "];
+
+                // [核心修改] 组合成您期望的、信息高度浓缩的标题格式
+                [finalReport appendFormat:@"// 4.%lu. %@[宫] (上神:%@, 天将:%@)\n", (unsigned long)i + 1, palaceName, shortShangShenName, shortTianJiangName];
+                [finalReport appendFormat:@"  - 天将详情:\n    %@\n", parsedTianJiang];
+                [finalReport appendFormat:@"  - 上神详情:\n    %@\n", parsedShangShen];
+
+                if (i < 11) { // 在每个宫位块之间添加一个换行符
+                    [finalReport appendString:@"\n"];
+                }
+            }
+        } else {
+            [finalReport appendString:@"[天地盘宫位详情组合失败：数据量不足]"];
+        }
+
+        if(g_tianDiPan_completion_handler) {
+            g_tianDiPan_completion_handler([finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
+        }
         g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil; g_tianDiPan_completion_handler = nil;
         return;
     }
@@ -1510,6 +1544,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
