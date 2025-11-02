@@ -535,7 +535,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
             continue;
         }
 
-        BOOL keywordFound = NO;
         for (NSString *keyword in keywordMap.allKeys) {
             if ([trimmedLine hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
@@ -565,7 +564,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                      }
                 }
                 
-                keywordFound = YES;
                 [processedLines addObject:trimmedLine];
                 break;
             }
@@ -1395,6 +1393,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
