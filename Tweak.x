@@ -46,11 +46,10 @@ static void initializeTianDiPanCoordinates() {
 }
 
 #pragma mark - Helpers
-// ... (All helpers remain the same) ...
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V7] %@", message);
+    //NSLog(@"[Echo-TDP] %@", message); // Can be enabled for debugging
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -116,7 +115,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (g_isExtractingTianDiPanDetail) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
         if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"]) {
-            LogMessage(EchoLogTypeDebug, @"拦截成功: %@", vcClassName);
+            LogMessage(EchoLogTypeSuccess, @"拦截成功: %@", vcClassName);
             vcToPresent.view.alpha = 0.0f;
             
             Original_presentViewController(self, _cmd, vcToPresent, NO, ^(void){
@@ -174,7 +173,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [self processTianDiPanQueue];
 }
 
-
 %new
 - (void)processTianDiPanQueue {
     if (g_tianDiPan_workQueue.count == 0) {
@@ -215,11 +213,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
     
-    // ====================== 决战 V7: 返璞归真 ======================
     @try {
         [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
         [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
-        LogMessage(EchoLogTypeDebug, @"坐标和状态已注入");
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"手势伪造失败: %@", exception.reason);
         [self processTianDiPanQueue];
@@ -236,7 +232,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         LogMessage(EchoLogError, @"触发失败: Target 无法响应");
         [self processTianDiPanQueue];
     }
-    // =============================================================
 }
 %end
 
@@ -244,6 +239,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-V7] 天地盘详情提取工具(最终决战版)已加载。");
+        NSLog(@"[Echo-V7-Final] 天地盘详情提取工具(成品版)已加载。");
     }
 }
