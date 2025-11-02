@@ -1552,31 +1552,31 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 };
 
                 // 第一课
-                [resultStr appendFormat:@"%@\n", cleanTitle(siKeLines[0])];
+                [resultStr appendFormat:@"%", cleanTitle(siKeLines[0])];
                 // [核心修改] 调整输出顺序：天将 -> 上神 -> 干/支
                 [resultStr appendString:findDetailBlock(@"日上 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"日上 (", @"上神详情")];
                 [resultStr appendString:findDetailBlock(@"日干", @"干支详情")];
-                [resultStr appendString:@"\n\n"];
+                [resultStr appendString:@"\n"];
 
                 // 第二课
-                [resultStr appendFormat:@"%@\n", cleanTitle(siKeLines[1])];
+                [resultStr appendFormat:@"%", cleanTitle(siKeLines[1])];
                 [resultStr appendString:findDetailBlock(@"日阴 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"日阴 (", @"上神详情")];
-                [resultStr appendString:@"\n\n"];
+                [resultStr appendString:@"\n"];
 
                 // 第三课
-                [resultStr appendFormat:@"%@\n", cleanTitle(siKeLines[2])];
+                [resultStr appendFormat:@"%", cleanTitle(siKeLines[2])];
                 [resultStr appendString:findDetailBlock(@"辰上 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"辰上 (", @"上神详情")];
                 [resultStr appendString:findDetailBlock(@"支辰", @"干支详情")];
-                [resultStr appendString:@"\n\n"];
+                [resultStr appendString:@"\n"];
                 
                 // 第四课
-                [resultStr appendFormat:@"%@\n", cleanTitle(siKeLines[3])];
+                [resultStr appendFormat:@"%", cleanTitle(siKeLines[3])];
                 [resultStr appendString:findDetailBlock(@"辰阴 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"辰阴 (", @"上神详情")];
-                [resultStr appendString:@"\n\n"];
+                [resultStr appendString:@"\n"];
             }
 
             // 步骤4: 按“三传”结构组合报告
@@ -1585,19 +1585,19 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             NSArray<NSString *> *sanChuanLines = [sanChuanSummary componentsSeparatedByString:@"\n"];
 
             if (sanChuanLines.count >= 1) { // 初传
-                [resultStr appendFormat:@"%@\n", sanChuanLines[0]];
+                [resultStr appendFormat:@"%", sanChuanLines[0]];
                 [resultStr appendString:findDetailBlock(@"初传 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"初传 - 地支", @"地支详情")];
-                [resultStr appendString:@"\n\n"];
+                [resultStr appendString:@"\n"];
             }
             if (sanChuanLines.count >= 2) { // 中传
-                [resultStr appendFormat:@"%@\n", sanChuanLines[1]];
+                [resultStr appendFormat:@"%", sanChuanLines[1]];
                 [resultStr appendString:findDetailBlock(@"中传 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"中传 - 地支", @"地支详情")];
-                [resultStr appendString:@"\n\n"];
+                [resultStr appendString:@"\n"];
             }
             if (sanChuanLines.count >= 3) { // 末传
-                [resultStr appendFormat:@"%@\n", sanChuanLines[2]];
+                [resultStr appendFormat:@"%", sanChuanLines[2]];
                 [resultStr appendString:findDetailBlock(@"末传 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"末传 - 地支", @"地支详情")];
             }
@@ -1672,6 +1672,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
