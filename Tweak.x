@@ -3,7 +3,7 @@
 #import <substrate.h>
 
 // =========================================================================
-// 全局变量、常量定义与辅助函数 (保持不变)
+// 1. 全局变量、常量定义与辅助函数
 // =========================================================================
 #pragma mark - Constants & Colors
 static const NSInteger kEchoControlButtonTag    = 556699;
@@ -24,31 +24,65 @@ static NSMutableArray *g_tianDiPan_workQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static __weak UIViewController *g_mainViewController = nil;
 
-#pragma mark - Coordinate Database
+// <<<< 你的天才解决方案 >>>>
+@interface EchoFakeGestureRecognizer : UITapGestureRecognizer
+@property (nonatomic, assign) CGPoint fakeLocation;
+@end
+
+@implementation EchoFakeGestureRecognizer
+- (CGPoint)locationInView:(UIView *)view {
+    return self.fakeLocation;
+}
+@end
+
+#pragma mark - Coordinate Database (V3 - 正确分层版)
 static NSArray *g_tianDiPan_fixedCoordinates = nil;
 static void initializeTianDiPanCoordinates() {
     if (g_tianDiPan_fixedCoordinates) return;
+    // 天地盘中心点 (大约)
+    CGFloat centerX = 180.0;
+    CGFloat centerY = 180.0;
+    // 半径
+    CGFloat tianJiangRadius = 70.0;  // 天将层的半径
+    CGFloat shangShenRadius = 115.0; // 上神层的半径 (比天将更靠外)
+
     g_tianDiPan_fixedCoordinates = @[
-        @{@"name": @"天将-午位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 108.57)]}, @{@"name": @"天将-巳位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(144.48, 118.19)]},
-        @{@"name": @"天将-辰位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(118.19, 144.48)]}, @{@"name": @"天将-卯位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(108.57, 180.39)]},
-        @{@"name": @"天将-寅位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(118.19, 216.29)]}, @{@"name": @"天将-丑位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(144.48, 242.58)]},
-        @{@"name": @"天将-子位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 252.20)]}, @{@"name": @"天将-亥位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 242.58)]},
-        @{@"name": @"天将-戌位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(242.58, 216.29)]}, @{@"name": @"天将-酉位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(252.20, 180.38)]},
-        @{@"name": @"天将-申位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(242.58, 144.48)]}, @{@"name": @"天将-未位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 118.19)]},
-        @{@"name": @"上神-午位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 134.00)]}, @{@"name": @"上神-巳位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 145.00)]},
-        @{@"name": @"上神-辰位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 168.00)]}, @{@"name": @"上神-卯位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(134.00, 180.39)]},
-        @{@"name": @"上神-寅位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 200.00)]}, @{@"name": @"上神-丑位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 220.00)]},
-        @{@"name": @"上神-子位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 226.00)]}, @{@"name": @"上神-亥位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 220.00)]},
-        @{@"name": @"上神-戌位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 200.00)]}, @{@"name": @"上神-酉位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(226.00, 180.39)]},
-        @{@"name": @"上神-申位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 168.00)]}, @{@"name": @"上神-未位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 145.00)]},
+        // --- 天将坐标 (内圈) ---
+        @{@"name": @"天将-午位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY - tianJiangRadius)]},
+        @{@"name": @"天将-巳位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadius * 0.5, centerY - tianJiangRadius * 0.866)]},
+        @{@"name": @"天将-辰位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadius * 0.866, centerY - tianJiangRadius * 0.5)]},
+        @{@"name": @"天将-卯位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadius, centerY)]},
+        @{@"name": @"天将-寅位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadius * 0.866, centerY + tianJiangRadius * 0.5)]},
+        @{@"name": @"天将-丑位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadius * 0.5, centerY + tianJiangRadius * 0.866)]},
+        @{@"name": @"天将-子位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY + tianJiangRadius)]},
+        @{@"name": @"天将-亥位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadius * 0.5, centerY + tianJiangRadius * 0.866)]},
+        @{@"name": @"天将-戌位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadius * 0.866, centerY + tianJiangRadius * 0.5)]},
+        @{@"name": @"天将-酉位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadius, centerY)]},
+        @{@"name": @"天将-申位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadius * 0.866, centerY - tianJiangRadius * 0.5)]},
+        @{@"name": @"天将-未位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadius * 0.5, centerY - tianJiangRadius * 0.866)]},
+
+        // --- 上神坐标 (外圈) ---
+        @{@"name": @"上神-午位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY - shangShenRadius)]},
+        @{@"name": @"上神-巳位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadius * 0.5, centerY - shangShenRadius * 0.866)]},
+        @{@"name": @"上神-辰位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadius * 0.866, centerY - shangShenRadius * 0.5)]},
+        @{@"name": @"上神-卯位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadius, centerY)]},
+        @{@"name": @"上神-寅位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadius * 0.866, centerY + shangShenRadius * 0.5)]},
+        @{@"name": @"上神-丑位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadius * 0.5, centerY + shangShenRadius * 0.866)]},
+        @{@"name": @"上神-子位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY + shangShenRadius)]},
+        @{@"name": @"上神-亥位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadius * 0.5, centerY + shangShenRadius * 0.866)]},
+        @{@"name": @"上神-戌位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadius * 0.866, centerY + shangShenRadius * 0.5)]},
+        @{@"name": @"上神-酉位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadius, centerY)]},
+        @{@"name": @"上神-申位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadius * 0.866, centerY - shangShenRadius * 0.5)]},
+        @{@"name": @"上神-未位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadius * 0.5, centerY - shangShenRadius * 0.866)]},
     ];
 }
 
 #pragma mark - Helpers
+// ... (LogMessage, FindSubviews, etc. remain the same) ...
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V19-Final] %@", message);
+    NSLog(@"[Echo-V18-Final] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -117,16 +151,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             LogMessage(EchoLogTypeDebug, @"[拦截器] 成功捕获目标弹窗: %@", vcClassName);
             vcToPresent.view.alpha = 0.0f;
             
-            // <<<< 核心逻辑修正 >>>>
-            // 将我们自己的逻辑注入到原始的 completion block 中
-            void (^originalCompletion)(void) = completion;
-            void (^newCompletion)(void) = ^{
-                // 先执行原始的 completion (如果有)
-                if (originalCompletion) {
-                    originalCompletion();
-                }
-                
-                // 然后执行我们的提取逻辑
+            Original_presentViewController(self, _cmd, vcToPresent, NO, ^(void){
                 dispatch_async(dispatch_get_main_queue(), ^{
                      NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
                      [g_tianDiPan_resultsArray addObject:extractedText];
@@ -136,9 +161,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                          }
                      }];
                 });
-            };
-            
-            Original_presentViewController(self, _cmd, vcToPresent, NO, newCompletion);
+                if(completion) completion();
+            });
             return;
         }
     }
@@ -208,55 +232,32 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
 
-    NSDictionary *task = g_tianDiPan_workQueue.firstObject; 
-    // <<<< 核心逻辑修正：不要在这里移除任务，让拦截器去驱动 >>>>
-    // [g_tianDiPan_workQueue removeObjectAtIndex:0]; 
-    
+    NSDictionary *task = g_tianDiPan_workQueue.firstObject; [g_tianDiPan_workQueue removeObjectAtIndex:0];
     NSString *name = task[@"name"]; CGPoint point = [task[@"point"] CGPointValue];
     LogMessage(EchoLogTypeInfo, @"[模拟器] 正在处理: %@ (%.0f, %.0f)", name, point.x, point.y);
 
-    NSString *plateViewClassName = @"六壬大占.天地盤視圖類";
-    Class plateViewClass = NSClassFromString(plateViewClassName);
-    if (!plateViewClass) { LogMessage(EchoLogError,@"关键错误: 找不到类 %@", plateViewClassName); [self processTianDiPanQueue]; return; }
-    
-    NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
-    if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
-    
-    UITapGestureRecognizer *singleTapGesture = nil;
-    for (UIGestureRecognizer *gesture in ((UIView *)plateViews.firstObject).gestureRecognizers) {
-        if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) {
-            singleTapGesture = (UITapGestureRecognizer *)gesture;
-            break;
-        }
-    }
-    if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
-    
+    // ====================== 最终解决方案 V18 - 你的方案 ======================
     @try {
-        // <<<< 核心逻辑修正：在触发下一次点击前，从队列中移除已完成的任务 >>>>
-        [g_tianDiPan_workQueue removeObjectAtIndex:0];
-
-        [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
-        [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
+        EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
+        fakeGesture.fakeLocation = point;
         
-        LogMessage(EchoLogTypeDebug, @"[模拟器] 手势已伪造 (坐标, 状态)");
-
         SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
         if ([self respondsToSelector:action]) {
             LogMessage(EchoLogTypeDebug, @"[模拟器] 准备调用 action...");
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [self performSelector:action withObject:singleTapGesture];
+            [self performSelector:action withObject:fakeGesture];
             #pragma clang diagnostic pop
-            // 这里不再打印 "等待拦截器"，因为 action 内部会同步调用 presentViewController
+            LogMessage(EchoLogTypeDebug, @"[模拟器] Action 已调用。等待拦截器响应...");
         } else {
             LogMessage(EchoLogError, @"[模拟器] 触发失败: Target 无法响应");
             [self processTianDiPanQueue];
         }
-
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"[模拟器] 方案执行失败: %@", exception.reason);
         [self processTianDiPanQueue];
     }
+    // =====================================================================
 }
 
 %end
@@ -265,6 +266,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-V19-Final] 天地盘提取工具(逻辑修正版)已加载。");
+        NSLog(@"[Echo-V18-Final] 天地盘详情提取工具(胜利版)已加载。");
     }
 }
