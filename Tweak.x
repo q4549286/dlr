@@ -26,13 +26,22 @@ static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static __weak UIViewController *g_mainViewController = nil;
 
 #pragma mark - Private API Declarations
+// <<<< 核心修复点 1 >>>>
 @interface UIEvent (Private)
-- (id)_initWithEvent:(struct __GSEvent *)event touches:(id)touches;
+- (id)_initWithEvent:(void *)event touches:(id)touches;
 @end
+
 @interface UITouch (Private)
-- (id)_initWithPoint:(CGPoint)point view:(UIView *)view window:(UIWindow *)window;
+// This is a simplified version for our needs, might need adjustment based on iOS version
+- (id)initInWindow:(id)window;
+- (void)setWindow:(id)window;
+- (void)setView:(id)view;
+- (void)setTapCount:(NSUInteger)tapCount;
+- (void)setLocationInWindow:(CGPoint)location;
 - (void)setPhase:(UITouchPhase)phase;
+- (void)_setLocationInWindow:(CGPoint)location resetPrevious:(_Bool)resetPrevious;
 @end
+
 
 #pragma mark - Coordinate Database
 static NSArray *g_tianDiPan_fixedCoordinates = nil;
@@ -55,7 +64,6 @@ static void initializeTianDiPanCoordinates() {
 }
 
 #pragma mark - Helpers
-// ... (LogMessage, FindSubviewsOfClassRecursive, GetFrontmostWindow, extractDataFromStackViewPopup all remain the same) ...
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
@@ -147,7 +155,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 %hook UIViewController
-// ... (viewDidLoad, createOrShowTDPPanel, handleTDPExtractionButtonTap, startTDPExtraction all remain the same) ...
 - (void)viewDidLoad {
     %orig;
     Class c = NSClassFromString(@"六壬大占.ViewController");
@@ -220,35 +227,35 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
     UIView *plateView = plateViews.firstObject;
 
-    // ====================== 核心修复点: 模拟系统事件 ======================
+    // ====================== 核心修复点 2: 使用更可靠的私有 API 创建 Touch ======================
     @try {
-        // 1. Create a fake touch object at the desired location
-        UITouch *touch = [[NSClassFromString(@"UITouch") alloc] _initWithPoint:point view:plateView window:plateView.window];
-        [touch setPhase:UITouchPhaseBegan];
+        UITouch *touch = [[NSClassFromString(@"UITouch") alloc] initInWindow:plateView.window];
+        [touch setView:plateView];
+        [touch setTapCount:1];
         
-        // 2. Create a fake event containing the touch
+        CGPoint windowPoint = [plateView convertPoint:point toView:plateView.window];
+        [touch _setLocationInWindow:windowPoint resetPrevious:YES];
+
+        [touch setPhase:UITouchPhaseBegan];
         NSSet *touches = [NSSet setWithObject:touch];
+        
+        // <<<< 核心修复点 3: 传入 NULL >>>>
         UIEvent *event = [[NSClassFromString(@"UITouchesEvent") alloc] _initWithEvent:NULL touches:touches];
         
-        // 3. Send the "touch down" event
         [[UIApplication sharedApplication] sendEvent:event];
 
-        // 4. Update the touch to "ended" phase
         [touch setPhase:UITouchPhaseEnded];
-        
-        // 5. Send the "touch up" event
         [[UIApplication sharedApplication] sendEvent:event];
 
         LogMessage(EchoLogTypeDebug, @"系统级点击事件已发送");
 
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"事件模拟失败: %@", exception.reason);
-        // Even if it fails, continue to the next item
         dispatch_async(dispatch_get_main_queue(), ^{
             [self processTianDiPanQueue];
         });
     }
-    // ====================================================================
+    // ====================================================================================
 }
 
 %end
@@ -257,6 +264,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-EventSim] 天地盘详情提取工具(事件模拟版)已加载。");
+        NSLog(@"[Echo-EventSim] 天地盘详情提取工具(编译修正版)已加载。");
     }
 }
