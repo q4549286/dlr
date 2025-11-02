@@ -56,7 +56,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-Final] %@", message);
+    NSLog(@"[Echo-IvarFix] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -222,26 +222,30 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
     
-    // ====================== 最终决战修复点 ======================
+    // ====================== 最终决战修复点 V2 ======================
     @try {
-        // Step 1: Create a fake touch object
         UITouch *touch = [[NSClassFromString(@"UITouch") alloc] init];
         [touch setTapCount:1];
-        
-        // Step 2: Set the touch's location and phase
-        CGPoint windowPoint = [plateView convertPoint:point toView:plateView.window];
-        [touch _setLocationInWindow:windowPoint resetPrevious:YES];
         [touch setPhase:UITouchPhaseEnded];
         
-        // Step 3: Inject the fake touch into the gesture recognizer
-        NSSet *touches = [NSSet setWithObject:touch];
-        [singleTapGesture setValue:touches forKey:@"touches"];
+        CGPoint windowPoint = [plateView convertPoint:point toView:plateView.window];
+        [touch _setLocationInWindow:windowPoint resetPrevious:YES];
         
-        // Step 4: Inject location and state
+        // Directly set the private ivar `_touches`
+        Ivar touchesIvar = class_getInstanceVariable([UIGestureRecognizer class], "_touches");
+        if (touchesIvar) {
+            NSMutableArray *touchesArray = [NSMutableArray arrayWithObject:touch];
+            object_setIvar(singleTapGesture, touchesIvar, touchesArray);
+        } else {
+             LogMessage(EchoLogError, @"致命错误: 找不到 _touches 实例变量!");
+             [self processTianDiPanQueue];
+             return;
+        }
+
         [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
         [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
 
-        LogMessage(EchoLogTypeDebug, @"手势已完全伪造");
+        LogMessage(EchoLogTypeDebug, @"手势已通过Ivar注入伪造");
 
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"手势伪造失败: %@", exception.reason);
@@ -267,6 +271,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-Final] 天地盘详情提取工具(最终版)已加载。");
+        NSLog(@"[Echo-IvarFix] 天地盘详情提取工具(Ivar修正版)已加载。");
     }
 }
