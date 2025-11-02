@@ -236,8 +236,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (!report || report.length == 0) { LogMessage(EchoLogError, @"报告为空"); return; }
     [UIPasteboard generalPasteboard].string = report; 
     UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"天地盘详情已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
-    UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertControllerStyleDefault handler:nil];
-    [actionSheet addAction:copyAction];
+// 这是正确的代码
+UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];    [actionSheet addAction:copyAction];
     [self presentViewController:actionSheet animated:YES completion:nil];
 }
 
@@ -250,3 +250,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo-Final-Debug] 天地盘详情提取工具(终极调试版)已加载。");
     }
 }
+
