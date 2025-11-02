@@ -232,7 +232,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [touch _setLocationInWindow:windowPoint resetPrevious:YES];
         
         // Directly set the private ivar `_touches`
-        Ivar touchesIvar = class_getInstanceVariable([UIGestureRecognizer class], "_touches");
+Ivar touchesIvar = class_getInstanceVariable([singleTapGesture class], "_touches");
         if (touchesIvar) {
             NSMutableArray *touchesArray = [NSMutableArray arrayWithObject:touch];
             object_setIvar(singleTapGesture, touchesIvar, touchesArray);
@@ -274,3 +274,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo-IvarFix] 天地盘详情提取工具(Ivar修正版)已加载。");
     }
 }
+
