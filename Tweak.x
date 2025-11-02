@@ -48,7 +48,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V13-Final] %@", message);
+    NSLog(@"[Echo-V14-Monitor] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -111,18 +111,24 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
+    // <<<< 核心监控点 1 >>>>
+    LogMessage(EchoLogTypeDebug, @"[拦截器] presentViewController 被调用！Presented VC: %@", NSStringFromClass([vcToPresent class]));
+
     if (g_isExtractingTianDiPanDetail) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
         if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"]) {
-            LogMessage(EchoLogTypeDebug, @"拦截到 ViewController: %@", vcClassName);
+            LogMessage(EchoLogTypeSuccess, @"[拦截器] 成功捕获目标弹窗: %@", vcClassName);
             vcToPresent.view.alpha = 0.0f;
             
             Original_presentViewController(self, _cmd, vcToPresent, NO, ^(void){
                 dispatch_async(dispatch_get_main_queue(), ^{
+                     LogMessage(EchoLogTypeDebug, @"[拦截器] 弹窗已呈现，准备提取数据...");
                      NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
                      [g_tianDiPan_resultsArray addObject:extractedText];
+                     LogMessage(EchoLogTypeSuccess, @"[拦截器] 数据提取成功，准备销毁弹窗。");
                      [vcToPresent dismissViewControllerAnimated:NO completion:^{
                          if (g_mainViewController) {
+                            LogMessage(EchoLogTypeDebug, @"[拦截器] 弹窗已销毁，继续处理下一个任务。");
                             [g_mainViewController processTianDiPanQueue];
                          }
                      }];
@@ -200,7 +206,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
     NSDictionary *task = g_tianDiPan_workQueue.firstObject; [g_tianDiPan_workQueue removeObjectAtIndex:0];
     NSString *name = task[@"name"]; CGPoint point = [task[@"point"] CGPointValue];
-    LogMessage(EchoLogTypeInfo, @"正在处理: %@ (%.0f, %.0f)", name, point.x, point.y);
+    LogMessage(EchoLogTypeInfo, @"[模拟器] 正在处理: %@ (%.0f, %.0f)", name, point.x, point.y);
 
     NSString *plateViewClassName = @"六壬大占.天地盤視圖類";
     Class plateViewClass = NSClassFromString(plateViewClassName);
@@ -219,13 +225,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
     
-    // ====================== 最终解决方案 V13 ======================
     @try {
-        // 只修改最关键的两个属性
         [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
         [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
         
-        LogMessage(EchoLogTypeDebug, @"手势已简化伪造 (坐标, 状态)");
+        LogMessage(EchoLogTypeDebug, @"[模拟器] 手势已伪造 (坐标, 状态)。准备调用 action...");
 
         SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
         if ([self respondsToSelector:action]) {
@@ -233,16 +237,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
             [self performSelector:action withObject:singleTapGesture];
             #pragma clang diagnostic pop
+            LogMessage(EchoLogTypeDebug, @"[模拟器] Action 已调用。等待拦截器响应...");
         } else {
-            LogMessage(EchoLogError, @"触发失败: Target 无法响应");
+            LogMessage(EchoLogError, @"[模拟器] 触发失败: Target 无法响应");
             [self processTianDiPanQueue];
         }
 
     } @catch (NSException *exception) {
-        LogMessage(EchoLogError, @"终极方案执行失败: %@", exception.reason);
+        LogMessage(EchoLogError, @"[模拟器] 方案执行失败: %@", exception.reason);
         [self processTianDiPanQueue];
     }
-    // =========================================================
 }
 
 %end
@@ -251,6 +255,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-V13-Final] 天地盘详情提取工具(返璞归真版)已加载。");
+        NSLog(@"[Echo-V14-Monitor] 天地盘提取工具(自我监控版)已加载。");
     }
 }
