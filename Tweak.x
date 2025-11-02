@@ -1511,29 +1511,29 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if (g_s2_isExtractingKeChuanDetail) {
             NSMutableString *resultStr = [NSMutableString string];
             
-            // 步骤1: 将所有提取到的详细信息存入一个字典，以便快速查找
+            // 步骤1: 将所有提取到的详细信息存入一个字典
             NSMutableDictionary<NSString *, NSString *> *detailedDataMap = [NSMutableDictionary dictionary];
             if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) {
                 for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) {
                     NSString *title = g_s2_keChuanTitleQueue[i];
                     NSString *rawBlock = g_s2_capturedKeChuanDetailArray[i];
+                    // [排版修正] 在解析时就增加一级缩进
                     NSString *structuredBlock = parseKeChuanDetailBlock(rawBlock, title);
+                    structuredBlock = [structuredBlock stringByReplacingOccurrencesOfString:@"\n" withString:@"\n    "];
                     detailedDataMap[title] = structuredBlock;
                 }
             } else {
                 g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]";
-                // ... (后续的清理代码会执行)
             }
 
-            // 步骤2: 创建一个辅助函数，用于从字典中根据前缀查找详细信息
-            NSString* (^findDetailBlock)(NSString*) = ^NSString*(NSString *prefix) {
+            // 步骤2: 创建一个辅助函数，用于从字典中根据前缀查找并格式化输出
+            NSString* (^findDetailBlock)(NSString*, NSString*) = ^NSString*(NSString *prefix, NSString *header) {
                 for (NSString *key in detailedDataMap.allKeys) {
                     if ([key hasPrefix:prefix]) {
-                        // 返回带标题的完整块
-                        return [NSString stringWithFormat:@"\n  - 详情 (%@):\n%@", key, detailedDataMap[key]];
+                        return [NSString stringWithFormat:@"\n  - %@ (%@):\n    %@", header, key, detailedDataMap[key]];
                     }
                 }
-                return [NSString stringWithFormat:@"\n  - 详情 (%@): [未找到]", prefix];
+                return [NSString stringWithFormat:@"\n  - %@ (%@): [未找到]", header, prefix];
             };
 
             // 步骤3: 按“四课”结构组合报告
@@ -1542,30 +1542,40 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             NSArray<NSString *> *siKeLines = [siKeSummary componentsSeparatedByString:@"\n"];
             
             if (siKeLines.count == 4) {
+                // [核心修改] 统一清理四课标题，移除括号内容
+                NSString* (^cleanTitle)(NSString*) = ^NSString*(NSString* line) {
+                    NSRange range = [line rangeOfString:@"("];
+                    if (range.location != NSNotFound) {
+                        return [line substringToIndex:range.location];
+                    }
+                    return line;
+                };
+
                 // 第一课
-                [resultStr appendFormat:@"%@\n", siKeLines[0]];
-                [resultStr appendString:findDetailBlock(@"日干")];
-                [resultStr appendString:findDetailBlock(@"日上 (")]; // 加括号以区分"日上"和"日上-天将"
-                [resultStr appendString:findDetailBlock(@"日上 - 天将")];
+                [resultStr appendFormat:@"%@\n", cleanTitle(siKeLines[0])];
+                // [核心修改] 调整输出顺序：天将 -> 上神 -> 干/支
+                [resultStr appendString:findDetailBlock(@"日上 - 天将", @"天将详情")];
+                [resultStr appendString:findDetailBlock(@"日上 (", @"上神详情")];
+                [resultStr appendString:findDetailBlock(@"日干", @"干支详情")];
                 [resultStr appendString:@"\n\n"];
 
                 // 第二课
-                [resultStr appendFormat:@"%@\n", siKeLines[1]];
-                [resultStr appendString:findDetailBlock(@"日阴 (")];
-                [resultStr appendString:findDetailBlock(@"日阴 - 天将")];
+                [resultStr appendFormat:@"%@\n", cleanTitle(siKeLines[1])];
+                [resultStr appendString:findDetailBlock(@"日阴 - 天将", @"天将详情")];
+                [resultStr appendString:findDetailBlock(@"日阴 (", @"上神详情")];
                 [resultStr appendString:@"\n\n"];
 
                 // 第三课
-                [resultStr appendFormat:@"%@\n", siKeLines[2]];
-                [resultStr appendString:findDetailBlock(@"支辰")];
-                [resultStr appendString:findDetailBlock(@"辰上 (")];
-                [resultStr appendString:findDetailBlock(@"辰上 - 天将")];
+                [resultStr appendFormat:@"%@\n", cleanTitle(siKeLines[2])];
+                [resultStr appendString:findDetailBlock(@"辰上 - 天将", @"天将详情")];
+                [resultStr appendString:findDetailBlock(@"辰上 (", @"上神详情")];
+                [resultStr appendString:findDetailBlock(@"支辰", @"干支详情")];
                 [resultStr appendString:@"\n\n"];
                 
                 // 第四课
-                [resultStr appendFormat:@"%@\n", siKeLines[3]];
-                [resultStr appendString:findDetailBlock(@"辰阴 (")];
-                [resultStr appendString:findDetailBlock(@"辰阴 - 天将")];
+                [resultStr appendFormat:@"%@\n", cleanTitle(siKeLines[3])];
+                [resultStr appendString:findDetailBlock(@"辰阴 - 天将", @"天将详情")];
+                [resultStr appendString:findDetailBlock(@"辰阴 (", @"上神详情")];
                 [resultStr appendString:@"\n\n"];
             }
 
@@ -1576,21 +1586,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
             if (sanChuanLines.count >= 1) { // 初传
                 [resultStr appendFormat:@"%@\n", sanChuanLines[0]];
-                [resultStr appendString:findDetailBlock(@"初传 - 地支")];
-                [resultStr appendString:findDetailBlock(@"初传 - 天将")];
+                [resultStr appendString:findDetailBlock(@"初传 - 天将", @"天将详情")];
+                [resultStr appendString:findDetailBlock(@"初传 - 地支", @"地支详情")];
                 [resultStr appendString:@"\n\n"];
             }
             if (sanChuanLines.count >= 2) { // 中传
                 [resultStr appendFormat:@"%@\n", sanChuanLines[1]];
-                [resultStr appendString:findDetailBlock(@"中传 - 地支")];
-                [resultStr appendString:findDetailBlock(@"中传 - 天将")];
+                [resultStr appendString:findDetailBlock(@"中传 - 天将", @"天将详情")];
+                [resultStr appendString:findDetailBlock(@"中传 - 地支", @"地支详情")];
                 [resultStr appendString:@"\n\n"];
             }
             if (sanChuanLines.count >= 3) { // 末传
                 [resultStr appendFormat:@"%@\n", sanChuanLines[2]];
-                [resultStr appendString:findDetailBlock(@"末传 - 地支")];
-                [resultStr appendString:findDetailBlock(@"末传 - 天将")];
-                [resultStr appendString:@"\n\n"];
+                [resultStr appendString:findDetailBlock(@"末传 - 天将", @"天将详情")];
+                [resultStr appendString:findDetailBlock(@"末传 - 地支", @"地支详情")];
             }
 
             g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -1619,7 +1628,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [g_s2_keChuanWorkQueue removeObjectAtIndex:0];
     NSString *title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
     [self updateProgressHUD:[NSString stringWithFormat:@"推演课传: %lu/%lu", (unsigned long)g_s2_capturedKeChuanDetailArray.count + 1, (unsigned long)g_s2_keChuanTitleQueue.count]];
-    SEL action = ([title containsString:@"天将"]) ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳摘要WithSender:");
+    SEL action = ([title containsString:@"天将"]) ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
     if ([self respondsToSelector:action]) {
         SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]);
     } else {
@@ -1663,6 +1672,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
