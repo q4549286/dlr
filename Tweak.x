@@ -24,13 +24,13 @@ static NSMutableArray *g_tianDiPan_workQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static void (^g_tianDiPan_completion_handler)(NSString *result) = nil;
 
-#pragma mark - Coordinate Database (V2.0 - 天将/上神分离校准版)
+#pragma mark - Coordinate Database (V2.1 - 精准微调版)
 static NSArray *g_tianDiPan_fixedCoordinates = nil;
 
 static void initializeTianDiPanCoordinates() {
     if (g_tianDiPan_fixedCoordinates) return;
     
-    // V2.0: 精确区分天将层和天盘上神层的固定坐标
+    // V2.1: 精确区分天将层和天盘上神层的固定坐标, 并微调上神坐标使其更靠内
     g_tianDiPan_fixedCoordinates = @[
         // --- 天将层 (12个坐标) ---
         @{@"name": @"天将-午位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 108.57)]},
@@ -47,18 +47,18 @@ static void initializeTianDiPanCoordinates() {
         @{@"name": @"天将-未位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 118.19)]},
 
         // --- 天盘上神层 (12个坐标) ---
-        @{@"name": @"上神-午位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 134.00)]}, // Y-coord adjusted inwards
-        @{@"name": @"上神-巳位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 145.00)]}, // Adjusted
-        @{@"name": @"上神-辰位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(145.00, 168.00)]}, // Adjusted
-        @{@"name": @"上神-卯位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(134.00, 180.39)]}, // X-coord adjusted inwards
-        @{@"name": @"上神-寅位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(145.00, 200.00)]}, // Adjusted
-        @{@"name": @"上神-丑位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 220.00)]}, // Adjusted
-        @{@"name": @"上神-子位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 226.00)]}, // Y-coord adjusted inwards
-        @{@"name": @"上神-亥位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 220.00)]}, // Adjusted
-        @{@"name": @"上神-戌位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 200.00)]}, // Adjusted
-        @{@"name": @"上神-酉位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(226.00, 180.39)]}, // X-coord adjusted inwards
-        @{@"name": @"上神-申位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 168.00)]}, // Adjusted
-        @{@"name": @"上神-未位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 145.00)]}, // Adjusted
+        @{@"name": @"上神-午位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 134.00)]},
+        @{@"name": @"上神-巳位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 145.00)]},
+        @{@"name": @"上神-辰位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 168.00)]},
+        @{@"name": @"上神-卯位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(134.00, 180.39)]},
+        @{@"name": @"上神-寅位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 200.00)]},
+        @{@"name": @"上神-丑位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 220.00)]},
+        @{@"name": @"上神-子位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 226.00)]},
+        @{@"name": @"上神-亥位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 220.00)]},
+        @{@"name": @"上神-戌位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 200.00)]},
+        @{@"name": @"上神-酉位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(226.00, 180.39)]},
+        @{@"name": @"上神-申位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 168.00)]},
+        @{@"name": @"上神-未位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 145.00)]},
     ];
 }
 
@@ -85,7 +85,9 @@ static void LogMessage(EchoLogType type, NSString *format, ...) {
             default:                 color = ECHO_COLOR_LOG_INFO; break;
         }
         [logLine addAttribute:NSForegroundColorAttributeName value:color range:NSMakeRange(0, logLine.length)];
-        [logLine addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, logLine.length)];
+        if (g_logTextView.font) {
+            [logLine addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, logLine.length)];
+        }
         NSMutableAttributedString *existingText = [[NSMutableAttributedString alloc] initWithAttributedString:g_logTextView.attributedText];
         [logLine appendAttributedString:existingText];
         g_logTextView.attributedText = logLine;
@@ -134,7 +136,7 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
             }
         }
     } else {
-        return @"[提取失败: 视图结构已更改，未找到StackView]";
+        return @"[提取失败: 未找到StackView]";
     }
     return [finalTextParts componentsJoinedByString:@"\n"];
 }
@@ -301,40 +303,30 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
     if (!singleTapGesture) { LogMessage(EchoLogError,@"找不到单击手势"); [self processTianDiPanQueue]; return; }
     
-    // The magic: inject the coordinate
-    // Use setValue:forKey: as it's more robust against OS changes
     @try {
         [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
+        LogMessage(EchoLogTypeInfo, @"坐标 (%.0f, %.0f) 已注入手势", point.x, point.y);
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"设置坐标失败: %@", exception.reason);
         [self processTianDiPanQueue];
         return;
     }
 
-    // Trigger the action
-    id target = nil;
-    // In modern iOS, targets are stored in an array. Let's find the correct one.
-    if ([singleTapGesture respondsToSelector:@selector(targets)]) {
-        id targets = [singleTapGesture valueForKey:@"targets"];
-        if ([targets count] > 0) {
-            id targetActionPair = [targets firstObject];
-            target = [targetActionPair valueForKey:@"target"];
-        }
-    }
-    // Fallback for older systems
-    if (!target) {
-         target = [singleTapGesture valueForKey:@"target"];
-    }
+    // ====================== 核心修复点 ======================
+    // 目标就是 ViewController 本身
+    id target = self; 
+    // =======================================================
     
     SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
 
-    if (target && [target respondsToSelector:action]) {
+    if ([target respondsToSelector:action]) {
+        LogMessage(EchoLogTypeInfo, @"即将触发点击事件...");
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
         [target performSelector:action withObject:singleTapGesture];
         #pragma clang diagnostic pop
     } else {
-        LogMessage(EchoLogError, @"无法触发点击事件 (Target: %@)", target);
+        LogMessage(EchoLogError, @"触发失败: Target (%@) 无法响应 %@", target, NSStringFromSelector(action));
         [self processTianDiPanQueue];
     }
 }
@@ -355,6 +347,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-TDP] 天地盘详情提取工具已加载。");
+        NSLog(@"[Echo-TDP] 天地盘详情提取工具(防闪退版)已加载。");
     }
 }
