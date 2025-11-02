@@ -560,20 +560,43 @@ static NSString* parseTianDiPanDetailBlock(NSString* rawData) {
     return simplifiedData;
 }
 // 新增的天将详情专属解析器
+// 新增的天将详情专属解析器 (v1.1 - 保留“主”事)
 static NSString* _parseTianJiangDetailInternal(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
+    
     NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
     NSMutableString *result = [NSMutableString string];
-    if (lines.count > 0) { [result appendFormat:@"%@\n", lines[0]]; }
-    NSArray *keywords = @[@"乘", @"临", @"阳神为", @"阴神为"];
+    
+    // 保留标题行 (e.g., "朱雀 夜将")
+    if (lines.count > 0 && lines[0].length < 20) { // 简单的标题行长度判断
+        [result appendFormat:@"%@\n", lines[0]];
+    }
+    
+    // 定义客观关系的关键词 (白名单)
+    NSArray *keywords = @[
+        @"乘",
+        @"临",
+        @"阳神为",
+        @"阴神为",
+        @"主" // <-- 已添加
+    ];
+    
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        if (trimmedLine.length == 0) continue;
+
         BOOL isObjectiveFact = NO;
-        for (NSString *key in keywords) { if ([trimmedLine hasPrefix:key]) { isObjectiveFact = YES; break; } }
+        for (NSString *key in keywords) {
+            if ([trimmedLine hasPrefix:key]) {
+                isObjectiveFact = YES;
+                break;
+            }
+        }
+        
         if (isObjectiveFact) {
-            NSRange conclusionRange = [trimmedLine rangeOfString:@"。"];
-            NSString *cleanLine = (conclusionRange.location != NSNotFound) ? [trimmedLine substringToIndex:conclusionRange.location] : trimmedLine;
-            [result appendFormat:@"- %@\n", cleanLine];
+            // 这次我们不再粗暴地移除句号后的内容，因为“主”事可能是多句话
+            // 而是直接保留整行，因为它已经被白名单验证
+            [result appendFormat:@"- %@\n", trimmedLine];
         }
     }
     return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -1313,6 +1336,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
