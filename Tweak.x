@@ -23,7 +23,7 @@ static BOOL g_isExtractingTianDiPanDetail = NO;
 static NSMutableArray *g_tianDiPan_workQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static __weak UIViewController *g_mainViewController = nil;
-static __weak UIView *g_popoverSourceView = nil; // <<<< 核心：保存 Popover 的源视图
+static __weak UIView *g_popoverSourceView = nil; 
 
 #pragma mark - Helpers
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
@@ -149,7 +149,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (g_isExtractingTianDiPanDetail) { LogMessage(EchoLogError, @"错误: 提取任务已在进行中。"); return; }
     LogMessage(EchoLogTypeInfo, @"任务启动: 推衍天地盘详情...");
     
-    // <<<< 核心修复点 1: 查找并缓存 SourceView >>>>
     Class sourceViewClass = NSClassFromString(@"六壬大占.課體視圖");
     if (!sourceViewClass) { LogMessage(EchoLogError, @"严重错误: 找不到关键的源视图类 '六壬大占.課體視圖'"); return; }
     NSMutableArray *sourceViews = [NSMutableArray array];
@@ -160,13 +159,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     g_isExtractingTianDiPanDetail = YES; 
     g_tianDiPan_workQueue = [NSMutableArray array];
-    // 为了简化，我们只提取两个作为测试
     for(int i=0; i < 24; i++) { [g_tianDiPan_workQueue addObject:@(i)]; }
     g_tianDiPan_resultsArray = [NSMutableArray array];
     
     [self processTianDiPanQueue];
 }
-
 
 %new
 - (void)processTianDiPanQueue {
@@ -174,20 +171,26 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if (!g_isExtractingTianDiPanDetail) return;
         g_isExtractingTianDiPanDetail = NO;
         LogMessage(EchoLogTypeSuccess, @"完成: 所有天地盘详情提取完毕。");
-        // ... (报告生成逻辑保持不变)
+        
         NSMutableString *finalReport = [NSMutableString string];
         [finalReport appendString:@"// 天地盘详情 (完整版)\n\n"];
         for (NSUInteger i = 0; i < 24; i++) {
             NSString *itemType = (i < 12) ? @"天将详情" : @"上神详情";
             NSString *itemName = [NSString stringWithFormat:@"%@-%lu", (i < 12) ? @"天将" : @"上神", (unsigned long)i % 12];
             NSString *itemData = (i < g_tianDiPan_resultsArray.count) ? g_tianDiPan_resultsArray[i] : @"[数据提取失败]";
-            NSMutableString *simplifiedData = [itemData mutableCopy]; CFStringTransform((__bridge CFStringRef)simplifiedData, NULL, CFSTR("Hant-Hans"), false);
+            
+            // ====================== 核心修复点 ======================
+            NSMutableString *simplifiedData = [itemData mutableCopy]; 
+            CFStringTransform((__bridge CFMutableStringRef)simplifiedData, NULL, CFSTR("Hant-Hans"), false);
+            // =======================================================
+            
             [finalReport appendFormat:@"-- [%@: %@] --\n%@\n\n", itemType, itemName, simplifiedData];
         }
         [UIPasteboard generalPasteboard].string = finalReport;
         UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"天地盘详情已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
         [ac addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:ac animated:YES completion:nil];
+        
         g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil; g_popoverSourceView = nil;
         return;
     }
@@ -197,15 +200,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     LogMessage(EchoLogTypeInfo, @"正在处理索引: %ld", (long)index);
 
-    // ====================== 核心修复点 2: 直接创建并呈现 ViewController ======================
     @try {
         UIViewController *vcToPresent = nil;
         NSString *vcClassName = nil;
 
-        // 根据索引判断应该创建哪个摘要视图
-        if (index < 12) { // 0-11 是天将
+        if (index < 12) {
             vcClassName = @"六壬大占.天將摘要視圖";
-        } else { // 12-23 是上神 (天地盘宫位)
+        } else {
             vcClassName = @"六壬大占.天地盤宮位摘要視圖";
         }
         
@@ -216,17 +217,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
         
-        // 创建实例
         vcToPresent = [[vcClass alloc] init];
         
-        // <<<< 核心逻辑：手动设置 Popover >>>>
+        // The core logic: manually configure the popover
         vcToPresent.modalPresentationStyle = UIModalPresentationPopover;
         UIPopoverPresentationController *popover = vcToPresent.popoverPresentationController;
         if (popover) {
             popover.sourceView = g_popoverSourceView;
-            // 为了避免箭头，我们可以把 sourceRect 设置为 sourceView 的中心一个很小的区域
             popover.sourceRect = CGRectMake(CGRectGetMidX(g_popoverSourceView.bounds), CGRectGetMidY(g_popoverSourceView.bounds), 1, 1);
-            popover.permittedArrowDirections = 0; // No arrow
+            popover.permittedArrowDirections = 0;
             
             LogMessage(EchoLogTypeDebug, @"Popover 已配置, SourceView: <%p>", g_popoverSourceView);
         } else {
@@ -235,14 +234,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
              return;
         }
         
-        // 直接调用 present 方法，我们的 Hook 会拦截它
         [self presentViewController:vcToPresent animated:NO completion:nil];
 
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"直接呈现失败: %@", exception.reason);
         [self processTianDiPanQueue];
     }
-    // =======================================================================================
 }
 
 %end
@@ -250,6 +247,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-Final] 天地盘详情提取工具(最终版)已加载。");
+        NSLog(@"[Echo-Final-V2] 天地盘详情提取工具(编译修正版)已加载。");
     }
 }
