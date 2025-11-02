@@ -7,9 +7,36 @@
 // =========================================================================
 static BOOL g_isSimulatingClick = NO;
 
+// <<<< 核心修复点 3: 恢复 GetFrontmostWindow 辅助函数 >>>>
+static UIWindow* GetFrontmostWindow() {
+    UIWindow *frontmostWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *window in scene.windows) {
+                    if (window.isKeyWindow) { frontmostWindow = window; break; }
+                }
+                if (frontmostWindow) break;
+            }
+        }
+    }
+    if (!frontmostWindow) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        frontmostWindow = [UIApplication sharedApplication].keyWindow;
+        #pragma clang diagnostic pop
+    }
+    return frontmostWindow;
+}
+
 static void PrintAllIVars(id object, NSString *prefix) {
+    if (!object) {
+        NSLog(@"[%@] Error: Object to dump is nil.", prefix);
+        return;
+    }
     unsigned int count;
-    Ivar *ivars = class_copy_ivar_list([object class], &count);
+    // <<<< 核心修复点 1 & 2: 修正函数名 >>>>
+    Ivar *ivars = class_copyIvarList([object class], &count);
     NSLog(@"[%@] --- Dumping IVars for %@ <%p> ---", prefix, NSStringFromClass([object class]), object);
     for (unsigned int i = 0; i < count; i++) {
         Ivar ivar = ivars[i];
@@ -20,7 +47,6 @@ static void PrintAllIVars(id object, NSString *prefix) {
         NSString *ivarType = [NSString stringWithUTF8String:type];
         
         @try {
-            // 对于非对象类型，object_getIvar 可能会崩溃，这里做个简单保护
             if (type[0] == '@' || type[0] == '#') {
                  id value = object_getIvar(object, ivar);
                  NSLog(@"[%@] Ivar: %@ (%@) = %@", prefix, ivarName, ivarType, value);
@@ -65,7 +91,8 @@ static void Tweak_ViewController_顯示天地盤觸摸WithSender(id self, SEL _c
     Class c = NSClassFromString(@"六壬大占.ViewController");
     if (c && [self isKindOfClass:c]) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-            UIWindow* keyWindow = [[UIApplication sharedApplication] keyWindow];
+            // <<<< 核心修复点 3: 使用新的辅助函数 >>>>
+            UIWindow* keyWindow = GetFrontmostWindow();
             if (!keyWindow || [keyWindow viewWithTag:556699]) return;
             UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
             b.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
