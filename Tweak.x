@@ -3,22 +3,6 @@
 #import <substrate.h>
 
 // =========================================================================
-// 新增：一个专门用于模拟点击位置的 UIGestureRecognizer 子类
-// =========================================================================
-@interface EchoFakeGestureRecognizer : UITapGestureRecognizer
-@property (nonatomic, assign) CGPoint fakeLocation;
-@end
-
-@implementation EchoFakeGestureRecognizer
-// 核心：重写这个方法，无论外界怎么问，都返回我们预设的假坐标
-// 这样可以骗过目标方法里的 [sender locationInView:someView] 调用
-- (CGPoint)locationInView:(UIView *)view {
-    return self.fakeLocation;
-}
-@end
-
-
-// =========================================================================
 // 全局变量、常量定义与辅助函数 (保持不变)
 // =========================================================================
 #pragma mark - Constants & Colors
@@ -64,7 +48,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-Final] %@", message);
+    NSLog(@"[Echo-V19-Final] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -116,7 +100,7 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 }
 
 // =========================================================================
-// 接口声明与核心Hook
+// 2. 接口声明与核心Hook
 // =========================================================================
 @interface UIViewController (EchoTDP)
 - (void)createOrShowTDPPanel;
@@ -131,9 +115,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
         if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.中宮信息視圖"]) {
             LogMessage(EchoLogTypeDebug, @"[拦截器] 成功捕获目标弹窗: %@", vcClassName);
-            vcToPresent.view.alpha = 0.0f; // 隐藏弹窗，避免闪烁
+            vcToPresent.view.alpha = 0.0f;
             
-            Original_presentViewController(self, _cmd, vcToPresent, NO, ^(void){
+            // <<<< 核心逻辑修正 >>>>
+            // 将我们自己的逻辑注入到原始的 completion block 中
+            void (^originalCompletion)(void) = completion;
+            void (^newCompletion)(void) = ^{
+                // 先执行原始的 completion (如果有)
+                if (originalCompletion) {
+                    originalCompletion();
+                }
+                
+                // 然后执行我们的提取逻辑
                 dispatch_async(dispatch_get_main_queue(), ^{
                      NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
                      [g_tianDiPan_resultsArray addObject:extractedText];
@@ -143,8 +136,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                          }
                      }];
                 });
-                if(completion) completion();
-            });
+            };
+            
+            Original_presentViewController(self, _cmd, vcToPresent, NO, newCompletion);
             return;
         }
     }
@@ -214,11 +208,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
 
-    NSDictionary *task = g_tianDiPan_workQueue.firstObject; [g_tianDiPan_workQueue removeObjectAtIndex:0];
-    NSString *name = task[@"name"]; 
-    NSString *type = task[@"type"];
-    CGPoint localPoint = [task[@"point"] CGPointValue]; // 这是相对于 plateView 的本地坐标
-    LogMessage(EchoLogTypeInfo, @"[模拟器] 正在处理 [%@]: %@ (本地坐标 %.0f, %.0f)", type, name, localPoint.x, localPoint.y);
+    NSDictionary *task = g_tianDiPan_workQueue.firstObject; 
+    // <<<< 核心逻辑修正：不要在这里移除任务，让拦截器去驱动 >>>>
+    // [g_tianDiPan_workQueue removeObjectAtIndex:0]; 
+    
+    NSString *name = task[@"name"]; CGPoint point = [task[@"point"] CGPointValue];
+    LogMessage(EchoLogTypeInfo, @"[模拟器] 正在处理: %@ (%.0f, %.0f)", name, point.x, point.y);
 
     NSString *plateViewClassName = @"六壬大占.天地盤視圖類";
     Class plateViewClass = NSClassFromString(plateViewClassName);
@@ -226,45 +221,50 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
-    UIView *plateView = plateViews.firstObject;
     
-    // ====================== 最终解决方案 V19 - 坐标系修正版 ======================
+    UITapGestureRecognizer *singleTapGesture = nil;
+    for (UIGestureRecognizer *gesture in ((UIView *)plateViews.firstObject).gestureRecognizers) {
+        if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) {
+            singleTapGesture = (UITapGestureRecognizer *)gesture;
+            break;
+        }
+    }
+    if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
     
-    // 1. 创建我们自定义的手势子类
-    EchoFakeGestureRecognizer *fakeGesture = [[EchoFakeGestureRecognizer alloc] init];
+    @try {
+        // <<<< 核心逻辑修正：在触发下一次点击前，从队列中移除已完成的任务 >>>>
+        [g_tianDiPan_workQueue removeObjectAtIndex:0];
 
-    // 2. 关键：进行坐标转换！
-    // 将 plateView 上的本地坐标 (localPoint) 转换成 ViewController.view 上的全局坐标
-    // 因为目标方法 `顯示天地盤觸摸WithSender:` 内部很可能是在 `self.view` (ViewController's view) 的坐标系中进行计算
-    CGPoint globalPoint = [plateView convertPoint:localPoint toView:self.view];
-    LogMessage(EchoLogTypeDebug, @"[坐标转换] 全局坐标: (%.2f, %.2f)", globalPoint.x, globalPoint.y);
+        [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
+        [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
+        
+        LogMessage(EchoLogTypeDebug, @"[模拟器] 手势已伪造 (坐标, 状态)");
 
-    // 3. 将转换后的【全局坐标】设置给我们的假手势
-    fakeGesture.fakeLocation = globalPoint;
+        SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+        if ([self respondsToSelector:action]) {
+            LogMessage(EchoLogTypeDebug, @"[模拟器] 准备调用 action...");
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            [self performSelector:action withObject:singleTapGesture];
+            #pragma clang diagnostic pop
+            // 这里不再打印 "等待拦截器"，因为 action 内部会同步调用 presentViewController
+        } else {
+            LogMessage(EchoLogError, @"[模拟器] 触发失败: Target 无法响应");
+            [self processTianDiPanQueue];
+        }
 
-    // 4. 把手势关联的 view 也设置成 self.view，让一切看起来更真实
-    [fakeGesture setValue:self.view forKey:@"view"];
-            
-    // 5. 调用 Action
-    SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-    if ([self respondsToSelector:action]) {
-        LogMessage(EchoLogTypeDebug, @"[模拟器] 准备调用 action...");
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:action withObject:fakeGesture];
-        #pragma clang diagnostic pop
-        LogMessage(EchoLogTypeDebug, @"[模拟器] Action 已调用。等待拦截器响应...");
-    } else {
-        LogMessage(EchoLogError, @"[模拟器] 触发失败: Target 无法响应");
+    } @catch (NSException *exception) {
+        LogMessage(EchoLogError, @"[模拟器] 方案执行失败: %@", exception.reason);
         [self processTianDiPanQueue];
     }
 }
+
 %end
 
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-Final] 天地盘详情提取工具(最终修正版)已加载。");
+        NSLog(@"[Echo-V19-Final] 天地盘提取工具(逻辑修正版)已加载。");
     }
 }
