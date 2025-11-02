@@ -460,7 +460,7 @@ static NSString* parseAndFilterShenSha(NSString *rawContent) {
     return [finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 课传流注详情解析器 (v2.5 - 新增变体释义过滤)
+// 课传流注详情解析器 (v2.5 - 新增格局/变体识别，移除纯释义)
 static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle) {
     if (!rawText || rawText.length == 0) return @"";
 
@@ -478,11 +478,14 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         if (objectTitle && [objectTitle containsString:@"日干"]) {
             NSRegularExpression *riGanWangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"寄(.)得([^，。]*)" options:0 error:nil];
             NSTextCheckingResult *riGanMatch = [riGanWangshuaiRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
+
             if (riGanMatch && [structuredResult rangeOfString:@"日干旺衰:"].location == NSNotFound) {
                 NSString *jiChen = [trimmedLine substringWithRange:[riGanMatch rangeAtIndex:1]];
                 NSString *deQi   = [[trimmedLine substringWithRange:[riGanMatch rangeAtIndex:2]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+                
                 [structuredResult appendFormat:@"  - 日干旺衰: %@ (因寄%@)\n", deQi, jiChen];
-                [processedLines addObject:trimmedLine]; continue;
+                [processedLines addObject:trimmedLine];
+                continue;
             }
         }
         
@@ -516,35 +519,23 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
 
-        // --- 新增规则：过滤变体/格局释义 ---
-        NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]、" options:0 error:nil];
-        if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
-            [processedLines addObject:trimmedLine];
-            continue; // 发现是变体释义，直接跳过
-        }
-        // 如果一行不以关键词开头，并且看起来像一个解释性句子，也过滤掉
-        if (trimmedLine.length > 5 && ![trimmedLine hasPrefix:@"-"]) {
-             BOOL isKnownFormat = NO;
-             for (NSString *key in keywordMap.allKeys) {
-                 if ([trimmedLine hasPrefix:key]) {
-                     isKnownFormat = YES;
-                     break;
-                 }
-             }
-             if (!isKnownFormat) {
-                 // 对于非已知格式的行 (很可能是跟在变体标题后的解释句)，也跳过
-                 [processedLines addObject:trimmedLine];
-                 continue;
-             }
-        }
-        // --- 新增规则结束 ---
-
         if (inZaxiang) {
             [structuredResult appendFormat:@"    - %@\n", trimmedLine];
+            [processedLines addObject:trimmedLine]; continue;
+        }
+
+        // <<< 新增对“变体/格局”的识别规则 >>>
+        NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
+        if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
+            NSRange reasonRange = [trimmedLine rangeOfString:@"因"];
+            NSString *cleanLine = (reasonRange.location != NSNotFound) ? [trimmedLine substringToIndex:reasonRange.location] : trimmedLine;
+            cleanLine = [cleanLine stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            [structuredResult appendFormat:@"  - 格局: %@\n", cleanLine];
             [processedLines addObject:trimmedLine];
             continue;
         }
 
+        BOOL keywordFound = NO;
         for (NSString *keyword in keywordMap.allKeys) {
             if ([trimmedLine hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
@@ -559,18 +550,13 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                 
                 NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知).*$" options:0 error:nil];
                 value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
-                
                 if ([label hasPrefix:@"刑"] || [label hasPrefix:@"冲"] || [label hasPrefix:@"害"] || [label hasPrefix:@"破"]) {
                     NSArray *parts = [value componentsSeparatedByString:@" "];
                     if (parts.count > 0) value = parts[0];
                 }
-                
-                if ([label hasPrefix:@"杂象"]) {
-                    inZaxiang = YES;
-                }
-                
+
+                if ([label hasPrefix:@"杂象"]) { inZaxiang = YES; }
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" ,，。"]];
-                
                 if (value.length > 0) {
                      if ([label isEqualToString:@"杂象B+"]) {
                          [structuredResult appendString:@"  - 杂象(只参与取象禁止对吉凶产生干涉):\n"];
@@ -578,10 +564,14 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                          [structuredResult appendFormat:@"  - %@: %@\n", label, value];
                      }
                 }
+                
+                keywordFound = YES;
                 [processedLines addObject:trimmedLine];
                 break;
             }
         }
+        
+        // 如果一行既不是关键词开头，也不是格局名，则被自动忽略
     }
     
     while ([structuredResult hasSuffix:@"\n\n"]) {
@@ -1405,6 +1395,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
