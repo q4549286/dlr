@@ -1,39 +1,49 @@
 // =========================================================================
-// V18 - 坐标侦察兵模式
+// V18 - 坐标侦察兵模式 (正确结构)
 // =========================================================================
 
-// 原来的 %hook UIViewController ... %end 可以先整个注释掉
+// 确保你已经 import 了必要的头文件
+#import <UIKit/UIKit.h>
+#import <substrate.h>
 
-// 新增一个专门用于侦察的 Hook
+// 辅助函数可以放在这里
+static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableArray *storage) { if (!view || !storage) return; if ([view isKindOfClass:aClass]) { [storage addObject:view]; } for (UIView *subview in view.subviews) { FindSubviewsOfClassRecursive(aClass, subview, storage); } }
+
+
+// 关键在这里！方法必须在 %hook 块内部
 %hook 六壬大占_ViewController 
-// 注意：如果 FLEX 显示 Target-Action 的 target 是 ViewController，就用这个类名
-// 如果是天地盘视图自己处理，就用 '六壬大占.天地盤視圖類'
 
-// Hook 目标 Action 方法
 - (void)顯示天地盤觸摸WithSender:(UIGestureRecognizer *)sender {
-    // 先调用原始方法，确保功能正常
+    // 1. 先调用原始实现，让App正常弹出窗口
     %orig;
 
-    // 获取当前点击在“天地盘”视图中的精确坐标
-    // 我们假设 self.view 就是或者包含了那个“天地盘视图”
-    // 如果不是，需要先找到那个视图实例
+    // 2. 在原始实现之后，我们再获取坐标并打印
     NSString *plateViewClassName = @"六壬大占.天地盤視圖類";
     Class plateViewClass = NSClassFromString(plateViewClassName);
+    if (!plateViewClass) {
+        NSLog(@"[Echo-Scout] 错误: 找不到类 %@", plateViewClassName);
+        return;
+    }
+
     NSMutableArray *plateViews = [NSMutableArray array];
+    // 这里要注意 self.view 可能是 ViewController 的 view，要从中找到天地盘视图
     FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
 
     if (plateViews.count > 0) {
         UIView *plateView = plateViews.firstObject;
         CGPoint location = [sender locationInView:plateView];
         
-        // 在Xcode控制台或者手机的系统日志中打印这个坐标
-        // 使用 NSLog 是为了确保它能被看到
-        NSLog(@"[Echo-Scout] 手动点击坐标: @{@\"point\": [NSValue valueWithCGPoint:CGPointMake(%.2f, %.2f)]}", location.x, location.y);
+        // 使用 NSLog 打印，方便在电脑端控制台查看
+        NSLog(@"[Echo-Scout] 点击坐标: @{@\"name\": @\"新坐标\", @\"type\": @\"shangShen\", @\"point\": [NSValue valueWithCGPoint:CGPointMake(%.2f, %.2f)]},", location.x, location.y);
+    } else {
+        NSLog(@"[Echo-Scout] 错误: 在视图层级中找不到 %@", plateViewClassName);
     }
 }
+
 %end
 
+
 %ctor {
-    // 构造函数现在什么都不用做，只是为了让logos能编译
-    NSLog(@"[Echo-Scout] 坐标侦察兵已部署。");
+    // 构造函数
+    NSLog(@"[Echo-Scout] 坐标侦察兵已部署。请手动点击天地盘并查看日志。");
 }
