@@ -23,32 +23,13 @@ static BOOL g_isExtractingTianDiPanDetail = NO;
 static NSMutableArray *g_tianDiPan_workQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static __weak UIViewController *g_mainViewController = nil;
-
-#pragma mark - Coordinate Database
-static NSArray *g_tianDiPan_fixedCoordinates = nil;
-static void initializeTianDiPanCoordinates() {
-    if (g_tianDiPan_fixedCoordinates) return;
-    g_tianDiPan_fixedCoordinates = @[
-        @{@"name": @"天将-午位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 108.57)]}, @{@"name": @"天将-巳位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(144.48, 118.19)]},
-        @{@"name": @"天将-辰位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(118.19, 144.48)]}, @{@"name": @"天将-卯位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(108.57, 180.39)]},
-        @{@"name": @"天将-寅位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(118.19, 216.29)]}, @{@"name": @"天将-丑位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(144.48, 242.58)]},
-        @{@"name": @"天将-子位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 252.20)]}, @{@"name": @"天将-亥位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 242.58)]},
-        @{@"name": @"天将-戌位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(242.58, 216.29)]}, @{@"name": @"天将-酉位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(252.20, 180.38)]},
-        @{@"name": @"天将-申位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(242.58, 144.48)]}, @{@"name": @"天将-未位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 118.19)]},
-        @{@"name": @"上神-午位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 134.00)]}, @{@"name": @"上神-巳位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 145.00)]},
-        @{@"name": @"上神-辰位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 168.00)]}, @{@"name": @"上神-卯位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(134.00, 180.39)]},
-        @{@"name": @"上神-寅位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 200.00)]}, @{@"name": @"上神-丑位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 220.00)]},
-        @{@"name": @"上神-子位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 226.00)]}, @{@"name": @"上神-亥位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 220.00)]},
-        @{@"name": @"上神-戌位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 200.00)]}, @{@"name": @"上神-酉位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(226.00, 180.39)]},
-        @{@"name": @"上神-申位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 168.00)]}, @{@"name": @"上神-未位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 145.00)]},
-    ];
-}
+static __weak UICollectionView *g_targetCollectionView = nil; // <<<< 核心：保存目标 CollectionView
 
 #pragma mark - Helpers
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V15-Final] %@", message);
+    NSLog(@"[Echo-V16-Final] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -102,7 +83,7 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 // =========================================================================
 // 2. 接口声明与核心Hook
 // =========================================================================
-@interface UIViewController (EchoTDP)
+@interface UIViewController (EchoTDP) <UICollectionViewDelegate>
 - (void)createOrShowTDPPanel;
 - (void)handleTDPExtractionButtonTap:(UIButton *)sender;
 - (void)startTDPExtraction;
@@ -113,7 +94,8 @@ static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL,
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     if (g_isExtractingTianDiPanDetail) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.中宮信息視圖"]) {
+        // 我们拦截所有可能的弹窗
+        if ([vcClassName containsString:@"摘要視圖"] || [vcClassName containsString:@"信息視圖"]) {
             LogMessage(EchoLogTypeDebug, @"[拦截器] 成功捕获目标弹窗: %@", vcClassName);
             vcToPresent.view.alpha = 0.0f;
             
@@ -167,9 +149,25 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)startTDPExtraction {
     if (g_isExtractingTianDiPanDetail) { LogMessage(EchoLogError, @"错误: 提取任务已在进行中。"); return; }
     LogMessage(EchoLogTypeInfo, @"任务启动: 推衍天地盘详情...");
+    
+    // <<<< 核心修复点 1: 找到作为 Popover 源的 CollectionView >>>>
+    Class sourceViewClass = NSClassFromString(@"六壬大占.課體視圖");
+    if (!sourceViewClass) { LogMessage(EchoLogError, @"严重错误: 找不到 '六壬大占.課體視圖'"); return; }
+    NSMutableArray *sourceViews = [NSMutableArray array];
+    FindSubviewsOfClassRecursive(sourceViewClass, self.view, sourceViews);
+    if (sourceViews.count == 0 || ![sourceViews.firstObject isKindOfClass:[UICollectionView class]]) {
+        LogMessage(EchoLogError, @"严重错误: 找不到 '課體視圖' 的 CollectionView 实例");
+        return;
+    }
+    g_targetCollectionView = sourceViews.firstObject;
+    LogMessage(EchoLogTypeDebug, @"已成功定位目标 CollectionView: <%p>", g_targetCollectionView);
+    
     g_isExtractingTianDiPanDetail = YES; 
-    g_tianDiPan_workQueue = [g_tianDiPan_fixedCoordinates mutableCopy];
+    g_tianDiPan_workQueue = [NSMutableArray array];
+    // 我们假设天地盘的24个元素对应 CollectionView 的前24个 item
+    for(int i = 0; i < 24; i++) { [g_tianDiPan_workQueue addObject:@(i)]; }
     g_tianDiPan_resultsArray = [NSMutableArray array];
+    
     [self processTianDiPanQueue];
 }
 
@@ -181,10 +179,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         LogMessage(EchoLogTypeSuccess, @"完成: 所有天地盘详情提取完毕。");
         NSMutableString *finalReport = [NSMutableString string];
         [finalReport appendString:@"// 天地盘详情 (完整版)\n\n"];
-        for (NSUInteger i = 0; i < g_tianDiPan_fixedCoordinates.count; i++) {
-            NSDictionary *itemInfo = g_tianDiPan_fixedCoordinates[i];
-            NSString *itemName = itemInfo[@"name"];
-            NSString *itemType = [itemInfo[@"type"] isEqualToString:@"tianJiang"] ? @"天将详情" : @"上神详情";
+        // 假设前12个是天将，后12个是上神
+        for (NSUInteger i = 0; i < 24; i++) {
+            NSString *itemType = (i < 12) ? @"天将详情" : @"上神详情";
+            NSString *itemName = [NSString stringWithFormat:@"%@索引-%lu", (i < 12) ? @"天将" : @"上神", (unsigned long)i % 12];
             NSString *itemData = (i < g_tianDiPan_resultsArray.count) ? g_tianDiPan_resultsArray[i] : @"[数据提取失败]";
             NSMutableString *simplifiedData = [itemData mutableCopy]; 
             CFStringTransform((__bridge CFMutableStringRef)simplifiedData, NULL, CFSTR("Hant-Hans"), false);
@@ -194,48 +192,32 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"天地盘详情已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
         [ac addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:ac animated:YES completion:nil];
-        g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil;
+        g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil; g_targetCollectionView = nil;
         return;
     }
 
-    NSDictionary *task = g_tianDiPan_workQueue.firstObject; [g_tianDiPan_workQueue removeObjectAtIndex:0];
-    NSString *name = task[@"name"]; CGPoint point = [task[@"point"] CGPointValue];
-    LogMessage(EchoLogTypeInfo, @"[模拟器] 正在处理: %@ (%.0f, %.0f)", name, point.x, point.y);
+    NSInteger index = [g_tianDiPan_workQueue.firstObject integerValue];
+    [g_tianDiPan_workQueue removeObjectAtIndex:0];
+    
+    LogMessage(EchoLogTypeInfo, @"[模拟器] 正在处理索引: %ld", (long)index);
 
-    NSString *plateViewClassName = @"六壬大占.天地盤視圖類";
-    Class plateViewClass = NSClassFromString(plateViewClassName);
-    if (!plateViewClass) { LogMessage(EchoLogError,@"关键错误: 找不到类 %@", plateViewClassName); [self processTianDiPanQueue]; return; }
-    
-    NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
-    if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
-    
-    UITapGestureRecognizer *singleTapGesture = nil;
-    for (UIGestureRecognizer *gesture in ((UIView *)plateViews.firstObject).gestureRecognizers) {
-        if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) {
-            singleTapGesture = (UITapGestureRecognizer *)gesture;
-            break;
-        }
-    }
-    if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
-    
-    // ====================== 最终解决方案 V15 ======================
+    // ====================== 最终解决方案 V16 ======================
     @try {
-        // 只设置最关键的两个属性
-        [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
-        [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
+        if (!g_targetCollectionView) {
+             LogMessage(EchoLogError, @"触发失败: 目标 CollectionView 为空");
+             [self processTianDiPanQueue];
+             return;
+        }
         
-        LogMessage(EchoLogTypeDebug, @"[模拟器] 手势已简化伪造 (坐标, 状态)");
+        id delegate = g_targetCollectionView.delegate;
+        NSIndexPath *indexPath = [NSIndexPath indexPathForItem:index inSection:0];
 
-        SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-        if ([self respondsToSelector:action]) {
-            LogMessage(EchoLogTypeDebug, @"[模拟器] 准备调用 action...");
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [self performSelector:action withObject:singleTapGesture];
-            #pragma clang diagnostic pop
-            LogMessage(EchoLogTypeDebug, @"[模拟器] Action 已调用。等待拦截器响应...");
+        if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) {
+            LogMessage(EchoLogTypeDebug, @"[模拟器] 准备调用 didSelectItemAtIndexPath: %@", indexPath);
+            [(id<UICollectionViewDelegate>)delegate collectionView:g_targetCollectionView didSelectItemAtIndexPath:indexPath];
+            LogMessage(EchoLogTypeDebug, @"[模拟器] Delegate 方法已调用。等待拦截器响应...");
         } else {
-            LogMessage(EchoLogError, @"[模拟器] 触发失败: Target 无法响应");
+            LogMessage(EchoLogError, @"[模拟器] 触发失败: Delegate 不响应或不存在");
             [self processTianDiPanQueue];
         }
 
@@ -250,8 +232,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 %ctor {
     @autoreleasepool {
-        initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-V15-Final] 天地盘详情提取工具(胜利版)已加载。");
+        NSLog(@"[Echo-V16-Final] 天地盘详情提取工具(大道至简版)已加载。");
     }
 }
