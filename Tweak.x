@@ -23,13 +23,32 @@ static BOOL g_isExtractingTianDiPanDetail = NO;
 static NSMutableArray *g_tianDiPan_workQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static __weak UIViewController *g_mainViewController = nil;
-static __weak UIView *g_popoverSourceView = nil; 
+
+#pragma mark - Coordinate Database
+static NSArray *g_tianDiPan_fixedCoordinates = nil;
+static void initializeTianDiPanCoordinates() {
+    if (g_tianDiPan_fixedCoordinates) return;
+    g_tianDiPan_fixedCoordinates = @[
+        @{@"name": @"天将-午位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 108.57)]}, @{@"name": @"天将-巳位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(144.48, 118.19)]},
+        @{@"name": @"天将-辰位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(118.19, 144.48)]}, @{@"name": @"天将-卯位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(108.57, 180.39)]},
+        @{@"name": @"天将-寅位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(118.19, 216.29)]}, @{@"name": @"天将-丑位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(144.48, 242.58)]},
+        @{@"name": @"天将-子位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 252.20)]}, @{@"name": @"天将-亥位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 242.58)]},
+        @{@"name": @"天将-戌位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(242.58, 216.29)]}, @{@"name": @"天将-酉位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(252.20, 180.38)]},
+        @{@"name": @"天将-申位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(242.58, 144.48)]}, @{@"name": @"天将-未位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(216.29, 118.19)]},
+        @{@"name": @"上神-午位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 134.00)]}, @{@"name": @"上神-巳位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 145.00)]},
+        @{@"name": @"上神-辰位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 168.00)]}, @{@"name": @"上神-卯位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(134.00, 180.39)]},
+        @{@"name": @"上神-寅位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(142.00, 200.00)]}, @{@"name": @"上神-丑位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(154.00, 220.00)]},
+        @{@"name": @"上神-子位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(180.38, 226.00)]}, @{@"name": @"上神-亥位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 220.00)]},
+        @{@"name": @"上神-戌位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 200.00)]}, @{@"name": @"上神-酉位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(226.00, 180.39)]},
+        @{@"name": @"上神-申位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(220.00, 168.00)]}, @{@"name": @"上神-未位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(208.00, 145.00)]},
+    ];
+}
 
 #pragma mark - Helpers
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-Final] %@", message);
+    NSLog(@"[Echo-Ultimate] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -149,17 +168,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (g_isExtractingTianDiPanDetail) { LogMessage(EchoLogError, @"错误: 提取任务已在进行中。"); return; }
     LogMessage(EchoLogTypeInfo, @"任务启动: 推衍天地盘详情...");
     
-    Class sourceViewClass = NSClassFromString(@"六壬大占.課體視圖");
-    if (!sourceViewClass) { LogMessage(EchoLogError, @"严重错误: 找不到关键的源视图类 '六壬大占.課體視圖'"); return; }
-    NSMutableArray *sourceViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(sourceViewClass, self.view, sourceViews);
-    if (sourceViews.count == 0) { LogMessage(EchoLogError, @"严重错误: 在当前界面找不到 '課體視圖' 的实例"); return; }
-    g_popoverSourceView = sourceViews.firstObject;
-    LogMessage(EchoLogTypeDebug, @"已成功定位Popover源视图: <%p>", g_popoverSourceView);
-    
     g_isExtractingTianDiPanDetail = YES; 
-    g_tianDiPan_workQueue = [NSMutableArray array];
-    for(int i=0; i < 24; i++) { [g_tianDiPan_workQueue addObject:@(i)]; }
+    g_tianDiPan_workQueue = [g_tianDiPan_fixedCoordinates mutableCopy];
     g_tianDiPan_resultsArray = [NSMutableArray array];
     
     [self processTianDiPanQueue];
@@ -171,82 +181,95 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if (!g_isExtractingTianDiPanDetail) return;
         g_isExtractingTianDiPanDetail = NO;
         LogMessage(EchoLogTypeSuccess, @"完成: 所有天地盘详情提取完毕。");
-        
         NSMutableString *finalReport = [NSMutableString string];
         [finalReport appendString:@"// 天地盘详情 (完整版)\n\n"];
-        for (NSUInteger i = 0; i < 24; i++) {
-            NSString *itemType = (i < 12) ? @"天将详情" : @"上神详情";
-            NSString *itemName = [NSString stringWithFormat:@"%@-%lu", (i < 12) ? @"天将" : @"上神", (unsigned long)i % 12];
+        for (NSUInteger i = 0; i < g_tianDiPan_fixedCoordinates.count; i++) {
+            NSDictionary *itemInfo = g_tianDiPan_fixedCoordinates[i];
+            NSString *itemName = itemInfo[@"name"];
+            NSString *itemType = [itemInfo[@"type"] isEqualToString:@"tianJiang"] ? @"天将详情" : @"上神详情";
             NSString *itemData = (i < g_tianDiPan_resultsArray.count) ? g_tianDiPan_resultsArray[i] : @"[数据提取失败]";
-            
-            // ====================== 核心修复点 ======================
             NSMutableString *simplifiedData = [itemData mutableCopy]; 
             CFStringTransform((__bridge CFMutableStringRef)simplifiedData, NULL, CFSTR("Hant-Hans"), false);
-            // =======================================================
-            
             [finalReport appendFormat:@"-- [%@: %@] --\n%@\n\n", itemType, itemName, simplifiedData];
         }
         [UIPasteboard generalPasteboard].string = finalReport;
         UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"天地盘详情已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
         [ac addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:ac animated:YES completion:nil];
-        
-        g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil; g_popoverSourceView = nil;
+        g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil;
         return;
     }
 
-    NSInteger index = [g_tianDiPan_workQueue.firstObject integerValue];
-    [g_tianDiPan_workQueue removeObjectAtIndex:0];
+    NSDictionary *task = g_tianDiPan_workQueue.firstObject; [g_tianDiPan_workQueue removeObjectAtIndex:0];
+    NSString *name = task[@"name"]; CGPoint point = [task[@"point"] CGPointValue];
+    LogMessage(EchoLogTypeInfo, @"正在处理: %@ (%.0f, %.0f)", name, point.x, point.y);
+
+    NSString *plateViewClassName = @"六壬大占.天地盤視圖類";
+    Class plateViewClass = NSClassFromString(plateViewClassName);
+    if (!plateViewClass) { LogMessage(EchoLogError,@"关键错误: 找不到类 %@", plateViewClassName); [self processTianDiPanQueue]; return; }
     
-    LogMessage(EchoLogTypeInfo, @"正在处理索引: %ld", (long)index);
-
+    NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
+    if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
+    UIView *plateView = plateViews.firstObject;
+    
+    UITapGestureRecognizer *singleTapGesture = nil;
+    for (UIGestureRecognizer *gesture in plateView.gestureRecognizers) {
+        if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) { singleTapGesture = (UITapGestureRecognizer *)gesture; break; }
+    }
+    if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
+    
+    // ====================== 终极解决方案 ======================
     @try {
-        UIViewController *vcToPresent = nil;
-        NSString *vcClassName = nil;
-
-        if (index < 12) {
-            vcClassName = @"六壬大占.天將摘要視圖";
-        } else {
-            vcClassName = @"六壬大占.天地盤宮位摘要視圖";
-        }
-        
-        Class vcClass = NSClassFromString(vcClassName);
-        if (!vcClass) {
-            LogMessage(EchoLogError, @"创建VC失败: 找不到类 %@", vcClassName);
-            [self processTianDiPanQueue];
-            return;
-        }
-        
-        vcToPresent = [[vcClass alloc] init];
-        
-        // The core logic: manually configure the popover
-        vcToPresent.modalPresentationStyle = UIModalPresentationPopover;
-        UIPopoverPresentationController *popover = vcToPresent.popoverPresentationController;
-        if (popover) {
-            popover.sourceView = g_popoverSourceView;
-            popover.sourceRect = CGRectMake(CGRectGetMidX(g_popoverSourceView.bounds), CGRectGetMidY(g_popoverSourceView.bounds), 1, 1);
-            popover.permittedArrowDirections = 0;
-            
-            LogMessage(EchoLogTypeDebug, @"Popover 已配置, SourceView: <%p>", g_popoverSourceView);
-        } else {
-             LogMessage(EchoLogError, @"获取 popoverPresentationController 失败!");
+        // 1. 找到 Popover 需要的源视图
+        Class sourceViewClass = NSClassFromString(@"六壬大占.課體視圖");
+        NSMutableArray *sourceViews = [NSMutableArray array];
+        FindSubviewsOfClassRecursive(sourceViewClass, self.view, sourceViews);
+        if (sourceViews.count == 0) {
+             LogMessage(EchoLogError, @"触发失败: 找不到作为 Popover 源的 '課體視圖'");
              [self processTianDiPanQueue];
              return;
         }
+        UIView *sourceView = sourceViews.firstObject;
+
+        // 2. 欺骗性地将手势的 view 设置为 sourceView
+        // 保存原始视图并在之后恢复
+        UIView *originalView = singleTapGesture.view;
+        [singleTapGesture setValue:sourceView forKey:@"view"];
         
-        [self presentViewController:vcToPresent animated:NO completion:nil];
+        // 3. 注入坐标和状态
+        [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
+        [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
+        
+        LogMessage(EchoLogTypeDebug, @"手势已完全伪造 (坐标, 状态, 视图)");
+
+        // 4. 使用正确的 target (self) 调用 action
+        SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+        if ([self respondsToSelector:action]) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            [self performSelector:action withObject:singleTapGesture];
+            #pragma clang diagnostic pop
+        } else {
+            LogMessage(EchoLogError, @"触发失败: Target 无法响应");
+            [self processTianDiPanQueue];
+        }
+
+        // 5. 恢复手势的原始视图
+        [singleTapGesture setValue:originalView forKey:@"view"];
 
     } @catch (NSException *exception) {
-        LogMessage(EchoLogError, @"直接呈现失败: %@", exception.reason);
+        LogMessage(EchoLogError, @"终极方案执行失败: %@", exception.reason);
         [self processTianDiPanQueue];
     }
+    // ========================================================
 }
 
 %end
 
 %ctor {
     @autoreleasepool {
+        initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-Final-V2] 天地盘详情提取工具(编译修正版)已加载。");
+        NSLog(@"[Echo-Ultimate] 天地盘详情提取工具(最终版)已加载。");
     }
 }
