@@ -1506,7 +1506,127 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion { if (g_s2_isExtractingKeChuanDetail) return; LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“课传流注”..."); [self showProgressHUD:@"正在推演课传流注..."]; g_s2_isExtractingKeChuanDetail = YES; g_s2_keChuan_completion_handler = [completion copy]; g_s2_capturedKeChuanDetailArray = [NSMutableArray array]; g_s2_keChuanWorkQueue = [NSMutableArray array]; g_s2_keChuanTitleQueue = [NSMutableArray array]; Ivar keChuanContainerIvar = class_getInstanceVariable([self class], "課傳"); if (!keChuanContainerIvar) { g_s2_isExtractingKeChuanDetail = NO; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); [self hideProgressHUD]; return; } id keChuanContainer = object_getIvar(self, keChuanContainerIvar); if (!keChuanContainer) { g_s2_isExtractingKeChuanDetail = NO; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); [self hideProgressHUD]; return; } Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖"); NSMutableArray *sanChuanResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, (UIView *)keChuanContainer, sanChuanResults); if (sanChuanResults.count > 0) { UIView *sanChuanContainer = sanChuanResults.firstObject; const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL}; NSString *rowTitles[] = {@"初传", @"中传", @"末传"}; for (int i = 0; ivarNames[i] != NULL; ++i) { Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarNames[i]); if (!ivar) continue; UIView *chuanView = object_getIvar(sanChuanContainer, ivar); if (!chuanView) continue; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], chuanView, labels); [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; if(labels.count >= 2) { UILabel *dizhiLabel = labels[labels.count-2]; UILabel *tianjiangLabel = labels[labels.count-1]; if (dizhiLabel.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": dizhiLabel.gestureRecognizers.firstObject} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]]; } if (tianjiangLabel.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]]; } } } } Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖"); NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, (UIView *)keChuanContainer, siKeResults); if (siKeResults.count > 0) { UIView *siKeContainer = siKeResults.firstObject; NSArray *keDefs = @[ @{@"ivar": @"日", @"title": @"日干"}, @{@"ivar": @"日上", @"title": @"日上"}, @{@"ivar": @"日上天將", @"title": @"日上 - 天将"}, @{@"ivar": @"日陰", @"title": @"日阴"}, @{@"ivar": @"日陰天將", @"title": @"日阴 - 天将"}, @{@"ivar": @"辰", @"title": @"支辰"}, @{@"ivar": @"辰上", @"title": @"辰上"}, @{@"ivar": @"辰上天將", @"title": @"辰上 - 天将"}, @{@"ivar": @"辰陰", @"title": @"辰阴"}, @{@"ivar": @"辰陰天將", @"title": @"辰阴 - 天将"} ]; for (NSDictionary *def in keDefs) { Ivar ivar = class_getInstanceVariable(siKeContainerClass, [def[@"ivar"] UTF8String]); if (ivar) { UILabel *label = (UILabel *)object_getIvar(siKeContainer, ivar); if (label && label.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": label.gestureRecognizers.firstObject} mutableCopy]]; if ([def[@"title"] containsString:@"天将"]) { [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@(%@)", def[@"title"], label.text]]; } else { [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ (%@)", def[@"title"], label.text]]; } } } } } if (g_s2_keChuanWorkQueue.count == 0) { g_s2_isExtractingKeChuanDetail = NO; [self hideProgressHUD]; g_s2_finalResultFromKeChuan = @""; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); return; } [self processKeChuanQueue_Truth_S2]; }
 %new
-- (void)processKeChuanQueue_Truth_S2 { if (!g_s2_isExtractingKeChuanDetail || g_s2_keChuanWorkQueue.count == 0) { if (g_s2_isExtractingKeChuanDetail) { NSMutableString *resultStr = [NSMutableString string]; if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) { for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) { NSString *title = g_s2_keChuanTitleQueue[i]; NSString *rawBlock = g_s2_capturedKeChuanDetailArray[i]; NSString *structuredBlock = parseKeChuanDetailBlock(rawBlock, title); [resultStr appendFormat:@"- 对象: %@\n%@\n\n", title, structuredBlock]; } g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; if (!g_s2_keChuan_completion_handler) { NSMutableDictionary *reportData = [NSMutableDictionary dictionary]; reportData[@"课传详解"] = g_s2_finalResultFromKeChuan; NSString *finalReport = formatFinalReport(reportData); g_lastGeneratedReport = [finalReport copy]; [self showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"]; [self presentAIActionSheetWithReport:finalReport]; } } else { g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]"; } } g_s2_isExtractingKeChuanDetail = NO; g_s2_capturedKeChuanDetailArray = nil; g_s2_keChuanWorkQueue = nil; g_s2_keChuanTitleQueue = nil; [self hideProgressHUD]; if (g_s2_keChuan_completion_handler) { g_s2_keChuan_completion_handler(); g_s2_keChuan_completion_handler = nil; } return; } NSMutableDictionary *task = g_s2_keChuanWorkQueue.firstObject; [g_s2_keChuanWorkQueue removeObjectAtIndex:0]; NSString *title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count]; [self updateProgressHUD:[NSString stringWithFormat:@"推演课传: %lu/%lu", (unsigned long)g_s2_capturedKeChuanDetailArray.count + 1, (unsigned long)g_s2_keChuanTitleQueue.count]]; SEL action = ([title containsString:@"天将"]) ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳摘要WithSender:"); if ([self respondsToSelector:action]) { SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]); } else { [g_s2_capturedKeChuanDetailArray addObject:@"[解析失败: 方法不存在]"]; [self processKeChuanQueue_Truth_S2]; } }
+- (void)processKeChuanQueue_Truth_S2 {
+    if (!g_s2_isExtractingKeChuanDetail || g_s2_keChuanWorkQueue.count == 0) {
+        if (g_s2_isExtractingKeChuanDetail) {
+            NSMutableString *resultStr = [NSMutableString string];
+            
+            // 步骤1: 将所有提取到的详细信息存入一个字典，以便快速查找
+            NSMutableDictionary<NSString *, NSString *> *detailedDataMap = [NSMutableDictionary dictionary];
+            if (g_s2_capturedKeChuanDetailArray.count == g_s2_keChuanTitleQueue.count) {
+                for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) {
+                    NSString *title = g_s2_keChuanTitleQueue[i];
+                    NSString *rawBlock = g_s2_capturedKeChuanDetailArray[i];
+                    NSString *structuredBlock = parseKeChuanDetailBlock(rawBlock, title);
+                    detailedDataMap[title] = structuredBlock;
+                }
+            } else {
+                g_s2_finalResultFromKeChuan = @"[错误: 课传流注解析数量不匹配]";
+                // ... (后续的清理代码会执行)
+            }
+
+            // 步骤2: 创建一个辅助函数，用于从字典中根据前缀查找详细信息
+            NSString* (^findDetailBlock)(NSString*) = ^NSString*(NSString *prefix) {
+                for (NSString *key in detailedDataMap.allKeys) {
+                    if ([key hasPrefix:prefix]) {
+                        // 返回带标题的完整块
+                        return [NSString stringWithFormat:@"\n  - 详情 (%@):\n%@", key, detailedDataMap[key]];
+                    }
+                }
+                return [NSString stringWithFormat:@"\n  - 详情 (%@): [未找到]", prefix];
+            };
+
+            // 步骤3: 按“四课”结构组合报告
+            [resultStr appendString:@"// 四课详解\n"];
+            NSString *siKeSummary = [self _echo_extractSiKeInfo];
+            NSArray<NSString *> *siKeLines = [siKeSummary componentsSeparatedByString:@"\n"];
+            
+            if (siKeLines.count == 4) {
+                // 第一课
+                [resultStr appendFormat:@"%@\n", siKeLines[0]];
+                [resultStr appendString:findDetailBlock(@"日干")];
+                [resultStr appendString:findDetailBlock(@"日上 (")]; // 加括号以区分"日上"和"日上-天将"
+                [resultStr appendString:findDetailBlock(@"日上 - 天将")];
+                [resultStr appendString:@"\n\n"];
+
+                // 第二课
+                [resultStr appendFormat:@"%@\n", siKeLines[1]];
+                [resultStr appendString:findDetailBlock(@"日阴 (")];
+                [resultStr appendString:findDetailBlock(@"日阴 - 天将")];
+                [resultStr appendString:@"\n\n"];
+
+                // 第三课
+                [resultStr appendFormat:@"%@\n", siKeLines[2]];
+                [resultStr appendString:findDetailBlock(@"支辰")];
+                [resultStr appendString:findDetailBlock(@"辰上 (")];
+                [resultStr appendString:findDetailBlock(@"辰上 - 天将")];
+                [resultStr appendString:@"\n\n"];
+                
+                // 第四课
+                [resultStr appendFormat:@"%@\n", siKeLines[3]];
+                [resultStr appendString:findDetailBlock(@"辰阴 (")];
+                [resultStr appendString:findDetailBlock(@"辰阴 - 天将")];
+                [resultStr appendString:@"\n\n"];
+            }
+
+            // 步骤4: 按“三传”结构组合报告
+            [resultStr appendString:@"// 三传详解\n"];
+            NSString *sanChuanSummary = [self _echo_extractSanChuanInfo];
+            NSArray<NSString *> *sanChuanLines = [sanChuanSummary componentsSeparatedByString:@"\n"];
+
+            if (sanChuanLines.count >= 1) { // 初传
+                [resultStr appendFormat:@"%@\n", sanChuanLines[0]];
+                [resultStr appendString:findDetailBlock(@"初传 - 地支")];
+                [resultStr appendString:findDetailBlock(@"初传 - 天将")];
+                [resultStr appendString:@"\n\n"];
+            }
+            if (sanChuanLines.count >= 2) { // 中传
+                [resultStr appendFormat:@"%@\n", sanChuanLines[1]];
+                [resultStr appendString:findDetailBlock(@"中传 - 地支")];
+                [resultStr appendString:findDetailBlock(@"中传 - 天将")];
+                [resultStr appendString:@"\n\n"];
+            }
+            if (sanChuanLines.count >= 3) { // 末传
+                [resultStr appendFormat:@"%@\n", sanChuanLines[2]];
+                [resultStr appendString:findDetailBlock(@"末传 - 地支")];
+                [resultStr appendString:findDetailBlock(@"末传 - 天将")];
+                [resultStr appendString:@"\n\n"];
+            }
+
+            g_s2_finalResultFromKeChuan = [resultStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (!g_s2_keChuan_completion_handler) {
+                NSMutableDictionary *reportData = [NSMutableDictionary dictionary];
+                reportData[@"课传详解"] = g_s2_finalResultFromKeChuan;
+                NSString *finalReport = formatFinalReport(reportData);
+                g_lastGeneratedReport = [finalReport copy];
+                [self showEchoNotificationWithTitle:@"推衍完成" message:@"课盘已生成并复制到剪贴板"];
+                [self presentAIActionSheetWithReport:finalReport];
+            }
+        }
+        g_s2_isExtractingKeChuanDetail = NO;
+        g_s2_capturedKeChuanDetailArray = nil;
+        g_s2_keChuanWorkQueue = nil;
+        g_s2_keChuanTitleQueue = nil;
+        [self hideProgressHUD];
+        if (g_s2_keChuan_completion_handler) {
+            g_s2_keChuan_completion_handler();
+            g_s2_keChuan_completion_handler = nil;
+        }
+        return;
+    }
+    
+    NSMutableDictionary *task = g_s2_keChuanWorkQueue.firstObject;
+    [g_s2_keChuanWorkQueue removeObjectAtIndex:0];
+    NSString *title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
+    [self updateProgressHUD:[NSString stringWithFormat:@"推演课传: %lu/%lu", (unsigned long)g_s2_capturedKeChuanDetailArray.count + 1, (unsigned long)g_s2_keChuanTitleQueue.count]];
+    SEL action = ([title containsString:@"天将"]) ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳摘要WithSender:");
+    if ([self respondsToSelector:action]) {
+        SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]);
+    } else {
+        [g_s2_capturedKeChuanDetailArray addObject:@"[解析失败: 方法不存在]"];
+        [self processKeChuanQueue_Truth_S2];
+    }
+}
 %new
 - (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingBiFa) return; g_isExtractingBiFa = YES; g_biFa_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示法訣總覽"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); } }
 %new
@@ -1543,6 +1663,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
