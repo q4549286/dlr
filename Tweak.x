@@ -48,7 +48,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V11-Final] %@", message);
+    NSLog(@"[Echo-V12-Final] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -204,46 +204,50 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
     if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
     UIView *plateView = plateViews.firstObject;
     
-    // ====================== 终极解决方案 V11 ======================
+    UITapGestureRecognizer *singleTapGesture = nil;
+    for (UIGestureRecognizer *gesture in plateView.gestureRecognizers) {
+        if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) {
+            singleTapGesture = (UITapGestureRecognizer *)gesture;
+            break;
+        }
+    }
+    if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
+    
+    // ====================== 最终解决方案 V12 ======================
     @try {
-        // 我们不创建新的手势，而是找到 App 自己的那个手势
-        UITapGestureRecognizer *realGesture = nil;
-        for (UIGestureRecognizer *gesture in plateView.gestureRecognizers) {
-            if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) {
-                realGesture = (UITapGestureRecognizer *)gesture;
-                break;
-            }
-        }
-        if (!realGesture) {
-            LogMessage(EchoLogError, @"关键错误: 找不到真实的手势识别器实例");
-            [self processTianDiPanQueue];
-            return;
-        }
-
-        // 1. 创建一个完美的假 Touch
+        // 创建一个假的 Touch 对象
         UITouch *fakeTouch = [[UITouch alloc] init];
         [fakeTouch setValue:plateView.window forKey:@"window"];
         [fakeTouch setValue:plateView forKey:@"view"];
         [fakeTouch setValue:@(1) forKey:@"tapCount"];
         [fakeTouch setValue:@(UITouchPhaseEnded) forKey:@"phase"];
-        // 设置 Touch 的坐标 (绝对坐标)
-        CGPoint windowPoint = [plateView convertPoint:point toView:plateView.window];
-        [fakeTouch setValue:[NSValue valueWithCGPoint:windowPoint] forKey:@"_locationInWindow"];
-        
-        // 2. 将 Touch 注入 Gesture (私有 ivar)
-        object_setIvar(realGesture, class_getInstanceVariable([realGesture class], "_touches"), [NSSet setWithObject:fakeTouch]);
-        
-        // 3. 设置 Gesture 的其他属性 (使用我们找到的真实手势)
-        [realGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
-        
-        LogMessage(EchoLogTypeDebug, @"手势已完全复刻 (Touch, State)");
 
-        // 4. 调用 Action
+        // 关键：创建 UITouch _touchInfo ivar
+        id touchInfo = [[NSClassFromString(@"_UITouchInfo") alloc] init];
+        CGPoint windowPoint = [plateView convertPoint:point toView:plateView.window];
+        [touchInfo setValue:[NSValue valueWithCGPoint:windowPoint] forKey:@"_touchLocation"];
+        [fakeTouch setValue:touchInfo forKey:@"_touchInfo"];
+        
+        // 将这个完美的 Touch 注入到真实手势的私有 Ivar `_touches` 中
+        Ivar touchesIvar = class_getInstanceVariable([singleTapGesture class], "_touches");
+        if (touchesIvar) {
+            object_setIvar(singleTapGesture, touchesIvar, [NSSet setWithObject:fakeTouch]);
+        } else {
+            LogMessage(EchoLogError, @"关键错误: 找不到 _touches 实例变量");
+            [self processTianDiPanQueue];
+            return;
+        }
+        
+        // 最后，设置手势状态
+        [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
+        
+        LogMessage(EchoLogTypeDebug, @"手势已基于蓝图完美复刻");
+
         SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
         if ([self respondsToSelector:action]) {
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [self performSelector:action withObject:realGesture];
+            [self performSelector:action withObject:singleTapGesture];
             #pragma clang diagnostic pop
         } else {
             LogMessage(EchoLogError, @"触发失败: Target 无法响应");
@@ -260,6 +264,6 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
-        NSLog(@"[Echo-V11-Final] 天地盘详情提取工具(完美复刻版)已加载。");
+        NSLog(@"[Echo-V12-Final] 天地盘详情提取工具(蓝图复刻版)已加载。");
     }
 }
