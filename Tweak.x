@@ -697,44 +697,42 @@ static NSString* _parseTianJiangDetailInternal(NSString *rawContent) {
     return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 上神详情专属解析器 (v1.3 - 采用更安全的末行过滤法)
+// 上神详情专属解析器 (v1.4 - 采用诗句黑名单过滤)
 static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
     
-    // [修改点 5 - 修正版] 先处理并移除末尾的诗句行
-    NSMutableArray<NSString *> *lines = [[rawContent componentsSeparatedByString:@"\n"] mutableCopy];
-    
-    // 1. 从后向前移除所有空行，以便定位到最后一行有效内容
-    while (lines.count > 0 && [[lines.lastObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] length] == 0) {
-        [lines removeLastObject];
-    }
-    
-    // 2. 如果还有内容，并且最后一行不是以关键描述词开头，则假定其为诗句并移除
-    if (lines.count > 0) {
-        NSString *lastContentLine = [lines.lastObject stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-        // 添加安全检查，确保我们不会删除像"遁干..."这样的有效数据行
-        NSArray *safeKeywords = @[@"遁干", @"得四时", @"临", @"昼乘", @"夜乘"];
-        BOOL isSafeLine = NO;
-        for (NSString *keyword in safeKeywords) {
-            if ([lastContentLine hasPrefix:keyword]) {
-                isSafeLine = YES;
-                break;
-            }
-        }
-        // 只有当最后一行不是已知的安全格式时，才将其移除
-        if (!isSafeLine) {
-            [lines removeLastObject];
-        }
-    }
-    
-    // 后续处理使用已经过滤掉诗句的行
+    // [修改点 5 - 黑名单策略]
+    // 定义一个包含所有要过滤诗句的集合，以便快速查找。
+    NSSet<NSString *> *poemBlacklist = [NSSet setWithArray:@[
+        @"小麦九江并赏赐，鸡禽解散不为缘。",
+        @"大麦守城丧碓磨，市贾贾劫攻田猎师。",
+        @"白头翁讼争婆母，井泉天耳墓风师。",
+        @"土公田宅巫天目，使君亭长巷兵持。",
+        @"赏赐灶炉管钥等，横祸非灾吊客蛇。",
+        @"战鬪陂池二千石，虞官左目宰伤神。",
+        @"林木三河雷电闪，弟兄私户匿阴人。",
+        @"从事信诚征召吏，虎豹猫狸及木丛。",
+        @"雨师风伯贵人召，畜鳖车牛兼宅田。",
+        @"土工悲泣浴盆事，燕鼠行人取类看。",
+        @"狱厕秽猪忧溺死，阴私管钥召征来。",
+        @"德合婢奴兼长者，豺狼犬畜悉为欢。"
+    ]];
+
+    NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
     NSMutableString *result = [NSMutableString string];
+    
+    // 黑名单增加了 "诗象"
     NSArray *blacklist = @[@"神象", @"诗象", @"星宿", @"禽类", @"身象", @"人类", @"物类", @"方所", @"事类", @"数象"];
     BOOL isFirstTextualLine = YES;
 
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0) continue;
+        
+        // 检查当前行是否在诗句黑名单中
+        if ([poemBlacklist containsObject:trimmedLine]) {
+            continue; // 如果是黑名单中的诗句，则直接跳过
+        }
         
         BOOL isBlacklisted = NO;
         for (NSString *key in blacklist) {
@@ -744,7 +742,7 @@ static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
         
         if (isFirstTextualLine) {
             isFirstTextualLine = NO;
-            if (trimmedLine.length > 20 && ![trimmedLine containsString:@"("] && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@":"]) {
+            if (trimmedLine.length > 20 || (![trimmedLine containsString:@"("] && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@":"])) {
                 continue;
             }
         }
@@ -1486,6 +1484,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
