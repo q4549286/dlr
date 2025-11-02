@@ -379,16 +379,15 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 解析方法过滤器 (v6.1 - 修复模块分割问题)
-// 解析方法过滤器 (v6.2 - 增强过滤规则)
+// 解析方法过滤器 (v6.3 - 对“来占之情”放开过滤)
 static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
-    
-    // [修正点 1: 强制换行] 预处理，在标题符号后强制换行
+
+    // [预处理]
     NSString *preprocessedContent = [rawContent stringByReplacingOccurrencesOfString:@"→" withString:@"→\n"];
     NSMutableString *workingContent = [preprocessedContent mutableCopy];
     
-    // [模块过滤器] 移除从特定标题开始的整个后续内容块
+    // [模块过滤器]
     NSArray<NSString *> *blockRemovalMarkers = @[@"发用事端→", @"三传事体→", @"日辰关系→", @"日辰上乘"];
     for (NSString *marker in blockRemovalMarkers) {
         NSRange markerRange = [workingContent rangeOfString:marker];
@@ -397,53 +396,84 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
         }
     }
 
-    // [修正点 2: 增强样板句黑名单]
+    // [样板句黑名单]
     NSArray<NSString *> *boilerplateSentences = @[
         @"凡看来情，以占之正时，详其与日之生克刑合，则于所占事体，可先有所主，故曰先锋门。",
         @"此以用神所乘所临，以及与日之生合刑墓等断事发之机。",
         @"此以三传之进退顺逆、有气无气、顺生逆克等而定事情之大体。",
         @"此以日辰对较而定主客彼我之关系，大体日为我，辰为彼；日为人，辰为宅；日为尊，辰为卑；日为老，辰为幼；日为夫，辰为妻；日为官，辰为民；出行则日为陆为车，辰则为水为舟；日为出，为南向，为前方，辰则为入，为北向，为后方；占病则以日为人，以辰为病；占产则以日为子，以辰为母；占农则以日为农夫，以辰为谷物；占猎则以日为猎师，以辰为鸟兽。故日辰之位，随占不同，总要依类而推之，方无差谬。",
         @"此以用神之旺相并天乙前后断事情之迟速，并以用神所合之岁月节候而定事体之远近，复以天上季神所临定成事之期。",
-        @"以常法而论，吉事而凶事年月日时以事体之大小斟酌定之。" // 新增要删除的句子
+        @"以常法而论，吉事而凶事年月日时以事体之大小斟酌定之。"
     ];
     for (NSString *sentence in boilerplateSentences) {
         [workingContent replaceOccurrencesOfString:sentence withString:@"" options:0 range:NSMakeRange(0, workingContent.length)];
     }
+    
+    // [新逻辑：分离“来占之情”和其他内容]
+    NSString *laiZhanZhiQingBlock = @"";
+    NSString *otherContentBlock = [workingContent copy];
+    
+    NSRange laiZhanRange = [workingContent rangeOfString:@"来占之情→"];
+    if (laiZhanRange.location != NSNotFound) {
+        // 找到“来占之情”的起始位置
+        NSString *tempString = [workingContent substringFromIndex:laiZhanRange.location];
+        
+        // 查找下一个标题（例如“克应之期→”）作为“来占之情”块的结束标志
+        NSRegularExpression *nextTitleRegex = [NSRegularExpression regularExpressionWithPattern:@"\\n[\\u4e00-\\u9fa5]+→" options:0 error:nil];
+        NSTextCheckingResult *nextTitleMatch = [nextTitleRegex firstMatchInString:tempString options:0 range:NSMakeRange(1, tempString.length - 1)]; // 从第一个字符后开始搜索
+        
+        if (nextTitleMatch) {
+            // 如果找到了下一个标题，则“来占之情”块就是从开头到下一个标题之前的部分
+            laiZhanZhiQingBlock = [tempString substringToIndex:nextTitleMatch.range.location];
+            // 剩下的内容是其他块
+            otherContentBlock = [workingContent stringByReplacingOccurrencesOfString:laiZhanZhiQingBlock withString:@""];
+        } else {
+            // 如果没找到其他标题，说明整个内容都是“来占之情”块
+            laiZhanZhiQingBlock = tempString;
+            otherContentBlock = @"";
+        }
+    }
 
-    // [修正点 3: 增强判断句/断语过滤]
+    // [断语过滤] 只对“其他内容”应用过滤规则
+    NSMutableString *filteredOtherContent = [otherContentBlock mutableCopy];
     NSArray<NSString *> *conclusionPatterns = @[
         @"(主|恐|利|不利|则|此主|凡事|又当|故当|当以|大有生意|凶祸更甚|凶祸消磨|其势悖逆|用昼将|唯不利|岁无成|而不能由己|可致福禄重重|情多窒且塞|事虽顺而有耗散之患|生归日辰则无虞|理势自然).*?($|。|，)",
-        @"(^|，|。)\\s*(主|恐|利|不利|则|此主|凡事|又当|故当|当以|不堪期|却无气|事虽新起)[^，。]*"
+        @"(^|，|。)\\s*(主|恐|利|不利|则|此主|凡事|又当|故当|当以|不堪期|却无气|事虽新起)[^，。]*",
+        @"(^|。)\\s*用神有气.*?期。"
     ];
     for (NSString *pattern in conclusionPatterns) {
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
         NSString *previous;
         do {
-            previous = [workingContent copy];
-            [regex replaceMatchesInString:workingContent options:0 range:NSMakeRange(0, workingContent.length) withTemplate:@""];
-        } while (![previous isEqualToString:workingContent]);
+            previous = [filteredOtherContent copy];
+            [regex replaceMatchesInString:filteredOtherContent options:0 range:NSMakeRange(0, filteredOtherContent.length) withTemplate:@""];
+        } while (![previous isEqualToString:filteredOtherContent]);
     }
 
-    // [格式化和清理]
-    [workingContent replaceOccurrencesOfString:@"\n" withString:@" " options:0 range:NSMakeRange(0, workingContent.length)];
+    // [合并与格式化] 将不过滤的“来占之情”和过滤后的其他内容重新组合
+    NSMutableString *finalContent = [NSMutableString string];
+    [finalContent appendString:laiZhanZhiQingBlock];
+    [finalContent appendString:filteredOtherContent];
+
+    // [通用格式化]
+    [finalContent replaceOccurrencesOfString:@"\n" withString:@" " options:0 range:NSMakeRange(0, finalContent.length)];
     NSArray *conjunctionsToRemove = @[@"但", @"又，"];
     for (NSString *conj in conjunctionsToRemove) {
-        [workingContent replaceOccurrencesOfString:[NSString stringWithFormat:@"%@ ", conj] withString:@"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, workingContent.length)];
+        [finalContent replaceOccurrencesOfString:[NSString stringWithFormat:@"%@ ", conj] withString:@"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, finalContent.length)];
     }
-    while ([workingContent containsString:@"  "]) {
-        [workingContent replaceOccurrencesOfString:@"  " withString:@" " options:0 range:NSMakeRange(0, workingContent.length)];
+    while ([finalContent containsString:@"  "]) {
+        [finalContent replaceOccurrencesOfString:@"  " withString:@" " options:0 range:NSMakeRange(0, finalContent.length)];
     }
     
-    // [修正标题格式] 将 "标题→ " 格式化为 "标题:\n"
-    [workingContent replaceOccurrencesOfString:@"→" withString:@":\n" options:0 range:NSMakeRange(0, workingContent.length)];
-    [workingContent replaceOccurrencesOfString:@"\\s*([，。])\\s*" withString:@"$1" options:NSRegularExpressionSearch range:NSMakeRange(0, workingContent.length)];
-    [workingContent replaceOccurrencesOfString:@"[，。]{2,}" withString:@"。" options:NSRegularExpressionSearch range:NSMakeRange(0, workingContent.length)];
-    if ([workingContent hasPrefix:@"，"] || [workingContent hasPrefix:@"。"]) {
-        if(workingContent.length > 0) [workingContent deleteCharactersInRange:NSMakeRange(0, 1)];
+    // [最终输出格式化]
+    [finalContent replaceOccurrencesOfString:@"→" withString:@":\n" options:0 range:NSMakeRange(0, finalContent.length)];
+    [finalContent replaceOccurrencesOfString:@"\\s*([，。])\\s*" withString:@"$1" options:NSRegularExpressionSearch range:NSMakeRange(0, finalContent.length)];
+    [finalContent replaceOccurrencesOfString:@"[，。]{2,}" withString:@"。" options:NSRegularExpressionSearch range:NSMakeRange(0, finalContent.length)];
+    if ([finalContent hasPrefix:@"，"] || [finalContent hasPrefix:@"。"]) {
+        if(finalContent.length > 0) [finalContent deleteCharactersInRange:NSMakeRange(0, 1)];
     }
 
-    // [最终输出格式化]
-    NSArray<NSString *> *finalSentences = [[workingContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] componentsSeparatedByString:@"。"];
+    NSArray<NSString *> *finalSentences = [[finalContent stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] componentsSeparatedByString:@"。"];
     NSMutableString *finalResult = [NSMutableString string];
     for (NSString *sentence in finalSentences) {
         NSString *trimmedSentence = [sentence stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" ,，"]];
@@ -452,7 +482,6 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
         }
     }
     
-    // 再次清理，确保标题和内容分离
     NSString *finalCleaned = [finalResult stringByReplacingOccurrencesOfString:@":\n" withString:@":\n  "];
     return [finalCleaned stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
@@ -1483,6 +1512,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
