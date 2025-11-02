@@ -465,7 +465,7 @@ static NSString* parseAndFilterShenSha(NSString *rawContent) {
     return [finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 课传流注详情解析器 (v2.7 - 修复格局释义过滤 & 遁干优先级)
+// 课传流注详情解析器 (v2.8 - 解决问题3和4)
 static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle) {
     if (!rawText || rawText.length == 0) return @"";
 
@@ -512,13 +512,12 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     };
     
     BOOL inZaxiang = NO;
-    BOOL skipNextLineAsExplanation = NO; // [修复点 1.1] 新增状态标志
+    BOOL skipNextLineAsExplanation = NO;
 
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
 
-        // [修复点 1.2] 如果上一行是格局，则跳过这一行（释义）
         if (skipNextLineAsExplanation) {
             skipNextLineAsExplanation = NO;
             continue;
@@ -526,21 +525,12 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
 
         if (inZaxiang) { [structuredResult appendFormat:@"    - %@\n", trimmedLine]; [processedLines addObject:trimmedLine]; continue; }
 
-        // [修复点 3.1] 优先处理遁干，防止被格局规则误判
-        if ([trimmedLine hasPrefix:@"遁干"]) {
-            // 这是遁干行，按关键词逻辑处理
-        } else {
-            // 如果不是遁干行，再检查是否是格局行
-            NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
-            if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
-                NSRange reasonRange = [trimmedLine rangeOfString:@"因"];
-                NSString *cleanLine = (reasonRange.location != NSNotFound) ? [trimmedLine substringToIndex:reasonRange.location] : trimmedLine;
-                cleanLine = [cleanLine stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                [structuredResult appendFormat:@"  - 格局: %@\n", cleanLine];
-                [processedLines addObject:trimmedLine];
-                skipNextLineAsExplanation = YES; // [修复点 1.3] 设置标志，跳过下一行
-                continue;
-            }
+        NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
+        if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
+            // [修改点 3 & 4] 过滤掉所有 "一、..." 格式的格局/释义行及其下一行解释
+            [processedLines addObject:trimmedLine];
+            skipNextLineAsExplanation = YES; // 标记下一行（解释）也应跳过
+            continue; // 直接跳过，不输出此行
         }
 
         for (NSString *keyword in keywordMap.allKeys) {
@@ -554,9 +544,11 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                                      stringByReplacingOccurrencesOfString:@"丁" withString:@"丁神"]
                                      stringByReplacingOccurrencesOfString:@"癸" withString:@"闭口"];
                 }
-                // ... [其他 value 清理逻辑不变]
-                NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知).*$" options:0 error:nil];
+                
+                // [修改点 4] 增强断语过滤，移除 "有...事" 和 "在初则..." 等模式
+                NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知|有.*事|在初则|凡占).*$" options:0 error:nil];
                 value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
+
                 if ([label hasPrefix:@"刑"] || [label hasPrefix:@"冲"] || [label hasPrefix:@"害"] || [label hasPrefix:@"破"]) {
                     NSArray *parts = [value componentsSeparatedByString:@" "];
                     if (parts.count > 0) value = parts[0];
@@ -668,14 +660,13 @@ static NSString* _parseTianJiangDetailInternal(NSString *rawContent) {
     return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 上神详情专属解析器 (v1.1 - 修复遁干替换和诗句过滤)
+// 上神详情专属解析器 (v1.2 - 修复诗句过滤)
 static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
     
     NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
     NSMutableString *result = [NSMutableString string];
     
-    // 黑名单增加了 "诗象"
     NSArray *blacklist = @[@"神象", @"诗象", @"星宿", @"禽类", @"身象", @"人类", @"物类", @"方所", @"事类", @"数象"];
     BOOL isFirstTextualLine = YES;
 
@@ -698,13 +689,11 @@ static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
 
         if ([trimmedLine hasPrefix:@"一、"] || [trimmedLine hasPrefix:@"二、"]) continue;
 
-        // [修复点 6.1] 过滤诗句 (特征：以中文结尾，且不含常见符号)
-        if (trimmedLine.length > 5 && ![trimmedLine containsString:@"("] && ![trimmedLine containsString:@":"] && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@"，"]) {
-             // 简单判断可能是诗句，丢弃
+        // [修改点 5] 增强诗句过滤规则：如果一行中没有格式化字符（如冒号、括号、空格），则视为诗句并过滤
+        if (trimmedLine.length > 5 && ![trimmedLine containsString:@"("] && ![trimmedLine containsString:@":"] && ![trimmedLine containsString:@" "]) {
              continue;
         }
 
-        // [修复点 6.2] 替换遁干的 `初建`/`复建`
         if ([trimmedLine hasPrefix:@"遁干"]) {
             trimmedLine = [[trimmedLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干:"]
                                         stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时:"];
@@ -801,7 +790,15 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         xun = [xunInfo substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
         kong = [[xunInfo substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     } else { kong = xunInfo; }
-    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, SafeString(reportData[@"昼夜"])];
+    
+    // [修改点 1] 动态构建旬空行，避免空括号
+    NSMutableString *xunKongLine = [NSMutableString stringWithFormat:@"- 旬空: %@", [kong stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+    if (xun.length > 0) {
+        [xunKongLine appendFormat:@" (%@)", xun];
+    }
+
+    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n%@\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], xunKongLine, SafeString(reportData[@"昼夜"])];
+
 
     // --- 板块二: 核心盘架 ---
     [report appendString:@"// 2. 核心盘架\n"];
@@ -1407,7 +1404,16 @@ if(g_tianDiPan_completion_handler) {
 %new
 - (void)extractSanGong_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingSanGong) return; g_isExtractingSanGong = YES; g_sanGong_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示三宮時信息WithSender:"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector withObject:nil]); } }
 %new
-- (NSString *)_echo_extractSiKeInfo { Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖"); if (!siKeViewClass) return @""; NSMutableArray *siKeViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews); if (siKeViews.count == 0) return @""; UIView *container = siKeViews.firstObject; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], container, labels); if (labels.count < 12) return @""; NSMutableDictionary *cols = [NSMutableDictionary dictionary]; for (UILabel *label in labels) { NSString *key = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))]; if (!cols[key]) { cols[key] = [NSMutableArray array]; } [cols[key] addObject:label]; } if (cols.allKeys.count != 4) return @""; NSArray *keys = [cols.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *o1, NSString *o2) { return [@([o1 floatValue]) compare:@([o2 floatValue])]; }]; NSMutableArray *c1 = cols[keys[0]], *c2 = cols[keys[1]], *c3 = cols[keys[2]], *c4 = cols[keys[3]]; [c1 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }]; [c2 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }]; [c3 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }]; [c4 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }]; NSString *k1_shang = ((UILabel*)c4[0]).text, *k1_jiang = ((UILabel*)c4[1]).text, *k1_xia = ((UILabel*)c4[2]).text; NSString *k2_shang = ((UILabel*)c3[0]).text, *k2_jiang = ((UILabel*)c3[1]).text, *k2_xia = ((UILabel*)c3[2]).text; NSString *k3_shang = ((UILabel*)c2[0]).text, *k3_jiang = ((UILabel*)c2[1]).text, *k3_xia = ((UILabel*)c2[2]).text; NSString *k4_shang = ((UILabel*)c1[0]).text, *k4_jiang = ((UILabel*)c1[1]).text, *k4_xia = ((UILabel*)c1[2]).text; return [NSString stringWithFormat:@"- 第一课(日干): %@ 上 %@，%@乘%@\n- 第二课(日上): %@ 上 %@，%@乘%@\n- 第三课(支辰): %@ 上 %@，%@乘%@\n- 第四课(辰上): %@ 上 %@，%@乘%@", SafeString(k1_xia), SafeString(k1_shang), SafeString(k1_shang), SafeString(k1_jiang), SafeString(k2_xia), SafeString(k2_shang), SafeString(k2_shang), SafeString(k2_jiang), SafeString(k3_xia), SafeString(k3_shang), SafeString(k3_shang), SafeString(k3_jiang), SafeString(k4_xia), SafeString(k4_shang), SafeString(k4_shang), SafeString(k4_jiang) ]; }
+- (NSString *)_echo_extractSiKeInfo { Class siKeViewClass = NSClassFromString(@"六壬大占.四課視圖"); if (!siKeViewClass) return @""; NSMutableArray *siKeViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeViewClass, self.view, siKeViews); if (siKeViews.count == 0) return @""; UIView *container = siKeViews.firstObject; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], container, labels); if (labels.count < 12) return @""; NSMutableDictionary *cols = [NSMutableDictionary dictionary]; for (UILabel *label in labels) { NSString *key = [NSString stringWithFormat:@"%.0f", roundf(CGRectGetMidX(label.frame))]; if (!cols[key]) { cols[key] = [NSMutableArray array]; } [cols[key] addObject:label]; } if (cols.allKeys.count != 4) return @""; NSArray *keys = [cols.allKeys sortedArrayUsingComparator:^NSComparisonResult(NSString *o1, NSString *o2) { return [@([o1 floatValue]) compare:@([o2 floatValue])]; }]; NSMutableArray *c1 = cols[keys[0]], *c2 = cols[keys[1]], *c3 = cols[keys[2]], *c4 = cols[keys[3]]; [c1 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }]; [c2 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }]; [c3 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }]; [c4 sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }];
+    // 天将(顶), 上神(中), 日/辰(底)
+    NSString *k1_shang = ((UILabel*)c4[0]).text, *k1_jiang = ((UILabel*)c4[1]).text, *k1_xia = ((UILabel*)c4[2]).text;
+    NSString *k2_shang = ((UILabel*)c3[0]).text, *k2_jiang = ((UILabel*)c3[1]).text, *k2_xia = ((UILabel*)c3[2]).text;
+    NSString *k3_shang = ((UILabel*)c2[0]).text, *k3_jiang = ((UILabel*)c2[1]).text, *k3_xia = ((UILabel*)c2[2]).text;
+    NSString *k4_shang = ((UILabel*)c1[0]).text, *k4_jiang = ((UILabel*)c1[1]).text, *k4_xia = ((UILabel*)c1[2]).text;
+    
+    // [修改点 2] 调整为 "天将乘上神 临 日/辰" 格式
+    return [NSString stringWithFormat:@"- 第一课(日干): %@乘%@ 临%@\n- 第二课(日上): %@乘%@ 临%@\n- 第三课(支辰): %@乘%@ 临%@\n- 第四课(辰上): %@乘%@ 临%@", SafeString(k1_shang), SafeString(k1_jiang), SafeString(k1_xia), SafeString(k2_shang), SafeString(k2_jiang), SafeString(k2_xia), SafeString(k3_shang), SafeString(k3_jiang), SafeString(k3_xia), SafeString(k4_shang), SafeString(k4_jiang), SafeString(k4_xia) ];
+}
 %new
 - (NSString *)_echo_extractSanChuanInfo { Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖"); if (!sanChuanViewClass) return @""; NSMutableArray *scViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, scViews); [scViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }]; NSArray *titles = @[@"初传", @"中传", @"末传"]; NSMutableArray *lines = [NSMutableArray array]; NSArray<NSString *> *shenShaWhitelist = @[@"日禄", @"太岁", @"旬空", @"日马", @"旬丁" , @"坐空"]; for (NSUInteger i = 0; i < scViews.count; i++) { UIView *v = scViews[i]; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], v, labels); [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; if (labels.count >= 3) { NSString *lq = [[(UILabel*)labels.firstObject text] stringByReplacingOccurrencesOfString:@"->" withString:@""]; NSString *tj = [(UILabel*)labels.lastObject text]; NSString *dz = [(UILabel*)[labels objectAtIndex:labels.count - 2] text]; NSMutableArray *ssParts = [NSMutableArray array]; if (labels.count > 3) { for (UILabel *l in [labels subarrayWithRange:NSMakeRange(1, labels.count - 3)]) { if (l.text.length > 0) [ssParts addObject:l.text]; } } NSMutableArray *filteredSsParts = [NSMutableArray array]; for (NSString *part in ssParts) { for (NSString *keyword in shenShaWhitelist) { if ([part containsString:keyword]) { [filteredSsParts addObject:part]; break; } } } NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"%lu传", (unsigned long)i+1]; if (filteredSsParts.count > 0) { [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@) [状态: %@]", title, SafeString(dz), SafeString(lq), SafeString(tj), [filteredSsParts componentsJoinedByString:@", "]]]; } else { [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@)", title, SafeString(dz), SafeString(lq), SafeString(tj)]]; } } } return [lines componentsJoinedByString:@"\n"]; }
 %new
@@ -1423,6 +1429,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
