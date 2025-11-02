@@ -200,7 +200,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     NSString *name = task[@"name"]; CGPoint point = [task[@"point"] CGPointValue];
     LogMessage(EchoLogTypeInfo, @"正在处理: %@ (%.0f, %.0f)", name, point.x, point.y);
 
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) { LogMessage(EchoLogError,@"找不到天地盘视图实例"); [self processTianDiPanQueue]; return; }
     UIView *plateView = plateViews.firstObject;
@@ -249,3 +249,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo-TDP-Fix] 天地盘详情提取工具(防闪退最终版)已加载。");
     }
 }
+
