@@ -109,7 +109,6 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 - (void)processTianDiPanQueue;
 @end
 
-// <<<< 核心 Hook 点：只 Hook presentViewController >>>>
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     if (g_isExtractingTianDiPanDetail) {
@@ -222,7 +221,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     // ====================== 最终解决方案 V13 ======================
     @try {
-        // 只修改最关键的两个属性，不触碰 view 和 touches
+        // 只修改最关键的两个属性
         [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
         [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
         
