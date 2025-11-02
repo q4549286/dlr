@@ -13,6 +13,8 @@ static const NSInteger kEchoMainPanelTag        = 778899;
 #define ECHO_COLOR_MAIN_TEAL        [UIColor colorWithRed:0.23 green:0.49 blue:0.49 alpha:1.0]
 #define ECHO_COLOR_LOG_INFO         [UIColor lightGrayColor]
 #define ECHO_COLOR_LOG_ERROR        [UIColor redColor]
+#define ECHO_COLOR_SUCCESS          [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0] // <<<<< 修复点：补上这行
+
 #define ECHO_COLOR_LOG_SUCCESS      [UIColor colorWithRed:0.4 green:1.0 blue:0.4 alpha:1.0]
 #define ECHO_COLOR_LOG_DEBUG        [UIColor orangeColor]
 #define ECHO_COLOR_CARD_BG          [UIColor colorWithWhite:0.2 alpha:1.0]
@@ -275,3 +277,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo-Debug] Tweak (Full Debug Mode) Loaded.");
     }
 }
+
