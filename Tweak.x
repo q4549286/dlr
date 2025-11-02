@@ -48,7 +48,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-Ultimate] %@", message);
+    NSLog(@"[Echo-V5] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -109,31 +109,27 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 - (void)processTianDiPanQueue;
 @end
 
-static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    if (g_isExtractingTianDiPanDetail) {
-        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"]) {
-            LogMessage(EchoLogTypeDebug, @"拦截到 ViewController: %@", vcClassName);
-            vcToPresent.view.alpha = 0.0f;
+// <<<< 核心 Hook 点 >>>>
+%hook UIView
+- (void)didMoveToWindow {
+    %orig;
+    if (g_isExtractingTianDiPanDetail && self.window && [NSStringFromClass([self class]) isEqualToString:@"_UIPopoverView"]) {
+        LogMessage(EchoLogTypeDebug, @"拦截到 _UIPopoverView!");
+        self.alpha = 0.0f;
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *extractedText = extractDataFromStackViewPopup(self);
+            [g_tianDiPan_resultsArray addObject:extractedText];
+            [self removeFromSuperview];
             
-            Original_presentViewController(self, _cmd, vcToPresent, NO, ^(void){
-                dispatch_async(dispatch_get_main_queue(), ^{
-                     NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
-                     [g_tianDiPan_resultsArray addObject:extractedText];
-                     [vcToPresent dismissViewControllerAnimated:NO completion:^{
-                         if (g_mainViewController) {
-                            [g_mainViewController processTianDiPanQueue];
-                         }
-                     }];
-                });
-                if(completion) completion();
-            });
-            return;
-        }
+            if (g_mainViewController) {
+                [g_mainViewController processTianDiPanQueue];
+            }
+        });
     }
-    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
+%end
+
 
 %hook UIViewController
 - (void)viewDidLoad {
@@ -218,9 +214,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
     
-    // ====================== 终极解决方案 ======================
     @try {
-        // 1. 找到 Popover 需要的源视图
         Class sourceViewClass = NSClassFromString(@"六壬大占.課體視圖");
         NSMutableArray *sourceViews = [NSMutableArray array];
         FindSubviewsOfClassRecursive(sourceViewClass, self.view, sourceViews);
@@ -231,18 +225,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
         UIView *sourceView = sourceViews.firstObject;
 
-        // 2. 欺骗性地将手势的 view 设置为 sourceView
-        // 保存原始视图并在之后恢复
-        UIView *originalView = singleTapGesture.view;
+        UIView *originalView = [singleTapGesture.view retain];
         [singleTapGesture setValue:sourceView forKey:@"view"];
         
-        // 3. 注入坐标和状态
         [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
         [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
         
         LogMessage(EchoLogTypeDebug, @"手势已完全伪造 (坐标, 状态, 视图)");
 
-        // 4. 使用正确的 target (self) 调用 action
         SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
         if ([self respondsToSelector:action]) {
             #pragma clang diagnostic push
@@ -254,14 +244,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             [self processTianDiPanQueue];
         }
 
-        // 5. 恢复手势的原始视图
         [singleTapGesture setValue:originalView forKey:@"view"];
+        [originalView release];
 
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"终极方案执行失败: %@", exception.reason);
         [self processTianDiPanQueue];
     }
-    // ========================================================
 }
 
 %end
@@ -269,7 +258,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
-        MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-Ultimate] 天地盘详情提取工具(最终版)已加载。");
+        // 移除 presentViewController 的 Hook，因为它不是正确的拦截点
+        NSLog(@"[Echo-V5] 天地盘详情提取工具(最终版)已加载。");
     }
 }
