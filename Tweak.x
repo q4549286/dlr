@@ -710,8 +710,9 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
     }
     
     // --- 动态编号的、经过解析器处理的模块 ---
-    NSArray<NSDictionary *> *optionalSections = @[
-        @{ @"key": @"天地盘详情", @"title": @"天地盘全息情报", @"type": @(EchoDataTypeTianDiPanDetail)},
+NSArray<NSDictionary *> *optionalSections = @[
+    // 将 type 改为 EchoDataTypeGeneric
+    @{ @"key": @"天地盘详情", @"title": @"天地盘全息情报", @"type": @(EchoDataTypeGeneric)}, 
         @{ @"key": @"九宗门_详", @"title": @"格局总览 (九宗门)", @"type": @(EchoDataTypeJiuZongMen)},
         @{ @"key": @"行年参数", @"title": @"模块二：【天命系统】 - A级情报", @"type": @(EchoDataTypeNianming)},
         @{ @"key": @"神煞详情", @"title": @"神煞系统", @"type": @(EchoDataTypeShenSha)},
@@ -1198,17 +1199,23 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if (!g_isExtractingTianDiPanDetail) return;
         g_isExtractingTianDiPanDetail = NO;
         LogMessage(EchoLogTypeSuccess, @"完成: 所有天地盘详情提取完毕。");
-        NSMutableString *finalReport = [NSMutableString string];
-        for (NSUInteger i = 0; i < g_tianDiPan_fixedCoordinates.count; i++) {
-            NSDictionary *itemInfo = g_tianDiPan_fixedCoordinates[i];
-            NSString *itemName = itemInfo[@"name"];
-            NSString *itemType = [itemInfo[@"type"] isEqualToString:@"tianJiang"] ? @"天将详情" : @"上神详情";
-            NSString *itemData = (i < g_tianDiPan_resultsArray.count) ? g_tianDiPan_resultsArray[i] : @"[数据提取失败]";
-            [finalReport appendFormat:@"-- [%@: %@] --\n%@\n\n", itemType, itemName, itemData];
-        }
-        if(g_tianDiPan_completion_handler) {
-            g_tianDiPan_completion_handler([finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
-        }
+// [修复点 1: 在合并前逐个解析天地盘详情]
+NSMutableString *finalReport = [NSMutableString string];
+for (NSUInteger i = 0; i < g_tianDiPan_fixedCoordinates.count; i++) {
+    NSDictionary *itemInfo = g_tianDiPan_fixedCoordinates[i];
+    NSString *itemName = itemInfo[@"name"];
+    NSString *itemType = [itemInfo[@"type"] isEqualToString:@"tianJiang"] ? @"天将详情" : @"上神详情";
+    NSString *rawItemData = (i < g_tianDiPan_resultsArray.count) ? g_tianDiPan_resultsArray[i] : @"[数据提取失败]";
+    
+    // 在这里，对每一块原始数据调用解析器！
+    NSString *parsedItemData = parseTianDiPanDetailBlock(rawItemData);
+    
+    // 使用解析后的数据来构建报告
+    [finalReport appendFormat:@"-- [%@: %@] --\n%@\n\n", itemType, itemName, parsedItemData];
+}
+if(g_tianDiPan_completion_handler) {
+    g_tianDiPan_completion_handler([finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]);
+}
         g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil; g_tianDiPan_completion_handler = nil;
         return;
     }
@@ -1306,6 +1313,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
