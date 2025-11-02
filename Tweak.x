@@ -23,11 +23,10 @@ static UITextView *g_logTextView = nil;
 static BOOL g_isExtractingTianDiPanDetail = NO;
 static NSMutableArray *g_tianDiPan_workQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
-static void (^g_tianDiPan_completion_handler)(NSString *result) = nil;
+static __weak UIViewController *g_mainViewController = nil; // <<<< 新增，持有主VC的弱引用
 
 #pragma mark - Coordinate Database (V2.1 - 精准微调版)
 static NSArray *g_tianDiPan_fixedCoordinates = nil;
-
 static void initializeTianDiPanCoordinates() {
     if (g_tianDiPan_fixedCoordinates) return;
     g_tianDiPan_fixedCoordinates = @[
@@ -62,7 +61,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-Final-Debug] %@", message);
+    NSLog(@"[Echo-Ultimate] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -119,32 +118,46 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 @interface UIViewController (EchoTDP)
 - (void)createOrShowTDPPanel;
 - (void)handleTDPExtractionButtonTap:(UIButton *)sender;
-- (void)startTDPExtractionWithCompletion:(void (^)(NSString *result))completion;
+- (void)startTDPExtraction;
 - (void)processTianDiPanQueue;
-- (void)presentAIActionSheetWithReport:(NSString *)report;
 @end
 
-static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
-    if (g_isExtractingTianDiPanDetail) {
-        NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"]) {
-            vcToPresent.view.alpha = 0.0f;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
-                [g_tianDiPan_resultsArray addObject:extractedText];
-                [vcToPresent dismissViewControllerAnimated:NO completion:^{ [self processTianDiPanQueue]; }];
-            });
-            Original_presentViewController(self, _cmd, vcToPresent, NO, completion);
-            return; 
-        }
+// <<<< 核心 Hook 点转移到 UIView >>>>
+%hook UIView
+- (void)didMoveToWindow {
+    %orig;
+    if (g_isExtractingTianDiPanDetail && self.window && [NSStringFromClass([self class]) isEqualToString:@"_UIPopoverView"]) {
+        LogMessage(EchoLogTypeDebug, @"拦截到 _UIPopoverView!");
+        self.alpha = 0.0f; // Make it invisible
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *extractedText = extractDataFromStackViewPopup(self);
+            [g_tianDiPan_resultsArray addObject:extractedText];
+            [self removeFromSuperview]; // Immediately remove it
+            
+            if (g_mainViewController) {
+                [g_mainViewController processTianDiPanQueue];
+            }
+        });
     }
-    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
+%end
 
 %hook UIViewController
 
-- (void)viewDidLoad { %orig; Class c=NSClassFromString(@"六壬大占.ViewController"); if(c&&[self isKindOfClass:c]){ dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{ UIWindow *w=GetFrontmostWindow();if(!w||[w viewWithTag:kEchoControlButtonTag])return; UIButton *b=[UIButton buttonWithType:UIButtonTypeSystem];b.frame=CGRectMake(w.bounds.size.width-150,45,140,36);b.tag=kEchoControlButtonTag;[b setTitle:@"推衍课盘" forState:UIControlStateNormal];b.backgroundColor=ECHO_COLOR_MAIN_BLUE;[b setTitleColor:[UIColor whiteColor]forState:UIControlStateNormal];b.layer.cornerRadius=18;[b addTarget:self action:@selector(createOrShowTDPPanel)forControlEvents:UIControlEventTouchUpInside];[w addSubview:b];});}}
+- (void)viewDidLoad {
+    %orig;
+    Class c = NSClassFromString(@"六壬大占.ViewController");
+    if (c && [self isKindOfClass:c]) {
+        g_mainViewController = self; // <<<< 保存主VC的引用
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.5*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+            UIWindow *w=GetFrontmostWindow(); if(!w||[w viewWithTag:kEchoControlButtonTag])return;
+            UIButton *b=[UIButton buttonWithType:UIButtonTypeSystem]; b.frame=CGRectMake(w.bounds.size.width-150,45,140,36); b.tag=kEchoControlButtonTag;
+            [b setTitle:@"推衍课盘" forState:UIControlStateNormal]; b.backgroundColor=ECHO_COLOR_MAIN_BLUE; [b setTitleColor:[UIColor whiteColor]forState:UIControlStateNormal];
+            b.layer.cornerRadius=18; [b addTarget:self action:@selector(createOrShowTDPPanel)forControlEvents:UIControlEventTouchUpInside]; [w addSubview:b];
+        });
+    }
+}
 
 %new
 - (void)createOrShowTDPPanel {
@@ -157,13 +170,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 %new
-- (void)handleTDPExtractionButtonTap:(UIButton *)sender { [self startTDPExtractionWithCompletion:nil]; }
+- (void)handleTDPExtractionButtonTap:(UIButton *)sender { [self startTDPExtraction]; }
 
 %new
-- (void)startTDPExtractionWithCompletion:(void (^)(NSString *))completion {
+- (void)startTDPExtraction {
     if (g_isExtractingTianDiPanDetail) { LogMessage(EchoLogError, @"错误: 提取任务已在进行中。"); return; }
     LogMessage(EchoLogTypeInfo, @"任务启动: 推衍天地盘详情...");
-    g_isExtractingTianDiPanDetail = YES; g_tianDiPan_completion_handler = [completion copy]; g_tianDiPan_workQueue = [g_tianDiPan_fixedCoordinates mutableCopy]; g_tianDiPan_resultsArray = [NSMutableArray array];
+    g_isExtractingTianDiPanDetail = YES; g_tianDiPan_workQueue = [g_tianDiPan_fixedCoordinates mutableCopy]; g_tianDiPan_resultsArray = [NSMutableArray array];
     if (!g_tianDiPan_workQueue || g_tianDiPan_workQueue.count == 0) { LogMessage(EchoLogError, @"错误: 坐标数据库为空或加载失败。"); g_isExtractingTianDiPanDetail = NO; return; }
     [self processTianDiPanQueue];
 }
@@ -171,6 +184,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)processTianDiPanQueue {
     if (g_tianDiPan_workQueue.count == 0) {
+        if (!g_isExtractingTianDiPanDetail) return; // Avoid double execution
+        g_isExtractingTianDiPanDetail = NO;
         LogMessage(EchoLogTypeSuccess, @"完成: 所有天地盘详情提取完毕。");
         NSMutableString *finalReport = [NSMutableString string];
         [finalReport appendString:@"// 天地盘详情 (完整版)\n\n"];
@@ -181,9 +196,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             NSMutableString *simplifiedData = [itemData mutableCopy]; CFStringTransform((__bridge CFMutableStringRef)simplifiedData, NULL, CFSTR("Hant-Hans"), false);
             [finalReport appendFormat:@"-- [%@: %@] --\n%@\n\n", itemType, itemName, simplifiedData];
         }
-        if (g_tianDiPan_completion_handler) { g_tianDiPan_completion_handler([finalReport copy]); } 
-        else { [self presentAIActionSheetWithReport:[finalReport copy]]; }
-        g_isExtractingTianDiPanDetail = NO; g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil; g_tianDiPan_completion_handler = nil;
+
+        [UIPasteboard generalPasteboard].string = finalReport; 
+        UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"天地盘详情已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
+        [ac addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:ac animated:YES completion:nil];
+        
+        g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil;
         return;
     }
 
@@ -191,39 +210,31 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     NSString *name = task[@"name"]; CGPoint point = [task[@"point"] CGPointValue];
     LogMessage(EchoLogTypeInfo, @"正在处理: %@ (%.0f, %.0f)", name, point.x, point.y);
 
-    // ====================== 核心修复点 1 ======================
     NSString *plateViewClassName = @"六壬大占.天地盤視圖類";
-    // =======================================================
     Class plateViewClass = NSClassFromString(plateViewClassName);
     if (!plateViewClass) { LogMessage(EchoLogError,@"关键错误: 找不到类 %@", plateViewClassName); [self processTianDiPanQueue]; return; }
     
     NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
     UIView *plateView = plateViews.firstObject;
-    LogMessage(EchoLogTypeDebug, @"视图已找到: <%p>", plateView);
     
     UITapGestureRecognizer *singleTapGesture = nil;
     for (UIGestureRecognizer *gesture in plateView.gestureRecognizers) {
         if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) { singleTapGesture = (UITapGestureRecognizer *)gesture; break; }
     }
     if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
-    LogMessage(EchoLogTypeDebug, @"手势已找到: <%p>", singleTapGesture);
     
     @try {
         [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
-        LogMessage(EchoLogTypeDebug, @"坐标已注入");
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"坐标注入失败: %@", exception.reason); [self processTianDiPanQueue]; return;
     }
-
-    id target = self;
-    SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-    LogMessage(EchoLogTypeDebug, @"准备触发: Target=<%p>, Action=%@", target, NSStringFromSelector(action));
     
-    if ([target respondsToSelector:action]) {
+    SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+    if ([self respondsToSelector:action]) {
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [target performSelector:action withObject:singleTapGesture];
+        [self performSelector:action withObject:singleTapGesture];
         #pragma clang diagnostic pop
     } else {
         LogMessage(EchoLogError, @"触发失败: Target 无法响应");
@@ -231,23 +242,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-%new
-- (void)presentAIActionSheetWithReport:(NSString *)report {
-    if (!report || report.length == 0) { LogMessage(EchoLogError, @"报告为空"); return; }
-    [UIPasteboard generalPasteboard].string = report; 
-    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"提取完成" message:@"天地盘详情已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
-// 这是正确的代码
-UIAlertAction *copyAction = [UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil];    [actionSheet addAction:copyAction];
-    [self presentViewController:actionSheet animated:YES completion:nil];
-}
-
 %end
 
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
-        MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-Final-Debug] 天地盘详情提取工具(终极调试版)已加载。");
+        NSLog(@"[Echo-Ultimate] 天地盘详情提取工具(最终版)已加载。");
     }
 }
-
