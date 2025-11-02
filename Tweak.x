@@ -23,7 +23,8 @@ static UITextView *g_logTextView = nil;
 static BOOL g_isExtractingTianDiPanDetail = NO;
 static NSMutableArray *g_tianDiPan_workQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
-static __weak UIViewController *g_mainViewController = nil; // <<<< 新增，持有主VC的弱引用
+static __weak UIViewController *g_mainViewController = nil; 
+static NSDate *g_lastTapTime = nil; // 用于防止多次触发
 
 #pragma mark - Coordinate Database (V2.1 - 精准微调版)
 static NSArray *g_tianDiPan_fixedCoordinates = nil;
@@ -126,19 +127,54 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 %hook UIView
 - (void)didMoveToWindow {
     %orig;
-    if (g_isExtractingTianDiPanDetail && self.window && [NSStringFromClass([self class]) isEqualToString:@"_UIPopoverView"]) {
-        LogMessage(EchoLogTypeDebug, @"拦截到 _UIPopoverView!");
-        self.alpha = 0.0f; // Make it invisible
+    if (self.window && g_isExtractingTianDiPanDetail) {
+        // 尝试判断是否是我们的目标弹窗
+        // 我们可以通过检查其内部是否包含UIStackView来进一步验证
+        // 或者直接检查类名，但_UIPopoverView可能是私有类，并且App可能嵌套
+        BOOL isTargetPopup = NO;
         
-        dispatch_async(dispatch_get_main_queue(), ^{
-            NSString *extractedText = extractDataFromStackViewPopup(self);
-            [g_tianDiPan_resultsArray addObject:extractedText];
-            [self removeFromSuperview]; // Immediately remove it
-            
-            if (g_mainViewController) {
-                [g_mainViewController processTianDiPanQueue];
+        // 更通用的判断：如果它包含UIStackView，且没有明确的UIPopoverView父类，
+        // 则可能是我们的目标弹窗内容视图
+        if ([self isKindOfClass:[UIView class]] && !self.superview.isUserInteractionEnabled) { // Simple heuristic
+            NSMutableArray *stackViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive([UIStackView class], self, stackViews);
+            if (stackViews.count > 0) {
+                // Further check for specific labels/content inside the stackView to be more precise
+                // For now, presence of stackView is a strong indicator
+                isTargetPopup = YES;
             }
-        });
+        }
+        
+        // 也可以基于类名直接判断，如果App的弹窗总是用_UIPopoverView
+        // if ([NSStringFromClass([self class]) isEqualToString:@"_UIPopoverView"]) {
+        //     isTargetPopup = YES;
+        // }
+        
+        if (isTargetPopup) {
+            // Add a timestamp check to prevent multiple triggers from nested views moving to window
+            if (g_lastTapTime && [[NSDate date] timeIntervalSinceDate:g_lastTapTime] < 0.1) {
+                LogMessage(EchoLogTypeDebug, @"短时间重复触发，跳过本次didMoveToWindow");
+                return;
+            }
+            g_lastTapTime = [NSDate date];
+            
+            LogMessage(EchoLogTypeDebug, @"拦截到疑似弹出视图: <%@>", NSStringFromClass([self class]));
+            self.alpha = 0.0f; // Make it invisible
+            
+            // Give it a tiny moment to fully layout and load content
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                NSString *extractedText = extractDataFromStackViewPopup(self);
+                [g_tianDiPan_resultsArray addObject:extractedText];
+                [self removeFromSuperview]; // Immediately remove it
+                
+                if (g_mainViewController) {
+                    [g_mainViewController processTianDiPanQueue];
+                } else {
+                    LogMessage(EchoLogError, @"错误: g_mainViewController 为 nil，无法继续处理队列。");
+                    g_isExtractingTianDiPanDetail = NO;
+                }
+            });
+        }
     }
 }
 %end
@@ -178,6 +214,10 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
     LogMessage(EchoLogTypeInfo, @"任务启动: 推衍天地盘详情...");
     g_isExtractingTianDiPanDetail = YES; g_tianDiPan_workQueue = [g_tianDiPan_fixedCoordinates mutableCopy]; g_tianDiPan_resultsArray = [NSMutableArray array];
     if (!g_tianDiPan_workQueue || g_tianDiPan_workQueue.count == 0) { LogMessage(EchoLogError, @"错误: 坐标数据库为空或加载失败。"); g_isExtractingTianDiPanDetail = NO; return; }
+    
+    // Reset g_lastTapTime to allow new sequence of taps
+    g_lastTapTime = nil;
+
     [self processTianDiPanQueue];
 }
 
@@ -230,23 +270,30 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
         LogMessage(EchoLogError, @"坐标注入失败: %@", exception.reason); [self processTianDiPanQueue]; return;
     }
     
+    // Get the *actual* target of the gesture recognizer
+    id actualGestureTarget = nil;
+    NSArray *targets = [singleTapGesture valueForKey:@"_targets"]; // Private array of UIGestureRecognizerTarget
+    if (targets && [targets count] > 0) {
+        actualGestureTarget = [[targets firstObject] valueForKey:@"_target"]; // _target is the actual object
+    }
+    
     SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
-    if ([self respondsToSelector:action]) {
+    if (actualGestureTarget && [actualGestureTarget respondsToSelector:action]) {
         #pragma clang diagnostic push
         #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [self performSelector:action withObject:singleTapGesture];
+        [actualGestureTarget performSelector:action withObject:singleTapGesture];
         #pragma clang diagnostic pop
     } else {
-        LogMessage(EchoLogError, @"触发失败: Target 无法响应");
+        LogMessage(EchoLogError, @"触发失败: 手势的实际 Target 无法响应");
         [self processTianDiPanQueue];
     }
 }
 
-%end
+@end
 
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
-        NSLog(@"[Echo-Ultimate] 天地盘详情提取工具(最终版)已加载。");
+        NSLog(@"[Echo-Ultimate] 天地盘详情提取工具(终极鲁棒版)已加载。");
     }
 }
