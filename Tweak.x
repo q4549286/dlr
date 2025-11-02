@@ -23,8 +23,18 @@ static BOOL g_isExtractingTianDiPanDetail = NO;
 static NSMutableArray *g_tianDiPan_workQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static __weak UIViewController *g_mainViewController = nil;
-// 用于存储 CALayer 和它的类型
 static const void *kAssociatedLayerTypeKey = &kAssociatedLayerTypeKey;
+
+// <<<< 核心修复点: 恢复被误删的函数定义 >>>>
+#pragma mark - Coordinate Database
+static NSArray *g_tianDiPan_fixedCoordinates = nil;
+static void initializeTianDiPanCoordinates() {
+    // This is just a placeholder, as the new logic doesn't use it.
+    // But the function call needs a definition to compile.
+    if (g_tianDiPan_fixedCoordinates) return;
+    g_tianDiPan_fixedCoordinates = @[]; 
+}
+
 
 #pragma mark - Helpers
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
@@ -95,7 +105,6 @@ static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL,
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     if (g_isExtractingTianDiPanDetail) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
-        // 增加了对中宫的拦截
         if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.中宮信息視圖"]) {
             LogMessage(EchoLogTypeDebug, @"[拦截器] 成功捕获目标弹窗: %@", vcClassName);
             vcToPresent.view.alpha = 0.0f;
@@ -151,7 +160,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (g_isExtractingTianDiPanDetail) { LogMessage(EchoLogError, @"错误: 提取任务已在进行中。"); return; }
     LogMessage(EchoLogTypeInfo, @"任务启动: 推衍天地盘详情...");
     
-    // ====================== 核心逻辑 V16 - 构建任务队列 ======================
     g_tianDiPan_workQueue = [NSMutableArray array];
     
     UIView *plateView = nil;
@@ -164,21 +172,19 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         return;
     }
     
-    // 获取所有天将图层
     Ivar tianJiangIvar = class_getInstanceVariable([plateView class], "天將宮名列");
     if(tianJiangIvar) {
         NSDictionary *tianJiangLayers = object_getIvar(plateView, tianJiangIvar);
-        for (CALayer *layer in [tianJiangLayers allValues]) {
-            [g_tianDiPan_workQueue addObject:@{@"layer": layer, @"type": @"tianJiang"}];
+        for (id key in tianJiangLayers) {
+             [g_tianDiPan_workQueue addObject:@{@"layer": tianJiangLayers[key], @"type": @"tianJiang"}];
         }
     }
     
-    // 获取所有上神图层
     Ivar tianShenIvar = class_getInstanceVariable([plateView class], "天神宮名列");
     if (tianShenIvar) {
         NSDictionary *tianShenLayers = object_getIvar(plateView, tianShenIvar);
-        for (CALayer *layer in [tianShenLayers allValues]) {
-            [g_tianDiPan_workQueue addObject:@{@"layer": layer, @"type": @"shangShen"}];
+        for (id key in tianShenLayers) {
+            [g_tianDiPan_workQueue addObject:@{@"layer": tianShenLayers[key], @"type": @"shangShen"}];
         }
     }
     
@@ -186,7 +192,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         LogMessage(EchoLogError, @"关键错误: 未能在天地盘上找到任何可点击的图层");
         return;
     }
-    // =======================================================================
     
     LogMessage(EchoLogTypeInfo, @"构建任务队列完成，共 %lu 个任务。", (unsigned long)g_tianDiPan_workQueue.count);
     g_isExtractingTianDiPanDetail = YES; 
@@ -222,16 +227,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CALayer *layer = task[@"layer"];
     NSString *type = task[@"type"];
     
-    // ====================== 最终解决方案 V16 ======================
     @try {
-        // 1. 创建一个假的 UILabel 作为 "信使"
         UILabel *fakeSender = [[UILabel alloc] init];
-        
-        // 2. 将 CALayer 附加到这个信使上，action 方法可能会需要
-        // 使用 objc_setAssociatedObject, 这是一个标准的运行时特性
         objc_setAssociatedObject(fakeSender, @selector(layer), layer, OBJC_ASSOCIATION_RETAIN);
 
-        // 3. 根据类型决定调用哪个 action 方法
         SEL actionSelector = [type isEqualToString:@"tianJiang"] ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳摘要WithSender:");
         
         LogMessage(EchoLogTypeDebug, @"[模拟器] 准备调用 %@ ...", NSStringFromSelector(actionSelector));
@@ -248,10 +247,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }
 
     } @catch (NSException *exception) {
-        LogMessage(EchoLogError, @"[模拟器] 方案执行失败: %@", exception.reason);
+        LogMessage(EchoLogError, @"[模拟器] V16 方案执行失败: %@", exception.reason);
         [self processTianDiPanQueue];
     }
-    // ===================================================================
 }
 
 %end
@@ -260,6 +258,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-V16-Final] 天地盘详情提取工具(最终胜利版)已加载。");
+        NSLog(@"[Echo-V16.1-Final] 天地盘详情提取工具(编译修正版)已加载。");
     }
 }
