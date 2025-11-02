@@ -668,15 +668,14 @@ static NSString* _parseTianJiangDetailInternal(NSString *rawContent) {
     return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 上神详情专属解析器 (v1.1 - 修复遁干替换和诗句过滤)
+// 上神详情专属解析器 (v1.2 - 修复遁干替换和诗句过滤)
 static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
     
     NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
     NSMutableString *result = [NSMutableString string];
     
-    // 黑名单增加了 "诗象"
-    NSArray *blacklist = @[@"神象", @"诗象", @"星宿", @"禽类", @"身象", @"人类", @"物类", @"方所", @"事类", @"数象"];
+    NSArray *blacklistKeywords = @[@"神象", @"诗象", @"星宿", @"禽类", @"身象", @"人类", @"物类", @"方所", @"事类", @"数象"];
     BOOL isFirstTextualLine = YES;
 
     for (NSString *line in lines) {
@@ -684,9 +683,7 @@ static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
         if (trimmedLine.length == 0) continue;
         
         BOOL isBlacklisted = NO;
-        for (NSString *key in blacklist) {
-            if ([trimmedLine hasPrefix:key]) { isBlacklisted = YES; break; }
-        }
+        for (NSString *key in blacklistKeywords) { if ([trimmedLine hasPrefix:key]) { isBlacklisted = YES; break; } }
         if (isBlacklisted) continue;
         
         if (isFirstTextualLine) {
@@ -698,13 +695,13 @@ static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
 
         if ([trimmedLine hasPrefix:@"一、"] || [trimmedLine hasPrefix:@"二、"]) continue;
 
-        // [修复点 6.1] 过滤诗句 (特征：以中文结尾，且不含常见符号)
-        if (trimmedLine.length > 5 && ![trimmedLine containsString:@"("] && ![trimmedLine containsString:@":"] && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@"，"]) {
-             // 简单判断可能是诗句，丢弃
-             continue;
+        // [修复点 1.1] 强力诗句/释义过滤
+        // 如果一行不包含任何结构化符号，并且不是遁干行，则大概率是诗句或释义
+        if (![trimmedLine containsString:@"("] && ![trimmedLine containsString:@":"] && ![trimmedLine hasPrefix:@"遁干"]) {
+            continue;
         }
 
-        // [修复点 6.2] 替换遁干的 `初建`/`复建`
+        // [修复点 1.2] 确保遁干替换逻辑在此处生效
         if ([trimmedLine hasPrefix:@"遁干"]) {
             trimmedLine = [[trimmedLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干:"]
                                         stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时:"];
@@ -801,8 +798,7 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         xun = [xunInfo substringWithRange:NSMakeRange(bracketStart.location + 1, bracketEnd.location - bracketStart.location - 1)];
         kong = [[xunInfo substringToIndex:bracketStart.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     } else { kong = xunInfo; }
-    [report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ (%@)\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xun, SafeString(reportData[@"昼夜"])];
-
+[report appendFormat:@"// 1.2. 核心参数\n- 月将: %@\n- 旬空: %@ %@\n- 昼夜贵人: %@\n\n", [yueJiang stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], kong, xunPart, SafeString(reportData[@"昼夜"])];
     // --- 板块二: 核心盘架 ---
     [report appendString:@"// 2. 核心盘架\n"];
     if (reportData[@"天地盘"]) [report appendFormat:@"// 2.1. 天地盘\n%@\n\n", reportData[@"天地盘"]];
