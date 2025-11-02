@@ -300,6 +300,8 @@ static NSString* extractDataFromSplitView_S1(UIView *rootView, BOOL includeXiang
 // 2. 统一数据解析器 (重构核心)
 // =========================================================================
 #pragma mark - Unified Data Parser
+static NSString* _parseTianJiangDetailInternal(NSString *rawContent);
+static NSString* _parseShangShenDetailInternal(NSString *rawContent);
 static NSString* parseRawData(NSString *rawData, EchoDataType type);
 static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle);
 
@@ -546,49 +548,29 @@ static NSString* parseJiuZongMenBlock(NSString* rawContent) {
 
 // [修改点 5: 改造天地盘解析器为调度器]
 static NSString* parseTianDiPanDetailBlock(NSString* rawData) {
-    // 先统一转简体
     NSMutableString *simplifiedData = [rawData mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)simplifiedData, NULL, CFSTR("Hant-Hans"), false);
     
-    // 根据内容特征，分派给不同的专业解析器
     if ([simplifiedData containsString:@"阳神为"] || [simplifiedData containsString:@"阴神为"]) {
-         // 这是天将详情的特征
          return _parseTianJiangDetailInternal(simplifiedData);
-    } else if ([simplifiedData containsString:@"遁干"] || [simplified-data containsString:@"神象"]) {
-        // 这是上神详情的特征
-         return _parseShangShenDetailInternal(simplifiedData);
+} else if ([simplifiedData containsString:@"遁干"] || [simplifiedData containsString:@"神象"]) { // <-- 修正后的行
+    return _parseShangShenDetailInternal(simplifiedData);
     }
     
-    // 如果都不是，返回原始简体版
     return simplifiedData;
 }
-// [修改点 3: 新增天将详情的专属解析器]
+// 新增的天将详情专属解析器
 static NSString* _parseTianJiangDetailInternal(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
-    
     NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
     NSMutableString *result = [NSMutableString string];
-    
-    // 保留标题行 (e.g., "朱雀 夜将")
-    if (lines.count > 0) {
-        [result appendFormat:@"%@\n", lines[0]];
-    }
-    
-    // 定义客观关系的关键词
+    if (lines.count > 0) { [result appendFormat:@"%@\n", lines[0]]; }
     NSArray *keywords = @[@"乘", @"临", @"阳神为", @"阴神为"];
-    
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         BOOL isObjectiveFact = NO;
-        for (NSString *key in keywords) {
-            if ([trimmedLine hasPrefix:key]) {
-                isObjectiveFact = YES;
-                break;
-            }
-        }
-        
+        for (NSString *key in keywords) { if ([trimmedLine hasPrefix:key]) { isObjectiveFact = YES; break; } }
         if (isObjectiveFact) {
-            // 清理行尾可能存在的解释
             NSRange conclusionRange = [trimmedLine rangeOfString:@"。"];
             NSString *cleanLine = (conclusionRange.location != NSNotFound) ? [trimmedLine substringToIndex:conclusionRange.location] : trimmedLine;
             [result appendFormat:@"- %@\n", cleanLine];
@@ -596,47 +578,31 @@ static NSString* _parseTianJiangDetailInternal(NSString *rawContent) {
     }
     return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
-// [修改点 4: 新增上神详情的专属解析器]
+
+// 新增的上神详情专属解析器
 static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
-    
     NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
     NSMutableString *result = [NSMutableString string];
-    
-    // 定义要移除的分类关键词
     NSArray *blacklist = @[@"神象", @"诗象", @"星宿", @"禽类", @"身象", @"人类", @"物类", @"方所", @"事类", @"数象"];
-    BOOL isFirstLine = YES;
-
+    BOOL isFirstTextualLine = YES;
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0) continue;
-        
-        // 规则1: 移除黑名单项目
         BOOL isBlacklisted = NO;
-        for (NSString *key in blacklist) {
-            if ([trimmedLine hasPrefix:key]) {
-                isBlacklisted = YES;
-                break;
+        for (NSString *key in blacklist) { if ([trimmedLine hasPrefix:key]) { isBlacklisted = YES; break; } }
+        if (isBlacklisted) continue;
+        // 修正逻辑：只移除第一行且不包含特定字符的行
+        if (isFirstTextualLine) {
+            isFirstTextualLine = NO; // 只判断一次
+            // 判断是否是纯描述性文字
+            if (![trimmedLine containsString:@"("] && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@":"]) {
+                continue;
             }
         }
-        if (isBlacklisted) continue;
-        
-        // 规则2: 移除开头的“神义”段落 (通常是第一段无前缀的长文本)
-        if (isFirstLine && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@"("] && ![trimmedLine hasPrefix:@"-"]) {
-             isFirstLine = NO;
-             continue;
-        }
-        isFirstLine = NO;
-
-        // 规则3: 清理遁干的解释
-        if ([trimmedLine hasPrefix:@"一、"] || [trimmedLine hasPrefix:@"二、"]) {
-            continue;
-        }
-        
-        // 保留剩下的行
+        if ([trimmedLine hasPrefix:@"一、"] || [trimmedLine hasPrefix:@"二、"]) continue;
         [result appendFormat:@"%@\n", trimmedLine];
     }
-    
     return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 // 统一解析器调度中心
@@ -1340,5 +1306,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
