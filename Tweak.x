@@ -413,8 +413,7 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
     // [修正点 3: 增强判断句/断语过滤]
     NSArray<NSString *> *conclusionPatterns = @[
         @"(主|恐|利|不利|则|此主|凡事|又当|故当|当以|大有生意|凶祸更甚|凶祸消磨|其势悖逆|用昼将|唯不利|岁无成|而不能由己|可致福禄重重|情多窒且塞|事虽顺而有耗散之患|生归日辰则无虞|理势自然).*?($|。|，)",
-        @"(^|，|。)\\s*(主|恐|利|不利|则|此主|凡事|又当|故当|当以|不堪期|却无气|事虽新起)[^，。]*",
-        @"(^|。)\\s*用神有气.*?期。" // 新增规则，移除 "用神有气..." 整句
+        @"(^|，|。)\\s*(主|恐|利|不利|则|此主|凡事|又当|故当|当以|不堪期|却无气|事虽新起)[^，。]*"
     ];
     for (NSString *pattern in conclusionPatterns) {
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
@@ -1484,6 +1483,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
