@@ -25,13 +25,6 @@ static NSMutableArray *g_tianDiPan_workQueue = nil;
 static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static __weak UIViewController *g_mainViewController = nil;
 
-#pragma mark - Private API Declarations
-@interface UITouch (Private)
-- (void)setPhase:(UITouchPhase)phase;
-- (void)setTapCount:(NSUInteger)tapCount;
-- (void)_setLocationInWindow:(CGPoint)location resetPrevious:(_Bool)resetPrevious;
-@end
-
 #pragma mark - Coordinate Database
 static NSArray *g_tianDiPan_fixedCoordinates = nil;
 static void initializeTianDiPanCoordinates() {
@@ -57,7 +50,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V6] %@", message);
+    NSLog(@"[Echo-V7] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -215,39 +208,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     
     NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
     if (plateViews.count == 0) { LogMessage(EchoLogError,@"关键错误: 找不到 %@ 的实例", plateViewClassName); [self processTianDiPanQueue]; return; }
-    UIView *plateView = plateViews.firstObject;
     
     UITapGestureRecognizer *singleTapGesture = nil;
-    for (UIGestureRecognizer *gesture in plateView.gestureRecognizers) {
+    for (UIGestureRecognizer *gesture in ((UIView *)plateViews.firstObject).gestureRecognizers) {
         if ([gesture isKindOfClass:[UITapGestureRecognizer class]]) { singleTapGesture = (UITapGestureRecognizer *)gesture; break; }
     }
     if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
     
-    // ====================== 终极决战 V6 ======================
+    // ====================== 决战 V7: 返璞归真 ======================
     @try {
-        UITouch *touch = [[NSClassFromString(@"UITouch") alloc] init];
-        [touch setTapCount:1];
-        [touch setPhase:UITouchPhaseEnded];
-        CGPoint windowPoint = [plateView convertPoint:point toView:plateView.window];
-        [touch _setLocationInWindow:windowPoint resetPrevious:YES];
-        
-        // Find the ivar in the correct class
-        Ivar touchesIvar = class_getInstanceVariable([singleTapGesture class], "_touches");
-        if (touchesIvar) {
-            NSMutableArray *touchesArray = [NSMutableArray arrayWithObject:touch];
-            object_setIvar(singleTapGesture, touchesIvar, touchesArray);
-             LogMessage(EchoLogTypeDebug, @"成功通过 ivar 注入 _touches");
-        } else {
-             LogMessage(EchoLogError, @"致命错误: 找不到 _touches 实例变量!");
-             [self processTianDiPanQueue];
-             return;
-        }
-
         [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
         [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
-
-        LogMessage(EchoLogTypeDebug, @"手势已完全伪造");
-
+        LogMessage(EchoLogTypeDebug, @"坐标和状态已注入");
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"手势伪造失败: %@", exception.reason);
         [self processTianDiPanQueue];
@@ -272,6 +244,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-V6] 天地盘详情提取工具(最终修正版)已加载。");
+        NSLog(@"[Echo-V7] 天地盘详情提取工具(最终决战版)已加载。");
     }
 }
