@@ -12,19 +12,22 @@ static void Tweak_ViewController_didSelectItem(id self, SEL _cmd, UICollectionVi
     NSLog(@"[IndexPath侦察兵] CollectionView: <%@: %p>", NSStringFromClass([collectionView class]), collectionView);
     NSLog(@"[IndexPath侦察兵] IndexPath: [Section: %ld, Item: %ld]", (long)indexPath.section, (long)indexPath.item);
     
-    // 我们可以尝试获取 cell 里的内容，来判断点击了什么
     UICollectionViewCell *cell = [collectionView cellForItemAtIndexPath:indexPath];
     if (cell) {
         NSMutableArray *labels = [NSMutableArray array];
-        // 简单的递归查找 UILabel
-        void (^findLabels)(UIView *) = ^(UIView *view) {
+        
+        // <<<< 核心修复点 >>>>
+        __block void (^findLabels)(UIView *);
+        findLabels = ^(UIView *view) {
             if ([view isKindOfClass:[UILabel class]]) {
-                [labels addObject:((UILabel *)view).text];
+                [labels addObject:((UILabel *)view).text ?: @""];
             }
             for (UIView *subview in view.subviews) {
                 findLabels(subview);
             }
         };
+        // <<<<<<<<<<<<<<<<<<<<
+        
         findLabels(cell.contentView);
         NSLog(@"[IndexPath侦察兵] Cell 内容: %@", [labels componentsJoinedByString:@" | "]);
     } else {
@@ -33,7 +36,6 @@ static void Tweak_ViewController_didSelectItem(id self, SEL _cmd, UICollectionVi
     
     NSLog(@"[IndexPath侦察兵] =========================================================");
 
-    // 调用原始方法
     Original_ViewController_didSelectItem(self, _cmd, collectionView, indexPath);
 }
 
