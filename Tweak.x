@@ -26,19 +26,11 @@ static NSMutableArray<NSString *> *g_tianDiPan_resultsArray = nil;
 static __weak UIViewController *g_mainViewController = nil;
 
 #pragma mark - Private API Declarations
-@interface UIEvent (Private)
-- (void)_addTouch:(id)touch forGestureRecognizer:(id)recognizer;
-@end
 @interface UITouch (Private)
 - (void)setPhase:(UITouchPhase)phase;
 - (void)setTapCount:(NSUInteger)tapCount;
 - (void)_setLocationInWindow:(CGPoint)location resetPrevious:(_Bool)resetPrevious;
 @end
-// This is the key method we're going to use
-@interface UIGestureRecognizer (Private)
-- (void)_addTouch:(UITouch *)touch forEvent:(UIEvent *)event;
-@end
-
 
 #pragma mark - Coordinate Database
 static NSArray *g_tianDiPan_fixedCoordinates = nil;
@@ -65,7 +57,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-FinalAttempt] %@", message);
+    NSLog(@"[Echo-V6] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -231,34 +223,46 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     if (!singleTapGesture) { LogMessage(EchoLogError,@"关键错误: 找不到单击手势"); [self processTianDiPanQueue]; return; }
     
-    // ====================== 终极决战 V4 ======================
+    // ====================== 终极决战 V6 ======================
     @try {
         UITouch *touch = [[NSClassFromString(@"UITouch") alloc] init];
         [touch setTapCount:1];
-        [touch setPhase:UITouchPhaseBegan];
+        [touch setPhase:UITouchPhaseEnded];
         CGPoint windowPoint = [plateView convertPoint:point toView:plateView.window];
         [touch _setLocationInWindow:windowPoint resetPrevious:YES];
-
-        UIEvent *event = [[NSClassFromString(@"UITouchesEvent") alloc] init];
-        [event _addTouch:touch forGestureRecognizer:singleTapGesture];
-
-        SEL addTouchSelector = NSSelectorFromString(@"_addTouch:forEvent:");
-        if ([singleTapGesture respondsToSelector:addTouchSelector]) {
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            [singleTapGesture performSelector:addTouchSelector withObject:touch withObject:event];
-            #pragma clang diagnostic pop
-            LogMessage(EchoLogTypeDebug, @"成功调用 _addTouch:forEvent:");
+        
+        // Find the ivar in the correct class
+        Ivar touchesIvar = class_getInstanceVariable([singleTapGesture class], "_touches");
+        if (touchesIvar) {
+            NSMutableArray *touchesArray = [NSMutableArray arrayWithObject:touch];
+            object_setIvar(singleTapGesture, touchesIvar, touchesArray);
+             LogMessage(EchoLogTypeDebug, @"成功通过 ivar 注入 _touches");
         } else {
-             LogMessage(EchoLogError, @"致命错误: 手势无法响应 _addTouch:forEvent:");
+             LogMessage(EchoLogError, @"致命错误: 找不到 _touches 实例变量!");
              [self processTianDiPanQueue];
              return;
         }
+
+        [singleTapGesture setValue:[NSValue valueWithCGPoint:point] forKey:@"_locationInView"];
+        [singleTapGesture setValue:@(UIGestureRecognizerStateEnded) forKey:@"state"];
+
+        LogMessage(EchoLogTypeDebug, @"手势已完全伪造");
 
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"手势伪造失败: %@", exception.reason);
         [self processTianDiPanQueue];
         return;
+    }
+    
+    SEL action = NSSelectorFromString(@"顯示天地盤觸摸WithSender:");
+    if ([self respondsToSelector:action]) {
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        [self performSelector:action withObject:singleTapGesture];
+        #pragma clang diagnostic pop
+    } else {
+        LogMessage(EchoLogError, @"触发失败: Target 无法响应");
+        [self processTianDiPanQueue];
     }
     // =============================================================
 }
@@ -268,6 +272,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     @autoreleasepool {
         initializeTianDiPanCoordinates();
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo-FinalAttempt] 天地盘详情提取工具(最终版)已加载。");
+        NSLog(@"[Echo-V6] 天地盘详情提取工具(最终修正版)已加载。");
     }
 }
