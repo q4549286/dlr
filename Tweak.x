@@ -380,8 +380,13 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
 static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
     NSMutableString *workingContent = [rawContent mutableCopy];
-    NSArray<NSString *> *blockRemovalMarkers = @[@"三传事体→", @"日辰关系→", @"日辰上乘"];
-    for (NSString *marker in blockRemovalMarkers) {
+NSArray<NSString *> *blockRemovalMarkers = @[
+    @"发用事端→", // <-- 新增这一行
+    @"三传事体→",
+    @"日辰关系→",
+    @"日辰上乘"
+];
+for (NSString *marker in blockRemovalMarkers) {
         NSRange markerRange = [workingContent rangeOfString:marker];
         if (markerRange.location != NSNotFound) { workingContent = [[workingContent substringToIndex:markerRange.location] mutableCopy]; }
     }
@@ -394,7 +399,7 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
         while (![previous isEqualToString:workingContent]);
     }
     [workingContent replaceOccurrencesOfString:@"\n" withString:@" " options:0 range:NSMakeRange(0, workingContent.length)];
-    NSArray *conjunctionsToRemove = @[@"但", @"却", @"又，"];
+    NSArray *conjunctionsToRemove = @[@"但", @"又，"];
     for (NSString *conj in conjunctionsToRemove) { [workingContent replaceOccurrencesOfString:[NSString stringWithFormat:@"%@ ", conj] withString:@"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, workingContent.length)]; }
     while ([workingContent containsString:@"  "]) { [workingContent replaceOccurrencesOfString:@"  " withString:@" " options:0 range:NSMakeRange(0, workingContent.length)]; }
     [workingContent replaceOccurrencesOfString:@"\\s*([，。])\\s*" withString:@"$1" options:NSRegularExpressionSearch range:NSMakeRange(0, workingContent.length)];
@@ -539,12 +544,101 @@ static NSString* parseJiuZongMenBlock(NSString* rawContent) {
     return [cleaned stringByReplacingOccurrencesOfString:@"\n" withString:@"\n  "];
 }
 
+// [修改点 5: 改造天地盘解析器为调度器]
 static NSString* parseTianDiPanDetailBlock(NSString* rawData) {
+    // 先统一转简体
     NSMutableString *simplifiedData = [rawData mutableCopy];
     CFStringTransform((__bridge CFMutableStringRef)simplifiedData, NULL, CFSTR("Hant-Hans"), false);
+    
+    // 根据内容特征，分派给不同的专业解析器
+    if ([simplifiedData containsString:@"阳神为"] || [simplifiedData containsString:@"阴神为"]) {
+         // 这是天将详情的特征
+         return _parseTianJiangDetailInternal(simplifiedData);
+    } else if ([simplifiedData containsString:@"遁干"] || [simplified-data containsString:@"神象"]) {
+        // 这是上神详情的特征
+         return _parseShangShenDetailInternal(simplifiedData);
+    }
+    
+    // 如果都不是，返回原始简体版
     return simplifiedData;
 }
+// [修改点 3: 新增天将详情的专属解析器]
+static NSString* _parseTianJiangDetailInternal(NSString *rawContent) {
+    if (!rawContent || rawContent.length == 0) return @"";
+    
+    NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
+    NSMutableString *result = [NSMutableString string];
+    
+    // 保留标题行 (e.g., "朱雀 夜将")
+    if (lines.count > 0) {
+        [result appendFormat:@"%@\n", lines[0]];
+    }
+    
+    // 定义客观关系的关键词
+    NSArray *keywords = @[@"乘", @"临", @"阳神为", @"阴神为"];
+    
+    for (NSString *line in lines) {
+        NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        BOOL isObjectiveFact = NO;
+        for (NSString *key in keywords) {
+            if ([trimmedLine hasPrefix:key]) {
+                isObjectiveFact = YES;
+                break;
+            }
+        }
+        
+        if (isObjectiveFact) {
+            // 清理行尾可能存在的解释
+            NSRange conclusionRange = [trimmedLine rangeOfString:@"。"];
+            NSString *cleanLine = (conclusionRange.location != NSNotFound) ? [trimmedLine substringToIndex:conclusionRange.location] : trimmedLine;
+            [result appendFormat:@"- %@\n", cleanLine];
+        }
+    }
+    return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+// [修改点 4: 新增上神详情的专属解析器]
+static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
+    if (!rawContent || rawContent.length == 0) return @"";
+    
+    NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
+    NSMutableString *result = [NSMutableString string];
+    
+    // 定义要移除的分类关键词
+    NSArray *blacklist = @[@"神象", @"诗象", @"星宿", @"禽类", @"身象", @"人类", @"物类", @"方所", @"事类", @"数象"];
+    BOOL isFirstLine = YES;
 
+    for (NSString *line in lines) {
+        NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        if (trimmedLine.length == 0) continue;
+        
+        // 规则1: 移除黑名单项目
+        BOOL isBlacklisted = NO;
+        for (NSString *key in blacklist) {
+            if ([trimmedLine hasPrefix:key]) {
+                isBlacklisted = YES;
+                break;
+            }
+        }
+        if (isBlacklisted) continue;
+        
+        // 规则2: 移除开头的“神义”段落 (通常是第一段无前缀的长文本)
+        if (isFirstLine && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@"("] && ![trimmedLine hasPrefix:@"-"]) {
+             isFirstLine = NO;
+             continue;
+        }
+        isFirstLine = NO;
+
+        // 规则3: 清理遁干的解释
+        if ([trimmedLine hasPrefix:@"一、"] || [trimmedLine hasPrefix:@"二、"]) {
+            continue;
+        }
+        
+        // 保留剩下的行
+        [result appendFormat:@"%@\n", trimmedLine];
+    }
+    
+    return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
 // 统一解析器调度中心
 static NSString* parseRawData(NSString *rawData, EchoDataType type) {
     if (!rawData || rawData.length == 0) return @"";
@@ -655,8 +749,8 @@ static NSString* generateStructuredReport(NSDictionary *reportData) {
         @{ @"key": @"九宗门_详", @"title": @"格局总览 (九宗门)", @"type": @(EchoDataTypeJiuZongMen)},
         @{ @"key": @"行年参数", @"title": @"模块二：【天命系统】 - A级情报", @"type": @(EchoDataTypeNianming)},
         @{ @"key": @"神煞详情", @"title": @"神煞系统", @"type": @(EchoDataTypeShenSha)},
-        @{ @"key": @"七政四余", @"title": @"辅助系统", @"type": @(EchoDataTypeQiZheng)},
-        @{ @"key": @"三宫时信息", @"title": @"辅助系统", @"type": @(EchoDataTypeSanGong), @"isSubSection": @YES},
+   //     @{ @"key": @"七政四余", @"title": @"辅助系统", @"type": @(EchoDataTypeQiZheng)},
+   //     @{ @"key": @"三宫时信息", @"title": @"辅助系统", @"type": @(EchoDataTypeSanGong), @"isSubSection": @YES},
     ];
 
     NSMutableString *auxiliaryContent = [NSMutableString string];
@@ -1246,4 +1340,5 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
