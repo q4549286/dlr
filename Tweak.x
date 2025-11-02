@@ -119,9 +119,9 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
     NSLog(@"[Echo-Coords-Extractor] ========== 开始提取天地盘坐标 ==========");
     
     @try {
-        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
+        Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
         if (!plateViewClass) {
-            NSLog(@"[Echo-Coords-Extractor] 错误: 找不到视图类 六壬大占.天地盤視圖");
+            NSLog(@"[Echo-Coords-Extractor] 错误: 找不到视图类 六壬大占.天地盤視圖類");
             return;
         }
         
@@ -134,7 +134,7 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
         NSMutableArray *plateViews = [NSMutableArray array];
         FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
         if (plateViews.count == 0) {
-            NSLog(@"[Echo-Coords-Extractor] 错误: 找不到 天地盤視圖 实例");
+            NSLog(@"[Echo-Coords-Extractor] 错误: 找不到 天地盤視圖類 实例");
             return;
         }
         
@@ -220,3 +220,4 @@ static void FindSubviewsOfClassRecursive(Class aClass, UIView *view, NSMutableAr
 %ctor {
     NSLog(@"[Echo-Coords-Extractor] 坐标提取工具已加载。");
 }
+
