@@ -145,27 +145,32 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
+    // 检查是否是我们正在进行的提取任务
     if (g_isExtractingTianDiPanDetail) {
         NSString *vcClassName = NSStringFromClass([vcToPresent class]);
+        
+        // 检查是否是我们想要拦截的目标弹窗
         if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.中宮信息視圖"]) {
-            LogMessage(EchoLogTypeDebug, @"[拦截器] 成功捕获目标弹窗: %@", vcClassName);
-            vcToPresent.view.alpha = 0.0f;
             
-            Original_presentViewController(self, _cmd, vcToPresent, NO, ^(void){
-                dispatch_async(dispatch_get_main_queue(), ^{
-                     NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
-                     [g_tianDiPan_resultsArray addObject:extractedText];
-                     [vcToPresent dismissViewControllerAnimated:NO completion:^{
-                         if (g_mainViewController) {
-                            [g_mainViewController processTianDiPanQueue];
-                         }
-                     }];
-                });
-                if(completion) completion();
+            LogMessage(EchoLogTypeDebug, @"[拦截器] 成功捕获目标弹窗: %@", vcClassName);
+            
+            // 1. 直接从“即将呈现”的视图控制器中提取数据
+            NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
+            [g_tianDiPan_resultsArray addObject:extractedText];
+            
+            // 2. 异步调用队列处理函数，继续下一个任务
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (g_mainViewController) {
+                    [g_mainViewController processTianDiPanQueue];
+                }
             });
-            return;
+            
+            // 3. 关键：直接返回，不调用原始的 presentViewController 方法，从而阻止弹窗出现
+            return; 
         }
     }
+    
+    // 如果不是我们的目标，或者提取任务未开始，则正常显示所有其他弹窗
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
@@ -269,3 +274,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo-V18-Final] 天地盘详情提取工具(胜利版)已加载。");
     }
 }
+
