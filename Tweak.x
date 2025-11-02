@@ -15,11 +15,9 @@ static void (^g_tianDiPan_completion_handler)(NSString *result) = nil;
 
 
 #pragma mark - 辅助函数 & 私有接口声明
-// 为编译器声明私有方法，避免警告
 @interface UIEvent (Private)
 - (void)_addTouch:(id)touch forDelayedDelivery:(BOOL)arg2;
 @end
-
 @interface UITouch (Private)
 - (void)setTimestamp:(NSTimeInterval)timestamp;
 - (void)setPhase:(UITouchPhase)phase;
@@ -40,9 +38,7 @@ static UIWindow* GetFrontmostWindow() {
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
-                for (UIWindow *window in scene.windows) {
-                    if (window.isKeyWindow) { frontmostWindow = window; break; }
-                }
+                for (UIWindow *window in scene.windows) { if (window.isKeyWindow) { frontmostWindow = window; break; } }
                 if (frontmostWindow) break;
             }
         }
@@ -104,7 +100,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 }];
             });
             Original_presentViewController(self, _cmd, vcToPresent, NO, nil);
-            return; 
+            return;
         }
     }
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
@@ -124,7 +120,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)ECHO_injectTianDiPanButton {
     UIWindow *keyWindow = GetFrontmostWindow();
     if (!keyWindow || [keyWindow viewWithTag:12345]) return;
-
     UIButton *testButton = [UIButton buttonWithType:UIButtonTypeSystem];
     testButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 85, 140, 36);
     testButton.tag = 12345;
@@ -143,9 +138,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         EchoLog(EchoLogTypeWarning, @"任务已在进行中，请勿重复点击。");
         return;
     }
-    
     EchoLog(EchoLogTypeInfo, @"==================== 任务启动 ====================");
-    
     g_isExtractingTianDiPanDetail = YES;
     g_tianDiPan_workQueue = [NSMutableArray array];
     g_tianDiPan_resultsArray = [NSMutableArray array];
@@ -154,7 +147,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         UIPasteboard.generalPasteboard.string = finalResult;
         EchoLog(EchoLogTypeSuccess, @"所有天地盘详情提取完毕，结果已打印并复制到剪贴板！");
     };
-
     NSArray<NSDictionary *> *targets = [self ECHO_getTianDiPanClickableTargets];
     if (!targets || targets.count == 0) {
         EchoLog(EchoLogError, @"未能获取任何可点击的目标，任务中止。");
@@ -163,26 +155,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
     [g_tianDiPan_workQueue addObjectsFromArray:targets];
     EchoLog(EchoLogTypeInfo, @"成功定位到 %lu 个可点击目标，已创建工作队列。", (unsigned long)g_tianDiPan_workQueue.count);
-
     [self ECHO_processTianDiPanQueue];
 }
 
+// MARK: v1.3 - 核心修正点
 %new
 - (void)ECHO_processTianDiPanQueue {
     if (g_tianDiPan_workQueue.count == 0) {
         EchoLog(EchoLogTypeSuccess, @"所有任务处理完毕，正在整理最终报告...");
         NSMutableString *report = [NSMutableString string];
         for (NSString *result in g_tianDiPan_resultsArray) {
-            [report appendString:result];
-            [report appendString:@"\n--------------------\n"];
+            [report appendString:result]; [report appendString:@"\n--------------------\n"];
         }
-        if (g_tianDiPan_completion_handler) {
-            g_tianDiPan_completion_handler(report);
-        }
-        g_isExtractingTianDiPanDetail = NO;
-        g_tianDiPan_workQueue = nil;
-        g_tianDiPan_resultsArray = nil;
-        g_tianDiPan_completion_handler = nil;
+        if (g_tianDiPan_completion_handler) { g_tianDiPan_completion_handler(report); }
+        g_isExtractingTianDiPanDetail = NO; g_tianDiPan_workQueue = nil; g_tianDiPan_resultsArray = nil; g_tianDiPan_completion_handler = nil;
         EchoLog(EchoLogTypeInfo, @"==================== 任务结束 ====================");
         return;
     }
@@ -196,17 +182,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
-        EchoLog(EchoLogError, @"找不到天地盘视图类 `天地盤視圖類`，无法继续。");
-        [self ECHO_processTianDiPanQueue];
-        return;
+        EchoLog(EchoLogError, @"找不到天地盘视图类 `天地盤視圖類`，跳过任务。");
+        [self ECHO_processTianDiPanQueue]; return;
     }
     
+    // MARK: 关键修正 - 搜索整个 window，而不是 self.view
+    UIWindow *keyWindow = GetFrontmostWindow();
     NSMutableArray *plateViews = [NSMutableArray array];
-    FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
+    FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
+    
     if (plateViews.count == 0) {
-        EchoLog(EchoLogError, @"找不到天地盘视图实例，无法继续。");
-        [self ECHO_processTianDiPanQueue];
-        return;
+        EchoLog(EchoLogError, @"在当前窗口中找不到天地盘视图实例，跳过任务。");
+        [self ECHO_processTianDiPanQueue]; return;
     }
     UIView *plateView = plateViews.firstObject;
 
@@ -215,17 +202,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         if ([g isKindOfClass:[UITapGestureRecognizer class]]) { gesture = (UITapGestureRecognizer *)g; break; }
     }
     if (!gesture) {
-        EchoLog(EchoLogError, @"在天地盘视图上找不到 UITapGestureRecognizer，无法继续。");
-        [self ECHO_processTianDiPanQueue];
-        return;
+        EchoLog(EchoLogError, @"在天地盘视图上找不到 UITapGestureRecognizer，跳过任务。");
+        [self ECHO_processTianDiPanQueue]; return;
     }
 
     @try {
         UIWindow *window = plateView.window;
         if (!window) {
-            EchoLog(EchoLogError, @"plateView 没有关联的 window，无法创建事件。");
-            [self ECHO_processTianDiPanQueue];
-            return;
+            EchoLog(EchoLogError, @"plateView 没有关联的 window，无法创建事件，跳过任务。");
+            [self ECHO_processTianDiPanQueue]; return;
         }
         CGPoint targetPosition = [task[@"position"] CGPointValue];
         
@@ -260,29 +245,22 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     NSMutableArray<NSString *> *finalTextParts = [NSMutableArray array];
     NSMutableArray *allStackViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UIStackView class], contentView, allStackViews);
-
     if (allStackViews.count > 0) {
         UIStackView *mainStackView = allStackViews.firstObject;
         for (UIView *subview in mainStackView.arrangedSubviews) {
             if ([subview isKindOfClass:[UILabel class]]) {
-                NSString *text = ((UILabel *)subview).text;
-                if (text && text.length > 0) [finalTextParts addObject:text];
-            } 
-            else if ([subview isKindOfClass:NSClassFromString(@"六壬大占.IntrinsicTableView")]) {
+                NSString *text = ((UILabel *)subview).text; if (text && text.length > 0) [finalTextParts addObject:text];
+            } else if ([subview isKindOfClass:NSClassFromString(@"六壬大占.IntrinsicTableView")]) {
                 UITableView *tableView = (UITableView *)subview;
                 id<UITableViewDataSource> dataSource = tableView.dataSource;
                 if (dataSource) {
-                    NSInteger sections = 1;
-                    if ([dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)]) {
-                        sections = [dataSource numberOfSectionsInTableView:tableView];
-                    }
+                    NSInteger sections = [dataSource respondsToSelector:@selector(numberOfSectionsInTableView:)] ? [dataSource numberOfSectionsInTableView:tableView] : 1;
                     for (NSInteger s = 0; s < sections; s++) {
                         NSInteger rows = [dataSource tableView:tableView numberOfRowsInSection:s];
                         for (NSInteger r = 0; r < rows; r++) {
                             UITableViewCell *cell = [dataSource tableView:tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:r inSection:s]];
                             if (cell) {
-                                NSMutableArray *labels = [NSMutableArray array];
-                                FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labels);
+                                NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], cell.contentView, labels);
                                 [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2){ return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)]; }];
                                 NSMutableArray<NSString *> *cellParts = [NSMutableArray array];
                                 for(UILabel *l in labels) { if(l.text.length > 0) [cellParts addObject:l.text]; }
@@ -299,58 +277,47 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         FindSubviewsOfClassRecursive([UILabel class], contentView, allLabels);
         for(UILabel *l in allLabels) { if (l.text.length > 0) [finalTextParts addObject:l.text]; }
     }
-
     return [finalTextParts componentsJoinedByString:@"\n"];
 }
 
+// MARK: v1.3 - 核心修正点
 %new
 - (NSArray<NSDictionary *> *)ECHO_getTianDiPanClickableTargets {
     @try {
         Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
         if (!plateViewClass) { EchoLog(EchoLogError, @"定位失败: 找不到视图类 `天地盤視圖類`"); return nil; }
 
+        // MARK: 关键修正 - 搜索整个 window，而不是 self.view
+        UIWindow *keyWindow = GetFrontmostWindow();
         NSMutableArray *plateViews = [NSMutableArray array];
-        FindSubviewsOfClassRecursive(plateViewClass, self.view, plateViews);
-        if (plateViews.count == 0) { EchoLog(EchoLogError, @"定位失败: 找不到视图实例"); return nil; }
+        FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews);
+        
+        if (plateViews.count == 0) { EchoLog(EchoLogError, @"定位失败: 在当前窗口中找不到视图实例"); return nil; }
 
         UIView *plateView = plateViews.firstObject;
         id diGongDict = [self ECHO_getIvarValueSafely:plateView ivarNameSuffix:@"地宮宮名列"];
         id tianJiangDict = [self ECHO_getIvarValueSafely:plateView ivarNameSuffix:@"天將宮名列"];
 
         if (!diGongDict || !tianJiangDict) { EchoLog(EchoLogError, @"定位失败: 未能获取核心数据字典"); return nil; }
-
-        NSMutableArray<NSDictionary *> *targets = [NSMutableArray array];
         
+        NSMutableArray<NSDictionary *> *targets = [NSMutableArray array];
         for (id key in [diGongDict allKeys]) {
             CALayer *layer = diGongDict[key];
             if (layer && [layer isKindOfClass:[CALayer class]]) {
                 NSString *name = [self ECHO_getStringFromLayer:layer];
-                CGPoint pointInSuperlayer = layer.position;
-                CGPoint position = [plateView.layer convertPoint:pointInSuperlayer fromLayer:layer.superlayer];
-                [targets addObject:@{
-                    @"name": name,
-                    @"type": @"gongWei",
-                    @"position": [NSValue valueWithCGPoint:position]
-                }];
+                CGPoint position = [plateView.layer convertPoint:layer.position fromLayer:layer.superlayer];
+                [targets addObject:@{ @"name": name, @"type": @"gongWei", @"position": [NSValue valueWithCGPoint:position] }];
             }
         }
-
         for (id key in [tianJiangDict allKeys]) {
             CALayer *layer = tianJiangDict[key];
             if (layer && [layer isKindOfClass:[CALayer class]]) {
                 NSString *name = [self ECHO_getStringFromLayer:layer];
-                CGPoint pointInSuperlayer = layer.position;
-                CGPoint position = [plateView.layer convertPoint:pointInSuperlayer fromLayer:layer.superlayer];
-                [targets addObject:@{
-                    @"name": name,
-                    @"type": @"tianJiang",
-                    @"position": [NSValue valueWithCGPoint:position]
-                }];
+                CGPoint position = [plateView.layer convertPoint:layer.position fromLayer:layer.superlayer];
+                [targets addObject:@{ @"name": name, @"type": @"tianJiang", @"position": [NSValue valueWithCGPoint:position] }];
             }
         }
-        
         return [targets copy];
-        
     } @catch (NSException *exception) {
         EchoLog(EchoLogError, @"定位异常: %@", exception.reason);
         return nil;
@@ -368,10 +335,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         const char *name = ivar_getName(ivars[i]);
         if (name) {
             NSString *ivarName = [NSString stringWithUTF8String:name];
-            if ([ivarName hasSuffix:ivarNameSuffix]) {
-                value = object_getIvar(object, ivars[i]);
-                break;
-            }
+            if ([ivarName hasSuffix:ivarNameSuffix]) { value = object_getIvar(object, ivars[i]); break; }
         }
     }
     free(ivars);
@@ -392,6 +356,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[EchoTDP] 天地盘独立提取脚本 v1.2 (防闪退版) 已加载。");
+        NSLog(@"[EchoTDP] 天地盘独立提取脚本 v1.3 (全局搜索修正版) 已加载。");
     }
 }
