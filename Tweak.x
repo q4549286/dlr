@@ -379,19 +379,24 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
+// 解析方法过滤器 (v6.1 - 修复模块分割问题)
 static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
-    NSMutableString *workingContent = [rawContent mutableCopy];
-NSArray<NSString *> *blockRemovalMarkers = @[
-    @"发用事端→", // <-- 新增这一行
-    @"三传事体→",
-    @"日辰关系→",
-    @"日辰上乘"
-];
-for (NSString *marker in blockRemovalMarkers) {
+    
+    // [修复点 2.1] 预处理，强制在标题前换行
+    NSString *preprocessedContent = [rawContent stringByReplacingOccurrencesOfString:@"→" withString:@"→\n"];
+    NSMutableString *workingContent = [preprocessedContent mutableCopy];
+    
+    // ... [区块过滤器和后续所有逻辑保持不变]
+    NSArray<NSString *> *blockRemovalMarkers = @[@"发用事端→", @"三传事体→", @"日辰关系→", @"日辰上乘"];
+    for (NSString *marker in blockRemovalMarkers) {
         NSRange markerRange = [workingContent rangeOfString:marker];
-        if (markerRange.location != NSNotFound) { workingContent = [[workingContent substringToIndex:markerRange.location] mutableCopy]; }
+        if (markerRange.location != NSNotFound) {
+            // 找到标题后，移除从标题开始的所有内容
+            [workingContent deleteCharactersInRange:NSMakeRange(markerRange.location, workingContent.length - markerRange.location)];
+        }
     }
+    // ... [剩下的所有过滤规则和格式化代码都保持原样]
     NSArray<NSString *> *boilerplateSentences = @[ @"凡看来情，以占之正时，详其与日之生克刑合，则于所占事体，可先有所主，故曰先锋门。", @"此以用神所乘所临，以及与日之生合刑墓等断事发之机。", @"此以三传之进退顺逆、有气无气、顺生逆克等而定事情之大体。", @"此以日辰对较而定主客彼我之关系，大体日为我，辰为彼；日为人，辰为宅；日为尊，辰为卑；日为老，辰为幼；日为夫，辰为妻；日为官，辰为民；出行则日为陆为车，辰则为水为舟；日为出，为南向，为前方，辰则为入，为北向，为后方；占病则以日为人，以辰为病；占产则以日为子，以辰为母；占农则以日为农夫，以辰为谷物；占猎则以日为猎师，以辰为鸟兽。故日辰之位，随占不同，总要依类而推之，方无差谬。", @"此以用神之旺相并天乙前后断事情之迟速，并以用神所合之岁月节候而定事体之远近，复以天上季神所临定成事之期。" ];
     for (NSString *sentence in boilerplateSentences) { [workingContent replaceOccurrencesOfString:sentence withString:@"" options:0 range:NSMakeRange(0, workingContent.length)]; }
     NSArray<NSString *> *conclusionPatterns = @[ @"(主|恐|利|不利|则|此主|凡事|又当|故当|当以|大有生意|凶祸更甚|凶祸消磨|其势悖逆|用昼将|唯不利|岁无成|而不能由己|可致福禄重重|情多窒且塞|事虽顺而有耗散之患|生归日辰则无虞|理势自然).*?($|。|，)", @"(^|，|。)\\s*(主|恐|利|不利|则|此主|凡事|又当|故当|当以|不堪期|却无气|事虽新起)[^，。]*" ];
@@ -460,35 +465,28 @@ static NSString* parseAndFilterShenSha(NSString *rawContent) {
     return [finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 课传流注详情解析器 (v2.5 - 新增格局/变体识别，移除纯释义)
+// 课传流注详情解析器 (v2.7 - 修复格局释义过滤 & 遁干优先级)
 static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle) {
     if (!rawText || rawText.length == 0) return @"";
 
     NSMutableString *structuredResult = [NSMutableString string];
     NSArray<NSString *> *lines = [rawText componentsSeparatedByString:@"\n"];
     NSMutableArray<NSString *> *processedLines = [NSMutableArray array];
-
     BOOL isTianJiangObject = (objectTitle && [objectTitle containsString:@"天将"]);
 
     // --- 阶段一：提取核心状态 (旺衰, 长生, 及特殊状态) ---
+    // [这部分逻辑不变]
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
-        
         if (objectTitle && [objectTitle containsString:@"日干"]) {
             NSRegularExpression *riGanWangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"寄(.)得([^，。]*)" options:0 error:nil];
             NSTextCheckingResult *riGanMatch = [riGanWangshuaiRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
-
             if (riGanMatch && [structuredResult rangeOfString:@"日干旺衰:"].location == NSNotFound) {
-                NSString *jiChen = [trimmedLine substringWithRange:[riGanMatch rangeAtIndex:1]];
-                NSString *deQi   = [[trimmedLine substringWithRange:[riGanMatch rangeAtIndex:2]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-                
-                [structuredResult appendFormat:@"  - 日干旺衰: %@ (因寄%@)\n", deQi, jiChen];
-                [processedLines addObject:trimmedLine];
-                continue;
+                [structuredResult appendFormat:@"  - 日干旺衰: %@ (因寄%@)\n", [[trimmedLine substringWithRange:[riGanMatch rangeAtIndex:2]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]], [trimmedLine substringWithRange:[riGanMatch rangeAtIndex:1]]];
+                [processedLines addObject:trimmedLine]; continue;
             }
         }
-        
         if (isTianJiangObject) {
             NSRegularExpression *wangshuaiRegex = [NSRegularExpression regularExpressionWithPattern:@"(得|值)四时(.)气" options:0 error:nil];
             NSTextCheckingResult *wangshuaiMatch = [wangshuaiRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
@@ -497,7 +495,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                 [processedLines addObject:trimmedLine]; continue;
             }
         }
-        
         NSRegularExpression *changshengRegex = [NSRegularExpression regularExpressionWithPattern:@"临(.)为(.+之地)" options:0 error:nil];
         NSTextCheckingResult *changshengMatch = [changshengRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)];
         if (changshengMatch && [structuredResult rangeOfString:@"长生:"].location == NSNotFound) {
@@ -506,33 +503,44 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         }
     }
 
-    // --- 阶段二：处理所有其他关系，并应用强力过滤引擎 ---
+    // --- 阶段二：处理所有其他关系 ---
     NSDictionary<NSString *, NSString *> *keywordMap = @{
-        @"乘": @"乘将关系", @"临": @"临宫状态",
-        @"遁干": @"遁干A+", @"德 :": @"德S+", @"空 :": @"空A+",  @"墓 :": @"墓A+",@"合 :": @"合A+",
+        @"乘": @"乘将关系", @"临": @"临宫状态", @"遁干": @"遁干A+",
+        @"德 :": @"德S+", @"空 :": @"空A+", @"墓 :": @"墓A+", @"合 :": @"合A+",
         @"刑 :": @"刑C-", @"冲 :": @"冲B+", @"害 :": @"害C-", @"破 :": @"破D",
         @"阳神为": @"阳神A+", @"阴神为": @"阴神A+", @"杂象": @"杂象B+",
     };
     
     BOOL inZaxiang = NO;
+    BOOL skipNextLineAsExplanation = NO; // [修复点 1.1] 新增状态标志
+
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
 
-        if (inZaxiang) {
-            [structuredResult appendFormat:@"    - %@\n", trimmedLine];
-            [processedLines addObject:trimmedLine]; continue;
+        // [修复点 1.2] 如果上一行是格局，则跳过这一行（释义）
+        if (skipNextLineAsExplanation) {
+            skipNextLineAsExplanation = NO;
+            continue;
         }
 
-        // <<< 新增对“变体/格局”的识别规则 >>>
-        NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
-        if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
-            NSRange reasonRange = [trimmedLine rangeOfString:@"因"];
-            NSString *cleanLine = (reasonRange.location != NSNotFound) ? [trimmedLine substringToIndex:reasonRange.location] : trimmedLine;
-            cleanLine = [cleanLine stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            [structuredResult appendFormat:@"  - 格局: %@\n", cleanLine];
-            [processedLines addObject:trimmedLine];
-            continue;
+        if (inZaxiang) { [structuredResult appendFormat:@"    - %@\n", trimmedLine]; [processedLines addObject:trimmedLine]; continue; }
+
+        // [修复点 3.1] 优先处理遁干，防止被格局规则误判
+        if ([trimmedLine hasPrefix:@"遁干"]) {
+            // 这是遁干行，按关键词逻辑处理
+        } else {
+            // 如果不是遁干行，再检查是否是格局行
+            NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
+            if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
+                NSRange reasonRange = [trimmedLine rangeOfString:@"因"];
+                NSString *cleanLine = (reasonRange.location != NSNotFound) ? [trimmedLine substringToIndex:reasonRange.location] : trimmedLine;
+                cleanLine = [cleanLine stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                [structuredResult appendFormat:@"  - 格局: %@\n", cleanLine];
+                [processedLines addObject:trimmedLine];
+                skipNextLineAsExplanation = YES; // [修复点 1.3] 设置标志，跳过下一行
+                continue;
+            }
         }
 
         for (NSString *keyword in keywordMap.allKeys) {
@@ -546,14 +554,13 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                                      stringByReplacingOccurrencesOfString:@"丁" withString:@"丁神"]
                                      stringByReplacingOccurrencesOfString:@"癸" withString:@"闭口"];
                 }
-                
+                // ... [其他 value 清理逻辑不变]
                 NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知).*$" options:0 error:nil];
                 value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
                 if ([label hasPrefix:@"刑"] || [label hasPrefix:@"冲"] || [label hasPrefix:@"害"] || [label hasPrefix:@"破"]) {
                     NSArray *parts = [value componentsSeparatedByString:@" "];
                     if (parts.count > 0) value = parts[0];
                 }
-
                 if ([label hasPrefix:@"杂象"]) { inZaxiang = YES; }
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" ,，。"]];
                 if (value.length > 0) {
@@ -563,19 +570,13 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                          [structuredResult appendFormat:@"  - %@: %@\n", label, value];
                      }
                 }
-                
                 [processedLines addObject:trimmedLine];
                 break;
             }
         }
-        
-        // 如果一行既不是关键词开头，也不是格局名，则被自动忽略
     }
     
-    while ([structuredResult hasSuffix:@"\n\n"]) {
-        [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)];
-    }
-
+    while ([structuredResult hasSuffix:@"\n\n"]) { [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)]; }
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
@@ -618,26 +619,20 @@ static NSString* parseTianDiPanDetailBlock(NSString* rawData) {
 }
 // 新增的天将详情专属解析器
 // 新增的天将详情专属解析器 (v1.1 - 保留“主”事)
+// 天将详情专属解析器 (v1.2 - 修复释义泄露问题)
 static NSString* _parseTianJiangDetailInternal(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
     
     NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
     NSMutableString *result = [NSMutableString string];
     
-    // 保留标题行 (e.g., "朱雀 夜将")
-    if (lines.count > 0 && lines[0].length < 20) { // 简单的标题行长度判断
+    if (lines.count > 0 && lines[0].length < 20) {
         [result appendFormat:@"%@\n", lines[0]];
     }
     
-    // 定义客观关系的关键词 (白名单)
-    NSArray *keywords = @[
-        @"乘",
-        @"临",
-        @"阳神为",
-        @"阴神为",
-        @"主" // <-- 已添加
-    ];
-    
+    NSArray *keywords = @[@"乘", @"临", @"阳神为", @"阴神为", @"主"];
+    NSString *previousLine = @"";
+
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0) continue;
@@ -651,38 +646,73 @@ static NSString* _parseTianJiangDetailInternal(NSString *rawContent) {
         }
         
         if (isObjectiveFact) {
-            // 这次我们不再粗暴地移除句号后的内容，因为“主”事可能是多句话
-            // 而是直接保留整行，因为它已经被白名单验证
+            // [修复点 5.1] 上下文判断
+            // 如果这一行以“主”开头，但前一行不是关键词行（说明前一行是格局名或释义），则跳过
+            if ([trimmedLine hasPrefix:@"主"]) {
+                BOOL isPreviousLineObjective = NO;
+                for (NSString *key in keywords) {
+                    if ([previousLine hasPrefix:key]) {
+                        isPreviousLineObjective = YES;
+                        break;
+                    }
+                }
+                // 如果前一行不是标题，也不是关键词行，那么这个'主'就是个释义，跳过
+                if (!isPreviousLineObjective && ![previousLine containsString:@"将"]) {
+                    continue;
+                }
+            }
             [result appendFormat:@"- %@\n", trimmedLine];
         }
+        previousLine = trimmedLine; // 记录当前行，供下一次循环判断
     }
     return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 新增的上神详情专属解析器
+// 上神详情专属解析器 (v1.1 - 修复遁干替换和诗句过滤)
 static NSString* _parseShangShenDetailInternal(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
+    
     NSArray<NSString *> *lines = [rawContent componentsSeparatedByString:@"\n"];
     NSMutableString *result = [NSMutableString string];
+    
+    // 黑名单增加了 "诗象"
     NSArray *blacklist = @[@"神象", @"诗象", @"星宿", @"禽类", @"身象", @"人类", @"物类", @"方所", @"事类", @"数象"];
     BOOL isFirstTextualLine = YES;
+
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0) continue;
+        
         BOOL isBlacklisted = NO;
-        for (NSString *key in blacklist) { if ([trimmedLine hasPrefix:key]) { isBlacklisted = YES; break; } }
+        for (NSString *key in blacklist) {
+            if ([trimmedLine hasPrefix:key]) { isBlacklisted = YES; break; }
+        }
         if (isBlacklisted) continue;
-        // 修正逻辑：只移除第一行且不包含特定字符的行
+        
         if (isFirstTextualLine) {
-            isFirstTextualLine = NO; // 只判断一次
-            // 判断是否是纯描述性文字
-            if (![trimmedLine containsString:@"("] && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@":"]) {
+            isFirstTextualLine = NO;
+            if (trimmedLine.length > 20 || (![trimmedLine containsString:@"("] && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@":"])) {
                 continue;
             }
         }
+
         if ([trimmedLine hasPrefix:@"一、"] || [trimmedLine hasPrefix:@"二、"]) continue;
+
+        // [修复点 6.1] 过滤诗句 (特征：以中文结尾，且不含常见符号)
+        if (trimmedLine.length > 5 && ![trimmedLine containsString:@"("] && ![trimmedLine containsString:@":"] && ![trimmedLine containsString:@" "] && ![trimmedLine containsString:@"，"]) {
+             // 简单判断可能是诗句，丢弃
+             continue;
+        }
+
+        // [修复点 6.2] 替换遁干的 `初建`/`复建`
+        if ([trimmedLine hasPrefix:@"遁干"]) {
+            trimmedLine = [[trimmedLine stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干:"]
+                                        stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时:"];
+        }
+
         [result appendFormat:@"%@\n", trimmedLine];
     }
+    
     return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 // 统一解析器调度中心
@@ -1393,6 +1423,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
