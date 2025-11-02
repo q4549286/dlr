@@ -379,7 +379,7 @@ static NSString* parseNianmingBlock(NSString *rawParamBlock) {
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 解析方法过滤器 (v6.3 - 对“来占之情”放开过滤)
+// 解析方法过滤器 (v6.4 - 对“来占之情”和“克应之期”均放开过滤)
 static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
 
@@ -400,7 +400,7 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
     NSArray<NSString *> *boilerplateSentences = @[
         @"凡看来情，以占之正时，详其与日之生克刑合，则于所占事体，可先有所主，故曰先锋门。",
         @"此以用神所乘所临，以及与日之生合刑墓等断事发之机。",
-        @"此以三传之进退顺逆、有气无气、顺生逆克等而定事情之大体。",
+        @"此以三传之进退顺逆、有气无气、顺生逆克等定事情之大体。",
         @"此以日辰对较而定主客彼我之关系，大体日为我，辰为彼；日为人，辰为宅；日为尊，辰为卑；日为老，辰为幼；日为夫，辰为妻；日为官，辰为民；出行则日为陆为车，辰则为水为舟；日为出，为南向，为前方，辰则为入，为北向，为后方；占病则以日为人，以辰为病；占产则以日为子，以辰为母；占农则以日为农夫，以辰为谷物；占猎则以日为猎师，以辰为鸟兽。故日辰之位，随占不同，总要依类而推之，方无差谬。",
         @"此以用神之旺相并天乙前后断事情之迟速，并以用神所合之岁月节候而定事体之远近，复以天上季神所临定成事之期。",
         @"以常法而论，吉事而凶事年月日时以事体之大小斟酌定之。"
@@ -409,58 +409,56 @@ static NSString* parseAndFilterFangFaBlock(NSString *rawContent) {
         [workingContent replaceOccurrencesOfString:sentence withString:@"" options:0 range:NSMakeRange(0, workingContent.length)];
     }
     
-    // [新逻辑：分离“来占之情”和其他内容]
-    NSString *laiZhanZhiQingBlock = @"";
-    NSString *otherContentBlock = [workingContent copy];
-    
-    NSRange laiZhanRange = [workingContent rangeOfString:@"来占之情→"];
-    if (laiZhanRange.location != NSNotFound) {
-        // 找到“来占之情”的起始位置
-        NSString *tempString = [workingContent substringFromIndex:laiZhanRange.location];
-        
-        // 查找下一个标题（例如“克应之期→”）作为“来占之情”块的结束标志
-        NSRegularExpression *nextTitleRegex = [NSRegularExpression regularExpressionWithPattern:@"\\n[\\u4e00-\\u9fa5]+→" options:0 error:nil];
-        NSTextCheckingResult *nextTitleMatch = [nextTitleRegex firstMatchInString:tempString options:0 range:NSMakeRange(1, tempString.length - 1)]; // 从第一个字符后开始搜索
-        
-        if (nextTitleMatch) {
-            // 如果找到了下一个标题，则“来占之情”块就是从开头到下一个标题之前的部分
-            laiZhanZhiQingBlock = [tempString substringToIndex:nextTitleMatch.range.location];
-            // 剩下的内容是其他块
-            otherContentBlock = [workingContent stringByReplacingOccurrencesOfString:laiZhanZhiQingBlock withString:@""];
-        } else {
-            // 如果没找到其他标题，说明整个内容都是“来占之情”块
-            laiZhanZhiQingBlock = tempString;
-            otherContentBlock = @"";
+    // [新逻辑：分离受保护的内容块]
+    NSMutableString *protectedContent = [NSMutableString string];
+    NSMutableString *contentToFilter = [workingContent mutableCopy];
+    NSArray<NSString *> *protectedTitles = @[@"来占之情→", @"克应之期→"];
+
+    for (NSString *title in protectedTitles) {
+        NSRange titleRange = [contentToFilter rangeOfString:title];
+        if (titleRange.location != NSNotFound) {
+            NSString *remainingString = [contentToFilter substringFromIndex:titleRange.location];
+            
+            // 查找下一个标题作为块的结束
+            NSRegularExpression *nextTitleRegex = [NSRegularExpression regularExpressionWithPattern:@"\n[\\u4e00-\\u9fa5]+→" options:0 error:nil];
+            NSTextCheckingResult *nextTitleMatch = [nextTitleRegex firstMatchInString:remainingString options:0 range:NSMakeRange(1, remainingString.length - 1)];
+            
+            NSString *blockToProtect;
+            if (nextTitleMatch) {
+                blockToProtect = [remainingString substringToIndex:nextTitleMatch.range.location];
+            } else {
+                blockToProtect = remainingString; // 如果是最后一个块，则保护到结尾
+            }
+            
+            // 将保护块添加到protectedContent，并从contentToFilter中移除
+            [protectedContent appendString:blockToProtect];
+            [contentToFilter replaceOccurrencesOfString:blockToProtect withString:@"" options:NSLiteralSearch range:NSMakeRange(0, contentToFilter.length)];
         }
     }
 
-    // [断语过滤] 只对“其他内容”应用过滤规则
-    NSMutableString *filteredOtherContent = [otherContentBlock mutableCopy];
+    // [断语过滤] 只对剩余内容应用过滤规则
     NSArray<NSString *> *conclusionPatterns = @[
         @"(主|恐|利|不利|则|此主|凡事|又当|故当|当以|大有生意|凶祸更甚|凶祸消磨|其势悖逆|用昼将|唯不利|岁无成|而不能由己|可致福禄重重|情多窒且塞|事虽顺而有耗散之患|生归日辰则无虞|理势自然).*?($|。|，)",
-        @"(^|，|。)\\s*(主|恐|利|不利|则|此主|凡事|又当|故当|当以|不堪期|却无气|事虽新起)[^，。]*",
-        @"(^|。)\\s*用神有气.*?期。"
+        @"(^|，|。)\\s*(主|恐|利|不利|则|此主|凡事|又当|故当|当以|不堪期|却无气|事虽新起)[^，。]*"
     ];
     for (NSString *pattern in conclusionPatterns) {
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
         NSString *previous;
         do {
-            previous = [filteredOtherContent copy];
-            [regex replaceMatchesInString:filteredOtherContent options:0 range:NSMakeRange(0, filteredOtherContent.length) withTemplate:@""];
-        } while (![previous isEqualToString:filteredOtherContent]);
+            previous = [contentToFilter copy];
+            [regex replaceMatchesInString:contentToFilter options:0 range:NSMakeRange(0, contentToFilter.length) withTemplate:@""];
+        } while (![previous isEqualToString:contentToFilter]);
     }
 
-    // [合并与格式化] 将不过滤的“来占之情”和过滤后的其他内容重新组合
+    // [合并与格式化] 将受保护的内容和过滤后的内容重新组合
     NSMutableString *finalContent = [NSMutableString string];
-    [finalContent appendString:laiZhanZhiQingBlock];
-    [finalContent appendString:filteredOtherContent];
+    [finalContent appendString:protectedContent];
+    [finalContent appendString:contentToFilter];
 
     // [通用格式化]
     [finalContent replaceOccurrencesOfString:@"\n" withString:@" " options:0 range:NSMakeRange(0, finalContent.length)];
-    NSArray *conjunctionsToRemove = @[@"但", @"又，"];
-    for (NSString *conj in conjunctionsToRemove) {
-        [finalContent replaceOccurrencesOfString:[NSString stringWithFormat:@"%@ ", conj] withString:@"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, finalContent.length)];
-    }
+    // 注意：这里的“又，”过滤可能会影响您期望保留的内容，我们将其移除或修改
+    // [finalContent replaceOccurrencesOfString:@"又， " withString:@"" options:NSCaseInsensitiveSearch range:NSMakeRange(0, finalContent.length)];
     while ([finalContent containsString:@"  "]) {
         [finalContent replaceOccurrencesOfString:@"  " withString:@" " options:0 range:NSMakeRange(0, finalContent.length)];
     }
@@ -1495,7 +1493,7 @@ if(g_tianDiPan_completion_handler) {
     NSString *k4_shang = ((UILabel*)c1[0]).text, *k4_jiang = ((UILabel*)c1[1]).text, *k4_xia = ((UILabel*)c1[2]).text;
     
     // [修改点 2] 调整为 "天将乘上神 临 日/辰" 格式
-    return [NSString stringWithFormat:@"- 第一课(日干): %@乘%@ 临%@\n- 第二课(日上): %@乘%@ 临%@\n- 第三课(支辰): %@乘%@ 临%@\n- 第四课(辰上): %@乘%@ 临%@", SafeString(k1_shang), SafeString(k1_jiang), SafeString(k1_xia), SafeString(k2_shang), SafeString(k2_jiang), SafeString(k2_xia), SafeString(k3_shang), SafeString(k3_jiang), SafeString(k3_xia), SafeString(k4_shang), SafeString(k4_jiang), SafeString(k4_xia) ];
+    return [NSString stringWithFormat:@"- 第一课: %@乘%@ 临%@\n- 第二课: %@乘%@ 临%@\n- 第三课: %@乘%@ 临%@\n- 第四课: %@乘%@ 临%@", SafeString(k1_shang), SafeString(k1_jiang), SafeString(k1_xia), SafeString(k2_shang), SafeString(k2_jiang), SafeString(k2_xia), SafeString(k3_shang), SafeString(k3_jiang), SafeString(k3_xia), SafeString(k4_shang), SafeString(k4_jiang), SafeString(k4_xia) ];
 }
 %new
 - (NSString *)_echo_extractSanChuanInfo { Class sanChuanViewClass = NSClassFromString(@"六壬大占.傳視圖"); if (!sanChuanViewClass) return @""; NSMutableArray *scViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanViewClass, self.view, scViews); [scViews sortUsingComparator:^NSComparisonResult(UIView *o1, UIView *o2) { return [@(o1.frame.origin.y) compare:@(o2.frame.origin.y)]; }]; NSArray *titles = @[@"初传", @"中传", @"末传"]; NSMutableArray *lines = [NSMutableArray array]; NSArray<NSString *> *shenShaWhitelist = @[@"日禄", @"太岁", @"旬空", @"日马", @"旬丁" , @"坐空"]; for (NSUInteger i = 0; i < scViews.count; i++) { UIView *v = scViews[i]; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], v, labels); [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; if (labels.count >= 3) { NSString *lq = [[(UILabel*)labels.firstObject text] stringByReplacingOccurrencesOfString:@"->" withString:@""]; NSString *tj = [(UILabel*)labels.lastObject text]; NSString *dz = [(UILabel*)[labels objectAtIndex:labels.count - 2] text]; NSMutableArray *ssParts = [NSMutableArray array]; if (labels.count > 3) { for (UILabel *l in [labels subarrayWithRange:NSMakeRange(1, labels.count - 3)]) { if (l.text.length > 0) [ssParts addObject:l.text]; } } NSMutableArray *filteredSsParts = [NSMutableArray array]; for (NSString *part in ssParts) { for (NSString *keyword in shenShaWhitelist) { if ([part containsString:keyword]) { [filteredSsParts addObject:part]; break; } } } NSString *title = (i < titles.count) ? titles[i] : [NSString stringWithFormat:@"%lu传", (unsigned long)i+1]; if (filteredSsParts.count > 0) { [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@) [状态: %@]", title, SafeString(dz), SafeString(lq), SafeString(tj), [filteredSsParts componentsJoinedByString:@", "]]]; } else { [lines addObject:[NSString stringWithFormat:@"- %@: %@ (%@, %@)", title, SafeString(dz), SafeString(lq), SafeString(tj)]]; } } } return [lines componentsJoinedByString:@"\n"]; }
@@ -1512,6 +1510,7 @@ if(g_tianDiPan_completion_handler) {
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
