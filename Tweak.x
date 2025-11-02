@@ -48,7 +48,7 @@ static void initializeTianDiPanCoordinates() {
 typedef NS_ENUM(NSInteger, EchoLogType) { EchoLogTypeInfo, EchoLogTypeSuccess, EchoLogError, EchoLogTypeDebug };
 static void LogMessage(EchoLogType type, NSString *format, ...) {
     va_list args; va_start(args, format); NSString *message = [[NSString alloc] initWithFormat:format arguments:args]; va_end(args);
-    NSLog(@"[Echo-V6] %@", message);
+    NSLog(@"[Echo-V7-Final] %@", message);
     if (!g_logTextView) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"HH:mm:ss"];
@@ -109,6 +109,7 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 - (void)processTianDiPanQueue;
 @end
 
+// <<<< 核心修复点 1: 独立的 UIView Hook >>>>
 %hook UIView
 - (void)didMoveToWindow {
     %orig;
@@ -128,6 +129,7 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
     }
 }
 %end
+
 
 %hook UIViewController
 - (void)viewDidLoad {
@@ -223,7 +225,6 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
         }
         UIView *sourceView = sourceViews.firstObject;
 
-        // ====================== 核心修复点 ======================
         UIView *originalView = singleTapGesture.view;
         [singleTapGesture setValue:sourceView forKey:@"view"];
         
@@ -244,7 +245,6 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
         }
 
         [singleTapGesture setValue:originalView forKey:@"view"];
-        // =======================================================
 
     } @catch (NSException *exception) {
         LogMessage(EchoLogError, @"终极方案执行失败: %@", exception.reason);
@@ -257,7 +257,8 @@ static NSString* extractDataFromStackViewPopup(UIView *contentView) {
 %ctor {
     @autoreleasepool {
         initializeTianDiPanCoordinates();
-        // 移除 presentViewController 的 Hook
-        NSLog(@"[Echo-V6] 天地盘详情提取工具(ARC修正版)已加载。");
+        // <<<< 核心修复点 2: 移除无效的 presentViewController Hook >>>>
+        // MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
+        NSLog(@"[Echo-V7-Final] 天地盘详情提取工具(语法修正版)已加载。");
     }
 }
