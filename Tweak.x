@@ -1395,8 +1395,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
                 // 获取并解析对应宫位的天将和上神数据
                 NSString *rawTianJiangData = g_tianDiPan_resultsArray[i];
-                NSString *rawShangShenData = g_tianDiPans_resultsArray[i + 12];
-                
+                NSString *rawShangShenData = g_tianDiPan_resultsArray[i + 12];                
                 NSString *parsedTianJiang = parseTianDiPanDetailBlock(rawTianJiangData);
                 NSString *parsedShangShen = parseTianDiPanDetailBlock(rawShangShenData);
 
@@ -1544,6 +1543,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
