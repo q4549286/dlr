@@ -1598,8 +1598,7 @@ NSString *footerText = [NSString stringWithFormat:@"/```\n"
     "> **三、 未来光谱探查：**\n"
     ">    *   `[此处插入匹配到的“未来探探查”点，以问题列表形式呈现]`\n"
     "> ---\n"
-    "> **分析将围绕此完整框架展开，以确保洞察全局，直击要害。**\n"
-    "*(注：您的任务是**生成**这份清单，而不是回答它。)*///>\n", userQuestion];    return [NSString stringWithFormat:@"%@%@%@%@", headerPrompt, structuredReport, summaryLine, footerText];
+    "> **分析将围绕此完整框架展开，以确保洞察全局，直击要害。**\n", userQuestion];    return [NSString stringWithFormat:@"%@%@%@%@", headerPrompt, structuredReport, summaryLine, footerText];
 }
 
 
@@ -2334,6 +2333,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
