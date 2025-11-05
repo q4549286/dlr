@@ -528,17 +528,12 @@ static NSString* parseAndFilterShenSha(NSString *rawContent) {
 }
 
 // 课传流注详情解析器 (v2.8 - 解决问题3和4)
-// =========================================================================
-// ↓↓↓ 使用这个【去除了过滤逻辑】的修正版替换您代码中的原函数 ↓↓↓
-// =========================================================================
-
 static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle) {
     if (!rawText || rawText.length == 0) return @"";
 
     NSMutableString *structuredResult = [NSMutableString string];
     NSArray<NSString *> *lines = [rawText componentsSeparatedByString:@"\n"];
     NSMutableArray<NSString *> *processedLines = [NSMutableArray array];
-
     BOOL isTianJiangObject = (objectTitle && [objectTitle containsString:@"天将"]);
 
     // --- 阶段一：提取核心状态 (旺衰, 长生, 及特殊状态) ---
@@ -579,30 +574,27 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     };
     
     BOOL inZaxiang = NO;
-    // BOOL skipNextLineAsExplanation = NO; // 已禁用
+    BOOL skipNextLineAsExplanation = NO;
 
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
-        
-        // 【核心修改】: 以下过滤逻辑已被注释掉，以显示完整信息
-        /*
+
         if (skipNextLineAsExplanation) {
             skipNextLineAsExplanation = NO;
             continue;
         }
-        
-        NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
-        if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
-            [processedLines addObject:trimmedLine];
-            skipNextLineAsExplanation = YES;
-            continue;
-        }
-        */
 
         if (inZaxiang) { [structuredResult appendFormat:@"    - %@\n", trimmedLine]; [processedLines addObject:trimmedLine]; continue; }
 
-        BOOL keywordFound = NO;
+        NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
+        if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
+            // [修改点 3 & 4] 过滤掉所有 "一、..." 格式的格局/释义行及其下一行解释
+            [processedLines addObject:trimmedLine];
+            skipNextLineAsExplanation = YES; // 标记下一行（解释）也应跳过
+            continue; // 直接跳过，不输出此行
+        }
+
         for (NSString *keyword in keywordMap.allKeys) {
             if ([trimmedLine hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
@@ -615,6 +607,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                                      stringByReplacingOccurrencesOfString:@"癸" withString:@"闭口"];
                 }
                 
+                // [修改点 4] 增强断语过滤，移除 "有...事" 和 "在初则..." 等模式
                 NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知|有.*事|在初则|凡占).*$" options:0 error:nil];
                 value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
 
@@ -632,15 +625,8 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                      }
                 }
                 [processedLines addObject:trimmedLine];
-                keywordFound = YES;
                 break;
             }
-        }
-        
-        // 如果没有匹配到任何关键字，就将原始行添加进来
-        if (!keywordFound) {
-            [structuredResult appendFormat:@"%@\n", trimmedLine];
-            [processedLines addObject:trimmedLine];
         }
     }
     
@@ -2638,10 +2624,6 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
-
-
-
-
 
 
 
