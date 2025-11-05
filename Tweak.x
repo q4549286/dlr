@@ -574,32 +574,26 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     };
     
     BOOL inZaxiang = NO;
-    // BOOL skipNextLineAsExplanation = NO; // <--- 修正1: 移除这个不再需要的标志位
+    BOOL skipNextLineAsExplanation = NO;
 
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
 
-        /*
-        // --- 注释掉或删除以下代码块 START ---
         if (skipNextLineAsExplanation) {
             skipNextLineAsExplanation = NO;
             continue;
         }
-        */
-        
+
         if (inZaxiang) { [structuredResult appendFormat:@"    - %@\n", trimmedLine]; [processedLines addObject:trimmedLine]; continue; }
 
-        /*
         NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
         if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
+            // [修改点 3 & 4] 过滤掉所有 "一、..." 格式的格局/释义行及其下一行解释
             [processedLines addObject:trimmedLine];
-            skipNextLineAsExplanation = YES; 
-            continue; 
+            skipNextLineAsExplanation = YES; // 标记下一行（解释）也应跳过
+            continue; // 直接跳过，不输出此行
         }
-        // --- 注释掉或删除以上代码块 END ---
-        */
-
 
         for (NSString *keyword in keywordMap.allKeys) {
             if ([trimmedLine hasPrefix:keyword]) {
@@ -613,6 +607,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                                      stringByReplacingOccurrencesOfString:@"癸" withString:@"闭口"];
                 }
                 
+                // [修改点 4] 增强断语过滤，移除 "有...事" 和 "在初则..." 等模式
                 NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知|有.*事|在初则|凡占).*$" options:0 error:nil];
                 value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
 
@@ -638,6 +633,7 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     while ([structuredResult hasSuffix:@"\n\n"]) { [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)]; }
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
+
 
 static NSString* parseAuxiliaryBlock(NSString *rawContent, NSString *title) {
     if (!rawContent || rawContent.length == 0) return @"";
@@ -2641,6 +2637,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
