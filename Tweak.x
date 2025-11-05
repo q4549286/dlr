@@ -1997,11 +1997,22 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 
 %new
 - (void)createOrShowMainControlPanel {
-    UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
-    if (g_mainControlPanelView && g_mainControlPanelView.superview) {
-        [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) { [g_mainControlPanelView removeFromSuperview]; g_mainControlPanelView = nil; g_logTextView = nil; g_questionTextView = nil; g_clearInputButton = nil; }];
-        return;
-    }
+// 这是旧的关闭逻辑
+// 这是新的、能根除问题的关闭逻辑
+UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
+if (g_mainControlPanelView && g_mainControlPanelView.superview) {
+    [UIView animateWithDuration:0.3 animations:^{ 
+        g_mainControlPanelView.alpha = 0; 
+    } completion:^(BOOL finished) { 
+        [g_mainControlPanelView removeFromSuperview]; 
+        // *** 核心修正：在这里彻底清空所有相关的全局UI指针 ***
+        g_mainControlPanelView = nil; 
+        g_logTextView = nil; 
+        g_questionTextView = nil; 
+        g_clearInputButton = nil; 
+    }];
+    return;
+}
     g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds];
     g_mainControlPanelView.tag = kEchoMainPanelTag;
     g_mainControlPanelView.backgroundColor = [UIColor clearColor];
@@ -2078,23 +2089,18 @@ g_clearInputButton.tintColor = [UIColor grayColor]; g_clearInputButton.tag = kBu
 [g_clearInputButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; [textViewContainer addSubview:g_clearInputButton];
 
 // ======================= 强制刷新逻辑 =======================
-// 1. *** 核心修正：首先无条件清空文本框，确保进入干净状态 ***
-g_questionTextView.text = @""; 
+g_questionTextView.text = @""; // 预清空，虽然在新实例上非必须，但保持逻辑健壮性
 
-// 2. 尝试从占案视图获取有效内容
 NSString *zhanAnContent = [self _echo_extractZhanAnContent];
 
-// 3. 根据获取结果决定最终显示内容
 if (zhanAnContent && zhanAnContent.length > 0) {
     g_questionTextView.text = zhanAnContent;
     g_questionTextView.textColor = [UIColor whiteColor];
 } else {
-    // 如果没有有效内容，则设置占位符
     g_questionTextView.text = @"选填：输入您想问的具体问题";
     g_questionTextView.textColor = [UIColor lightGrayColor];
 }
 
-// 4. 最后，根据最终的文本状态更新“清除”按钮的可见性
 [self textViewDidChange:g_questionTextView];
 // ==========================================================
 
@@ -2595,6 +2601,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
