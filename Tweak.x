@@ -2057,6 +2057,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     benMingButton.selected = g_shouldExtractBenMing; [contentView addSubview:benMingButton];
     currentY += compactButtonHeight + 15;
 // 这是新代码
+// 这是最终修正版的代码块
 UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
 textViewContainer.backgroundColor = ECHO_COLOR_CARD_BG; textViewContainer.layer.cornerRadius = 12; [contentView addSubview:textViewContainer];
 g_questionTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, 0, textViewContainer.bounds.size.width - 2*padding - 40, 110)];
@@ -2065,6 +2066,13 @@ g_questionTextView.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular
 g_questionTextView.textContainerInset = UIEdgeInsetsMake(10, 0, 10, 0);
 g_questionTextView.delegate = (id<UITextViewDelegate>)self;
 g_questionTextView.returnKeyType = UIReturnKeyDone;
+[textViewContainer addSubview:g_questionTextView]; // 先把空的TextView加进去
+
+g_clearInputButton = [UIButton buttonWithType:UIButtonTypeSystem];
+if (@available(iOS 13.0, *)) { [g_clearInputButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal]; }
+g_clearInputButton.frame = CGRectMake(textViewContainer.bounds.size.width - padding - 25, 10, 25, 25);
+g_clearInputButton.tintColor = [UIColor grayColor]; g_clearInputButton.tag = kButtonTag_ClearInput; g_clearInputButton.alpha = 0;
+[g_clearInputButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; [textViewContainer addSubview:g_clearInputButton];
 
 // *** 刷新逻辑移动到这里，确保每次都执行 ***
 NSString *zhanAnContent = [self _echo_extractZhanAnContent];
@@ -2079,11 +2087,7 @@ if (zhanAnContent && zhanAnContent.length > 0) {
 [self textViewDidChange:g_questionTextView]; 
 
 currentY += 110 + 20;
-    if (@available(iOS 13.0, *)) { [g_clearInputButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal]; }
-    g_clearInputButton.frame = CGRectMake(textViewContainer.bounds.size.width - padding - 25, 10, 25, 25);
-    g_clearInputButton.tintColor = [UIColor grayColor]; g_clearInputButton.tag = kButtonTag_ClearInput; g_clearInputButton.alpha = 0;
-    [g_clearInputButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; [textViewContainer addSubview:g_clearInputButton];
-    currentY += 110 + 20;
+// ... 后续创建 card1 的代码 ...
     UIView *card1 = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 0)];
     card1.backgroundColor = ECHO_COLOR_CARD_BG; card1.layer.cornerRadius = 12; [contentView addSubview:card1];
     CGFloat card1InnerY = 15;
@@ -2579,6 +2583,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
