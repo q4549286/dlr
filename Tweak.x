@@ -2416,7 +2416,6 @@ currentY += 110 + 20;
 - (void)processKeTiWorkQueue_S1 { if (g_s1_keTi_workQueue.count == 0) { NSString *finalResult = [[g_s1_keTi_resultsArray componentsJoinedByString:@"\n\n"] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; g_s1_keTi_targetCV = nil; g_s1_keTi_workQueue = nil; g_s1_keTi_resultsArray = nil; if (g_s1_completion_handler) { g_s1_completion_handler(finalResult); } return; } NSIndexPath *indexPath = g_s1_keTi_workQueue.firstObject; [g_s1_keTi_workQueue removeObjectAtIndex:0]; id delegate = g_s1_keTi_targetCV.delegate; if (delegate && [delegate respondsToSelector:@selector(collectionView:didSelectItemAtIndexPath:)]) { [delegate collectionView:g_s1_keTi_targetCV didSelectItemAtIndexPath:indexPath]; } else { [self processKeTiWorkQueue_S1]; } }
 %new
 - (void)startExtraction_Truth_S2_WithCompletion:(void (^)(void))completion { if (g_s2_isExtractingKeChuanDetail) return; LogMessage(EchoLogTypeTask, @"[任务启动] 开始推演“课传流注”..."); [self showProgressHUD:@"正在推演课传流注..."]; g_s2_isExtractingKeChuanDetail = YES; g_s2_keChuan_completion_handler = [completion copy]; g_s2_capturedKeChuanDetailArray = [NSMutableArray array]; g_s2_keChuanWorkQueue = [NSMutableArray array]; g_s2_keChuanTitleQueue = [NSMutableArray array]; Ivar keChuanContainerIvar = class_getInstanceVariable([self class], "課傳"); if (!keChuanContainerIvar) { g_s2_isExtractingKeChuanDetail = NO; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); [self hideProgressHUD]; return; } id keChuanContainer = object_getIvar(self, keChuanContainerIvar); if (!keChuanContainer) { g_s2_isExtractingKeChuanDetail = NO; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); [self hideProgressHUD]; return; } Class sanChuanContainerClass = NSClassFromString(@"六壬大占.三傳視圖"); NSMutableArray *sanChuanResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(sanChuanContainerClass, (UIView *)keChuanContainer, sanChuanResults); if (sanChuanResults.count > 0) { UIView *sanChuanContainer = sanChuanResults.firstObject; const char *ivarNames[] = {"初傳", "中傳", "末傳", NULL}; NSString *rowTitles[] = {@"初传", @"中传", @"末传"}; for (int i = 0; ivarNames[i] != NULL; ++i) { Ivar ivar = class_getInstanceVariable(sanChuanContainerClass, ivarNames[i]); if (!ivar) continue; UIView *chuanView = object_getIvar(sanChuanContainer, ivar); if (!chuanView) continue; NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], chuanView, labels); [labels sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2){ return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; if(labels.count >= 2) { UILabel *dizhiLabel = labels[labels.count-2]; UILabel *tianjiangLabel = labels[labels.count-1]; if (dizhiLabel.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": dizhiLabel.gestureRecognizers.firstObject} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 地支(%@)", rowTitles[i], dizhiLabel.text]]; } if (tianjiangLabel.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": tianjiangLabel.gestureRecognizers.firstObject} mutableCopy]]; [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ - 天将(%@)", rowTitles[i], tianjiangLabel.text]]; } } } } Class siKeContainerClass = NSClassFromString(@"六壬大占.四課視圖"); NSMutableArray *siKeResults = [NSMutableArray array]; FindSubviewsOfClassRecursive(siKeContainerClass, (UIView *)keChuanContainer, siKeResults); if (siKeResults.count > 0) { UIView *siKeContainer = siKeResults.firstObject; NSArray *keDefs = @[ @{@"ivar": @"日", @"title": @"日干"}, @{@"ivar": @"日上", @"title": @"日上"}, @{@"ivar": @"日上天將", @"title": @"日上 - 天将"}, @{@"ivar": @"日陰", @"title": @"日阴"}, @{@"ivar": @"日陰天將", @"title": @"日阴 - 天将"}, @{@"ivar": @"辰", @"title": @"支"}, @{@"ivar": @"辰上", @"title": @"支上"}, @{@"ivar": @"辰上天將", @"title": @"支上 - 天将"}, @{@"ivar": @"辰陰", @"title": @"支阴"}, @{@"ivar": @"辰陰天將", @"title": @"支阴 - 天将"} ]; for (NSDictionary *def in keDefs) { Ivar ivar = class_getInstanceVariable(siKeContainerClass, [def[@"ivar"] UTF8String]); if (ivar) { UILabel *label = (UILabel *)object_getIvar(siKeContainer, ivar); if (label && label.gestureRecognizers.count > 0) { [g_s2_keChuanWorkQueue addObject:[@{@"gesture": label.gestureRecognizers.firstObject} mutableCopy]]; if ([def[@"title"] containsString:@"天将"]) { [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@(%@)", def[@"title"], label.text]]; } else { [g_s2_keChuanTitleQueue addObject:[NSString stringWithFormat:@"%@ (%@)", def[@"title"], label.text]]; } } } } } if (g_s2_keChuanWorkQueue.count == 0) { g_s2_isExtractingKeChuanDetail = NO; [self hideProgressHUD]; g_s2_finalResultFromKeChuan = @""; if(g_s2_keChuan_completion_handler) g_s2_keChuan_completion_handler(); return; } [self processKeChuanQueue_Truth_S2]; }
-// (V29.1-FIXED) 修正了地支和天将调用相同弹窗的致命错误
 %new
 - (void)processKeChuanQueue_Truth_S2 {
     if (!g_s2_isExtractingKeChuanDetail || g_s2_keChuanWorkQueue.count == 0) {
@@ -2429,6 +2428,7 @@ currentY += 110 + 20;
                 for (NSUInteger i = 0; i < g_s2_keChuanTitleQueue.count; i++) {
                     NSString *title = g_s2_keChuanTitleQueue[i];
                     NSString *rawBlock = g_s2_capturedKeChuanDetailArray[i];
+                    // [排版修正] 在解析时就增加一级缩进
                     NSString *structuredBlock = parseKeChuanDetailBlock(rawBlock, title);
                     structuredBlock = [structuredBlock stringByReplacingOccurrencesOfString:@"\n" withString:@"\n    "];
                     detailedDataMap[title] = structuredBlock;
@@ -2453,28 +2453,37 @@ currentY += 110 + 20;
             NSArray<NSString *> *siKeLines = [siKeSummary componentsSeparatedByString:@"\n"];
             
             if (siKeLines.count == 4) {
+                // [核心修改] 统一清理四课标题，移除括号内容
                 NSString* (^cleanTitle)(NSString*) = ^NSString*(NSString* line) {
                     NSRange range = [line rangeOfString:@"("];
-                    return (range.location != NSNotFound) ? [line substringToIndex:range.location] : line;
+                    if (range.location != NSNotFound) {
+                        return [line substringToIndex:range.location];
+                    }
+                    return line;
                 };
 
+                // 第一课
                 [resultStr appendFormat:@"%@", cleanTitle(siKeLines[0])];
+                // [核心修改] 调整输出顺序：天将 -> 上神 -> 干/支
                 [resultStr appendString:findDetailBlock(@"日上 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"日上 (", @"上神详情")];
                 [resultStr appendString:findDetailBlock(@"日干", @"日干详情")];
                 [resultStr appendString:@"\n"];
 
+                // 第二课
                 [resultStr appendFormat:@"%@", cleanTitle(siKeLines[1])];
                 [resultStr appendString:findDetailBlock(@"日阴 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"日阴 (", @"上神详情")];
                 [resultStr appendString:@"\n"];
 
+                // 第三课
                 [resultStr appendFormat:@"%@", cleanTitle(siKeLines[2])];
                 [resultStr appendString:findDetailBlock(@"支上 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"支上 (", @"上神详情")];
                 [resultStr appendString:findDetailBlock(@"支", @"日支详情")];
                 [resultStr appendString:@"\n"];
                 
+                // 第四课
                 [resultStr appendFormat:@"%@", cleanTitle(siKeLines[3])];
                 [resultStr appendString:findDetailBlock(@"支阴 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"支阴 (", @"上神详情")];
@@ -2486,19 +2495,19 @@ currentY += 110 + 20;
             NSString *sanChuanSummary = [self _echo_extractSanChuanInfo];
             NSArray<NSString *> *sanChuanLines = [sanChuanSummary componentsSeparatedByString:@"\n"];
 
-            if (sanChuanLines.count >= 1) {
+            if (sanChuanLines.count >= 1) { // 初传
                 [resultStr appendFormat:@"%@", sanChuanLines[0]];
                 [resultStr appendString:findDetailBlock(@"初传 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"初传 - 地支", @"地支详情")];
                 [resultStr appendString:@"\n"];
             }
-            if (sanChuanLines.count >= 2) {
+            if (sanChuanLines.count >= 2) { // 中传
                 [resultStr appendFormat:@"%@", sanChuanLines[1]];
                 [resultStr appendString:findDetailBlock(@"中传 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"中传 - 地支", @"地支详情")];
                 [resultStr appendString:@"\n"];
             }
-            if (sanChuanLines.count >= 3) {
+            if (sanChuanLines.count >= 3) { // 末传
                 [resultStr appendFormat:@"%@", sanChuanLines[2]];
                 [resultStr appendString:findDetailBlock(@"末传 - 天将", @"天将详情")];
                 [resultStr appendString:findDetailBlock(@"末传 - 地支", @"地支详情")];
@@ -2530,14 +2539,7 @@ currentY += 110 + 20;
     [g_s2_keChuanWorkQueue removeObjectAtIndex:0];
     NSString *title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
     [self updateProgressHUD:[NSString stringWithFormat:@"推演课传: %lu/%lu", (unsigned long)g_s2_capturedKeChuanDetailArray.count + 1, (unsigned long)g_s2_keChuanTitleQueue.count]];
-
-    // ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ 核心修正点 ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-    // 根据标题是否包含 "天将" 来决定调用哪个不同的弹窗函数
-    SEL action = ([title containsString:@"天将"]) 
-                 ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") 
-                 : NSSelectorFromString(@"顯示課傳摘要WithSender:");
-    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-    
+    SEL action = ([title containsString:@"天将"]) ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳摘要WithSender:");
     if ([self respondsToSelector:action]) {
         SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]);
     } else {
@@ -2639,6 +2641,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
