@@ -1958,6 +1958,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (NSString *)_echo_extractSanChuanInfo;
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator;
 - (NSString *)extractTianDiPanInfo_V18;
+- (NSString *)_echo_extractZhanAnContent;
+
 @end
 
 %hook UILabel
@@ -2054,10 +2056,29 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     benMingButton.frame = CGRectMake(startX + compactBtnWidth + innerPadding, currentY, compactBtnWidth, compactButtonHeight);
     benMingButton.selected = g_shouldExtractBenMing; [contentView addSubview:benMingButton];
     currentY += compactButtonHeight + 15;
-    UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
-    textViewContainer.backgroundColor = ECHO_COLOR_CARD_BG; textViewContainer.layer.cornerRadius = 12; [contentView addSubview:textViewContainer];
-    g_questionTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, 0, textViewContainer.bounds.size.width - 2*padding - 40, 110)];
-    g_questionTextView.backgroundColor = [UIColor clearColor]; g_questionTextView.textColor = [UIColor lightGrayColor]; g_questionTextView.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular]; g_questionTextView.textContainerInset = UIEdgeInsetsMake(10, 0, 10, 0); g_questionTextView.text = @"选填：输入您想问的具体问题"; g_questionTextView.delegate = (id<UITextViewDelegate>)self; g_questionTextView.returnKeyType = UIReturnKeyDone; [textViewContainer addSubview:g_questionTextView];
+// 这是新代码
+UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
+textViewContainer.backgroundColor = ECHO_COLOR_CARD_BG; textViewContainer.layer.cornerRadius = 12; [contentView addSubview:textViewContainer];
+g_questionTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, 0, textViewContainer.bounds.size.width - 2*padding - 40, 110)];
+g_questionTextView.backgroundColor = [UIColor clearColor];
+g_questionTextView.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
+g_questionTextView.textContainerInset = UIEdgeInsetsMake(10, 0, 10, 0);
+g_questionTextView.delegate = (id<UITextViewDelegate>)self;
+g_questionTextView.returnKeyType = UIReturnKeyDone;
+
+// *** 核心修改点在这里 ***
+// 尝试从占案视图获取内容
+NSString *zhanAnContent = [self _echo_extractZhanAnContent];
+if (zhanAnContent && zhanAnContent.length > 0) {
+    g_questionTextView.text = zhanAnContent;
+    g_questionTextView.textColor = [UIColor whiteColor]; // 使用正常文本颜色
+} else {
+    g_questionTextView.text = @"选填：输入您想问的具体问题";
+    g_questionTextView.textColor = [UIColor lightGrayColor]; // 使用占位符颜色
+}
+[textViewContainer addSubview:g_questionTextView];
+// 手动触发一次检查，以决定是否显示“清除”按钮
+[self textViewDidChange:g_questionTextView];
     g_clearInputButton = [UIButton buttonWithType:UIButtonTypeSystem];
     if (@available(iOS 13.0, *)) { [g_clearInputButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal]; }
     g_clearInputButton.frame = CGRectMake(textViewContainer.bounds.size.width - padding - 25, 10, 25, 25);
@@ -2527,6 +2548,18 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (NSString *)extractTextFromFirstViewOfClassName:(NSString *)className separator:(NSString *)separator { Class targetViewClass = NSClassFromString(className); if (!targetViewClass) return @""; NSMutableArray *targetViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(targetViewClass, self.view, targetViews); if (targetViews.count == 0) return @""; UIView *containerView = targetViews.firstObject; NSMutableArray *labelsInView = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], containerView, labelsInView); [labelsInView sortUsingComparator:^NSComparisonResult(UILabel *o1, UILabel *o2) { if(roundf(o1.frame.origin.y) < roundf(o2.frame.origin.y)) return NSOrderedAscending; if(roundf(o1.frame.origin.y) > roundf(o2.frame.origin.y)) return NSOrderedDescending; return [@(o1.frame.origin.x) compare:@(o2.frame.origin.x)]; }]; NSMutableArray *textParts = [NSMutableArray array]; for (UILabel *label in labelsInView) { if (label.text.length > 0) { [textParts addObject:label.text]; } } return [textParts componentsJoinedByString:separator]; }
 %new
+- (NSString *)_echo_extractZhanAnContent {
+    // 提取占案视图的原始文本
+    NSString *rawText = [self extractTextFromFirstViewOfClassName:@"六壬大占.占案視圖" separator:@""];
+    
+    // 检查文本是否为默认占位符，如果是，则返回nil
+    if (rawText && ![rawText isEqualToString:@"占案"] && ![rawText isEqualToString:@"存课"]) {
+        return rawText;
+    }
+    
+    return nil; // 返回nil表示没有有效的用户输入
+}
+%new
 - (NSString *)extractTianDiPanInfo_V18 { @try { Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類"); if (!plateViewClass) return @"天地盘推衍失败: 找不到视图类"; UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return @"天地盘推衍失败: 找不到keyWindow"; NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews); if (plateViews.count == 0) return @"天地盘推衍失败: 找不到视图实例"; UIView *plateView = plateViews.firstObject; unsigned int ivarCount; Ivar *ivars = class_copyIvarList(plateViewClass, &ivarCount); id diGongDict=nil, tianShenDict=nil, tianJiangDict=nil; for(unsigned int i=0; i<ivarCount; i++) { NSString *ivarName = [NSString stringWithUTF8String:ivar_getName(ivars[i])]; if([ivarName hasSuffix:@"地宮宮名列"]) diGongDict=object_getIvar(plateView, ivars[i]); else if([ivarName hasSuffix:@"天神宮名列"]) tianShenDict=object_getIvar(plateView, ivars[i]); else if([ivarName hasSuffix:@"天將宮名列"]) tianJiangDict=object_getIvar(plateView, ivars[i]); } free(ivars); if (!diGongDict || !tianShenDict || !tianJiangDict) return @"天地盘推衍失败: 未能获取核心数据字典"; NSArray *diGongLayers=[diGongDict allValues], *tianShenLayers=[tianShenDict allValues], *tianJiangLayers=[tianJiangDict allValues]; if (diGongLayers.count!=12||tianShenLayers.count!=12||tianJiangLayers.count!=12) return @"天地盘推衍失败: 数据长度不匹配"; NSMutableArray *allLayerInfos = [NSMutableArray array]; CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil]; void (^processLayers)(NSArray *, NSString *) = ^(NSArray *layers, NSString *type) { for (id layer in layers) { if (![layer isKindOfClass:[CALayer class]]) continue; CALayer *pLayer = [layer presentationLayer] ?: layer; CGPoint pos = [pLayer.superlayer convertPoint:pLayer.position toLayer:nil]; [allLayerInfos addObject:@{ @"type": type, @"text": ([layer respondsToSelector:@selector(string)]) ? ([(id)layer string] ?: @"?") : @"?", @"angle": @(atan2(pos.y - center.y, pos.x - center.x)), @"radius": @(hypotf(pos.x - center.x, pos.y - center.y)) }]; } }; processLayers(diGongLayers, @"diPan"); processLayers(tianShenLayers, @"tianPan"); processLayers(tianJiangLayers, @"tianJiang"); NSMutableDictionary *palaceGroups = [NSMutableDictionary dictionary]; for (NSDictionary *info in allLayerInfos) { BOOL foundGroup = NO; for (NSNumber *angleKey in [palaceGroups allKeys]) { CGFloat diff = fabsf([info[@"angle"] floatValue] - [angleKey floatValue]); if (diff > M_PI) diff = 2*M_PI-diff; if (diff < 0.15) { [palaceGroups[angleKey] addObject:info]; foundGroup=YES; break; } } if (!foundGroup) { palaceGroups[info[@"angle"]] = [NSMutableArray arrayWithObject:info];} } NSMutableArray *palaceData = [NSMutableArray array]; for (NSNumber *groupAngle in palaceGroups) { NSMutableArray *group = palaceGroups[groupAngle]; if (group.count < 3) continue; [group sortUsingComparator:^NSComparisonResult(id o1, id o2) { return [o2[@"radius"] compare:o1[@"radius"]]; }]; NSString *diPan=@"?", *tianPan=@"?", *tianJiang=@"?"; for(NSDictionary* li in group){ if([li[@"type"] isEqualToString:@"diPan"]) diPan=li[@"text"]; else if([li[@"type"] isEqualToString:@"tianPan"]) tianPan=li[@"text"]; else if([li[@"type"] isEqualToString:@"tianJiang"]) tianJiang=li[@"text"]; } [palaceData addObject:@{ @"diPan": diPan, @"tianPan": tianPan, @"tianJiang": tianJiang }]; } if (palaceData.count != 12) return @"天地盘推衍失败: 宫位数据不完整"; NSArray *order = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"]; [palaceData sortUsingComparator:^NSComparisonResult(NSDictionary *o1, NSDictionary *o2) { return [@([order indexOfObject:o1[@"diPan"]]) compare:@([order indexOfObject:o2[@"diPan"]])]; }]; NSMutableString *result = [NSMutableString string]; for (NSDictionary *entry in palaceData) { [result appendFormat:@"- %@宫: %@(%@)\n", entry[@"diPan"], entry[@"tianPan"], entry[@"tianJiang"]]; } return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; } @catch (NSException *exception) { return [NSString stringWithFormat:@"天地盘推衍异常: %@", exception.reason]; } }
 %end
 
@@ -2537,6 +2570,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
