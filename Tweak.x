@@ -528,6 +528,7 @@ static NSString* parseAndFilterShenSha(NSString *rawContent) {
 }
 
 // 课传流注详情解析器 (v2.8 - 解决问题3和4)
+// 课传流注详情解析器 (v2.9 - 移除过度过滤，恢复数据提取)
 static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle) {
     if (!rawText || rawText.length == 0) return @"";
 
@@ -567,52 +568,44 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
 
     // --- 阶段二：处理所有其他关系 ---
     NSDictionary<NSString *, NSString *> *keywordMap = @{
-        @"乘": @"乘将关系", @"临": @"临宫状态",
-        @"遁干": @"遁干A+", @"德 :": @"德S+", @"空 :": @"空A+",  @"墓 :": @"墓A+",@"合 :": @"合A+",
+        @"乘": @"乘将关系", @"临": @"临宫状态", @"遁干": @"遁干A+",
+        @"德 :": @"德S+", @"空 :": @"空A+", @"墓 :": @"墓A+", @"合 :": @"合A+",
         @"刑 :": @"刑C-", @"冲 :": @"冲B+", @"害 :": @"害C-", @"破 :": @"破D",
         @"阳神为": @"阳神A+", @"阴神为": @"阴神A+", @"杂象": @"杂象B+",
     };
     
     BOOL inZaxiang = NO;
+    // ===== 核心修正：移除了 skipNextLineAsExplanation 变量及其相关的所有逻辑 =====
+
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
 
-        if (inZaxiang) { // 如果进入了杂象部分，直接添加
-            [structuredResult appendFormat:@"    - %@\n", trimmedLine];
-            [processedLines addObject:trimmedLine]; continue;
-        }
+        if (inZaxiang) { [structuredResult appendFormat:@"    - %@\n", trimmedLine]; [processedLines addObject:trimmedLine]; continue; }
+        
+        // ===== 核心修正：移除了 variantRegex 的检查和 continue 逻辑 =====
 
+        BOOL keywordFound = NO;
         for (NSString *keyword in keywordMap.allKeys) {
             if ([trimmedLine hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
                 NSString *label = keywordMap[keyword];
-                // <<<<<<<<<<<<<<<<<<<< 核心修改点 START >>>>>>>>>>>>>>>>>>>>
-                // 根据您的要求，对"遁干"的输出内容进行文本替换
+                
                 if ([label isEqualToString:@"遁干A+"]) {
-                    // 步骤 1: 替换标签 "初建" -> "遁干", "复建" -> "遁时"
-                    value = [value stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干:"];
-                    value = [value stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时:"];
-
-                    // <<<<<<<<<<<<<<<<<<<< 核心修改点 START >>>>>>>>>>>>>>>>>>>>
-                    // 步骤 2: 在上一步的基础上，替换特定的天干值为特殊名称
-                    value = [value stringByReplacingOccurrencesOfString:@"丁" withString:@"丁神"];
-                    value = [value stringByReplacingOccurrencesOfString:@"癸" withString:@"闭口"];
-                    // <<<<<<<<<<<<<<<<<<<< 核心修改点 END >>>>>>>>>>>>>>>>>>>>
+                    value = [[[[value stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干:"]
+                                     stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时:"]
+                                     stringByReplacingOccurrencesOfString:@"丁" withString:@"丁神"]
+                                     stringByReplacingOccurrencesOfString:@"癸" withString:@"闭口"];
                 }
-                // <<<<<<<<<<<<<<< 强力过滤引擎 >>>>>>>>>>>>>>>>>
-                NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知).*$" options:0 error:nil];
+                
+                NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知|有.*事|在初则|凡占).*$" options:0 error:nil];
                 value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
+
                 if ([label hasPrefix:@"刑"] || [label hasPrefix:@"冲"] || [label hasPrefix:@"害"] || [label hasPrefix:@"破"]) {
                     NSArray *parts = [value componentsSeparatedByString:@" "];
                     if (parts.count > 0) value = parts[0];
                 }
-                // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
-                if ([label hasPrefix:@"杂象"]) {
-                    inZaxiang = YES;
-                }
-
+                if ([label hasPrefix:@"杂象"]) { inZaxiang = YES; }
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" ,，。"]];
                 if (value.length > 0) {
                      if ([label isEqualToString:@"杂象B+"]) {
@@ -622,15 +615,19 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                      }
                 }
                 [processedLines addObject:trimmedLine];
+                keywordFound = YES;
                 break;
             }
         }
+        
+        // 如果一行既不是关键字开头，也不是之前处理过的，我们就简单地忽略它
+        // 这样可以自然地过滤掉 `一、武临门户...` 和 `当防盗贼失脱...` 这样的解释性行
+        if (!keywordFound) {
+            [processedLines addObject:trimmedLine];
+        }
     }
     
-    while ([structuredResult hasSuffix:@"\n\n"]) {
-        [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)];
-    }
-
+    while ([structuredResult hasSuffix:@"\n\n"]) { [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)]; }
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
@@ -2611,6 +2608,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
