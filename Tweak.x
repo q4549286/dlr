@@ -631,7 +631,19 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-
+static NSString* parseAuxiliaryBlock(NSString *rawContent, NSString *title) {
+    if (!rawContent || rawContent.length == 0) return @"";
+    NSMutableString *result = [NSMutableString string];
+    NSArray *lines = [rawContent componentsSeparatedByString:@"\n"];
+    for (NSString* line in lines) {
+        NSString *trimmed = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        if (trimmed.length > 0) {
+            NSString *formattedLine = [trimmed stringByReplacingOccurrencesOfString:@"→" withString:@": "];
+            [result appendFormat:@"- %@\n", formattedLine];
+        }
+    }
+    return result;
+}
 static NSString* parseJiuZongMenBlock(NSString* rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
     NSMutableString *processedJiuZongMen = [rawContent mutableCopy];
@@ -2608,6 +2620,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
