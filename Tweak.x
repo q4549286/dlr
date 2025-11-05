@@ -527,7 +527,7 @@ static NSString* parseAndFilterShenSha(NSString *rawContent) {
     return [finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 课传流注详情解析器 (v29.1-FIXED - 恢复刑冲克害提取)
+// 课传流注详情解析器 (v2.8 - 解决问题3和4)
 static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle) {
     if (!rawText || rawText.length == 0) return @"";
 
@@ -634,7 +634,6 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-
 static NSString* parseAuxiliaryBlock(NSString *rawContent, NSString *title) {
     if (!rawContent || rawContent.length == 0) return @"";
     NSMutableString *result = [NSMutableString string];
@@ -648,6 +647,7 @@ static NSString* parseAuxiliaryBlock(NSString *rawContent, NSString *title) {
     }
     return result;
 }
+
 static NSString* parseJiuZongMenBlock(NSString* rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
     NSMutableString *processedJiuZongMen = [rawContent mutableCopy];
@@ -2543,19 +2543,6 @@ currentY += 110 + 20;
         [self processKeChuanQueue_Truth_S2];
     }
 }
-    
-    NSMutableDictionary *task = g_s2_keChuanWorkQueue.firstObject;
-    [g_s2_keChuanWorkQueue removeObjectAtIndex:0];
-    NSString *title = g_s2_keChuanTitleQueue[g_s2_capturedKeChuanDetailArray.count];
-    [self updateProgressHUD:[NSString stringWithFormat:@"推演课传: %lu/%lu", (unsigned long)g_s2_capturedKeChuanDetailArray.count + 1, (unsigned long)g_s2_keChuanTitleQueue.count]];
-    SEL action = ([title containsString:@"天将"]) ? NSSelectorFromString(@"顯示課傳天將摘要WithSender:") : NSSelectorFromString(@"顯示課傳天將摘要WithSender:");
-    if ([self respondsToSelector:action]) {
-        SUPPRESS_LEAK_WARNING([self performSelector:action withObject:task[@"gesture"]]);
-    } else {
-        [g_s2_capturedKeChuanDetailArray addObject:@"[解析失败: 方法不存在]"];
-        [self processKeChuanQueue_Truth_S2];
-    }
-}
 %new
 - (void)extractBiFa_NoPopup_WithCompletion:(void (^)(NSString *))completion { if (g_isExtractingBiFa) return; g_isExtractingBiFa = YES; g_biFa_completion = [completion copy]; SEL selector = NSSelectorFromString(@"顯示法訣總覽"); if ([self respondsToSelector:selector]) { SUPPRESS_LEAK_WARNING([self performSelector:selector]); } }
 %new
@@ -2637,47 +2624,6 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
