@@ -116,8 +116,7 @@ static void (^g_tianDiPan_completion_handler)(NSString *result) = nil;
 
 // --- UI & 配置状态 ---
 static BOOL g_shouldIncludeAIPromptHeader = YES;
-static BOOL g_shouldExtractBenMing = YES;
-
+static BOOL g_shouldExtractBenMing = NO;
 #pragma mark - Macros & Enums
 #define SafeString(str) (str ?: @"")
 #define SUPPRESS_LEAK_WARNING(code) \
@@ -2050,11 +2049,14 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     UIButton *promptButton = createButton(promptTitle, @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, promptColor);
     promptButton.frame = CGRectMake(startX, currentY, compactBtnWidth, compactButtonHeight);
     promptButton.selected = g_shouldIncludeAIPromptHeader; [contentView addSubview:promptButton];
-    NSString *benMingTitle = [NSString stringWithFormat:@"本命: %@", g_shouldExtractBenMing ? @"开启" : @"关闭"];
-    UIColor *benMingColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF;
-    UIButton *benMingButton = createButton(benMingTitle, @"person.text.rectangle", kButtonTag_BenMingToggle, benMingColor);
-    benMingButton.frame = CGRectMake(startX + compactBtnWidth + innerPadding, currentY, compactBtnWidth, compactButtonHeight);
-    benMingButton.selected = g_shouldExtractBenMing; [contentView addSubview:benMingButton];
+    // 确认这段代码的逻辑
+// 因为 g_shouldExtractBenMing 默认为 NO, 所以...
+NSString *benMingTitle = [NSString stringWithFormat:@"本命: %@", g_shouldExtractBenMing ? @"开启" : @"关闭"]; // ...这里 benMingTitle 会变成 "本命: 关闭"
+UIColor *benMingColor = g_shouldExtractBenMing ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF; // ...这里 benMingColor 会变成 ECHO_COLOR_SWITCH_OFF (灰色)
+UIButton *benMingButton = createButton(benMingTitle, @"person.text.rectangle", kButtonTag_BenMingToggle, benMingColor);
+benMingButton.frame = CGRectMake(startX + compactBtnWidth + innerPadding, currentY, compactBtnWidth, compactButtonHeight);
+benMingButton.selected = g_shouldExtractBenMing; // ...这里 selected 会被设为 NO
+[contentView addSubview:benMingButton];
     currentY += compactButtonHeight + 15;
 // 这是新代码
 // 这是最终修正版的代码块
@@ -2593,6 +2595,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
