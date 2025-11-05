@@ -527,8 +527,7 @@ static NSString* parseAndFilterShenSha(NSString *rawContent) {
     return [finalReport stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-// 课传流注详情解析器 (v2.8 - 解决问题3和4)
-// 课传流注详情解析器 (v2.9 - 移除过度过滤，恢复数据提取)
+// 课传流注详情解析器 (v29.1-FIXED - 恢复刑冲克害提取)
 static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitle) {
     if (!rawText || rawText.length == 0) return @"";
 
@@ -575,17 +574,33 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
     };
     
     BOOL inZaxiang = NO;
-    // ===== 核心修正：移除了 skipNextLineAsExplanation 变量及其相关的所有逻辑 =====
+    // BOOL skipNextLineAsExplanation = NO; // <--- 修正1: 移除这个不再需要的标志位
 
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
 
-        if (inZaxiang) { [structuredResult appendFormat:@"    - %@\n", trimmedLine]; [processedLines addObject:trimmedLine]; continue; }
+        /*
+        // --- 注释掉或删除以下代码块 START ---
+        if (skipNextLineAsExplanation) {
+            skipNextLineAsExplanation = NO;
+            continue;
+        }
+        */
         
-        // ===== 核心修正：移除了 variantRegex 的检查和 continue 逻辑 =====
+        if (inZaxiang) { [structuredResult appendFormat:@"    - %@\n", trimmedLine]; [processedLines addObject:trimmedLine]; continue; }
 
-        BOOL keywordFound = NO;
+        /*
+        NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
+        if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
+            [processedLines addObject:trimmedLine];
+            skipNextLineAsExplanation = YES; 
+            continue; 
+        }
+        // --- 注释掉或删除以上代码块 END ---
+        */
+
+
         for (NSString *keyword in keywordMap.allKeys) {
             if ([trimmedLine hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
@@ -615,15 +630,8 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
                      }
                 }
                 [processedLines addObject:trimmedLine];
-                keywordFound = YES;
                 break;
             }
-        }
-        
-        // 如果一行既不是关键字开头，也不是之前处理过的，我们就简单地忽略它
-        // 这样可以自然地过滤掉 `一、武临门户...` 和 `当防盗贼失脱...` 这样的解释性行
-        if (!keywordFound) {
-            [processedLines addObject:trimmedLine];
         }
     }
     
@@ -2620,6 +2628,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
