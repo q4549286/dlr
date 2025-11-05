@@ -567,55 +567,52 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
 
     // --- 阶段二：处理所有其他关系 ---
     NSDictionary<NSString *, NSString *> *keywordMap = @{
-        @"乘": @"乘将关系", @"临": @"临宫状态", @"遁干": @"遁干A+",
-        @"德 :": @"德S+", @"空 :": @"空A+", @"墓 :": @"墓A+", @"合 :": @"合A+",
+        @"乘": @"乘将关系", @"临": @"临宫状态",
+        @"遁干": @"遁干A+", @"德 :": @"德S+", @"空 :": @"空A+",  @"墓 :": @"墓A+",@"合 :": @"合A+",
         @"刑 :": @"刑C-", @"冲 :": @"冲B+", @"害 :": @"害C-", @"破 :": @"破D",
         @"阳神为": @"阳神A+", @"阴神为": @"阴神A+", @"杂象": @"杂象B+",
     };
     
     BOOL inZaxiang = NO;
-    BOOL skipNextLineAsExplanation = NO;
-
     for (NSString *line in lines) {
         NSString *trimmedLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         if (trimmedLine.length == 0 || [processedLines containsObject:trimmedLine]) continue;
 
-        if (skipNextLineAsExplanation) {
-            skipNextLineAsExplanation = NO;
-            continue;
-        }
-
-        if (inZaxiang) { [structuredResult appendFormat:@"    - %@\n", trimmedLine]; [processedLines addObject:trimmedLine]; continue; }
-
-        NSRegularExpression *variantRegex = [NSRegularExpression regularExpressionWithPattern:@"^[一二三四五六七八九十]+、" options:0 error:nil];
-        if ([variantRegex firstMatchInString:trimmedLine options:0 range:NSMakeRange(0, trimmedLine.length)]) {
-            // [修改点 3 & 4] 过滤掉所有 "一、..." 格式的格局/释义行及其下一行解释
-            [processedLines addObject:trimmedLine];
-            skipNextLineAsExplanation = YES; // 标记下一行（解释）也应跳过
-            continue; // 直接跳过，不输出此行
+        if (inZaxiang) { // 如果进入了杂象部分，直接添加
+            [structuredResult appendFormat:@"    - %@\n", trimmedLine];
+            [processedLines addObject:trimmedLine]; continue;
         }
 
         for (NSString *keyword in keywordMap.allKeys) {
             if ([trimmedLine hasPrefix:keyword]) {
                 NSString *value = extractValueAfterKeyword(trimmedLine, keyword);
                 NSString *label = keywordMap[keyword];
-                
+                // <<<<<<<<<<<<<<<<<<<< 核心修改点 START >>>>>>>>>>>>>>>>>>>>
+                // 根据您的要求，对"遁干"的输出内容进行文本替换
                 if ([label isEqualToString:@"遁干A+"]) {
-                    value = [[[[value stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干:"]
-                                     stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时:"]
-                                     stringByReplacingOccurrencesOfString:@"丁" withString:@"丁神"]
-                                     stringByReplacingOccurrencesOfString:@"癸" withString:@"闭口"];
-                }
-                
-                // [修改点 4] 增强断语过滤，移除 "有...事" 和 "在初则..." 等模式
-                NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知|有.*事|在初则|凡占).*$" options:0 error:nil];
-                value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
+                    // 步骤 1: 替换标签 "初建" -> "遁干", "复建" -> "遁时"
+                    value = [value stringByReplacingOccurrencesOfString:@"初建:" withString:@"遁干:"];
+                    value = [value stringByReplacingOccurrencesOfString:@"复建:" withString:@"遁时:"];
 
+                    // <<<<<<<<<<<<<<<<<<<< 核心修改点 START >>>>>>>>>>>>>>>>>>>>
+                    // 步骤 2: 在上一步的基础上，替换特定的天干值为特殊名称
+                    value = [value stringByReplacingOccurrencesOfString:@"丁" withString:@"丁神"];
+                    value = [value stringByReplacingOccurrencesOfString:@"癸" withString:@"闭口"];
+                    // <<<<<<<<<<<<<<<<<<<< 核心修改点 END >>>>>>>>>>>>>>>>>>>>
+                }
+                // <<<<<<<<<<<<<<< 强力过滤引擎 >>>>>>>>>>>>>>>>>
+                NSRegularExpression *conclusionRegex = [NSRegularExpression regularExpressionWithPattern:@"(，|。|\\s)(此主|主|此为|此曰|故|实难|不宜|恐|凡事|进退有悔|百事不顺|其吉可知|其凶可知).*$" options:0 error:nil];
+                value = [conclusionRegex stringByReplacingMatchesInString:value options:0 range:NSMakeRange(0, value.length) withTemplate:@""];
                 if ([label hasPrefix:@"刑"] || [label hasPrefix:@"冲"] || [label hasPrefix:@"害"] || [label hasPrefix:@"破"]) {
                     NSArray *parts = [value componentsSeparatedByString:@" "];
                     if (parts.count > 0) value = parts[0];
                 }
-                if ([label hasPrefix:@"杂象"]) { inZaxiang = YES; }
+                // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+                if ([label hasPrefix:@"杂象"]) {
+                    inZaxiang = YES;
+                }
+
                 value = [value stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" ,，。"]];
                 if (value.length > 0) {
                      if ([label isEqualToString:@"杂象B+"]) {
@@ -630,23 +627,13 @@ static NSString* parseKeChuanDetailBlock(NSString *rawText, NSString *objectTitl
         }
     }
     
-    while ([structuredResult hasSuffix:@"\n\n"]) { [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)]; }
+    while ([structuredResult hasSuffix:@"\n\n"]) {
+        [structuredResult deleteCharactersInRange:NSMakeRange(structuredResult.length - 1, 1)];
+    }
+
     return [structuredResult stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 }
 
-static NSString* parseAuxiliaryBlock(NSString *rawContent, NSString *title) {
-    if (!rawContent || rawContent.length == 0) return @"";
-    NSMutableString *result = [NSMutableString string];
-    NSArray *lines = [rawContent componentsSeparatedByString:@"\n"];
-    for (NSString* line in lines) {
-        NSString *trimmed = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-        if (trimmed.length > 0) {
-            NSString *formattedLine = [trimmed stringByReplacingOccurrencesOfString:@"→" withString:@": "];
-            [result appendFormat:@"- %@\n", formattedLine];
-        }
-    }
-    return result;
-}
 
 static NSString* parseJiuZongMenBlock(NSString* rawContent) {
     if (!rawContent || rawContent.length == 0) return @"";
@@ -2624,6 +2611,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
