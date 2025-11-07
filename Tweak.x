@@ -3072,13 +3072,7 @@ static NSString* formatFinalReport(NSDictionary* reportData) {
         ">    *   **终极指令：** `[此处插入匹配到的“终极指令”]`\n"
         ">    *   **干预方案：** `[此处插入匹配到的“干预方案”]`\n"
         "> ---\n"
-        "> **地图生成完毕。控制权移交【创境分析引擎】，开始深度推演。**\n", userQuestion];
-    
-    // 假设 headerPrompt, structuredReport, summaryLine 是其他需要拼接的字符串
-    // return [NSString stringWithFormat:@"%@%@%@%@", headerPrompt, structuredReport, summaryLine, footerText];
-    
-    // 如果这个方法只负责生成 footerText，可以直接返回
-    return footerText;
+        "> **地图生成完毕。控制权移交【创境分析引擎】，开始深度推演。**\n", userQuestion];    return [NSString stringWithFormat:@"%@%@%@%@", headerPrompt, structuredReport, summaryLine, footerText];
 }
 
 // =======================================================================
@@ -3905,6 +3899,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
