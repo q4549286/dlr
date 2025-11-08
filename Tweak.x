@@ -5,8 +5,9 @@
 
 // =======================================================================================
 //
-//  Echo 天地盘坐标校准工具 v1.0
+//  Echo 天地盘坐标校准工具 v1.1
 //
+//  - [修复] 修复了因混用 CALayer 和 UIView 坐标转换方法导致的编译错误。
 //  - 功能: 专门用于提取“天地盘”中“天神”(上神)十二宫的原始屏幕坐标。
 //  - 用法:
 //    1. 独立安装此脚本，并暂时禁用主分析脚本。
@@ -151,13 +152,18 @@ static UIWindow* GetFrontmostWindow() {
         CALayer *textLayer = (CALayer *)layer;
         NSString *text = ([textLayer respondsToSelector:@selector(string)]) ? [(id)textLayer string] : @"?";
 
-        // 获取在窗口中的绝对坐标
-        CGPoint position = [textLayer.superlayer convertPoint:textLayer.position toView:nil];
+        // ======================= 核心修正点 =======================
+        // 步骤1: 将图层坐标转换到 plateView 的主图层坐标系
+        CGPoint positionInPlateViewLayer = [textLayer.superlayer convertPoint:textLayer.position toLayer:plateView.layer];
+        // 步骤2: 使用 plateView (UIView) 将其图层上的点转换到窗口坐标系
+        CGPoint finalPosition = [plateView convertPoint:positionInPlateViewLayer toView:nil];
+        // ==========================================================
         
-        [extractedData addObject:@{ @"text": text, @"point": [NSValue valueWithCGPoint:position] }];
+        [extractedData addObject:@{ @"text": text, @"point": [NSValue valueWithCGPoint:finalPosition] }];
     }
 
     // 4. 按十二地支顺序排序
+    // 修正顺序以匹配主脚本的逆时针布局 (从午位开始)
     NSArray *order = @[@"午", @"巳", @"辰", @"卯", @"寅", @"丑", @"子", @"亥", @"戌", @"酉", @"申", @"未"];
     [extractedData sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
         NSUInteger index1 = [order indexOfObject:obj1[@"text"]];
@@ -190,6 +196,6 @@ static UIWindow* GetFrontmostWindow() {
 
 %ctor {
     @autoreleasepool {
-        NSLog(@"[Echo坐标校准] 工具已加载。");
+        NSLog(@"[Echo坐标校准] 工具 v1.1 (已修复) 已加载。");
     }
 }
