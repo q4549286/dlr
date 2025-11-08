@@ -101,9 +101,9 @@ static UIWindow* GetFrontmostWindow() {
     NSLog(@"[坐标校准] 任务启动：开始提取'天神宮名列'的原始坐标...");
 
     // 1. 查找天地盘视图
-    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖");
+    Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
     if (!plateViewClass) {
-        NSLog(@"[坐标校准] 错误: 找不到天地盘视图类 '六壬大占.天地盤視圖'");
+        NSLog(@"[坐标校准] 错误: 找不到天地盘视图类 '六壬大占.天地盤視圖類'");
         return;
     }
 
@@ -199,3 +199,4 @@ static UIWindow* GetFrontmostWindow() {
         NSLog(@"[Echo坐标校准] 工具 v1.1 (已修复) 已加载。");
     }
 }
+
