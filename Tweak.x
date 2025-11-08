@@ -154,52 +154,56 @@ typedef NS_ENUM(NSInteger, EchoDataType) {
 
 #pragma mark - Coordinate Database (from Script 1)
 // 核心修改: 移入天地盘坐标数据库
+// =================================================================================
+// 方案B: 几何重构修正版 (推荐)
+//
+// - [修正] 根据从设备提取的实际数据，将上神半径从 115.0 调整为 104.5。
+// - [保留] 天将半径 70.0 与提取数据基本吻合，予以保留。
+// - [统一] 中心点统一为 (180.0, 180.0)，与视图调试器信息一致。
+//
+// 请用此函数完整替换您主脚本中的 initializeTianDiPanCoordinates 函数
+// =================================================================================
+
 static NSArray *g_tianDiPan_fixedCoordinates = nil;
 static void initializeTianDiPanCoordinates() {
     if (g_tianDiPan_fixedCoordinates) return;
-        CGFloat centerX = 180.0, centerY = 180.0;
 
-    // --- 根据实测数据更新为椭圆半径 ---
-    // 上神 (外圈)
-    CGFloat shangShenRadiusX = 52.0;  // 水平方向半径
-    CGFloat shangShenRadiusY = 90.5;  // 垂直方向半径
-    
-    // 天将 (内圈) - 按主脚本的半径比例 (70/115 ≈ 0.608) 同步缩放
-    CGFloat tianJiangRadiusX = shangShenRadiusX * 0.608; // ≈ 31.6
-    CGFloat tianJiangRadiusY = shangShenRadiusY * 0.608; // ≈ 55.0
+    CGFloat centerX = 180.0, centerY = 180.0;
+    CGFloat tianJiangRadius = 70.0;  // 天将半径与提取数据基本吻合，保持不变
+    CGFloat shangShenRadius = 104.5; // !!! 核心修正：根据提取数据更新上神半径
 
     // 三角函数常量
-    const CGFloat sin30 = 0.500;
-    const CGFloat cos30 = 0.866;
+    CGFloat sin30 = 0.5;
+    CGFloat cos30 = 0.866;
 
     g_tianDiPan_fixedCoordinates = @[
         // --- 天将 (内圈) ---
-        @{@"name": @"天将-午位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY - tianJiangRadiusY)]},
-        @{@"name": @"天将-巳位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadiusX * sin30, centerY - tianJiangRadiusY * cos30)]},
-        @{@"name": @"天将-辰位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadiusX * cos30, centerY - tianJiangRadiusY * sin30)]},
-        @{@"name": @"天将-卯位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadiusX, centerY)]},
-        @{@"name": @"天将-寅位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadiusX * cos30, centerY + tianJiangRadiusY * sin30)]},
-        @{@"name": @"天将-丑位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadiusX * sin30, centerY + tianJiangRadiusY * cos30)]},
-        @{@"name": @"天将-子位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY + tianJiangRadiusY)]},
-        @{@"name": @"天将-亥位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadiusX * sin30, centerY + tianJiangRadiusY * cos30)]},
-        @{@"name": @"天将-戌位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadiusX * cos30, centerY + tianJiangRadiusY * sin30)]},
-        @{@"name": @"天将-酉位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadiusX, centerY)]},
-        @{@"name": @"天将-申位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadiusX * cos30, centerY - tianJiangRadiusY * sin30)]},
-        @{@"name": @"天将-未位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadiusX * sin30, centerY - tianJiangRadiusY * cos30)]},
-        
+        @{@"name": @"天将-午位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY - tianJiangRadius)]},
+        @{@"name": @"天将-巳位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadius * sin30, centerY - tianJiangRadius * cos30)]},
+        @{@"name": @"天将-辰位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadius * cos30, centerY - tianJiangRadius * sin30)]},
+        @{@"name": @"天将-卯位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadius, centerY)]},
+        @{@"name": @"天将-寅位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadius * cos30, centerY + tianJiangRadius * sin30)]},
+        @{@"name": @"天将-丑位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - tianJiangRadius * sin30, centerY + tianJiangRadius * cos30)]},
+        @{@"name": @"天将-子位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY + tianJiangRadius)]},
+        @{@"name": @"天将-亥位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadius * sin30, centerY + tianJiangRadius * cos30)]},
+        @{@"name": @"天将-戌位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadius * cos30, centerY + tianJiangRadius * sin30)]},
+        @{@"name": @"天将-酉位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadius, centerY)]},
+        @{@"name": @"天将-申位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadius * cos30, centerY - tianJiangRadius * sin30)]},
+        @{@"name": @"天将-未位", @"type": @"tianJiang", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + tianJiangRadius * sin30, centerY - tianJiangRadius * cos30)]},
+
         // --- 上神 (外圈) ---
-        @{@"name": @"上神-午位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY - shangShenRadiusY)]},
-        @{@"name": @"上神-巳位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadiusX * sin30, centerY - shangShenRadiusY * cos30)]},
-        @{@"name": @"上神-辰位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadiusX * cos30, centerY - shangShenRadiusY * sin30)]},
-        @{@"name": @"上神-卯位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadiusX, centerY)]},
-        @{@"name": @"上神-寅位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadiusX * cos30, centerY + shangShenRadiusY * sin30)]},
-        @{@"name": @"上神-丑位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadiusX * sin30, centerY + shangShenRadiusY * cos30)]},
-        @{@"name": @"上神-子位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY + shangShenRadiusY)]},
-        @{@"name": @"上神-亥位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadiusX * sin30, centerY + shangShenRadiusY * cos30)]},
-        @{@"name": @"上神-戌位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadiusX * cos30, centerY + shangShenRadiusY * sin30)]},
-        @{@"name": @"上神-酉位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadiusX, centerY)]},
-        @{@"name": @"上神-申位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadiusX * cos30, centerY - shangShenRadiusY * sin30)]},
-        @{@"name": @"上神-未位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadiusX * sin30, centerY - shangShenRadiusY * cos30)]},
+        @{@"name": @"上神-午位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY - shangShenRadius)]},
+        @{@"name": @"上神-巳位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadius * sin30, centerY - shangShenRadius * cos30)]},
+        @{@"name": @"上神-辰位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadius * cos30, centerY - shangShenRadius * sin30)]},
+        @{@"name": @"上神-卯位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadius, centerY)]},
+        @{@"name": @"上神-寅位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadius * cos30, centerY + shangShenRadius * sin30)]},
+        @{@"name": @"上神-丑位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX - shangShenRadius * sin30, centerY + shangShenRadius * cos30)]},
+        @{@"name": @"上神-子位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX, centerY + shangShenRadius)]},
+        @{@"name": @"上神-亥位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadius * sin30, centerY + shangShenRadius * cos30)]},
+        @{@"name": @"上神-戌位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadius * cos30, centerY + shangShenRadius * sin30)]},
+        @{@"name": @"上神-酉位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadius, centerY)]},
+        @{@"name": @"上神-申位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadius * cos30, centerY - shangShenRadius * sin30)]},
+        @{@"name": @"上神-未位", @"type": @"shangShen", @"point": [NSValue valueWithCGPoint:CGPointMake(centerX + shangShenRadius * sin30, centerY - shangShenRadius * cos30)]},
     ];
 }
 
@@ -3916,3 +3920,4 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
