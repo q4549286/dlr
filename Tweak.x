@@ -8,7 +8,7 @@
 //  Echo 天地盘坐标校准工具 v1.1
 //
 //  - [修复] 修复了因混用 CALayer 和 UIView 坐标转换方法导致的编译错误。
-//  - 功能: 专门用于提取“天地盘”中“天神”(上神)十二宫的原始屏幕坐标。
+//  - 功能: 专门用于提取“天地盘”中“天將”(上神)十二宫的原始屏幕坐标。
 //  - 用法:
 //    1. 独立安装此脚本，并暂时禁用主分析脚本。
 //    2. 在App主界面，点击新增的红色“校准坐标”按钮。
@@ -98,7 +98,7 @@ static UIWindow* GetFrontmostWindow() {
 // 新增的方法，作为按钮点击后的核心处理逻辑
 %new
 - (void)runCoordinateExtraction {
-    NSLog(@"[坐标校准] 任务启动：开始提取'天神宮名列'的原始坐标...");
+    NSLog(@"[坐标校准] 任务启动：开始提取'天將宮名列'的原始坐标...");
 
     // 1. 查找天地盘视图
     Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖類");
@@ -126,7 +126,7 @@ static UIWindow* GetFrontmostWindow() {
         const char* ivarNameCStr = ivar_getName(ivars[i]);
         if (!ivarNameCStr) continue;
         NSString *ivarName = [NSString stringWithUTF8String:ivarNameCStr];
-        if ([ivarName hasSuffix:@"天神宮名列"]) { // 精确匹配目标
+        if ([ivarName hasSuffix:@"天將宮名列"]) { // 精确匹配目标
             tianShenDict = object_getIvar(plateView, ivars[i]);
             NSLog(@"[坐标校准] 成功找到实例变量: %@", ivarName);
             break;
@@ -135,14 +135,14 @@ static UIWindow* GetFrontmostWindow() {
     free(ivars);
 
     if (!tianShenDict || ![tianShenDict isKindOfClass:[NSDictionary class]]) {
-        NSLog(@"[坐标校准] 错误: 未能获取'天神宮名列'的数据字典，或其类型不正确。");
+        NSLog(@"[坐标校准] 错误: 未能获取'天將宮名列'的数据字典，或其类型不正确。");
         return;
     }
 
     // 3. 遍历字典中的所有CALayer，并提取信息
     NSArray *allLayers = [tianShenDict allValues];
     if (allLayers.count != 12) {
-         NSLog(@"[坐标校准] 警告: 提取到的天神数量为 %lu, 而非预期的12个。", (unsigned long)allLayers.count);
+         NSLog(@"[坐标校准] 警告: 提取到的天將数量为 %lu, 而非预期的12个。", (unsigned long)allLayers.count);
     }
 
     NSMutableArray *extractedData = [NSMutableArray array];
@@ -172,7 +172,7 @@ static UIWindow* GetFrontmostWindow() {
     }];
 
     // 5. 格式化输出
-    NSMutableString *outputString = [NSMutableString stringWithString:@"\n\n// ===== [Echo坐标校准工具] 提取结果 (天神/上神) =====\n"];
+    NSMutableString *outputString = [NSMutableString stringWithString:@"\n\n// ===== [Echo坐标校准工具] 提取结果 (天將/上神) =====\n"];
     [outputString appendString:@"// 请将以下代码块复制到主脚本的 g_tianDiPan_fixedCoordinates 数组中，替换所有 type 为 shangShen 的条目\n\n"];
     
     for (NSDictionary *data in extractedData) {
@@ -186,7 +186,7 @@ static UIWindow* GetFrontmostWindow() {
 
     // 6. 弹窗提示用户
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提取完成"
-                                                                   message:@"“天神/上神”坐标数据已输出到控制台日志。\n请检查Xcode或设备日志并复制结果。"
+                                                                   message:@"“天將/上神”坐标数据已输出到控制台日志。\n请检查Xcode或设备日志并复制结果。"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -199,4 +199,5 @@ static UIWindow* GetFrontmostWindow() {
         NSLog(@"[Echo坐标校准] 工具 v1.1 (已修复) 已加载。");
     }
 }
+
 
