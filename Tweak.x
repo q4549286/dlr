@@ -3260,7 +3260,7 @@ NSString *footerText = [NSString stringWithFormat:@"/```\n"
     "> **三、 剧情推演 (机会与风险)：**\n"
     ">    *   `[此处插入匹配到的“剧情推演”点，以问题列表形式呈现]`\n"
     "> ---\n"
-    "> **协议执行完毕后，控制权无条件移交至【创境分析引擎 · 榫卯架构】，本协议静默终止。**\n", userQuestion];
+    "> **协议执行完毕后，控制权无条件移交至【创境分析引擎 · 榫卯架构】并启动，本协议静默终止。**\n", userQuestion];
     return [NSString stringWithFormat:@"%@%@%@%@", headerPrompt, structuredReport, summaryLine, footerText];
 }
 
@@ -4088,6 +4088,7 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.1 (完整版) 已加载。");
     }
 }
+
 
 
 
