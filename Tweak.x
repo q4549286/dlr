@@ -5,18 +5,14 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v2.3 (闪退修复最终完美版)
+//  Echo 奇门遁甲提取器 v2.4 (混合模式最终版)
 //
-//  - [闪退修复] 使用了从Flex中获取的 CZGong 对象的真实属性名，彻底解决闪退问题。
-//  - [精准提取] 所有数据均从数据模型中读取，结果100%准确。
-//  - [最终版] 这是经过所有调试和修正后的最终稳定版本。
+//  - [精准升级] 采用数据模型+UI抓取混合模式，提取信息更全面、更精准。
+//  - [新增] 增加了遁干、寄干、星旺衰、门旺衰、卦数等信息的提取。
+//  - [优化] 顶部核心参数提取改为从 CZShowBaZiView 的数据模型读取，避免无关信息。
 //
 // =======================================================================================
 
-
-// =========================================================================
-// 1. 全局变量、常量定义与辅助函数
-// =========================================================================
 
 #pragma mark - Constants, Colors & Tags
 static const NSInteger kEchoControlButtonTag    = 556699;
@@ -93,9 +89,6 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
     } return frontmostWindow; }
 
 
-// =========================================================================
-// 3. 报告生成
-// =========================================================================
 static NSString *getAIPromptHeader() {
     return @"# 【创境分析引擎 · 榫卯架构 IV · 超越之道版】\n"
          @"> #### **本次战略勘探地图：**\n"
@@ -120,18 +113,11 @@ static NSString* formatFinalReport(NSString* reportContent) {
     return [NSString stringWithFormat:@"%@\n%@\n", finalPrompt, SafeString(reportContent)];
 }
 
-
-// =========================================================================
-// 4. 核心拦截器 (占位符)
-// =========================================================================
 static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
 static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
     Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
 }
 
-// =========================================================================
-// 5. 接口声明、UI与核心Hook
-// =========================================================================
 @interface UIViewController (EchoAnalysisEngine) <UITextViewDelegate>
 - (void)createOrShowMainControlPanel;
 - (void)handleMasterButtonTap:(UIButton *)sender;
@@ -188,25 +174,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         }];
         return;
     }
-
     g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds];
     g_mainControlPanelView.tag = kEchoMainPanelTag;
     g_mainControlPanelView.backgroundColor = [UIColor clearColor];
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
     blurView.frame = g_mainControlPanelView.bounds;
     [g_mainControlPanelView addSubview:blurView];
-
     UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 45, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 65)];
     [g_mainControlPanelView addSubview:contentView];
-
     CGFloat padding = 15.0;
-
     UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
         btn.backgroundColor = color; btn.tag = tag;
         if (tag >= 200 && tag < 900) { [btn addTarget:self action:@selector(handleToolButtonTap:) forControlEvents:UIControlEventTouchUpInside]; }
         else {[btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];}
-
         [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
         [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
         btn.layer.cornerRadius = 12; [btn setTitle:title forState:UIControlStateNormal];
@@ -222,49 +203,41 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; btn.tintColor = [UIColor whiteColor];
         return btn;
     };
-
     UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) {
         UILabel *label = [[UILabel alloc] init]; label.text = title;
         label.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
         label.textColor = [UIColor lightGrayColor]; return label;
     };
-
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v2.3" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v2.4" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
     [contentView addSubview:titleLabel];
     currentY += 30 + 20;
-
     CGFloat compactButtonHeight = 40.0, innerPadding = 10.0;
     CGFloat cardContentWidth = contentView.bounds.size.width - 2 * padding;
     CGFloat compactBtnWidth = (cardContentWidth - innerPadding) / 2.0;
-    
     NSString *promptTitle = [NSString stringWithFormat:@"Prompt: %@", g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"];
     UIButton *promptButton = createButton(promptTitle, @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF);
     promptButton.frame = CGRectMake(padding, currentY, compactBtnWidth, compactButtonHeight);
     [contentView addSubview:promptButton];
-
     NSString *toggleTitle = [NSString stringWithFormat:@"开关: %@", g_isSomeToggleOn ? @"开启" : @"关闭"];
     UIButton *toggleButton = createButton(toggleTitle, @"switch.2", kButtonTag_BenMingToggle, g_isSomeToggleOn ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF);
     toggleButton.frame = CGRectMake(padding + compactBtnWidth + innerPadding, currentY, compactBtnWidth, compactButtonHeight);
     [contentView addSubview:toggleButton];
     currentY += compactButtonHeight + 15;
-
     UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
     textViewContainer.backgroundColor = ECHO_COLOR_CARD_BG; textViewContainer.layer.cornerRadius = 12;
     [contentView addSubview:textViewContainer];
-    
     g_questionTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, 0, textViewContainer.bounds.size.width - 2*padding - 40, 110)];
     g_questionTextView.backgroundColor = [UIColor clearColor]; g_questionTextView.font = [UIFont systemFontOfSize:14];
     g_questionTextView.textContainerInset = UIEdgeInsetsMake(10, 0, 10, 0); g_questionTextView.delegate = (id<UITextViewDelegate>)self;
     g_questionTextView.returnKeyType = UIReturnKeyDone; g_questionTextView.text = @"选填：输入您想问的具体问题";
     g_questionTextView.textColor = [UIColor lightGrayColor];
     [textViewContainer addSubview:g_questionTextView];
-    
     g_clearInputButton = [UIButton buttonWithType:UIButtonTypeSystem];
     if (@available(iOS 13.0, *)) { [g_clearInputButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal]; }
     g_clearInputButton.frame = CGRectMake(textViewContainer.bounds.size.width - padding - 25, 10, 25, 25);
@@ -272,46 +245,37 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [g_clearInputButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
     [textViewContainer addSubview:g_clearInputButton];
     currentY += 110 + 20;
-
     UIView *card1 = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 0)];
     card1.backgroundColor = ECHO_COLOR_CARD_BG; card1.layer.cornerRadius = 12;
     [contentView addSubview:card1];
-    
     CGFloat card1InnerY = 15;
     UILabel *sec1Title = createSectionTitle(@"核心功能");
     sec1Title.frame = CGRectMake(padding, card1InnerY, card1.bounds.size.width - 2*padding, 22);
     [card1 addSubview:sec1Title];
     card1InnerY += 22 + 10;
-    
     UIButton *stdButton = createButton(@"提取奇门盘", @"doc.text.fill", kButtonTag_StandardReport, ECHO_COLOR_MAIN_TEAL);
     stdButton.frame = CGRectMake(padding, card1InnerY, card1.bounds.size.width - 2*padding, 48);
     [card1 addSubview:stdButton];
-    
     card1InnerY += 48 + 15;
     card1.frame = CGRectMake(padding, currentY, card1.bounds.size.width, card1InnerY);
     currentY += card1.frame.size.height + 20;
-    
     CGFloat bottomButtonsHeight = 40, bottomAreaPadding = 10, logTopPadding = 20;
     CGFloat bottomButtonsY = contentView.bounds.size.height - bottomButtonsHeight - bottomAreaPadding;
     CGFloat logViewY = currentY + logTopPadding;
     CGFloat logViewHeight = bottomButtonsY - logViewY - bottomAreaPadding;
-    
     g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, logViewY, contentView.bounds.size.width - 2*padding, logViewHeight)];
     g_logTextView.backgroundColor = ECHO_COLOR_CARD_BG; g_logTextView.layer.cornerRadius = 12;
     g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
     g_logTextView.editable = NO; g_logTextView.textContainerInset = UIEdgeInsetsMake(10, 10, 10, 10);
     g_logTextView.attributedText = [[NSAttributedString alloc] initWithString:@"[Echo奇门提取器]：就绪。\n" attributes:@{NSForegroundColorAttributeName: [UIColor whiteColor], NSFontAttributeName: g_logTextView.font}];
     [contentView addSubview:g_logTextView];
-    
     CGFloat bottomBtnWidth = (contentView.bounds.size.width - 2*padding - padding) / 2.0;
     UIButton *closeButton = createButton(@"关闭", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
     closeButton.frame = CGRectMake(padding, bottomButtonsY, bottomBtnWidth, bottomButtonsHeight);
     [contentView addSubview:closeButton];
-    
     UIButton *sendLastReportButton = createButton(@"发送数据", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
     sendLastReportButton.frame = CGRectMake(padding + bottomBtnWidth + padding, bottomButtonsY, bottomBtnWidth, bottomButtonsHeight);
     [contentView addSubview:sendLastReportButton];
-
     g_mainControlPanelView.alpha = 0; g_mainControlPanelView.transform = CGAffineTransformMakeScale(1.05, 1.05);
     [keyWindow addSubview:g_mainControlPanelView];
     [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.2 options:UIViewAnimationOptionCurveEaseInOut animations:^{
@@ -358,69 +322,73 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [self showEchoNotificationWithTitle:@"无操作" message:@"此按钮为框架占位符"];
 }
 
-
-// ==========================================================
-// 核心提取逻辑 (v2.3 闪退修复最终版)
-// ==========================================================
 %new
 - (void)startStandardExtraction {
     if (g_isExtracting) return;
-    LogMessage(EchoLogTypeTask, @"[奇门] v2.3 提取任务启动 (最终版)...");
+    LogMessage(EchoLogTypeTask, @"[奇门] v2.4 提取任务启动 (混合模式)...");
     g_isExtracting = YES;
-    [self showProgressHUD:@"正在提取奇门盘..."];
+    [self showProgressHUD:@"正在精准提取..."];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         NSMutableString *reportContent = [NSMutableString string];
         
-        // --- 1. 提取顶部和底部信息 (UI抓取) ---
         [reportContent appendString:@"// 1. 核心参数\n"];
-        NSString *fullInfo = [self findTextInViewWithClassName:@"CZJuShiView" separator:@"\n"]; 
-        
-        NSString *topInfo = fullInfo;
-        NSRange range = [topInfo rangeOfString:@"时家拆补飞盘"];
-        if (range.location != NSNotFound) {
-            topInfo = [topInfo substringToIndex:range.location];
-        }
-        [reportContent appendFormat:@"%@\n\n", [SafeString(topInfo) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        Class baziViewClass = NSClassFromString(@"CZShowBaZiView");
+        if(baziViewClass) {
+            NSMutableArray *baziViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive(baziViewClass, self.view, baziViews);
+            if (baziViews.count > 0) {
+                UIView *baziView = baziViews.firstObject;
+                id baZiModel = [baziView valueForKey:@"baZi"];
+                id juTouModel = [baziView valueForKey:@"juTou"];
+                if (baZiModel && juTouModel) {
+                    NSString *nianZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"nianGan"], [baZiModel valueForKey:@"nianZhi"]];
+                    NSString *yueZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"yueGan"], [baZiModel valueForKey:@"yueZhi"]];
+                    NSString *riZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"riGan"], [baZiModel valueForKey:@"riZhi"]];
+                    NSString *shiZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"shiGan"], [baZiModel valueForKey:@"shiZhi"]];
+                    NSString *juStr = [juTouModel valueForKey:@"juStr"];
+                    NSString *xunKong = [juTouModel valueForKey:@"xunKong"];
+                    NSString *zhiFu = [juTouModel valueForKey:@"zhiFu"];
+                    NSString *zhiShi = [juTouModel valueForKey:@"zhiShi"];
+                    [reportContent appendFormat:@"四柱: %s %s %s %s\n", [nianZhu UTF8String], [yueZhu UTF8String], [riZhu UTF8String], [shiZhu UTF8String]];
+                    [reportContent appendFormat:@"局: %@ %@\n", SafeString(juStr), SafeString(xunKong)];
+                    [reportContent appendFormat:@"值符: %@ | 值使: %@\n\n", SafeString(zhiFu), SafeString(zhiShi)];
+                } else { [reportContent appendString:@"[顶部信息提取失败: 未找到baZi或juTou模型]\n\n"]; }
+            } else { [reportContent appendString:@"[顶部信息提取失败: 未找到CZShowBaZiView]\n\n"]; }
+        } else { [reportContent appendString:@"[顶部信息提取失败: 找不到CZShowBaZiView类]\n\n"]; }
 
-        // --- 2. 提取九宫格详情 (数据模型抓取) ---
         [reportContent appendString:@"// 2. 九宫格详情\n"];
-        
         Class cellClass = NSClassFromString(@"CZGongChuanRenThemeCollectionViewCell");
         if (!cellClass) {
             [reportContent appendString:@"[提取失败: 找不到 CZGongChuanRenThemeCollectionViewCell 类]\n"];
         } else {
             NSMutableArray *allCells = [NSMutableArray array];
             FindSubviewsOfClassRecursive(cellClass, self.view, allCells);
-
             if (allCells.count >= 9) {
                 LogMessage(EchoLogTypeSuccess, @"[奇门] 成功找到 %lu 个宫位Cell。", (unsigned long)allCells.count);
-
                 Ivar gongIvar = class_getInstanceVariable(cellClass, "_gong");
                 if (!gongIvar) {
                     [reportContent appendString:@"[提取失败: 找不到 _gong 实例变量]\n"];
                 } else {
-                    NSMutableArray *gongModels = [NSMutableArray array];
+                    NSMutableArray *gongModelsWithCell = [NSMutableArray array];
                     for (UIView *cell in allCells) {
                         id gongModel = object_getIvar(cell, gongIvar);
                         if (gongModel) {
-                            [gongModels addObject:gongModel];
+                            [gongModelsWithCell addObject:@{@"model": gongModel, @"cell": cell}];
                         }
                     }
-
                     NSDictionary *sortOrder = @{@"坎":@1, @"坤":@2, @"震":@3, @"巽":@4, @"中":@5, @"乾":@6, @"兑":@7, @"艮":@8, @"离":@9};
-                    [gongModels sortUsingComparator:^NSComparisonResult(id obj1, id obj2) {
-                        // [闪退修复] 使用正确的属性名
-                        NSString *gongName1 = [obj1 valueForKey:@"gongHouTianNameStr"];
-                        NSString *gongName2 = [obj2 valueForKey:@"gongHouTianNameStr"];
+                    [gongModelsWithCell sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
+                        NSString *gongName1 = [obj1[@"model"] valueForKey:@"gongHouTianNameStr"];
+                        NSString *gongName2 = [obj2[@"model"] valueForKey:@"gongHouTianNameStr"];
                         if (gongName1.length < 1 || gongName2.length < 1) return NSOrderedSame;
                         NSNumber *order1 = sortOrder[[gongName1 substringToIndex:1]];
                         NSNumber *order2 = sortOrder[[gongName2 substringToIndex:1]];
                         return [order1 compare:order2 ? order2 : @(99)];
                     }];
-
-                    for (id model in gongModels) {
-                        // [闪退修复] 使用从Flex获取的真实属性名
+                    for (NSDictionary *item in gongModelsWithCell) {
+                        id model = item[@"model"];
+                        UIView *cell = item[@"cell"];
                         NSString *gongName = [model valueForKey:@"gongHouTianNameStr"];
                         NSString *tianPanGan = [model valueForKey:@"tianPanGanStr"];
                         NSString *diPanGan = [model valueForKey:@"diPanGanStr"];
@@ -429,46 +397,42 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                         NSString *baMen = [model valueForKey:@"baMenStr"];
                         BOOL isMaXing = [[model valueForKey:@"isMaXing"] boolValue];
                         BOOL isKongWang = [[model valueForKey:@"isKongWang"] boolValue];
-                        
+                        NSString *yinGan = [model valueForKey:@"yinGanStr"];
+                        NSString *tianPanJiGan = [model valueForKey:@"tianPanJiGanStr"];
+                        NSString *diPanJiGan = [model valueForKey:@"diPanJiGanStr"];
+                        UILabel *xingWangShuaiLabel = [cell valueForKey:@"labelXingWangShuai"];
+                        NSString *xingWangShuai = xingWangShuaiLabel.text ?: @"";
+                        UILabel *menWangShuaiLabel = [cell valueForKey:@"labelMenWangShuai"];
+                        NSString *menWangShuai = menWangShuaiLabel.text ?: @"";
+                        UILabel *gongGuaLabel = [cell valueForKey:@"labelGongGuaShuNeiWaiPan"];
+                        NSString *gongGua = gongGuaLabel.text ?: @"";
                         NSString *specialSymbols = @"";
                         if (isMaXing) specialSymbols = [specialSymbols stringByAppendingString:@" 马"];
                         if (isKongWang) specialSymbols = [specialSymbols stringByAppendingString:@" O"];
-                        
-                        NSString *xingPart = [NSString stringWithFormat:@"%@ %@", SafeString(jiuXing), SafeString(tianPanGan)];
-                        NSString *menPart = [NSString stringWithFormat:@"%@ %@", SafeString(baMen), SafeString(diPanGan)];
-
-                        // 注意：地支信息在`_gong`模型中不直接，我们组合天盘干和地盘干来表示
-                        [reportContent appendFormat:@"- %@: %@ %@ | %@ | %@\n", SafeString(gongName), specialSymbols, SafeString(baShen), xingPart, menPart];
+                        NSMutableString *xingPart = [NSMutableString stringWithFormat:@"%@ %@", SafeString(jiuXing), SafeString(tianPanGan)];
+                        if (tianPanJiGan && tianPanJiGan.length > 0) [xingPart appendFormat:@"(%@)", tianPanJiGan];
+                        NSMutableString *menPart = [NSMutableString stringWithFormat:@"%@ %@", SafeString(baMen), SafeString(diPanGan)];
+                        if (diPanJiGan && diPanJiGan.length > 0) [menPart appendFormat:@"(%@)", diPanJiGan];
+                        [reportContent appendFormat:@"- %@:%@ %@ | %@ (%@) | %@ (%@)\n", SafeString(gongName), specialSymbols, SafeString(baShen), xingPart, xingWangShuai, menPart, menWangShuai];
+                        if (yinGan && yinGan.length > 0) { [reportContent appendFormat:@"  遁干: %@\n", yinGan]; }
+                        if (gongGua && gongGua.length > 0) { [reportContent appendFormat:@"  卦数: %@\n", gongGua]; }
                     }
                 }
-            } else {
-                [reportContent appendFormat:@"[提取失败: 找到的Cell数量不足 (%lu/9)]\n", (unsigned long)allCells.count];
-            }
+            } else { [reportContent appendFormat:@"[提取失败: Cell数量不足 (%lu/9)]\n", (unsigned long)allCells.count]; }
         }
         [reportContent appendString:@"\n"];
 
-        // --- 3. 提取底部附加信息 ---
         [reportContent appendString:@"// 3. 附加信息\n"];
-        NSString *bottomInfo = fullInfo;
-        range = [bottomInfo rangeOfString:@"年命"];
-        if (range.location != NSNotFound) {
-            bottomInfo = [bottomInfo substringFromIndex:range.location];
-            range = [bottomInfo rangeOfString:@"时间流"];
-            if (range.location != NSNotFound) {
-                bottomInfo = [bottomInfo substringToIndex:range.location];
-            }
-        } else {
-            bottomInfo = @"[底部信息提取失败]";
-        }
-        [reportContent appendFormat:@"%@\n", [SafeString(bottomInfo) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        NSString *bottomInfo = [self findTextInViewWithClassName:@"CZShowKongMaView" separator:@" | "];
+        if (!bottomInfo || [bottomInfo containsString:@"找不到类"]) { bottomInfo = @"[底部信息提取失败]"; }
+        [reportContent appendFormat:@"%@\n", bottomInfo];
         
-        // --- 4. 生成并输出报告 ---
         g_lastGeneratedReport = formatFinalReport(reportContent);
         
         [self hideProgressHUD];
         [self showEchoNotificationWithTitle:@"提取完成" message:@"奇门盘数据已生成并复制"];
         [self presentAIActionSheetWithReport:g_lastGeneratedReport];
-        LogMessage(EchoLogTypeSuccess, @"[奇门] v2.3 提取任务完成。");
+        LogMessage(EchoLogTypeSuccess, @"[奇门] v2.4 提取任务完成。");
         g_isExtracting = NO;
     });
 }
@@ -477,22 +441,17 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (NSString *)findTextInViewWithClassName:(NSString *)className separator:(NSString *)separator {
     Class targetClass = NSClassFromString(className);
     if (!targetClass) return [NSString stringWithFormat:@"[错误: 找不到类 %@]", className];
-    
     NSMutableArray *targetViews = [NSMutableArray array];
     FindSubviewsOfClassRecursive(targetClass, self.view, targetViews);
-    
     if (targetViews.count == 0) return [NSString stringWithFormat:@"[提取失败: 未找到 %@ 视图]", className];
-    
     UIView *container = targetViews.firstObject;
     NSMutableArray *labels = [NSMutableArray array];
     FindSubviewsOfClassRecursive([UILabel class], container, labels);
-    
     [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
         if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
         if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
         return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
     }];
-    
     NSMutableArray *textParts = [NSMutableArray array];
     for (UILabel *label in labels) {
         if (label.text.length > 0 && !label.isHidden) {
@@ -502,7 +461,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     return [textParts componentsJoinedByString:separator];
 }
 
-// --- 以下为UI交互和辅助函数的实现 ---
 %new
 - (void)textViewDidChange:(UITextView *)textView {
     BOOL hasText = textView.text.length > 0 && ![textView.text isEqualToString:@"选填：输入您想问的具体问题"];
@@ -528,16 +486,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)buttonTouchDown:(UIButton *)sender { [UIView animateWithDuration:0.15 animations:^{ sender.transform = CGAffineTransformMakeScale(0.95, 0.95); sender.alpha = 0.8; }]; }
 %new
 - (void)buttonTouchUp:(UIButton *)sender { [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.5 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseInOut animations:^{ sender.transform = CGAffineTransformIdentity; sender.alpha = 1.0; } completion:nil]; }
-
 %new
 - (void)presentAIActionSheetWithReport:(NSString *)report {
     if (!report || report.length == 0) { LogMessage(EchoLogError, @"数据为空。"); return; }
     [UIPasteboard generalPasteboard].string = report;
     UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"发送数据至AI助手" message:@"数据已复制到剪贴板" preferredStyle:UIAlertControllerStyleActionSheet];
     NSString *encodedReport = [report stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-    
     NSArray *aiApps = @[ @{@"name": @"DeepSeek", @"scheme": @"deepseek://", @"format": @"deepseek://send?text=%@"}, @{@"name": @"ChatGPT", @"scheme": @"chatgpt://", @"format": @"chatgpt://"}, ];
-    
     int availableApps = 0;
     for (NSDictionary *appInfo in aiApps) {
         if ([[UIApplication sharedApplication] canOpenURL:[NSURL URLWithString:appInfo[@"scheme"]]]) {
@@ -549,7 +504,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             availableApps++;
         }
     }
-    
     if (availableApps == 0) { actionSheet.message = @"未检测到AI App。\n数据已复制。"; }
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"仅复制" style:UIAlertActionStyleDefault handler:nil]];
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -619,6 +573,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v2.3 (闪退修复最终版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v2.4 (混合模式最终版) 已加载。");
     }
 }
