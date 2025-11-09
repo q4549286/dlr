@@ -350,7 +350,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     
                     NSString *起局方式 = @"时家拆补"; 
                     NSMutableString *geJuStr = [NSMutableString string];
-                    Class geJuCellClass = NSClassFromString(@"CZShowShiJianGeCollectionViewCell");
+                    Class geJuCellClass = NSClassFromString(@"CZShowShiJianGeView");
                     if(geJuCellClass) {
                          NSMutableArray *geJuCells = [NSMutableArray array]; FindSubviewsOfClassRecursive(geJuCellClass, self.view, geJuCells);
                          for(UIView* cell in geJuCells) {
@@ -605,4 +605,5 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v3.9 (终极毕业版) 已加载。");
     }
 }
+
 
