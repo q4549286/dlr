@@ -5,9 +5,9 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v4.0 (终极毕业版)
+//  Echo 奇门遁甲提取器 v4.4 (终极毕业版)
 //
-//  - [终极修复] 修正了所有已知的数据源和UI组件访问方式，确保不再闪退。
+//  - [最终优化] 调整了“附加”信息的显示逻辑，仅在有内容时输出。
 //  - [成品] 这是经过所有调试和修正的最终稳定版本。
 //
 // =======================================================================================
@@ -198,7 +198,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v4.0" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v4.4" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -309,8 +309,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [self showEchoNotificationWithTitle:@"无操作" message:@"此按钮为框架占位符"];
 }
 
-
-
 %new
 - (void)startStandardExtraction {
     if (g_isExtracting) return;
@@ -322,7 +320,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [reportContent appendString:@"// 奇门盘信息\n"];
         
         // --- 1. 提取顶部概览 ---
-        // (此部分代码保持不变)
         @try {
             Class juShiViewClass = NSClassFromString(@"CZJuShiView");
             Class baziViewClass = NSClassFromString(@"CZShowBaZiView");
@@ -335,35 +332,28 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSDate *dateUse = [juShiView valueForKey:@"dateUse"];
                     NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
                     NSString *timeStr = [formatter stringFromDate:dateUse];
-                    
                     Ivar baZiIvar = class_getInstanceVariable(baziViewClass, "_baZi");
                     id baZiModel = object_getIvar(baziView, baZiIvar);
                     NSString *nianZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"nianGan"]), SafeString([baZiModel valueForKey:@"nianZhi"])];
                     NSString *yueZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"yueGan"]), SafeString([baZiModel valueForKey:@"yueZhi"])];
                     NSString *riZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"riGan"]), SafeString([baZiModel valueForKey:@"riZhi"])];
                     NSString *shiZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"shiGan"]), SafeString([baZiModel valueForKey:@"shiZhi"])];
-                    
                     Ivar juTouIvar = class_getInstanceVariable(baziViewClass, "_juTou");
                     id juTouModel = object_getIvar(baziView, juTouIvar);
                     NSString *xunStr = SafeString([juTouModel valueForKey:@"xunStr"]);
                     NSString *yinYangStr = SafeString([juTouModel valueForKey:@"yinYangStr"]);
-
                     NSString *juStr = SafeString([[baziView valueForKey:@"labelJu"] text]);
                     NSString *zhiFu = SafeString([[baziView valueForKey:@"labelZhiFu"] text]);
                     NSString *zhiShi = SafeString([[baziView valueForKey:@"labelZhiShi"] text]);
-                    
                     NSString *起局方式 = @"时家拆补"; 
                     NSMutableString *geJuStr = [NSMutableString string];
                     Class geJuViewClass = NSClassFromString(@"CZShowShiJianGeView");
                     if(geJuViewClass) {
                          NSMutableArray *geJuViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(geJuViewClass, self.view, geJuViews);
                          for(UIView* view in geJuViews) {
-                            NSMutableArray *labels = [NSMutableArray array];
-                            FindSubviewsOfClassRecursive([UILabel class], view, labels);
+                            NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], view, labels);
                             for (UILabel *label in labels) {
-                                if (label.text && label.text.length > 0) {
-                                    [geJuStr appendFormat:@"%@ ", label.text];
-                                }
+                                if (label.text && label.text.length > 0) { [geJuStr appendFormat:@"%@ ", label.text]; }
                             }
                          }
                     }
@@ -388,7 +378,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         } @catch (NSException *exception) { [reportContent appendString:@"[顶部提取失败]\n"]; LogMessage(EchoLogError, @"[CRASH-DEBUG] 顶部提取失败: %@", exception); }
         [reportContent appendString:@"\n// 九宫格详情\n"];
 
-        // --- 2. 提取九宫格详情 ---
         Class cellClass = NSClassFromString(@"CZGongChuanRenThemeCollectionViewCell");
         if (!cellClass) {
             [reportContent appendString:@"[提取失败: 找不到九宫格Cell类]\n"];
@@ -404,18 +393,19 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     }
                     NSDictionary *sortOrder = @{@"坎":@1, @"坤":@2, @"震":@3, @"巽":@4, @"中":@5, @"乾":@6, @"兑":@7, @"艮":@8, @"离":@9};
                     [gongItems sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-                        // ... 排序逻辑不变 ...
+                         NSString *gongName1 = [obj1[@"model"] valueForKey:@"gongHouTianNameStr"];
+                         NSString *gongName2 = [obj2[@"model"] valueForKey:@"gongHouTianNameStr"];
+                         if (!gongName1 || gongName1.length < 1 || !gongName2 || gongName2.length < 1) return NSOrderedSame;
+                         NSNumber *order1 = sortOrder[[gongName1 substringToIndex:1]];
+                         NSNumber *order2 = sortOrder[[gongName2 substringToIndex:1]];
+                         return [order1 compare:order2 ? order2 : @(99)];
                     }];
                     for (NSDictionary *item in gongItems) {
                         @try {
                             id model = item[@"model"];
                             UIView *cell = item[@"cell"];
                             NSString *gongName = SafeString([model valueForKey:@"gongHouTianNameStr"]);
-                            if ([gongName containsString:@"中5宫"]) { 
-                                [reportContent appendString:@"【中5宫】\n 天盘: 己 | 地盘: 己\n---\n"]; 
-                                continue; 
-                            }
-                            
+                            if ([gongName containsString:@"中5宫"]) { [reportContent appendString:@"【中5宫】\n 天盘: 己 | 地盘: 己\n---\n"]; continue; }
                             NSString *gongGua = SafeString([[cell valueForKey:@"labelGongGuaShuNeiWaiPan"] text]);
                             NSString *gongWangShuai = @"";
                             NSArray *gongGuaParts = [gongGua componentsSeparatedByString:@" "];
@@ -424,15 +414,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             
                             NSString *baShen = SafeString([model valueForKey:@"baShenStr"]);
                             [reportContent appendFormat:@" 神: %@\n", baShen];
-
                             NSString *jiuXing = SafeString([model valueForKey:@"jiuXingStr"]);
                             NSString *xingWangShuai = [SafeString([[cell valueForKey:@"labelXingWangShuai"] text]) stringByReplacingOccurrencesOfString:@"`" withString:@" "];
                             [reportContent appendFormat:@" 星: %@ (落宫:%@)\n", jiuXing, xingWangShuai];
-
                             NSString *baMen = SafeString([model valueForKey:@"baMenStr"]);
                             NSString *menWangShuai = [SafeString([[cell valueForKey:@"labelMenWangShuai"] text]) stringByReplacingOccurrencesOfString:@"`" withString:@" "];
-                             [reportContent appendFormat:@" 门: %@ (落宫:%@)\n", baMen, menWangShuai];
-
+                            [reportContent appendFormat:@" 门: %@ (落宫:%@)\n", baMen, menWangShuai];
+                            
                             NSString *tianPanGan = SafeString([model valueForKey:@"tianPanGanStr"]);
                             NSString *tianPan12 = SafeString([[cell valueForKey:@"labelTianPanGan12ZhangSheng"] text]);
                             NSString *tianPanJiGan = SafeString([model valueForKey:@"tianPanJiGanStr"]);
@@ -442,7 +430,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             } else {
                                 [reportContent appendFormat:@" 天盘: %@(%@)\n", tianPanGan, tianPan12];
                             }
-                            
                             NSString *diPanGan = SafeString([model valueForKey:@"diPanGanStr"]);
                             NSString *diPan12 = SafeString([[cell valueForKey:@"labelDiPanGan12ZhangSheng"] text]);
                             NSString *diPanJiGan = SafeString([model valueForKey:@"diPanJiGanStr"]);
@@ -459,15 +446,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             NSMutableString *otherPart = [NSMutableString string];
                             if(isKongWang) [otherPart appendString:@"时空 "];
                             if(yinGan.length > 0) [otherPart appendFormat:@"暗干%@ ", yinGan];
-                            if(isMaXing) [otherPart appendString:@"马星 "];
-                            
-                            // [最终优化] 只有在otherPart有内容时才输出"附加:"
+                            if(isMaXing) [otherPart appendString:@"马星"];
                             NSString *trimmedOtherPart = [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
                             if (trimmedOtherPart.length > 0) {
                                 [reportContent appendFormat:@" 附加: %@\n", trimmedOtherPart];
                             }
                             [reportContent appendString:@"---\n"];
-
                         } @catch (NSException *exception) {
                             LogMessage(EchoLogError, @"[CRASH-DEBUG] 宫位提取失败: %@", exception);
                             continue;
@@ -622,14 +606,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v4.0 (终极毕业版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v4.2 (终极毕业版) 已加载。");
     }
 }
-
-
-
-
-
-
-
-
