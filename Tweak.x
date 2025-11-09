@@ -443,7 +443,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             if(isKongWang) [otherPart appendString:@"空亡 "];
                             if(yinGan.length > 0) [otherPart appendFormat:@"暗干%@ ", yinGan];
                             if(isMaXing) [otherPart appendString:@"马星"];
-                            [reportContent appendFormat:@"{%@(%@)|%@|%@|%@|%@}\n", gongName, gongWangShuai, xingPart, baShen, menPart, tiandiPart, [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+                            [reportContent appendFormat:@"{%@(%@)|%@|%@|%@|%@|%@}\n", gongName, gongWangShuai, xingPart, baShen, menPart, tiandiPart, [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
                         } @catch (NSException *exception) {
                             LogMessage(EchoLogError, @"[CRASH-DEBUG] 宫位提取失败: %@", exception);
                             continue;
@@ -601,3 +601,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v3.4 (终极完美版) 已加载。");
     }
 }
+
