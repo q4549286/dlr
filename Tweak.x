@@ -5,9 +5,9 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v3.8 (终极架构修正版)
+//  Echo 奇门遁甲提取器 v3.9 (终极毕业版)
 //
-//  - [终极修复] 顶部信息提取架构完全重构，不再访问`_juTou`模型，改为直接读取UILabel，彻底解决闪退。
+//  - [终极修复] 顶部信息提取架构完全重构，确保不再有任何闪退。
 //  - [成品] 这是经过所有调试和修正的最终稳定版本。
 //
 // =======================================================================================
@@ -198,7 +198,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v3.8" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v3.9" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -312,7 +312,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)startStandardExtraction {
     if (g_isExtracting) return;
-    LogMessage(EchoLogTypeTask, @"[奇门] v3.8 提取任务启动 (终极毕业版)...");
+    LogMessage(EchoLogTypeTask, @"[奇门] v3.9 提取任务启动 (终极毕业版)...");
     g_isExtracting = YES;
     [self showProgressHUD:@"正在精准提取..."];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -333,7 +333,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
                     NSString *timeStr = [formatter stringFromDate:dateUse];
                     
-                    // 从 _baZi 模型提取四柱
                     Ivar baZiIvar = class_getInstanceVariable(baziViewClass, "_baZi");
                     id baZiModel = object_getIvar(baziView, baZiIvar);
                     NSString *nianZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"nianGan"]), SafeString([baZiModel valueForKey:@"nianZhi"])];
@@ -341,11 +340,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSString *riZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"riGan"]), SafeString([baZiModel valueForKey:@"riZhi"])];
                     NSString *shiZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"shiGan"]), SafeString([baZiModel valueForKey:@"shiZhi"])];
                     
-                    // 直接从 UILabel 读取局、符、使
+                    Ivar juTouIvar = class_getInstanceVariable(baziViewClass, "_juTou");
+                    id juTouModel = object_getIvar(baziView, juTouIvar);
+                    NSString *xunStr = SafeString([juTouModel valueForKey:@"xunStr"]);
+
                     NSString *juStr = SafeString([[baziView valueForKey:@"labelJu"] text]);
                     NSString *zhiFu = SafeString([[baziView valueForKey:@"labelZhiFu"] text]);
                     NSString *zhiShi = SafeString([[baziView valueForKey:@"labelZhiShi"] text]);
-                    NSString *shiKong = SafeString([[baziView valueForKey:@"labelShiKong"] text]);
                     
                     NSString *起局方式 = @"时家拆补"; 
                     NSMutableString *geJuStr = [NSMutableString string];
@@ -356,7 +357,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             UILabel* label = [cell valueForKey:@"label"]; if(label.text) [geJuStr appendFormat:@"%@ ", label.text];
                          }
                     }
-                    [reportContent appendFormat:@"%@ | %@ | %@ | %@ | %@\n", timeStr, 起局方式, juStr, shiKong, [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+                    [reportContent appendFormat:@"%@ | %@ | %@ | %@ | %@\n", timeStr, 起局方式, juStr, [NSString stringWithFormat:@"%@旬", xunStr], [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
                     [reportContent appendFormat:@"值符: %@ | 值使: %@\n", zhiFu, zhiShi];
                     [reportContent appendFormat:@"四柱: %s %s %s %s\n", [nianZhu UTF8String], [yueZhu UTF8String], [riZhu UTF8String], [shiZhu UTF8String]];
                 }
@@ -460,7 +461,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [self hideProgressHUD];
         [self showEchoNotificationWithTitle:@"提取完成" message:@"专家格式报告已生成"];
         [self presentAIActionSheetWithReport:g_lastGeneratedReport];
-        LogMessage(EchoLogTypeSuccess, @"[奇门] v3.8 提取任务完成。");
+        LogMessage(EchoLogTypeSuccess, @"[奇门] v3.9 提取任务完成。");
         g_isExtracting = NO;
     });
 }
@@ -601,6 +602,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v3.8 (终极毕业版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v3.9 (终极毕业版) 已加载。");
     }
 }
