@@ -452,10 +452,17 @@ NSMutableString *otherPart = [NSMutableString string];
 if(isKongWang) [otherPart appendString:@"时空 "];
 if(isMaXing) [otherPart appendString:@"马星 "];
 
+// 先处理附加信息
 NSString *trimmedOtherPart = [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
 if (trimmedOtherPart.length > 0) {
     [reportContent appendFormat:@" 附加: %@\n", trimmedOtherPart];
 }
+
+// 再单独处理暗干
+if(yinGan.length > 0) {
+    [reportContent appendFormat:@" 暗干: %@\n", yinGan];
+}
+
 [reportContent appendString:@"---\n"];
                         } @catch (NSException *exception) {
                             LogMessage(EchoLogError, @"[CRASH-DEBUG] 宫位提取失败: %@", exception);
@@ -614,5 +621,6 @@ if (trimmedOtherPart.length > 0) {
         NSLog(@"[Echo奇门提取器] v4.2 (终极毕业版) 已加载。");
     }
 }
+
 
 
