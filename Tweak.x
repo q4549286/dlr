@@ -240,10 +240,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     }
 }
 
-// ... 您其他的 %new 方法保持不变 ...
-// (createOrShowMainControlPanel, handleMasterButtonTap, 等等)
-
-%end
 
 %new
 - (void)createOrShowMainControlPanel {
@@ -730,4 +726,5 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v1.2 (编译修复最终版) 已加载。");
     }
 }
+
 
