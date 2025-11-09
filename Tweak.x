@@ -323,13 +323,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 }
 
 // ==========================================================
-// 核心提取逻辑 (v2.6 诊断版)
-// 请用此方法完整替换您代码中的 startStandardExtraction
+// 核心提取逻辑 (v2.6.1 诊断编译修复版)
 // ==========================================================
 %new
 - (void)startStandardExtraction {
     if (g_isExtracting) return;
-    LogMessage(EchoLogTypeTask, @"[奇门] v2.6 提取任务启动 (诊断版)...");
+    LogMessage(EchoLogTypeTask, @"[奇门] v2.6.1 提取任务启动 (诊断版)...");
     g_isExtracting = YES;
     [self showProgressHUD:@"正在进行诊断提取..."];
 
@@ -384,7 +383,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 if (!gongIvar) {
                     [reportContent appendString:@"[诊断] 找不到 _gong 实例变量\n"];
                 } else {
-                    // ... (排序部分代码不变) ...
                     NSMutableArray *gongModelsWithCell = [NSMutableArray array];
                     for (UIView *cell in allCells) {
                         id gongModel = object_getIvar(cell, gongIvar);
@@ -392,10 +390,21 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             [gongModelsWithCell addObject:@{@"model": gongModel, @"cell": cell}];
                         }
                     }
+                    
+                    // [编译修复] 恢复排序逻辑
                     NSDictionary *sortOrder = @{@"坎":@1, @"坤":@2, @"震":@3, @"巽":@4, @"中":@5, @"乾":@6, @"兑":@7, @"艮":@8, @"离":@9};
                     [gongModelsWithCell sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-                        // ... (此部分基本不会出错) ...
-                        return NSOrderedSame;
+                        @try {
+                            NSString *gongName1 = [obj1[@"model"] valueForKey:@"gongHouTianNameStr"];
+                            NSString *gongName2 = [obj2[@"model"] valueForKey:@"gongHouTianNameStr"];
+                            if (gongName1.length < 1 || gongName2.length < 1) return NSOrderedSame;
+                            NSNumber *order1 = sortOrder[[gongName1 substringToIndex:1]];
+                            NSNumber *order2 = sortOrder[[gongName2 substringToIndex:1]];
+                            return [order1 compare:order2 ? order2 : @(99)];
+                        } @catch (NSException *exception) {
+                            LogMessage(EchoLogError, @"[CRASH-DEBUG] 排序时出错: %@", exception);
+                            return NSOrderedSame;
+                        }
                     }];
 
                     for (NSDictionary *item in gongModelsWithCell) {
@@ -445,7 +454,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [reportContent appendString:@"\n"];
 
         [reportContent appendString:@"// 3. 附加信息\n"];
-        // ... (这部分代码不会出错) ...
         NSString *bottomInfo = [self findTextInViewWithClassName:@"CZShowKongMaView" separator:@" | "];
         if (!bottomInfo || [bottomInfo containsString:@"找不到类"]) { bottomInfo = @"[底部信息提取失败]"; }
         [reportContent appendFormat:@"%@\n", bottomInfo];
@@ -455,11 +463,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [self hideProgressHUD];
         [self showEchoNotificationWithTitle:@"诊断提取完成" message:@"请查看设备日志"];
         [self presentAIActionSheetWithReport:g_lastGeneratedReport];
-        LogMessage(EchoLogTypeSuccess, @"[奇门] v2.6 诊断任务完成。");
+        LogMessage(EchoLogTypeSuccess, @"[奇门] v2.6.1 诊断任务完成。");
         g_isExtracting = NO;
     });
 }
-
 %new
 - (NSString *)findTextInViewWithClassName:(NSString *)className separator:(NSString *)separator {
     Class targetClass = NSClassFromString(className);
@@ -599,4 +606,5 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v2.5 (最终完美修复版) 已加载。");
     }
 }
+
 
