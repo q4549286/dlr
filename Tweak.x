@@ -442,10 +442,10 @@ if(geJuViewClass) {
                             
                             NSMutableString *tiandiPart = [NSMutableString string];
                             [tiandiPart appendFormat:@"天盘%@(%@)", tianPanGan, tianPan12];
-                            if (tianPanJiGan.length > 0) [tiandiPart appendFormat:@" 寄干%@(%@)", tianPanJiGan, tianPanJiGan12];
+                            if (tianPanJiGan.length > 0) [tiandiPart appendFormat:@" 寄天盘干%@(%@)", tianPanJiGan, tianPanJiGan12];
                             [tiandiPart appendString:@" | "];
                             [tiandiPart appendFormat:@"地盘%@(%@)", diPanGan, diPan12];
-                            if (diPanJiGan.length > 0) [tiandiPart appendFormat:@" 寄干%@(%@)", diPanJiGan, diPanJiGan12];
+                            if (diPanJiGan.length > 0) [tiandiPart appendFormat:@" 寄地盘干%@(%@)", diPanJiGan, diPanJiGan12];
 
                             NSMutableString *otherPart = [NSMutableString string];
                             if(isKongWang) [otherPart appendString:@"时空 "];
@@ -612,6 +612,7 @@ if(geJuViewClass) {
         NSLog(@"[Echo奇门提取器] v4.0 (终极毕业版) 已加载。");
     }
 }
+
 
 
 
