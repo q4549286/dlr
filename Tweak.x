@@ -317,6 +317,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     [self showProgressHUD:@"正在精准提取..."];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         NSMutableString *reportContent = [NSMutableString string];
+    UIView *baziView = nil; // <--- 在这里添加声明
+
         [reportContent appendString:@"// 奇门盘信息\n"];
         
         // --- 1. 提取顶部概览 ---
@@ -327,8 +329,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 NSMutableArray *juShiViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(juShiViewClass, self.view, juShiViews);
                 UIView *juShiView = (juShiViews.count > 0) ? juShiViews.firstObject : nil;
                 NSMutableArray *baziViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(baziViewClass, self.view, baziViews);
-                UIView *baziView = (baziViews.count > 0) ? baziViews.firstObject : nil;
-                if (juShiView && baziView) {
+baziView = (baziViews.count > 0) ? baziViews.firstObject : nil;                if (juShiView && baziView) {
                     NSDate *dateUse = [juShiView valueForKey:@"dateUse"];
                     NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
                     NSString *timeStr = [formatter stringFromDate:dateUse];
@@ -625,5 +626,6 @@ if ([gongName containsString:@"中5宫"]) {
         NSLog(@"[Echo奇门提取器] v4.5 (终极毕业版) 已加载。");
     }
 }
+
 
 
