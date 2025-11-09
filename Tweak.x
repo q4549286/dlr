@@ -376,8 +376,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 }
             }
         } @catch (NSException *exception) { [reportContent appendString:@"[顶部提取失败]\n"]; LogMessage(EchoLogError, @"[CRASH-DEBUG] 顶部提取失败: %@", exception); }
-        [reportContent appendString:@"\n// 九宫格详情\n"];
-
         Class cellClass = NSClassFromString(@"CZGongChuanRenThemeCollectionViewCell");
         if (!cellClass) {
             [reportContent appendString:@"[提取失败: 找不到九宫格Cell类]\n"];
@@ -445,13 +443,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             NSString *yinGan = SafeString([model valueForKey:@"yinGanStr"]);
                             NSMutableString *otherPart = [NSMutableString string];
                             if(isKongWang) [otherPart appendString:@"时空 "];
-                            if(yinGan.length > 0) [otherPart appendFormat:@"暗干%@ ", yinGan];
-                            if(isMaXing) [otherPart appendString:@"马星"];
-                            NSString *trimmedOtherPart = [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-                            if (trimmedOtherPart.length > 0) {
-                                [reportContent appendFormat:@" 附加: %@\n", trimmedOtherPart];
-                            }
-                            [reportContent appendString:@"---\n"];
+                           // [格式优化] 
+if(yinGan.length > 0) {
+    [reportContent appendFormat:@" 暗干: %@\n", yinGan];
+}
+
+NSMutableString *otherPart = [NSMutableString string];
+if(isKongWang) [otherPart appendString:@"时空 "];
+if(isMaXing) [otherPart appendString:@"马星 "];
+
+NSString *trimmedOtherPart = [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+if (trimmedOtherPart.length > 0) {
+    [reportContent appendFormat:@" 附加: %@\n", trimmedOtherPart];
+}
+[reportContent appendString:@"---\n"];
                         } @catch (NSException *exception) {
                             LogMessage(EchoLogError, @"[CRASH-DEBUG] 宫位提取失败: %@", exception);
                             continue;
@@ -609,4 +614,5 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v4.2 (终极毕业版) 已加载。");
     }
 }
+
 
