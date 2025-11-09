@@ -5,9 +5,9 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v4.4 (终极毕业版)
+//  Echo 奇门遁甲提取器 v4.5 (终极完美版)
 //
-//  - [最终优化] 调整了“附加”信息的显示逻辑，仅在有内容时输出。
+//  - [最终修复] 解决了 `otherPart` 变量重定义的编译错误。
 //  - [成品] 这是经过所有调试和修正的最终稳定版本。
 //
 // =======================================================================================
@@ -198,7 +198,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v4.4" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v4.5" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -312,7 +312,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)startStandardExtraction {
     if (g_isExtracting) return;
-    LogMessage(EchoLogTypeTask, @"[奇门] v4.4 提取任务启动 (终极毕业版)...");
+    LogMessage(EchoLogTypeTask, @"[奇门] v4.5 提取任务启动 (终极毕业版)...");
     g_isExtracting = YES;
     [self showProgressHUD:@"正在精准提取..."];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -332,19 +332,23 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSDate *dateUse = [juShiView valueForKey:@"dateUse"];
                     NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
                     NSString *timeStr = [formatter stringFromDate:dateUse];
+                    
                     Ivar baZiIvar = class_getInstanceVariable(baziViewClass, "_baZi");
                     id baZiModel = object_getIvar(baziView, baZiIvar);
                     NSString *nianZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"nianGan"]), SafeString([baZiModel valueForKey:@"nianZhi"])];
                     NSString *yueZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"yueGan"]), SafeString([baZiModel valueForKey:@"yueZhi"])];
                     NSString *riZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"riGan"]), SafeString([baZiModel valueForKey:@"riZhi"])];
                     NSString *shiZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"shiGan"]), SafeString([baZiModel valueForKey:@"shiZhi"])];
+                    
                     Ivar juTouIvar = class_getInstanceVariable(baziViewClass, "_juTou");
                     id juTouModel = object_getIvar(baziView, juTouIvar);
                     NSString *xunStr = SafeString([juTouModel valueForKey:@"xunStr"]);
-                    NSString *YinYangStr = SafeString([[baziView valueForKey:@"labelYinYang"] text]);
+                    NSString *yinYangStr = SafeString([juTouModel valueForKey:@"yinYangStr"]);
+
                     NSString *juStr = SafeString([[baziView valueForKey:@"labelJu"] text]);
                     NSString *zhiFu = SafeString([[baziView valueForKey:@"labelZhiFu"] text]);
                     NSString *zhiShi = SafeString([[baziView valueForKey:@"labelZhiShi"] text]);
+                    
                     NSString *起局方式 = @"时家拆补"; 
                     NSMutableString *geJuStr = [NSMutableString string];
                     Class geJuViewClass = NSClassFromString(@"CZShowShiJianGeView");
@@ -358,7 +362,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                          }
                     }
                     [reportContent appendFormat:@"时间: %@\n", timeStr];
-                    [reportContent appendFormat:@"格局: %@ | %@%@ | %@旬 | %@\n", 起局方式, YinYangStr, juStr, xunStr, [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+                    [reportContent appendFormat:@"格局: %@ | %@%@ | %@旬 | %@\n", 起局方式, yinYangStr, juStr, xunStr, [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
                     [reportContent appendFormat:@"四柱: %@ %@ %@ %@\n", nianZhu, yueZhu, riZhu, shiZhu];
                     [reportContent appendFormat:@"符使: 值符:%@ | 值使:%@\n", zhiFu, zhiShi];
 
@@ -376,6 +380,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 }
             }
         } @catch (NSException *exception) { [reportContent appendString:@"[顶部提取失败]\n"]; LogMessage(EchoLogError, @"[CRASH-DEBUG] 顶部提取失败: %@", exception); }
+        [reportContent appendString:@"\n// 九宫格详情\n"];
+
         Class cellClass = NSClassFromString(@"CZGongChuanRenThemeCollectionViewCell");
         if (!cellClass) {
             [reportContent appendString:@"[提取失败: 找不到九宫格Cell类]\n"];
@@ -443,27 +449,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             NSString *yinGan = SafeString([model valueForKey:@"yinGanStr"]);
                             NSMutableString *otherPart = [NSMutableString string];
                             if(isKongWang) [otherPart appendString:@"时空 "];
-                           // [格式优化] 
-if(yinGan.length > 0) {
-    [reportContent appendFormat:@" 暗干: %@\n", yinGan];
-}
-
-NSMutableString *otherPart = [NSMutableString string];
-if(isKongWang) [otherPart appendString:@"时空 "];
-if(isMaXing) [otherPart appendString:@"马星 "];
-
-// 先处理附加信息
-NSString *trimmedOtherPart = [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-if (trimmedOtherPart.length > 0) {
-    [reportContent appendFormat:@" 附加: %@\n", trimmedOtherPart];
-}
-
-// 再单独处理暗干
-if(yinGan.length > 0) {
-    [reportContent appendFormat:@" 暗干: %@\n", yinGan];
-}
-
-[reportContent appendString:@"---\n"];
+                            if(isMaXing) [otherPart appendString:@"马星 "];
+                            
+                            if(yinGan.length > 0) {
+                                [reportContent appendFormat:@" 暗干: %@\n", yinGan];
+                            }
+                            NSString *trimmedOtherPart = [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+                            if (trimmedOtherPart.length > 0) {
+                                [reportContent appendFormat:@" 附加: %@\n", trimmedOtherPart];
+                            }
+                            [reportContent appendString:@"---\n"];
                         } @catch (NSException *exception) {
                             LogMessage(EchoLogError, @"[CRASH-DEBUG] 宫位提取失败: %@", exception);
                             continue;
@@ -477,7 +472,7 @@ if(yinGan.length > 0) {
         [self hideProgressHUD];
         [self showEchoNotificationWithTitle:@"提取完成" message:@"专家格式报告已生成"];
         [self presentAIActionSheetWithReport:g_lastGeneratedReport];
-        LogMessage(EchoLogTypeSuccess, @"[奇门] v4.4 提取任务完成。");
+        LogMessage(EchoLogTypeSuccess, @"[奇门] v4.5 提取任务完成。");
         g_isExtracting = NO;
     });
 }
@@ -618,9 +613,6 @@ if(yinGan.length > 0) {
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v4.2 (终极毕业版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v4.5 (终极毕业版) 已加载。");
     }
 }
-
-
-
