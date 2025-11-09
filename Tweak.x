@@ -88,7 +88,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
     } return frontmostWindow; }
 
 
-static NSString *getAIPromptHeader() {
+__attribute__((unused)) static NSString *getAIPromptHeader() {
     return @""; // 返回空字符串，不添加头部
 }
 
@@ -605,3 +605,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v3.5 (终极完美版) 已加载。");
     }
 }
+
