@@ -5,11 +5,10 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v1.0 (完整最终版)
+//  Echo 奇门遁甲提取器 v1.1 (编译修复版)
 //
-//  - [集成] 已将针对目标App的特定提取逻辑集成至Echo通用框架。
-//  - [升级] 九宫格数据提取已升级为直接读取内存中的`_gongsDataSource`数据模型，实现精准、高效、稳定。
-//  - [保留] 顶部和底部信息保留UI文本抓取作为辅助手段。
+//  - [修复] 解决了在高版本SDK（iOS 15+）下因 API 废弃导致的编译错误。
+//  - [修复] 将三元运算符中的 @available 判断改写为标准的 if/else 语句块，以符合新版编译器要求。
 //  - [成品] 这是一个可以直接编译使用的完整脚本。
 //
 // =======================================================================================
@@ -248,8 +247,12 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         btn.layer.cornerRadius = 12; [btn setTitle:title forState:UIControlStateNormal];
         if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
             [btn setImage:[UIImage systemImageNamed:iconName] forState:UIControlStateNormal];
+            // [编译修复] 使用 pragma 忽略弃用警告
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
             btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, -8);
             btn.imageEdgeInsets = UIEdgeInsetsMake(0, -8, 0, 8);
+            #pragma clang diagnostic pop
         }
         btn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
         [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; btn.tintColor = [UIColor whiteColor];
@@ -265,7 +268,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v1.0" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v1.1" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -331,9 +334,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     card1InnerY += 48 + 15;
     card1.frame = CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, card1InnerY);
     currentY += card1.frame.size.height + 20;
-
-    // 工具箱卡片可以先隐藏，因为目前没有功能
-    // UIView *card2 = ...
     
     CGFloat bottomButtonsHeight = 40, bottomAreaPadding = 10, logTopPadding = 20;
     CGFloat bottomButtonsY = contentView.bounds.size.height - bottomButtonsHeight - bottomAreaPadding;
@@ -422,10 +422,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         
         // --- 1. 提取顶部核心参数 ---
         [reportContent appendString:@"// 1. 核心参数\n"];
-        // CZJuShiView 包含了从顶部时间到底部信息栏的所有内容，我们先抓取它
         NSString *fullInfo = [self findTextInViewWithClassName:@"CZJuShiView" separator:@"\n"]; 
         
-        // 从完整信息中裁剪出顶部部分
         NSString *topInfo = fullInfo;
         NSRange range = [topInfo rangeOfString:@"时家拆补飞盘"];
         if (range.location != NSNotFound) {
@@ -542,7 +540,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     return [textParts componentsJoinedByString:separator];
 }
 
-// --- 以下为UI交互和辅助函数的实现，无需修改 ---
+// --- 以下为UI交互和辅助函数的实现 ---
 
 %new
 - (void)textViewDidChange:(UITextView *)textView {
@@ -662,7 +660,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)showEchoNotificationWithTitle:(NSString *)title message:(NSString *)message {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
-    CGFloat topPadding = (@available(iOS 11.0, *)) ? keyWindow.safeAreaInsets.top : 20;
+    CGFloat topPadding;
+    // [编译修复] 改写为 if/else
+    if (@available(iOS 11.0, *)) {
+        topPadding = keyWindow.safeAreaInsets.top;
+    } else {
+        topPadding = 20;
+    };
     topPadding = topPadding > 0 ? topPadding : 20;
     CGFloat bannerWidth = keyWindow.bounds.size.width - 32;
     UIView *bannerView = [[UIView alloc] initWithFrame:CGRectMake(16, -100, bannerWidth, 60)];
@@ -675,11 +679,21 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     iconLabel.font = [UIFont boldSystemFontOfSize:16]; [containerForLabels addSubview:iconLabel];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(45, 12, bannerWidth-55, 20)];
     titleLabel.text = title; titleLabel.font = [UIFont boldSystemFontOfSize:15];
-    titleLabel.textColor = (@available(iOS 13.0, *)) ? [UIColor labelColor] : [UIColor blackColor];
+    // [编译修复] 改写为 if/else
+    if (@available(iOS 13.0, *)) { 
+        titleLabel.textColor = [UIColor labelColor]; 
+    } else { 
+        titleLabel.textColor = [UIColor blackColor];
+    }
     [containerForLabels addSubview:titleLabel];
     UILabel *messageLabel = [[UILabel alloc] initWithFrame:CGRectMake(45, 32, bannerWidth-55, 16)];
     messageLabel.text = message; messageLabel.font = [UIFont systemFontOfSize:13];
-    messageLabel.textColor = (@available(iOS 13.0, *)) ? [UIColor secondaryLabelColor] : [UIColor darkGrayColor];
+    // [编译修复] 改写为 if/else
+    if (@available(iOS 13.0, *)) { 
+        messageLabel.textColor = [UIColor secondaryLabelColor]; 
+    } else { 
+        messageLabel.textColor = [UIColor darkGrayColor]; 
+    }
     [containerForLabels addSubview:messageLabel];
     [keyWindow addSubview:bannerView];
     [UIView animateWithDuration:0.5 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseInOut animations:^{
@@ -694,6 +708,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v1.0 (数据模型版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v1.1 (编译修复版) 已加载。");
     }
 }
