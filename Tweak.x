@@ -447,7 +447,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             if (diPanJiGan.length > 0) [tiandiPart appendFormat:@" 寄干%@(%@)", diPanJiGan, diPanJiGan12];
 
                             NSMutableString *otherPart = [NSMutableString string];
-                            if(isKongWang) [otherPart appendString:@"空亡 "];
+                            if(isKongWang) [otherPart appendString:@"时空 "];
                             if(yinGan.length > 0) [otherPart appendFormat:@"暗干%@ ", yinGan];
                             if(isMaXing) [otherPart appendString:@"马星"];
                             
@@ -611,4 +611,5 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v3.7 (终极毕业版) 已加载。");
     }
 }
+
 
