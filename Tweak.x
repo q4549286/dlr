@@ -380,8 +380,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 }
             }
         } @catch (NSException *exception) { [reportContent appendString:@"[顶部提取失败]\n"]; LogMessage(EchoLogError, @"[CRASH-DEBUG] 顶部提取失败: %@", exception); }
-        [reportContent appendString:@"\n// 九宫格详情\n"];
-
         Class cellClass = NSClassFromString(@"CZGongChuanRenThemeCollectionViewCell");
         if (!cellClass) {
             [reportContent appendString:@"[提取失败: 找不到九宫格Cell类]\n"];
@@ -616,3 +614,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v4.5 (终极毕业版) 已加载。");
     }
 }
+
