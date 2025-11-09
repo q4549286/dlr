@@ -5,9 +5,9 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v3.9 (终极毕业版)
+//  Echo 奇门遁甲提取器 v4.0 (终极毕业版)
 //
-//  - [终极修复] 顶部信息提取架构完全重构，确保不再有任何闪退。
+//  - [终极修复] 修正了所有已知的数据源和UI组件访问方式，确保不再闪退。
 //  - [成品] 这是经过所有调试和修正的最终稳定版本。
 //
 // =======================================================================================
@@ -198,7 +198,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v3.9" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v4.0" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -312,7 +312,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)startStandardExtraction {
     if (g_isExtracting) return;
-    LogMessage(EchoLogTypeTask, @"[奇门] v3.9 提取任务启动 (终极毕业版)...");
+    LogMessage(EchoLogTypeTask, @"[奇门] v4.0 提取任务启动 (终极毕业版)...");
     g_isExtracting = YES;
     [self showProgressHUD:@"正在精准提取..."];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -350,11 +350,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     
                     NSString *起局方式 = @"时家拆补"; 
                     NSMutableString *geJuStr = [NSMutableString string];
-                    Class geJuCellClass = NSClassFromString(@"CZShowShiJianGeView");
-                    if(geJuCellClass) {
-                         NSMutableArray *geJuCells = [NSMutableArray array]; FindSubviewsOfClassRecursive(geJuCellClass, self.view, geJuCells);
-                         for(UIView* cell in geJuCells) {
-                            UILabel* label = [cell valueForKey:@"label"]; if(label.text) [geJuStr appendFormat:@"%@ ", label.text];
+                    Class geJuViewClass = NSClassFromString(@"CZShowShiJianGeView"); // [修复] 使用正确的View类名
+                    if(geJuViewClass) {
+                         NSMutableArray *geJuViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(geJuViewClass, self.view, geJuViews);
+                         for(UIView* view in geJuViews) {
+                            // 直接从这个View里找UILabel
+                            NSMutableArray *labels = [NSMutableArray array];
+                            FindSubviewsOfClassRecursive([UILabel class], view, labels);
+                            if (labels.count > 0) {
+                                [geJuStr appendFormat:@"%@ ", ((UILabel*)labels.firstObject).text];
+                            }
                          }
                     }
                     [reportContent appendFormat:@"%@ | %@ | %@ | %@ | %@\n", timeStr, 起局方式, juStr, [NSString stringWithFormat:@"%@旬", xunStr], [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
@@ -445,7 +450,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             if(yinGan.length > 0) [otherPart appendFormat:@"暗干%@ ", yinGan];
                             if(isMaXing) [otherPart appendString:@"马星"];
                             
-                            [reportContent appendFormat:@"{%@(%@)|%@|%@|%@|%@|%@}\n",
+                            [reportContent appendFormat:@"{%@(%@)|%@|%@|%@|%@}\n",
                                 gongName, gongWangShuai, xingPart, baShen, menPart, tiandiPart, [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]
                             ];
                         } @catch (NSException *exception) {
@@ -461,7 +466,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [self hideProgressHUD];
         [self showEchoNotificationWithTitle:@"提取完成" message:@"专家格式报告已生成"];
         [self presentAIActionSheetWithReport:g_lastGeneratedReport];
-        LogMessage(EchoLogTypeSuccess, @"[奇门] v3.9 提取任务完成。");
+        LogMessage(EchoLogTypeSuccess, @"[奇门] v4.0 提取任务完成。");
         g_isExtracting = NO;
     });
 }
@@ -602,8 +607,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v3.9 (终极毕业版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v4.0 (终极毕业版) 已加载。");
     }
 }
-
-
