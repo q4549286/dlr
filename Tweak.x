@@ -409,18 +409,11 @@ baziView = (baziViews.count > 0) ? baziViews.firstObject : nil;                i
                             UIView *cell = item[@"cell"];
                             NSString *gongName = SafeString([model valueForKey:@"gongHouTianNameStr"]);
 if ([gongName containsString:@"中5宫"]) {
-    Ivar juTouIvar = class_getInstanceVariable(NSClassFromString(@"CZShowBaZiView"), "_juTou");
-    id juTouModel = object_getIvar(baziView, juTouIvar);
-    BOOL isYangDun = [[juTouModel valueForKey:@"isYang"] boolValue];
-    NSString *jiGong = isYangDun ? @"寄艮8宫" : @"寄坤2宫";
-    
-    // 从中宫自己的模型里读取天地盘干
     NSString *zhongTianPanGan = SafeString([model valueForKey:@"tianPanGanStr"]);
     NSString *zhongDiPanGan = SafeString([model valueForKey:@"diPanGanStr"]);
-
-    [reportContent appendFormat:@"【中5宫 (%@)】\n 天盘: %@ | 地盘: %@\n---\n", jiGong, zhongTianPanGan, zhongDiPanGan]; 
+    [reportContent appendFormat:@"【中5宫】\n 天盘: %@ | 地盘: %@\n---\n", zhongTianPanGan, zhongDiPanGan]; 
     continue; 
-}                            NSString *gongGua = SafeString([[cell valueForKey:@"labelGongGuaShuNeiWaiPan"] text]);
+}                     NSString *gongGua = SafeString([[cell valueForKey:@"labelGongGuaShuNeiWaiPan"] text]);
                             NSString *gongWangShuai = @"";
                             NSArray *gongGuaParts = [gongGua componentsSeparatedByString:@" "];
                             if (gongGuaParts.count > 2) { gongWangShuai = gongGuaParts[2]; }
@@ -626,6 +619,7 @@ if ([gongName containsString:@"中5宫"]) {
         NSLog(@"[Echo奇门提取器] v4.5 (终极毕业版) 已加载。");
     }
 }
+
 
 
 
