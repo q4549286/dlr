@@ -349,8 +349,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             NSString *riZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"riGan"]), SafeString([baZiModel valueForKey:@"riZhi"])];
                             NSString *shiZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"shiGan"]), SafeString([baZiModel valueForKey:@"shiZhi"])];
                             NSString *juStr = SafeString([juTouModel valueForKey:@"juStr"]);
-                            NSString *zhiFu = SafeString([juTouModel valueForKey:@"zhiFu"]);
-                            NSString *zhiShi = SafeString([juTouModel valueForKey:@"zhiShi"]);
+                            NSString *ZhiFu = SafeString([juTouModel valueForKey:@"ZhiFu"]);
+                            NSString *ZhiShi = SafeString([juTouModel valueForKey:@"ZhiShi"]);
                             NSString *起局方式 = @"时家拆补"; 
                             
                             NSMutableString *geJuStr = [NSMutableString string];
@@ -611,3 +611,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v3.7 (终极毕业版) 已加载。");
     }
 }
+
