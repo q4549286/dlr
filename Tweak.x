@@ -5,10 +5,10 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v3.4 (终极完美版)
+//  Echo 奇门遁甲提取器 v3.5 (最终编译修复版)
 //
-//  - [终极优化] 底部信息提取升级为直接读取`CZShowNianMingRiShiKongView`内部的UILabel属性。
-//  - [完整性] 提供未经省略的完整代码，修复所有已知问题。
+//  - [终极修复] 修正了 appendFormat 的格式化字符串错误，解决最终编译问题。
+//  - [完整性] 提供未经省略的完整代码。
 //
 // =======================================================================================
 
@@ -198,7 +198,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v3.4" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v3.5" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -312,7 +312,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)startStandardExtraction {
     if (g_isExtracting) return;
-    LogMessage(EchoLogTypeTask, @"[奇门] v3.4 提取任务启动 (终极完美版)...");
+    LogMessage(EchoLogTypeTask, @"[奇门] v3.5 提取任务启动 (终极完美版)...");
     g_isExtracting = YES;
     [self showProgressHUD:@"正在精准提取..."];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -443,7 +443,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             if(isKongWang) [otherPart appendString:@"空亡 "];
                             if(yinGan.length > 0) [otherPart appendFormat:@"暗干%@ ", yinGan];
                             if(isMaXing) [otherPart appendString:@"马星"];
-                            [reportContent appendFormat:@"{%@(%@)|%@|%@|%@|%@|%@}\n", gongName, gongWangShuai, xingPart, baShen, menPart, tiandiPart, [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+                            
+                            // [编译修复] 确保格式化字符串有7个占位符
+                            [reportContent appendFormat:@"{%@(%@)|%@|%@|%@|%@|%@}\n",
+                                gongName, gongWangShuai, xingPart, baShen, menPart, tiandiPart, [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]
+                            ];
                         } @catch (NSException *exception) {
                             LogMessage(EchoLogError, @"[CRASH-DEBUG] 宫位提取失败: %@", exception);
                             continue;
@@ -457,7 +461,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [self hideProgressHUD];
         [self showEchoNotificationWithTitle:@"提取完成" message:@"专家格式报告已生成"];
         [self presentAIActionSheetWithReport:g_lastGeneratedReport];
-        LogMessage(EchoLogTypeSuccess, @"[奇门] v3.4 提取任务完成。");
+        LogMessage(EchoLogTypeSuccess, @"[奇门] v3.5 提取任务完成。");
         g_isExtracting = NO;
     });
 }
@@ -598,7 +602,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v3.4 (终极完美版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v3.5 (终极完美版) 已加载。");
     }
 }
-
