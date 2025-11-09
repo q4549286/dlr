@@ -180,44 +180,21 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 @end
 
 // ==========================================================
-// 请用这个调试版本完整替换您代码中的 %hook UIViewController ... %end
+// 请用这个终极版本完整替换您代码中的 %hook UIViewController ... %end
 // ==========================================================
 %hook UIViewController
 
 - (void)viewDidLoad {
     %orig;
 
-    // --- 调试日志 ---
-    // 这一行会打印出App加载的每一个视图控制器的名字
-    NSLog(@"[Echo Debug] viewDidLoad for: %@", NSStringFromClass([self class]));
-
-    // 检查我们目标类名是否正确
     Class targetClass = NSClassFromString(@"CZQMHomeViewController"); 
-    if (!targetClass) {
-        // 如果Flex给的类名抄错了，这里会打印日志
-        NSLog(@"[Echo Debug] 致命错误: 类 'CZQMHomeViewController' 未找到! 请仔细核对Flex中的类名。");
-        return;
-    }
-
-    // [关键修改] 我们暂时移除了 `&& self.navigationController` 这个条件
     if ([self isKindOfClass:targetClass]) {
-        
-        NSLog(@"[Echo Debug] 成功匹配目标: CZQMHomeViewController! 准备注入按钮...");
-
-        // 防止重复注入
-        if (g_mainViewController) {
-            NSLog(@"[Echo Debug] 按钮已存在，跳过。");
-            return;
-        }
+        if (g_mainViewController) return;
 
         g_mainViewController = self;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            NSLog(@"[Echo Debug] 开始在主窗口上添加按钮...");
             UIWindow *keyWindow = GetFrontmostWindow();
-            if (!keyWindow) {
-                NSLog(@"[Echo Debug] 错误: 找不到主窗口 (keyWindow)!");
-                return;
-            }
+            if (!keyWindow) return;
             if ([keyWindow viewWithTag:kEchoControlButtonTag]) {
                 [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview];
             }
@@ -235,162 +212,125 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             controlButton.layer.shadowRadius = 3;
             [controlButton addTarget:self action:@selector(createOrShowMainControlPanel) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:controlButton];
-            NSLog(@"[Echo Debug] 按钮已成功添加到窗口。");
         });
     }
 }
 
+// ... 您其他的 %new 方法保持不变 ...
+// (createOrShowMainControlPanel, handleMasterButtonTap, 等等)
 
+// ==========================================================
+// 核心提取逻辑 (终极精准UI抓取版)
+// ==========================================================
 %new
-- (void)createOrShowMainControlPanel {
-    UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
-    if (g_mainControlPanelView && g_mainControlPanelView.superview) {
-        [UIView animateWithDuration:0.3 animations:^{ g_mainControlPanelView.alpha = 0; } completion:^(BOOL finished) {
-            [g_mainControlPanelView removeFromSuperview];
-            g_mainControlPanelView = nil; g_logTextView = nil; g_questionTextView = nil; g_clearInputButton = nil;
-        }];
-        return;
-    }
+- (void)startStandardExtraction {
+    if (g_isExtracting) return;
+    LogMessage(EchoLogTypeTask, @"[奇门] “提取奇门盘”任务已启动 (精准UI抓取模式)。");
+    g_isExtracting = YES;
+    [self showProgressHUD:@"正在提取奇门盘..."];
 
-    g_mainControlPanelView = [[UIView alloc] initWithFrame:keyWindow.bounds];
-    g_mainControlPanelView.tag = kEchoMainPanelTag;
-    g_mainControlPanelView.backgroundColor = [UIColor clearColor];
-    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
-    blurView.frame = g_mainControlPanelView.bounds;
-    [g_mainControlPanelView addSubview:blurView];
-
-    UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(10, 45, g_mainControlPanelView.bounds.size.width - 20, g_mainControlPanelView.bounds.size.height - 65)];
-    contentView.clipsToBounds = YES;
-    [g_mainControlPanelView addSubview:contentView];
-
-    CGFloat padding = 15.0;
-
-    UIButton* (^createButton)(NSString*, NSString*, NSInteger, UIColor*) = ^(NSString* title, NSString* iconName, NSInteger tag, UIColor* color) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-        btn.backgroundColor = color; btn.tag = tag;
-        if (tag >= 200 && tag < 900) { [btn addTarget:self action:@selector(handleToolButtonTap:) forControlEvents:UIControlEventTouchUpInside]; } 
-        else { [btn addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside]; }
-        [btn addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown | UIControlEventTouchDragEnter];
-        [btn addTarget:self action:@selector(buttonTouchUp:) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchDragExit | UIControlEventTouchCancel];
-        btn.layer.cornerRadius = 12; [btn setTitle:title forState:UIControlStateNormal];
-        if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
-            [btn setImage:[UIImage systemImageNamed:iconName] forState:UIControlStateNormal];
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, -8);
-            btn.imageEdgeInsets = UIEdgeInsetsMake(0, -8, 0, 8);
-            #pragma clang diagnostic pop
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        
+        NSMutableString *reportContent = [NSMutableString string];
+        
+        // --- 1. 提取顶部核心参数 (改进) ---
+        [reportContent appendString:@"// 1. 核心参数\n"];
+        // 我们通过查找特定的文本来更精确地定位和分割信息
+        NSString *fullInfo = [self findTextInViewWithClassName:@"CZJuShiView" separator:@"\n"];
+        
+        NSString *topInfo = @"";
+        NSRange rangeStart = [fullInfo rangeOfString:@"20"]; // 从年份开始
+        NSRange rangeEnd = [fullInfo rangeOfString:@"值符:"];
+        if (rangeStart.location != NSNotFound && rangeEnd.location != NSNotFound) {
+            topInfo = [fullInfo substringWithRange:NSMakeRange(rangeStart.location, rangeEnd.location - rangeStart.location + rangeEnd.length + 5)];
         }
-        btn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
-        [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal]; btn.tintColor = [UIColor whiteColor];
-        return btn;
-    };
+        [reportContent appendFormat:@"%@\n\n", [SafeString(topInfo) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
 
-    UILabel* (^createSectionTitle)(NSString*) = ^(NSString* title) {
-        UILabel *label = [[UILabel alloc] init]; label.text = title;
-        label.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-        label.textColor = [UIColor lightGrayColor]; return label;
-    };
+        // --- 2. 提取九宫格详情 (全新精准定位法) ---
+        [reportContent appendString:@"// 2. 九宫格详情\n"];
 
-    CGFloat currentY = 15.0;
-    NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
-    [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v1.2" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
-    [titleString appendAttributedString:versionString];
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
-    titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
-    [contentView addSubview:titleLabel];
-    currentY += 30 + 20;
+        Class containerClass = NSClassFromString(@"CZShowGongsCollectionView");
+        if (containerClass) {
+            NSMutableArray *containerViews = [NSMutableArray array];
+            FindSubviewsOfClassRecursive(containerClass, self.view, containerViews);
 
-    CGFloat compactButtonHeight = 40.0, innerPadding = 10.0;
-    CGFloat cardContentWidth = contentView.bounds.size.width - 2 * padding;
-    CGFloat compactBtnWidth = (cardContentWidth - innerPadding) / 2.0;
-    
-    NSString *promptTitle = [NSString stringWithFormat:@"Prompt: %@", g_shouldIncludeAIPromptHeader ? @"开启" : @"关闭"];
-    UIColor *promptColor = g_shouldIncludeAIPromptHeader ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF;
-    UIButton *promptButton = createButton(promptTitle, @"wand.and.stars.inverse", kButtonTag_AIPromptToggle, promptColor);
-    promptButton.frame = CGRectMake(padding, currentY, compactBtnWidth, compactButtonHeight);
-    promptButton.selected = g_shouldIncludeAIPromptHeader;
-    [contentView addSubview:promptButton];
+            if (containerViews.count > 0) {
+                UIView *containerView = containerViews.firstObject;
+                
+                NSMutableArray *labels = [NSMutableArray array];
+                FindSubviewsOfClassRecursive([UILabel class], containerView, labels);
 
-    NSString *toggleTitle = [NSString stringWithFormat:@"开关: %@", g_isSomeToggleOn ? @"开启" : @"关闭"];
-    UIColor *toggleColor = g_isSomeToggleOn ? ECHO_COLOR_PROMPT_ON : ECHO_COLOR_SWITCH_OFF;
-    UIButton *toggleButton = createButton(toggleTitle, @"switch.2", kButtonTag_BenMingToggle, toggleColor);
-    toggleButton.frame = CGRectMake(padding + compactBtnWidth + innerPadding, currentY, compactBtnWidth, compactButtonHeight);
-    toggleButton.selected = g_isSomeToggleOn;
-    [contentView addSubview:toggleButton];
-    currentY += compactButtonHeight + 15;
+                // 按从上到下，从左到右排序
+                [labels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
+                    if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
+                    if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
+                    return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
+                }];
 
-    UIView *textViewContainer = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 110)];
-    textViewContainer.backgroundColor = ECHO_COLOR_CARD_BG; textViewContainer.layer.cornerRadius = 12;
-    [contentView addSubview:textViewContainer];
-    
-    g_questionTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, 0, textViewContainer.bounds.size.width - 2*padding - 40, 110)];
-    g_questionTextView.backgroundColor = [UIColor clearColor];
-    g_questionTextView.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
-    g_questionTextView.textContainerInset = UIEdgeInsetsMake(10, 0, 10, 0);
-    g_questionTextView.delegate = (id<UITextViewDelegate>)self;
-    g_questionTextView.returnKeyType = UIReturnKeyDone;
-    g_questionTextView.text = @"选填：输入您想问的具体问题";
-    g_questionTextView.textColor = [UIColor lightGrayColor];
-    [textViewContainer addSubview:g_questionTextView];
-    
-    g_clearInputButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    if (@available(iOS 13.0, *)) { [g_clearInputButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal]; }
-    g_clearInputButton.frame = CGRectMake(textViewContainer.bounds.size.width - padding - 25, 10, 25, 25);
-    g_clearInputButton.tintColor = [UIColor grayColor]; g_clearInputButton.tag = kButtonTag_ClearInput; g_clearInputButton.alpha = 0;
-    [g_clearInputButton addTarget:self action:@selector(handleMasterButtonTap:) forControlEvents:UIControlEventTouchUpInside];
-    [textViewContainer addSubview:g_clearInputButton];
-    currentY += 110 + 20;
+                // 核心逻辑：将所有Label分组到9个宫位中
+                NSMutableArray *palaces = [NSMutableArray array];
+                for (int i = 0; i < 9; i++) { [palaces addObject:[NSMutableArray array]]; }
 
-    UIView *card1 = [[UIView alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 0)];
-    card1.backgroundColor = ECHO_COLOR_CARD_BG; card1.layer.cornerRadius = 12;
-    [contentView addSubview:card1];
-    
-    CGFloat card1InnerY = 15;
-    UILabel *sec1Title = createSectionTitle(@"核心功能");
-    sec1Title.frame = CGRectMake(padding, card1InnerY, card1.bounds.size.width - 2*padding, 22);
-    [card1 addSubview:sec1Title];
-    card1InnerY += 22 + 10;
-    
-    CGFloat cardBtnWidth = (card1.bounds.size.width - 2*padding); // 单个按钮占满
-    UIButton *stdButton = createButton(@"提取奇门盘", @"doc.text.fill", kButtonTag_StandardReport, ECHO_COLOR_MAIN_TEAL);
-    stdButton.frame = CGRectMake(padding, card1InnerY, cardBtnWidth, 48);
-    [card1 addSubview:stdButton];
-    
-    card1InnerY += 48 + 15;
-    card1.frame = CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, card1InnerY);
-    currentY += card1.frame.size.height + 20;
-    
-    CGFloat bottomButtonsHeight = 40, bottomAreaPadding = 10, logTopPadding = 20;
-    CGFloat bottomButtonsY = contentView.bounds.size.height - bottomButtonsHeight - bottomAreaPadding;
-    CGFloat logViewY = currentY + logTopPadding;
-    CGFloat logViewHeight = bottomButtonsY - logViewY - bottomAreaPadding;
-    
-    g_logTextView = [[UITextView alloc] initWithFrame:CGRectMake(padding, logViewY, contentView.bounds.size.width - 2*padding, logViewHeight)];
-    g_logTextView.backgroundColor = ECHO_COLOR_CARD_BG; g_logTextView.layer.cornerRadius = 12;
-    g_logTextView.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
-    g_logTextView.editable = NO; g_logTextView.textContainerInset = UIEdgeInsetsMake(10, 10, 10, 10);
-    NSMutableAttributedString *initLog = [[NSMutableAttributedString alloc] initWithString:@"[Echo奇门提取器]：就绪。\n"];
-    [initLog addAttribute:NSForegroundColorAttributeName value:[UIColor whiteColor] range:NSMakeRange(0, initLog.length)];
-    [initLog addAttribute:NSFontAttributeName value:g_logTextView.font range:NSMakeRange(0, initLog.length)];
-    g_logTextView.attributedText = initLog;
-    [contentView addSubview:g_logTextView];
-    
-    CGFloat bottomBtnWidth = (contentView.bounds.size.width - 2*padding - padding) / 2.0;
-    UIButton *closeButton = createButton(@"关闭", @"xmark.circle", kButtonTag_ClosePanel, ECHO_COLOR_ACTION_CLOSE);
-    closeButton.frame = CGRectMake(padding, bottomButtonsY, bottomBtnWidth, bottomButtonsHeight);
-    [contentView addSubview:closeButton];
-    
-    UIButton *sendLastReportButton = createButton(@"发送数据", @"arrow.up.forward.app", kButtonTag_SendLastReportToAI, ECHO_COLOR_ACTION_AI);
-    sendLastReportButton.frame = CGRectMake(padding + bottomBtnWidth + padding, bottomButtonsY, bottomBtnWidth, bottomButtonsHeight);
-    [contentView addSubview:sendLastReportButton];
+                CGFloat palaceHeight = containerView.frame.size.height / 3.0;
+                CGFloat palaceWidth = containerView.frame.size.width / 3.0;
 
-    g_mainControlPanelView.alpha = 0; g_mainControlPanelView.transform = CGAffineTransformMakeScale(1.05, 1.05);
-    [keyWindow addSubview:g_mainControlPanelView];
-    [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.2 options:UIViewAnimationOptionCurveEaseInOut animations:^{
-        g_mainControlPanelView.alpha = 1.0; g_mainControlPanelView.transform = CGAffineTransformIdentity;
-    } completion:nil];
+                for (UILabel *label in labels) {
+                    if (label.text.length == 0 || label.isHidden) continue;
+                    
+                    int row = floor(label.center.y / palaceHeight);
+                    int col = floor(label.center.x / palaceWidth);
+                    int index = row * 3 + col;
+                    
+                    if (index >= 0 && index < 9) {
+                        [(NSMutableArray *)palaces[index] addObject:label];
+                    }
+                }
+                
+                // 对每个宫位内部的Label再进行排序并格式化输出
+                for (NSMutableArray *palaceLabels in palaces) {
+                    if (palaceLabels.count == 0) continue;
+
+                    [palaceLabels sortUsingComparator:^NSComparisonResult(UILabel *l1, UILabel *l2) {
+                         if (roundf(l1.frame.origin.y) < roundf(l2.frame.origin.y)) return NSOrderedAscending;
+                         if (roundf(l1.frame.origin.y) > roundf(l2.frame.origin.y)) return NSOrderedDescending;
+                         return [@(l1.frame.origin.x) compare:@(l2.frame.origin.x)];
+                    }];
+                    
+                    NSMutableArray *textParts = [NSMutableArray array];
+                    for (UILabel *label in palaceLabels) {
+                        [textParts addObject:label.text];
+                    }
+
+                    // 简单拼接所有文本，您后续可以根据内容进一步格式化
+                    [reportContent appendFormat:@"- %@\n", [textParts componentsJoinedByString:@" | "]];
+                }
+                LogMessage(EchoLogTypeSuccess, @"[奇门] 成功提取并分组 %ld 个UILabel。", (unsigned long)labels.count);
+
+            } else { [reportContent appendString:@"[提取失败: 未找到 CZShowGongsCollectionView 视图]\n"]; }
+        } else { [reportContent appendString:@"[提取失败: 找不到 CZShowGongsCollectionView 类]\n"]; }
+        [reportContent appendString:@"\n"];
+
+        // --- 3. 提取底部附加信息 (改进) ---
+        [reportContent appendString:@"// 3. 附加信息\n"];
+        NSString *bottomInfo = @"";
+        rangeStart = [fullInfo rangeOfString:@"年命:"];
+        rangeEnd = [fullInfo rangeOfString:@"时间流"];
+        if (rangeStart.location != NSNotFound && rangeEnd.location != NSNotFound) {
+            bottomInfo = [fullInfo substringWithRange:NSMakeRange(rangeStart.location, rangeEnd.location - rangeStart.location)];
+        } else {
+             bottomInfo = @"[底部信息提取失败]";
+        }
+        [reportContent appendFormat:@"%@\n", [SafeString(bottomInfo) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+        
+        // --- 4. 生成并输出报告 ---
+        g_lastGeneratedReport = formatFinalReport(reportContent);
+        
+        [self hideProgressHUD];
+        [self showEchoNotificationWithTitle:@"提取完成" message:@"奇门盘数据已生成并复制"];
+        [self presentAIActionSheetWithReport:g_lastGeneratedReport];
+        LogMessage(EchoLogTypeSuccess, @"[奇门] “提取奇门盘”任务完成。");
+        g_isExtracting = NO;
+    });
 }
 
 %new
@@ -726,5 +666,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v1.2 (编译修复最终版) 已加载。");
     }
 }
+
 
 
