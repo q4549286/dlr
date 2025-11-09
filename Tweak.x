@@ -450,7 +450,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             if(yinGan.length > 0) [otherPart appendFormat:@"暗干%@ ", yinGan];
                             if(isMaXing) [otherPart appendString:@"马星"];
                             
-                            [reportContent appendFormat:@"{%@(%@)|%@|%@|%@|%@}\n",
+                            [reportContent appendFormat:@"{%@(%@)|%@|%@|%@|%@|%@}\n",
                                 gongName, gongWangShuai, xingPart, baShen, menPart, tiandiPart, [otherPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]
                             ];
                         } @catch (NSException *exception) {
@@ -610,3 +610,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v4.0 (终极毕业版) 已加载。");
     }
 }
+
