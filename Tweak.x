@@ -351,17 +351,21 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     
                     NSString *起局方式 = @"时家拆补"; 
 NSMutableString *geJuStr = [NSMutableString string];
-Class geJuViewClass = NSClassFromString(@"CZShowShiJianGeView"); // [修复] 使用正确的View类名
+Class geJuViewClass = NSClassFromString(@"CZShowShiJianGeView");
 if(geJuViewClass) {
      NSMutableArray *geJuViews = [NSMutableArray array]; 
      FindSubviewsOfClassRecursive(geJuViewClass, self.view, geJuViews);
-     for(UIView* view in geJuViews) {
-        // 直接从这个View里找UILabel
-        NSMutableArray *labels = [NSMutableArray array];
-        FindSubviewsOfClassRecursive([UILabel class], view, labels);
-        if (labels.count > 0) {
-            // 假设每个View里只有一个Label显示格局名称
-            [geJuStr appendFormat:@"%@ ", ((UILabel*)labels.firstObject).text];
+     if (geJuViews.count > 0) {
+        // 我们知道只有一个 CZShowShiJianGeView，直接取第一个
+        UIView *containerView = geJuViews.firstObject;
+        // 在这个容器里，找到 *所有* 的 UILabel
+        NSMutableArray *allLabelsInContainer = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UILabel class], containerView, allLabelsInContainer);
+        // 遍历所有找到的 UILabel
+        for (UILabel *label in allLabelsInContainer) {
+            if (label.text && label.text.length > 0) {
+                [geJuStr appendFormat:@"%@ ", label.text];
+            }
         }
      }
 }
@@ -612,6 +616,7 @@ if(geJuViewClass) {
         NSLog(@"[Echo奇门提取器] v4.0 (终极毕业版) 已加载。");
     }
 }
+
 
 
 
