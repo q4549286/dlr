@@ -345,6 +345,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSString *xunStr = SafeString([juTouModel valueForKey:@"xunStr"]);
 
                     NSString *juStr = SafeString([[baziView valueForKey:@"labelJu"] text]);
+                    NSString *YinYangStr = SafeString([baziView valueForKey:@"labelYinYing"] text);
                     NSString *zhiFu = SafeString([[baziView valueForKey:@"labelZhiFu"] text]);
                     NSString *zhiShi = SafeString([[baziView valueForKey:@"labelZhiShi"] text]);
                     
@@ -362,10 +363,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             }
                          }
                     }
-                    [reportContent appendFormat:@"%@ | %@ | %@ | %@ | %@\n", timeStr, 起局方式, juStr, [NSString stringWithFormat:@"%@旬", xunStr], [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+                    [reportContent appendFormat:@"%@ | %@ | %@ | %@ | %@\n", timeStr, 起局方式, YinYangStr, juStr, [NSString stringWithFormat:@"%@旬", xunStr], [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
                     [reportContent appendFormat:@"值符: %@ | 值使: %@\n", zhiFu, zhiShi];
-                    [reportContent appendFormat:@"四柱: %s %s %s %s\n", [nianZhu UTF8String], [yueZhu UTF8String], [riZhu UTF8String], [shiZhu UTF8String]];
-                }
+[reportContent appendFormat:@"四柱: %@ %@ %@ %@\n", nianZhu, yueZhu, riZhu, shiZhu];                }
             }
         } @catch (NSException *exception) { [reportContent appendString:@"[顶部提取失败]\n"]; LogMessage(EchoLogError, @"[CRASH-DEBUG] 顶部提取失败: %@", exception); }
         
@@ -610,4 +610,5 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v4.0 (终极毕业版) 已加载。");
     }
 }
+
 
