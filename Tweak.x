@@ -350,19 +350,21 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSString *zhiShi = SafeString([[baziView valueForKey:@"labelZhiShi"] text]);
                     
                     NSString *起局方式 = @"时家拆补"; 
-                    NSMutableString *geJuStr = [NSMutableString string];
-                    Class geJuViewClass = NSClassFromString(@"CZShowShiJianGeView"); // [修复] 使用正确的View类名
-                    if(geJuViewClass) {
-                         NSMutableArray *geJuViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(geJuViewClass, self.view, geJuViews);
-                         for(UIView* view in geJuViews) {
-                            // 直接从这个View里找UILabel
-                            NSMutableArray *labels = [NSMutableArray array];
-                            FindSubviewsOfClassRecursive([UILabel class], view, labels);
-                            if (labels.count > 0) {
-                                [geJuStr appendFormat:@"%@ ", ((UILabel*)labels.firstObject).text];
-                            }
-                         }
-                    }
+NSMutableString *geJuStr = [NSMutableString string];
+Class geJuViewClass = NSClassFromString(@"CZShowShiJianGeView"); // [修复] 使用正确的View类名
+if(geJuViewClass) {
+     NSMutableArray *geJuViews = [NSMutableArray array]; 
+     FindSubviewsOfClassRecursive(geJuViewClass, self.view, geJuViews);
+     for(UIView* view in geJuViews) {
+        // 直接从这个View里找UILabel
+        NSMutableArray *labels = [NSMutableArray array];
+        FindSubviewsOfClassRecursive([UILabel class], view, labels);
+        if (labels.count > 0) {
+            // 假设每个View里只有一个Label显示格局名称
+            [geJuStr appendFormat:@"%@ ", ((UILabel*)labels.firstObject).text];
+        }
+     }
+}
                     [reportContent appendFormat:@"%@ | %@ | %@%@ | %@ | %@\n", timeStr, 起局方式, YinYangStr, juStr, [NSString stringWithFormat:@"%@旬", xunStr], [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
                     [reportContent appendFormat:@"值符: %@ | 值使: %@\n", zhiFu, zhiShi];
 [reportContent appendFormat:@"四柱: %@ %@ %@ %@\n", nianZhu, yueZhu, riZhu, shiZhu];                }
@@ -610,6 +612,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v4.0 (终极毕业版) 已加载。");
     }
 }
+
 
 
 
