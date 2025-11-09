@@ -345,7 +345,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                     NSString *xunStr = SafeString([juTouModel valueForKey:@"xunStr"]);
 
                     NSString *juStr = SafeString([[baziView valueForKey:@"labelJu"] text]);
-                    NSString *YinYangStr = SafeString([baziView valueForKey:@"labelYinYing"] text);
+                    NSString *YinYangStr = SafeString([baziView valueForKey:@"labelYinYang"] text);
                     NSString *zhiFu = SafeString([[baziView valueForKey:@"labelZhiFu"] text]);
                     NSString *zhiShi = SafeString([[baziView valueForKey:@"labelZhiShi"] text]);
                     
@@ -363,7 +363,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             }
                          }
                     }
-                    [reportContent appendFormat:@"%@ | %@ | %@ | %@ | %@\n", timeStr, 起局方式, YinYangStr, juStr, [NSString stringWithFormat:@"%@旬", xunStr], [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
+                    [reportContent appendFormat:@"%@ | %@ | %@%@ | %@ | %@\n", timeStr, 起局方式, YinYangStr, juStr, [NSString stringWithFormat:@"%@旬", xunStr], [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
                     [reportContent appendFormat:@"值符: %@ | 值使: %@\n", zhiFu, zhiShi];
 [reportContent appendFormat:@"四柱: %@ %@ %@ %@\n", nianZhu, yueZhu, riZhu, shiZhu];                }
             }
@@ -610,5 +610,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v4.0 (终极毕业版) 已加载。");
     }
 }
+
 
 
