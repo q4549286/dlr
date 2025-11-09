@@ -179,19 +179,45 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (NSString *)findTextInViewWithClassName:(NSString *)className separator:(NSString *)separator;
 @end
 
+// ==========================================================
+// 请用这个调试版本完整替换您代码中的 %hook UIViewController ... %end
+// ==========================================================
 %hook UIViewController
 
 - (void)viewDidLoad {
     %orig;
-    // [已更新] 使用您找到的主视图控制器类名
+
+    // --- 调试日志 ---
+    // 这一行会打印出App加载的每一个视图控制器的名字
+    NSLog(@"[Echo Debug] viewDidLoad for: %@", NSStringFromClass([self class]));
+
+    // 检查我们目标类名是否正确
     Class targetClass = NSClassFromString(@"CZQMHomeViewController"); 
-    if (targetClass && [self isKindOfClass:targetClass] && self.navigationController) {
-        if (g_mainViewController) return;
+    if (!targetClass) {
+        // 如果Flex给的类名抄错了，这里会打印日志
+        NSLog(@"[Echo Debug] 致命错误: 类 'CZQMHomeViewController' 未找到! 请仔细核对Flex中的类名。");
+        return;
+    }
+
+    // [关键修改] 我们暂时移除了 `&& self.navigationController` 这个条件
+    if ([self isKindOfClass:targetClass]) {
+        
+        NSLog(@"[Echo Debug] 成功匹配目标: CZQMHomeViewController! 准备注入按钮...");
+
+        // 防止重复注入
+        if (g_mainViewController) {
+            NSLog(@"[Echo Debug] 按钮已存在，跳过。");
+            return;
+        }
 
         g_mainViewController = self;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            NSLog(@"[Echo Debug] 开始在主窗口上添加按钮...");
             UIWindow *keyWindow = GetFrontmostWindow();
-            if (!keyWindow) return;
+            if (!keyWindow) {
+                NSLog(@"[Echo Debug] 错误: 找不到主窗口 (keyWindow)!");
+                return;
+            }
             if ([keyWindow viewWithTag:kEchoControlButtonTag]) {
                 [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview];
             }
@@ -209,9 +235,15 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             controlButton.layer.shadowRadius = 3;
             [controlButton addTarget:self action:@selector(createOrShowMainControlPanel) forControlEvents:UIControlEventTouchUpInside];
             [keyWindow addSubview:controlButton];
+            NSLog(@"[Echo Debug] 按钮已成功添加到窗口。");
         });
     }
 }
+
+// ... 您其他的 %new 方法保持不变 ...
+// (createOrShowMainControlPanel, handleMasterButtonTap, 等等)
+
+%end
 
 %new
 - (void)createOrShowMainControlPanel {
@@ -698,3 +730,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v1.2 (编译修复最终版) 已加载。");
     }
 }
+
