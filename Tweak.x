@@ -362,7 +362,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                                  }
                             }
                             [reportContent appendFormat:@"%@ | %@ | %@ | %@\n", timeStr, 起局方式, juStr, [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
-                            [reportContent appendFormat:@"值符: %@ | 值使: %@\n", zhiFu, zhiShi];
+                            [reportContent appendFormat:@"值符: %@ | 值使: %@\n", ZhiFu, ZhiShi];
                             [reportContent appendFormat:@"四柱: %s %s %s %s\n", [nianZhu UTF8String], [yueZhu UTF8String], [riZhu UTF8String], [shiZhu UTF8String]];
                         }
                     }
@@ -611,5 +611,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v3.7 (终极毕业版) 已加载。");
     }
 }
+
 
 
