@@ -5,7 +5,7 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v3.1 (终极完美版)
+//  Echo 奇门遁甲提取器 v3.1 (终极完整版)
 //
 //  - [终极升级] 时间提取升级为直接读取`dateUse`属性，完全脱离UI抓取。
 //  - [最终确认] 所有数据源均已通过Flex确认，代码不再包含任何猜测。
@@ -323,26 +323,21 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         @try {
             Class juShiViewClass = NSClassFromString(@"CZJuShiView");
             Class baziViewClass = NSClassFromString(@"CZShowBaZiView");
-            
             if(juShiViewClass && baziViewClass) {
-                // 提取最外层容器
                 NSMutableArray *juShiViews = [NSMutableArray array];
                 FindSubviewsOfClassRecursive(juShiViewClass, self.view, juShiViews);
                 UIView *juShiView = (juShiViews.count > 0) ? juShiViews.firstObject : nil;
 
-                // 提取八字视图容器
                 NSMutableArray *baziViews = [NSMutableArray array];
                 FindSubviewsOfClassRecursive(baziViewClass, self.view, baziViews);
                 UIView *baziView = (baziViews.count > 0) ? baziViews.firstObject : nil;
                 
                 if (juShiView && baziView) {
-                    // 从外层容器提取NSDate
                     NSDate *dateUse = [juShiView valueForKey:@"dateUse"];
                     NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
                     [formatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
                     NSString *timeStr = [formatter stringFromDate:dateUse];
 
-                    // 从八字视图容器提取模型
                     Ivar baZiIvar = class_getInstanceVariable(baziViewClass, "_baZi");
                     Ivar juTouIvar = class_getInstanceVariable(baziViewClass, "_juTou");
                     if (baZiIvar && juTouIvar) {
@@ -369,7 +364,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                                     if(label.text) [geJuStr appendFormat:@"%@ ", label.text];
                                  }
                             }
-                            [reportContent appendFormat:@"%@ | %@ | %@ | %@ | %@\n", timeStr, 起局方式, juStr, shiKong, geJuStr];
+                            [reportContent appendFormat:@"%@ | %@ | %@ | %@ | %@\n", timeStr, 起局方式, juStr, shiKong, [geJuStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]];
                             [reportContent appendFormat:@"值符: %@ | 值使: %@\n", zhiFu, zhiShi];
                             [reportContent appendFormat:@"四柱: %s %s %s %s\n\n", [nianZhu UTF8String], [yueZhu UTF8String], [riZhu UTF8String], [shiZhu UTF8String]];
                         }
@@ -417,7 +412,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                                 [reportContent appendString:@"{中宫||中|地盘己|}\n"];
                                 continue;
                             }
-
+                            
                             NSString *tianPanGan = SafeString([model valueForKey:@"tianPanGanStr"]);
                             NSString *diPanGan = SafeString([model valueForKey:@"diPanGanStr"]);
                             NSString *baShen = SafeString([model valueForKey:@"baShenStr"]);
@@ -434,7 +429,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             NSString *tianPan12 = SafeString([[cell valueForKey:@"labelTianPanGan12ZhangSheng"] text]);
                             NSString *diPan12 = SafeString([[cell valueForKey:@"labelDiPanGan12ZhangSheng"] text]);
                             NSString *tianPanJiGan12 = SafeString([[cell valueForKey:@"labelTianPanJiGan12ZhangSheng"] text]);
-                            NSString *diPan12JiGan = SafeString([[cell valueForKey:@"labelDiPanJiGan12ZhangSheng"] text]);
+                            NSString *diPanJiGan12 = SafeString([[cell valueForKey:@"labelDiPanJiGan12ZhangSheng"] text]);
 
                             NSString *gongGua = SafeString([[cell valueForKey:@"labelGongGuaShuNeiWaiPan"] text]);
                             NSString *gongWangShuai = @"";
@@ -442,7 +437,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                             if (gongGuaParts.count > 2) { gongWangShuai = gongGuaParts[2]; }
                             
                             NSString *tianPan12Final = (tianPanJiGan.length > 0) ? tianPanJiGan12 : tianPan12;
-                            NSString *diPan12Final = (diPanJiGan.length > 0) ? diPan12JiGan : diPan12;
+                            NSString *diPan12Final = (diPanJiGan.length > 0) ? diPanJiGan12 : diPan12;
                             
                             NSMutableString *xingPart = [NSMutableString stringWithFormat:@"%@(%@,%@)", jiuXing, xingWangShuai, tianPan12Final];
                             NSMutableString *menPart = [NSMutableString stringWithFormat:@"%@(%@,%@)", baMen, menWangShuai, diPan12Final];
@@ -619,4 +614,3 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v3.1 (终极完美版) 已加载。");
     }
 }
-
