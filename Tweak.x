@@ -5,10 +5,9 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v1.1 (编译修复版)
+//  Echo 奇门遁甲提取器 v1.2 (编译修复最终版)
 //
-//  - [修复] 解决了在高版本SDK（iOS 15+）下因 API 废弃导致的编译错误。
-//  - [修复] 将三元运算符中的 @available 判断改写为标准的 if/else 语句块，以符合新版编译器要求。
+//  - [修复] 注释掉了未使用的按钮Tag常量，以解决`unused-const-variable`编译错误。
 //  - [成品] 这是一个可以直接编译使用的完整脚本。
 //
 // =======================================================================================
@@ -27,15 +26,16 @@ static const NSInteger kEchoInteractionBlockerTag = 224466;
 
 // Button Tags
 static const NSInteger kButtonTag_StandardReport    = 101;
-static const NSInteger kButtonTag_DeepDiveReport    = 102;
-static const NSInteger kButtonTag_Tool1             = 201;
-static const NSInteger kButtonTag_Tool2             = 203;
-static const NSInteger kButtonTag_Tool3             = 301;
-static const NSInteger kButtonTag_Tool4             = 302;
-static const NSInteger kButtonTag_Tool5             = 204;
-static const NSInteger kButtonTag_Tool6             = 303;
-static const NSInteger kButtonTag_Tool7             = 304;
-static const NSInteger kButtonTag_Tool8             = 305;
+// [编译修复] 注释掉未使用的Tag
+// static const NSInteger kButtonTag_DeepDiveReport    = 102;
+// static const NSInteger kButtonTag_Tool1             = 201;
+// static const NSInteger kButtonTag_Tool2             = 203;
+// static const NSInteger kButtonTag_Tool3             = 301;
+// static const NSInteger kButtonTag_Tool4             = 302;
+// static const NSInteger kButtonTag_Tool5             = 204;
+// static const NSInteger kButtonTag_Tool6             = 303;
+// static const NSInteger kButtonTag_Tool7             = 304;
+// static const NSInteger kButtonTag_Tool8             = 305;
 static const NSInteger kButtonTag_ClearInput        = 999;
 static const NSInteger kButtonTag_ClosePanel        = 998;
 static const NSInteger kButtonTag_SendLastReportToAI = 997;
@@ -247,7 +247,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         btn.layer.cornerRadius = 12; [btn setTitle:title forState:UIControlStateNormal];
         if (iconName && [UIImage respondsToSelector:@selector(systemImageNamed:)]) {
             [btn setImage:[UIImage systemImageNamed:iconName] forState:UIControlStateNormal];
-            // [编译修复] 使用 pragma 忽略弃用警告
             #pragma clang diagnostic push
             #pragma clang diagnostic ignored "-Wdeprecated-declarations"
             btn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, -8);
@@ -268,7 +267,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v1.1" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v1.2" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -661,12 +660,8 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 - (void)showEchoNotificationWithTitle:(NSString *)title message:(NSString *)message {
     UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return;
     CGFloat topPadding;
-    // [编译修复] 改写为 if/else
-    if (@available(iOS 11.0, *)) {
-        topPadding = keyWindow.safeAreaInsets.top;
-    } else {
-        topPadding = 20;
-    };
+    if (@available(iOS 11.0, *)) { topPadding = keyWindow.safeAreaInsets.top; } 
+    else { topPadding = 20; };
     topPadding = topPadding > 0 ? topPadding : 20;
     CGFloat bannerWidth = keyWindow.bounds.size.width - 32;
     UIView *bannerView = [[UIView alloc] initWithFrame:CGRectMake(16, -100, bannerWidth, 60)];
@@ -679,21 +674,13 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     iconLabel.font = [UIFont boldSystemFontOfSize:16]; [containerForLabels addSubview:iconLabel];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(45, 12, bannerWidth-55, 20)];
     titleLabel.text = title; titleLabel.font = [UIFont boldSystemFontOfSize:15];
-    // [编译修复] 改写为 if/else
-    if (@available(iOS 13.0, *)) { 
-        titleLabel.textColor = [UIColor labelColor]; 
-    } else { 
-        titleLabel.textColor = [UIColor blackColor];
-    }
+    if (@available(iOS 13.0, *)) { titleLabel.textColor = [UIColor labelColor]; } 
+    else { titleLabel.textColor = [UIColor blackColor];}
     [containerForLabels addSubview:titleLabel];
     UILabel *messageLabel = [[UILabel alloc] initWithFrame:CGRectMake(45, 32, bannerWidth-55, 16)];
     messageLabel.text = message; messageLabel.font = [UIFont systemFontOfSize:13];
-    // [编译修复] 改写为 if/else
-    if (@available(iOS 13.0, *)) { 
-        messageLabel.textColor = [UIColor secondaryLabelColor]; 
-    } else { 
-        messageLabel.textColor = [UIColor darkGrayColor]; 
-    }
+    if (@available(iOS 13.0, *)) { messageLabel.textColor = [UIColor secondaryLabelColor]; } 
+    else { messageLabel.textColor = [UIColor darkGrayColor]; }
     [containerForLabels addSubview:messageLabel];
     [keyWindow addSubview:bannerView];
     [UIView animateWithDuration:0.5 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseInOut animations:^{
@@ -708,6 +695,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v1.1 (编译修复版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v1.2 (编译修复最终版) 已加载。");
     }
 }
