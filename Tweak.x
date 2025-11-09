@@ -5,11 +5,10 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v3.3 (终极完整版)
+//  Echo 奇门遁甲提取器 v3.4 (终极完美版)
 //
-//  - [格式重构] 整合所有信息到单一“奇门盘信息”标题下。
-//  - [精准提取] 优化底部信息提取逻辑，只获取年命和时空时马。
-//  - [完整性] 提供未经省略的完整代码，修复所有编译错误。
+//  - [终极优化] 底部信息提取升级为直接读取`CZShowNianMingRiShiKongView`内部的UILabel属性。
+//  - [完整性] 提供未经省略的完整代码，修复所有已知问题。
 //
 // =======================================================================================
 
@@ -199,7 +198,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v3.3" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v3.4" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -313,7 +312,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)startStandardExtraction {
     if (g_isExtracting) return;
-    LogMessage(EchoLogTypeTask, @"[奇门] v3.3 提取任务启动 (终极完整版)...");
+    LogMessage(EchoLogTypeTask, @"[奇门] v3.4 提取任务启动 (终极完美版)...");
     g_isExtracting = YES;
     [self showProgressHUD:@"正在精准提取..."];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -365,22 +364,22 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 }
             }
         } @catch (NSException *exception) { [reportContent appendString:@"[顶部提取失败]\n"]; LogMessage(EchoLogError, @"[CRASH-DEBUG] 顶部提取失败: %@", exception); }
-
+        
         // --- 2. 提取附加信息 (年命, 时空) ---
         @try {
-            NSString *nianMing = @"年命: 未找到";
-            NSString *shiKongMa = @"时空: 未找到";
             Class bottomContainerClass = NSClassFromString(@"CZShowNianMingRiShiKongView");
             if (bottomContainerClass) {
-                NSMutableArray *labels = [NSMutableArray array]; FindSubviewsOfClassRecursive([UILabel class], self.view, labels);
-                for(UILabel *label in labels) {
-                    if([label.text containsString:@"年命"]) { nianMing = label.text; }
-                    if([label.text containsString:@"时空"]) { shiKongMa = label.text; }
-                }
-            }
-            [reportContent appendFormat:@"%@\n%@\n\n", nianMing, shiKongMa];
-        } @catch (NSException *exception) { [reportContent appendString:@"[附加信息提取失败]\n\n"]; LogMessage(EchoLogError, @"[CRASH-DEBUG] 附加信息提取失败: %@", exception); }
-
+                NSMutableArray *containerViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(bottomContainerClass, self.view, containerViews);
+                if (containerViews.count > 0) {
+                    UIView *container = containerViews.firstObject;
+                    UILabel *nianMingLabel = [container valueForKey:@"labelNianMing"];
+                    UILabel *shiKongLabel = [container valueForKey:@"labelShiKong"];
+                    if (nianMingLabel) [reportContent appendFormat:@"%@\n", SafeString(nianMingLabel.text)];
+                    if (shiKongLabel) [reportContent appendFormat:@"%@\n", SafeString(shiKongLabel.text)];
+                } else { [reportContent appendString:@"[附加信息提取失败: 未找到容器]\n"]; }
+            } else { [reportContent appendString:@"[附加信息提取失败: 找不到类]\n"]; }
+        } @catch (NSException *exception) { [reportContent appendString:@"[附加信息提取失败]\n"]; LogMessage(EchoLogError, @"[CRASH-DEBUG] 附加信息提取失败: %@", exception); }
+        [reportContent appendString:@"\n"];
 
         // --- 3. 提取九宫格详情 ---
         Class cellClass = NSClassFromString(@"CZGongChuanRenThemeCollectionViewCell");
@@ -458,7 +457,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [self hideProgressHUD];
         [self showEchoNotificationWithTitle:@"提取完成" message:@"专家格式报告已生成"];
         [self presentAIActionSheetWithReport:g_lastGeneratedReport];
-        LogMessage(EchoLogTypeSuccess, @"[奇门] v3.3 提取任务完成。");
+        LogMessage(EchoLogTypeSuccess, @"[奇门] v3.4 提取任务完成。");
         g_isExtracting = NO;
     });
 }
@@ -599,6 +598,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v3.3 (终极完整版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v3.4 (终极完美版) 已加载。");
     }
 }
