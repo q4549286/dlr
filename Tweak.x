@@ -423,10 +423,10 @@ if ([gongName containsString:@"中5宫"]) {
                             [reportContent appendFormat:@" 神: %@\n", baShen];
                             NSString *jiuXing = SafeString([model valueForKey:@"jiuXingStr"]);
                             NSString *xingWangShuai = [SafeString([[cell valueForKey:@"labelXingWangShuai"] text]) stringByReplacingOccurrencesOfString:@"`" withString:@" "];
-                            [reportContent appendFormat:@" 星: %@ (落宫:%@)\n", jiuXing, xingWangShuai];
+                            [reportContent appendFormat:@" 星: %@ (落宫%@)\n", jiuXing, xingWangShuai];
                             NSString *baMen = SafeString([model valueForKey:@"baMenStr"]);
                             NSString *menWangShuai = [SafeString([[cell valueForKey:@"labelMenWangShuai"] text]) stringByReplacingOccurrencesOfString:@"`" withString:@" "];
-                            [reportContent appendFormat:@" 门: %@ (落宫:%@)\n", baMen, menWangShuai];
+                            [reportContent appendFormat:@" 门: %@ (落宫%@)\n", baMen, menWangShuai];
                             
                             NSString *tianPanGan = SafeString([model valueForKey:@"tianPanGanStr"]);
                             NSString *tianPan12 = SafeString([[cell valueForKey:@"labelTianPanGan12ZhangSheng"] text]);
@@ -619,6 +619,7 @@ if ([gongName containsString:@"中5宫"]) {
         NSLog(@"[Echo奇门提取器] v4.5 (终极毕业版) 已加载。");
     }
 }
+
 
 
 
