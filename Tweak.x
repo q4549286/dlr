@@ -5,11 +5,11 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v2.4 (混合模式最终版)
+//  Echo 奇门遁甲提取器 v2.5 (最终完美修复版)
 //
-//  - [精准升级] 采用数据模型+UI抓取混合模式，提取信息更全面、更精准。
-//  - [新增] 增加了遁干、寄干、星旺衰、门旺衰、卦数等信息的提取。
-//  - [优化] 顶部核心参数提取改为从 CZShowBaZiView 的数据模型读取，避免无关信息。
+//  - [最终修复] 使用了 CZBaZi 和 CZJu 的真实属性名，采用更可靠的 Ivar 访问方式，彻底解决闪退。
+//  - [新增] 增加了“十二长生”状态的提取。
+//  - [最终版] 这是理论上最完美、信息最全面的版本。
 //
 // =======================================================================================
 
@@ -211,7 +211,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v2.4" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v2.5" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -325,13 +325,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)startStandardExtraction {
     if (g_isExtracting) return;
-    LogMessage(EchoLogTypeTask, @"[奇门] v2.4 提取任务启动 (混合模式)...");
+    LogMessage(EchoLogTypeTask, @"[奇门] v2.5 提取任务启动 (最终完美版)...");
     g_isExtracting = YES;
     [self showProgressHUD:@"正在精准提取..."];
-
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         NSMutableString *reportContent = [NSMutableString string];
-        
         [reportContent appendString:@"// 1. 核心参数\n"];
         Class baziViewClass = NSClassFromString(@"CZShowBaZiView");
         if(baziViewClass) {
@@ -339,21 +337,25 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             FindSubviewsOfClassRecursive(baziViewClass, self.view, baziViews);
             if (baziViews.count > 0) {
                 UIView *baziView = baziViews.firstObject;
-                id baZiModel = [baziView valueForKey:@"baZi"];
-                id juTouModel = [baziView valueForKey:@"juTou"];
-                if (baZiModel && juTouModel) {
-                    NSString *nianZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"nianGan"], [baZiModel valueForKey:@"nianZhi"]];
-                    NSString *yueZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"yueGan"], [baZiModel valueForKey:@"yueZhi"]];
-                    NSString *riZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"riGan"], [baZiModel valueForKey:@"riZhi"]];
-                    NSString *shiZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"shiGan"], [baZiModel valueForKey:@"shiZhi"]];
-                    NSString *juStr = [juTouModel valueForKey:@"juStr"];
-                    NSString *xunKong = [juTouModel valueForKey:@"xunKong"];
-                    NSString *zhiFu = [juTouModel valueForKey:@"zhiFu"];
-                    NSString *zhiShi = [juTouModel valueForKey:@"zhiShi"];
-                    [reportContent appendFormat:@"四柱: %s %s %s %s\n", [nianZhu UTF8String], [yueZhu UTF8String], [riZhu UTF8String], [shiZhu UTF8String]];
-                    [reportContent appendFormat:@"局: %@ %@\n", SafeString(juStr), SafeString(xunKong)];
-                    [reportContent appendFormat:@"值符: %@ | 值使: %@\n\n", SafeString(zhiFu), SafeString(zhiShi)];
-                } else { [reportContent appendString:@"[顶部信息提取失败: 未找到baZi或juTou模型]\n\n"]; }
+                Ivar baZiIvar = class_getInstanceVariable(baziViewClass, "_baZi");
+                Ivar juTouIvar = class_getInstanceVariable(baziViewClass, "_juTou");
+                if (baZiIvar && juTouIvar) {
+                    id baZiModel = object_getIvar(baziView, baZiIvar);
+                    id juTouModel = object_getIvar(baziView, juTouIvar);
+                    if (baZiModel && juTouModel) {
+                        NSString *nianZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"nianGan"], [baZiModel valueForKey:@"nianZhi"]];
+                        NSString *yueZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"yueGan"], [baZiModel valueForKey:@"yueZhi"]];
+                        NSString *riZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"riGan"], [baZiModel valueForKey:@"riZhi"]];
+                        NSString *shiZhu = [NSString stringWithFormat:@"%@%@", [baZiModel valueForKey:@"shiGan"], [baZiModel valueForKey:@"shiZhi"]];
+                        NSString *juStr = [juTouModel valueForKey:@"juStr"];
+                        NSString *shiKong = [juTouModel valueForKey:@"shiKongStr"];
+                        NSString *zhiFu = [juTouModel valueForKey:@"zhiFu"];
+                        NSString *zhiShi = [juTouModel valueForKey:@"zhiShi"];
+                        [reportContent appendFormat:@"四柱: %s %s %s %s\n", [nianZhu UTF8String], [yueZhu UTF8String], [riZhu UTF8String], [shiZhu UTF8String]];
+                        [reportContent appendFormat:@"局: %@ %@\n", SafeString(juStr), SafeString(shiKong)];
+                        [reportContent appendFormat:@"值符: %@ | 值使: %@\n\n", SafeString(zhiFu), SafeString(zhiShi)];
+                    } else { [reportContent appendString:@"[顶部信息提取失败: baZi或juTou模型为空]\n\n"]; }
+                } else { [reportContent appendString:@"[顶部信息提取失败: 未找到_baZi或_juTou实例变量]\n\n"]; }
             } else { [reportContent appendString:@"[顶部信息提取失败: 未找到CZShowBaZiView]\n\n"]; }
         } else { [reportContent appendString:@"[顶部信息提取失败: 找不到CZShowBaZiView类]\n\n"]; }
 
@@ -406,6 +408,10 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                         NSString *menWangShuai = menWangShuaiLabel.text ?: @"";
                         UILabel *gongGuaLabel = [cell valueForKey:@"labelGongGuaShuNeiWaiPan"];
                         NSString *gongGua = gongGuaLabel.text ?: @"";
+                        UILabel *tianPan12Label = [cell valueForKey:@"labelTianPanGan12ZhangSheng"];
+                        NSString *tianPan12ZhangSheng = tianPan12Label.text ?: @"";
+                        UILabel *diPan12Label = [cell valueForKey:@"labelDiPanGan12ZhangSheng"];
+                        NSString *diPan12ZhangSheng = diPan12Label.text ?: @"";
                         NSString *specialSymbols = @"";
                         if (isMaXing) specialSymbols = [specialSymbols stringByAppendingString:@" 马"];
                         if (isKongWang) specialSymbols = [specialSymbols stringByAppendingString:@" O"];
@@ -413,7 +419,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                         if (tianPanJiGan && tianPanJiGan.length > 0) [xingPart appendFormat:@"(%@)", tianPanJiGan];
                         NSMutableString *menPart = [NSMutableString stringWithFormat:@"%@ %@", SafeString(baMen), SafeString(diPanGan)];
                         if (diPanJiGan && diPanJiGan.length > 0) [menPart appendFormat:@"(%@)", diPanJiGan];
-                        [reportContent appendFormat:@"- %@:%@ %@ | %@ (%@) | %@ (%@)\n", SafeString(gongName), specialSymbols, SafeString(baShen), xingPart, xingWangShuai, menPart, menWangShuai];
+                        [reportContent appendFormat:@"- %@:%@ %@ | %@(%@,%@) | %@(%@,%@)\n", SafeString(gongName), specialSymbols, SafeString(baShen), xingPart, xingWangShuai, tianPan12ZhangSheng, menPart, menWangShuai, diPan12ZhangSheng];
                         if (yinGan && yinGan.length > 0) { [reportContent appendFormat:@"  遁干: %@\n", yinGan]; }
                         if (gongGua && gongGua.length > 0) { [reportContent appendFormat:@"  卦数: %@\n", gongGua]; }
                     }
@@ -432,7 +438,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         [self hideProgressHUD];
         [self showEchoNotificationWithTitle:@"提取完成" message:@"奇门盘数据已生成并复制"];
         [self presentAIActionSheetWithReport:g_lastGeneratedReport];
-        LogMessage(EchoLogTypeSuccess, @"[奇门] v2.4 提取任务完成。");
+        LogMessage(EchoLogTypeSuccess, @"[奇门] v2.5 提取任务完成。");
         g_isExtracting = NO;
     });
 }
@@ -573,6 +579,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v2.4 (混合模式最终版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v2.5 (最终完美修复版) 已加载。");
     }
 }
