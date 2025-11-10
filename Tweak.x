@@ -2,7 +2,7 @@
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 #import <substrate.h>
-
+#import "Prompt.h"
 // =======================================================================================
 //
 //  Echo 奇门遁甲提取器 v4.7 (终极毕业版)
@@ -90,7 +90,7 @@ static UIWindow* GetFrontmostWindow() { UIWindow *frontmostWindow = nil; if (@av
 
 
 __attribute__((unused)) static NSString *getAIPromptHeader() {
-    return @""; // 返回空字符串，不添加头部
+    return kQiMenAnalysisPrompt; // 返回在 Prompt.h 中定义的分析技法
 }
 
 static NSString* formatFinalReport(NSString* reportContent) {
@@ -281,9 +281,26 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         case kButtonTag_StandardReport: [self startStandardExtraction]; break;
         case kButtonTag_ClearInput: { g_questionTextView.text = @""; [self textViewDidEndEditing:g_questionTextView]; [g_questionTextView resignFirstResponder]; break; }
         case kButtonTag_ClosePanel: [self createOrShowMainControlPanel]; break;
-        case kButtonTag_SendLastReportToAI: {
-            if (g_lastGeneratedReport.length > 0) { [self presentAIActionSheetWithReport:g_lastGeneratedReport]; } 
-            else { LogMessage(EchoLogTypeWarning, @"无缓存数据。"); [self showEchoNotificationWithTitle:@"操作无效" message:@"请先提取数据。"]; }
+case kButtonTag_SendLastReportToAI: {
+            if (g_lastGeneratedReport.length > 0) {
+                NSString *finalPayload;
+                // 检查 Prompt 开关是否开启
+                if (g_shouldIncludeAIPromptHeader) {
+                    // 如果开启，将分析规则和奇门盘数据拼接
+                    NSString *promptHeader = getAIPromptHeader();
+                    finalPayload = [NSString stringWithFormat:@"%@\n\n---\n\n**待分析盘面：**\n\n%@", promptHeader, g_lastGeneratedReport];
+                    LogMessage(EchoLogTypeInfo, @"[AI] 已附加分析技法增强包。");
+                } else {
+                    // 如果关闭，只发送原始的奇门盘数据
+                    finalPayload = g_lastGeneratedReport;
+                    LogMessage(EchoLogTypeInfo, @"[AI] 仅发送原始盘面数据。");
+                }
+                // 使用拼接后的最终内容调用发送函数
+                [self presentAIActionSheetWithReport:finalPayload];
+            } else {
+                LogMessage(EchoLogTypeWarning, @"无缓存数据。");
+                [self showEchoNotificationWithTitle:@"操作无效" message:@"请先提取数据。"];
+            }
             break;
         }
         case kButtonTag_AIPromptToggle:{
@@ -661,6 +678,7 @@ NSString *formattedNeiWaiPan = [neiWaiPan stringByAppendingString:@"盘"];
         NSLog(@"[Echo奇门提取器] v4.7 (终极毕业版) 已加载。");
     }
 }
+
 
 
 
