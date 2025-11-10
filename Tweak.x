@@ -135,7 +135,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview];
             }
             UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
+            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 85, 140, 36);
             controlButton.tag = kEchoControlButtonTag;
             [controlButton setTitle:@"Echo 面板" forState:UIControlStateNormal];
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
@@ -649,3 +649,4 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v4.7 (终极毕业版) 已加载。");
     }
 }
+
