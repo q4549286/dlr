@@ -96,7 +96,8 @@ __attribute__((unused)) static NSString *getAIPromptHeader() {
 static NSString* formatFinalReport(NSString* reportContent) {
     NSString *userQuestion = (g_questionTextView && g_questionTextView.text.length > 0 && ![g_questionTextView.text isEqualToString:@"选填：输入您想问的具体问题"]) ? g_questionTextView.text : @"";
     if (userQuestion.length > 0) {
-        return [NSString stringWithFormat:@"问事: %@\n\n%@", userQuestion, reportContent];
+        // 将问事内容移动到末尾，并添加分割线
+        return [NSString stringWithFormat:@"%@\n\n-------------------\n\n问题: %@", SafeString(reportContent), userQuestion];
     }
     return SafeString(reportContent);
 }
@@ -531,9 +532,31 @@ NSString *formattedNeiWaiPan = [neiWaiPan stringByAppendingString:@"盘"];
         }
         
         g_lastGeneratedReport = formatFinalReport(reportContent);
+        
+        // --- 新增的智能复制逻辑 ---
+        NSString *finalPayloadToCopy;
+        NSString *notificationMessage;
+
+        if (g_shouldIncludeAIPromptHeader) {
+            // 如果Prompt开启，拼接规则并复制
+            NSString *promptHeader = getAIPromptHeader();
+            finalPayloadToCopy = [NSString stringWithFormat:@"%@\n\n---\n\n**待分析盘面：**\n\n%@", promptHeader, g_lastGeneratedReport];
+            notificationMessage = @"完整Prompt已复制到剪贴板";
+            LogMessage(EchoLogTypeInfo, @"[提取&复制] 已附加分析技法并复制。");
+        } else {
+            // 如果Prompt关闭，仅复制盘面数据
+            finalPayloadToCopy = g_lastGeneratedReport;
+            notificationMessage = @"盘面数据已复制到剪贴板";
+            LogMessage(EchoLogTypeInfo, @"[提取&复制] 仅复制原始盘面数据。");
+        }
+        
+        // 执行复制
+        [UIPasteboard generalPasteboard].string = finalPayloadToCopy;
+        // --- 智能复制逻辑结束 ---
+
         [self hideProgressHUD];
-        [self showEchoNotificationWithTitle:@"提取完成" message:@"数据已存入缓存"]; // 提示语也可以优化一下
-        // [self presentAIActionSheetWithReport:g_lastGeneratedReport]; // <--- 已注释或删除，不再自动弹出
+        [self showEchoNotificationWithTitle:@"提取完成" message:notificationMessage]; // 使用动态的提示信息
+        
         LogMessage(EchoLogTypeSuccess, @"[奇门] v4.7 提取任务完成。");
         g_isExtracting = NO;
     });
@@ -678,6 +701,7 @@ NSString *formattedNeiWaiPan = [neiWaiPan stringByAppendingString:@"盘"];
         NSLog(@"[Echo奇门提取器] v4.7 (终极毕业版) 已加载。");
     }
 }
+
 
 
 
