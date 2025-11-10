@@ -532,8 +532,8 @@ NSString *formattedNeiWaiPan = [neiWaiPan stringByAppendingString:@"盘"];
         
         g_lastGeneratedReport = formatFinalReport(reportContent);
         [self hideProgressHUD];
-        [self showEchoNotificationWithTitle:@"提取完成" message:@"专家格式报告已生成"];
-        [self presentAIActionSheetWithReport:g_lastGeneratedReport];
+        [self showEchoNotificationWithTitle:@"提取完成" message:@"数据已存入缓存"]; // 提示语也可以优化一下
+        // [self presentAIActionSheetWithReport:g_lastGeneratedReport]; // <--- 已注释或删除，不再自动弹出
         LogMessage(EchoLogTypeSuccess, @"[奇门] v4.7 提取任务完成。");
         g_isExtracting = NO;
     });
@@ -678,6 +678,7 @@ NSString *formattedNeiWaiPan = [neiWaiPan stringByAppendingString:@"盘"];
         NSLog(@"[Echo奇门提取器] v4.7 (终极毕业版) 已加载。");
     }
 }
+
 
 
 
