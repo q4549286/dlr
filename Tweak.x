@@ -377,8 +377,6 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 }
             }
         } @catch (NSException *exception) { [reportContent appendString:@"[顶部提取失败]\n"]; LogMessage(EchoLogError, @"[CRASH-DEBUG] 顶部提取失败: %@", exception); }
-        [reportContent appendString:@"\n// 九宫格详情\n"];
-
         Class cellClass = NSClassFromString(@"CZGongChuanRenThemeCollectionViewCell");
         if (!cellClass) {
             [reportContent appendString:@"[提取失败: 找不到九宫格Cell类]\n"];
@@ -405,8 +403,16 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                         @try {
                             id model = item[@"model"];
                             UIView *cell = item[@"cell"];
-                            NSString *gongName = SafeString([model valueForKey:@"gongHouTianNameStr"]);
-                            if ([gongName containsString:@"中5宫"]) {
+// [格式优化] 将阿拉伯数字替换为中文数字
+gongName = [gongName stringByReplacingOccurrencesOfString:@"1" withString:@"一"];
+gongName = [gongName stringByReplacingOccurrencesOfString:@"2" withString:@"二"];
+gongName = [gongName stringByReplacingOccurrencesOfString:@"3" withString:@"三"];
+gongName = [gongName stringByReplacingOccurrencesOfString:@"4" withString:@"四"];
+gongName = [gongName stringByReplacingOccurrencesOfString:@"5" withString:@"五"];
+gongName = [gongName stringByReplacingOccurrencesOfString:@"6" withString:@"六"];
+gongName = [gongName stringByReplacingOccurrencesOfString:@"7" withString:@"七"];
+gongName = [gongName stringByReplacingOccurrencesOfString:@"8" withString:@"八"];
+gongName = [gongName stringByReplacingOccurrencesOfString:@"9" withString:@"九"];                            if ([gongName containsString:@"中5宫"]) {
                                 NSString *zhongTianPanGan = SafeString([model valueForKey:@"tianPanGanStr"]);
                                 NSString *zhongDiPanGan = SafeString([model valueForKey:@"diPanGanStr"]);
                                 [reportContent appendFormat:@"【中5宫】\n 天盘: %@ | 地盘: %@\n---\n", zhongTianPanGan, zhongDiPanGan];
@@ -423,8 +429,9 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                                 gongWangShuai = [gongGua substringWithRange:[match rangeAtIndex:3]];
                                 neiWaiPan = [gongGua substringWithRange:[match rangeAtIndex:4]];
                             }
-                            [reportContent appendFormat:@"【%@ %@ %@】\n", gongName, gongWangShuai, neiWaiPan];
-                            
+// [格式优化] 将 "内" 改为 "内盘"，"外" 改为 "外盘"
+NSString *formattedNeiWaiPan = [neiWaiPan stringByAppendingString:@"盘"];
+[reportContent appendFormat:@"【%@ %@ %@】\n", gongName, gongWangShuai, formattedNeiWaiPan];                            
                             NSString *baShen = SafeString([model valueForKey:@"baShenStr"]);
                             [reportContent appendFormat:@" 神: %@\n", baShen];
                             NSString *jiuXing = SafeString([model valueForKey:@"jiuXingStr"]);
@@ -649,4 +656,5 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
         NSLog(@"[Echo奇门提取器] v4.7 (终极毕业版) 已加载。");
     }
 }
+
 
