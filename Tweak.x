@@ -5,9 +5,10 @@
 
 // =======================================================================================
 //
-//  Echo 奇门遁甲提取器 v4.5 (终极完美版)
+//  Echo 奇门遁甲提取器 v4.7 (终极毕业版)
 //
-//  - [最终修复] 解决了 `otherPart` 变量重定义的编译错误。
+//  - [最终格式] 实现了卦数的精细化解析与格式化。
+//  - [最终修复] 修正了所有已知的数据源、UI组件访问方式和格式问题。
 //  - [成品] 这是经过所有调试和修正的最终稳定版本。
 //
 // =======================================================================================
@@ -134,7 +135,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview];
             }
             UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 75, 140, 36);
+            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
             controlButton.tag = kEchoControlButtonTag;
             [controlButton setTitle:@"Echo 面板" forState:UIControlStateNormal];
             controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
@@ -198,7 +199,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     CGFloat currentY = 15.0;
     NSMutableAttributedString *titleString = [[NSMutableAttributedString alloc] initWithString:@"Echo 奇门提取器 "];
     [titleString addAttributes:@{NSFontAttributeName: [UIFont systemFontOfSize:22 weight:UIFontWeightBold], NSForegroundColorAttributeName: [UIColor whiteColor]} range:NSMakeRange(0, titleString.length)];
-    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v4.5" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
+    NSAttributedString *versionString = [[NSAttributedString alloc] initWithString:@"v4.7" attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightRegular], NSForegroundColorAttributeName: [UIColor lightGrayColor]}];
     [titleString appendAttributedString:versionString];
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(padding, currentY, contentView.bounds.size.width - 2*padding, 30)];
     titleLabel.attributedText = titleString; titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -312,13 +313,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
 %new
 - (void)startStandardExtraction {
     if (g_isExtracting) return;
-    LogMessage(EchoLogTypeTask, @"[奇门] v4.5 提取任务启动 (终极毕业版)...");
+    LogMessage(EchoLogTypeTask, @"[奇门] v4.7 提取任务启动 (终极毕业版)...");
     g_isExtracting = YES;
     [self showProgressHUD:@"正在精准提取..."];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         NSMutableString *reportContent = [NSMutableString string];
-    UIView *baziView = nil; // <--- 在这里添加声明
-
         [reportContent appendString:@"// 奇门盘信息\n"];
         
         // --- 1. 提取顶部概览 ---
@@ -329,27 +328,24 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 NSMutableArray *juShiViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(juShiViewClass, self.view, juShiViews);
                 UIView *juShiView = (juShiViews.count > 0) ? juShiViews.firstObject : nil;
                 NSMutableArray *baziViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(baziViewClass, self.view, baziViews);
-baziView = (baziViews.count > 0) ? baziViews.firstObject : nil;                if (juShiView && baziView) {
+                UIView *baziView = (baziViews.count > 0) ? baziViews.firstObject : nil;
+                if (juShiView && baziView) {
                     NSDate *dateUse = [juShiView valueForKey:@"dateUse"];
                     NSDateFormatter *formatter = [[NSDateFormatter alloc] init]; [formatter setDateFormat:@"yyyy-MM-dd HH:mm:ss"];
                     NSString *timeStr = [formatter stringFromDate:dateUse];
-                    
                     Ivar baZiIvar = class_getInstanceVariable(baziViewClass, "_baZi");
                     id baZiModel = object_getIvar(baziView, baZiIvar);
                     NSString *nianZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"nianGan"]), SafeString([baZiModel valueForKey:@"nianZhi"])];
                     NSString *yueZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"yueGan"]), SafeString([baZiModel valueForKey:@"yueZhi"])];
                     NSString *riZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"riGan"]), SafeString([baZiModel valueForKey:@"riZhi"])];
                     NSString *shiZhu = [NSString stringWithFormat:@"%@%@", SafeString([baZiModel valueForKey:@"shiGan"]), SafeString([baZiModel valueForKey:@"shiZhi"])];
-                    
                     Ivar juTouIvar = class_getInstanceVariable(baziViewClass, "_juTou");
                     id juTouModel = object_getIvar(baziView, juTouIvar);
                     NSString *xunStr = SafeString([juTouModel valueForKey:@"xunStr"]);
                     NSString *yinYangStr = SafeString([juTouModel valueForKey:@"yinYangStr"]);
-
                     NSString *juStr = SafeString([[baziView valueForKey:@"labelJu"] text]);
                     NSString *zhiFu = SafeString([[baziView valueForKey:@"labelZhiFu"] text]);
                     NSString *zhiShi = SafeString([[baziView valueForKey:@"labelZhiShi"] text]);
-                    
                     NSString *起局方式 = @"时家拆补"; 
                     NSMutableString *geJuStr = [NSMutableString string];
                     Class geJuViewClass = NSClassFromString(@"CZShowShiJianGeView");
@@ -381,6 +377,8 @@ baziView = (baziViews.count > 0) ? baziViews.firstObject : nil;                i
                 }
             }
         } @catch (NSException *exception) { [reportContent appendString:@"[顶部提取失败]\n"]; LogMessage(EchoLogError, @"[CRASH-DEBUG] 顶部提取失败: %@", exception); }
+        [reportContent appendString:@"\n// 九宫格详情\n"];
+
         Class cellClass = NSClassFromString(@"CZGongChuanRenThemeCollectionViewCell");
         if (!cellClass) {
             [reportContent appendString:@"[提取失败: 找不到九宫格Cell类]\n"];
@@ -408,25 +406,33 @@ baziView = (baziViews.count > 0) ? baziViews.firstObject : nil;                i
                             id model = item[@"model"];
                             UIView *cell = item[@"cell"];
                             NSString *gongName = SafeString([model valueForKey:@"gongHouTianNameStr"]);
-if ([gongName containsString:@"中5宫"]) {
-    NSString *zhongTianPanGan = SafeString([model valueForKey:@"tianPanGanStr"]);
-    NSString *zhongDiPanGan = SafeString([model valueForKey:@"diPanGanStr"]);
-    [reportContent appendFormat:@"【中5宫】\n 天盘: %@ | 地盘: %@\n---\n", zhongTianPanGan, zhongDiPanGan]; 
-    continue; 
-}                     NSString *gongGua = SafeString([[cell valueForKey:@"labelGongGuaShuNeiWaiPan"] text]);
+                            if ([gongName containsString:@"中5宫"]) {
+                                NSString *zhongTianPanGan = SafeString([model valueForKey:@"tianPanGanStr"]);
+                                NSString *zhongDiPanGan = SafeString([model valueForKey:@"diPanGanStr"]);
+                                [reportContent appendFormat:@"【中5宫】\n 天盘: %@ | 地盘: %@\n---\n", zhongTianPanGan, zhongDiPanGan];
+                                continue;
+                            }
+                            NSString *gongGua = SafeString([[cell valueForKey:@"labelGongGuaShuNeiWaiPan"] text]);
                             NSString *gongWangShuai = @"";
-                            NSArray *gongGuaParts = [gongGua componentsSeparatedByString:@" "];
-                            if (gongGuaParts.count > 2) { gongWangShuai = gongGuaParts[2]; }
-                            [reportContent appendFormat:@"【%@ %@】\n", gongName, gongWangShuai];
+                            NSString *neiWaiPan = @"";
+                            NSString *guaShu = @"";
+                            NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(\\d+`\\d+|\\d+)\\s+(.*?)\\s+(.+)\\s+(.+)" options:0 error:nil];
+                            NSTextCheckingResult *match = [regex firstMatchInString:gongGua options:0 range:NSMakeRange(0, [gongGua length])];
+                            if (match) {
+                                guaShu = [gongGua substringWithRange:[match rangeAtIndex:1]];
+                                gongWangShuai = [gongGua substringWithRange:[match rangeAtIndex:3]];
+                                neiWaiPan = [gongGua substringWithRange:[match rangeAtIndex:4]];
+                            }
+                            [reportContent appendFormat:@"【%@ %@ %@】\n", gongName, gongWangShuai, neiWaiPan];
                             
                             NSString *baShen = SafeString([model valueForKey:@"baShenStr"]);
                             [reportContent appendFormat:@" 神: %@\n", baShen];
                             NSString *jiuXing = SafeString([model valueForKey:@"jiuXingStr"]);
                             NSString *xingWangShuai = [SafeString([[cell valueForKey:@"labelXingWangShuai"] text]) stringByReplacingOccurrencesOfString:@"`" withString:@" "];
-                            [reportContent appendFormat:@" 星: %@ (落宫%@)\n", jiuXing, xingWangShuai];
+                            [reportContent appendFormat:@" 星: %@ (落宫:%@)\n", jiuXing, xingWangShuai];
                             NSString *baMen = SafeString([model valueForKey:@"baMenStr"]);
                             NSString *menWangShuai = [SafeString([[cell valueForKey:@"labelMenWangShuai"] text]) stringByReplacingOccurrencesOfString:@"`" withString:@" "];
-                            [reportContent appendFormat:@" 门: %@ (落宫%@)\n", baMen, menWangShuai];
+                            [reportContent appendFormat:@" 门: %@ (落宫:%@)\n", baMen, menWangShuai];
                             
                             NSString *tianPanGan = SafeString([model valueForKey:@"tianPanGanStr"]);
                             NSString *tianPan12 = SafeString([[cell valueForKey:@"labelTianPanGan12ZhangSheng"] text]);
@@ -461,6 +467,30 @@ if ([gongName containsString:@"中5宫"]) {
                             if (trimmedOtherPart.length > 0) {
                                 [reportContent appendFormat:@" 附加: %@\n", trimmedOtherPart];
                             }
+                            
+                            if (guaShu.length > 0) {
+                                NSString *parsedGuaShu = guaShu;
+                                NSRange separatorRange = [guaShu rangeOfString:@"`"];
+                                if (separatorRange.location != NSNotFound) {
+                                    NSString *part1 = [guaShu substringToIndex:separatorRange.location];
+                                    NSString *partD = [guaShu substringFromIndex:separatorRange.location + 1];
+                                    if (part1.length == 3) {
+                                        NSString *partA = [part1 substringToIndex:1];
+                                        NSString *partB = [part1 substringWithRange:NSMakeRange(1, 1)];
+                                        NSString *partC = [part1 substringFromIndex:2];
+                                        parsedGuaShu = [NSString stringWithFormat:@"先天数%@ 后天数%@ 河图五行数%@、%@", partA, partB, partC, partD];
+                                    }
+                                } else if ([guaShu rangeOfCharacterFromSet:[[NSCharacterSet decimalDigitCharacterSet] invertedSet]].location == NSNotFound) {
+                                     if (guaShu.length == 4) {
+                                        NSString *partA = [guaShu substringToIndex:1];
+                                        NSString *partB = [guaShu substringWithRange:NSMakeRange(1, 1)];
+                                        NSString *partC = [guaShu substringWithRange:NSMakeRange(2, 1)];
+                                        NSString *partD = [guaShu substringFromIndex:3];
+                                        parsedGuaShu = [NSString stringWithFormat:@"先天数%@ 后天数%@ 河图五行数%@、%@", partA, partB, partC, partD];
+                                    }
+                                }
+                                [reportContent appendFormat:@" 卦数: %@\n", parsedGuaShu];
+                            }
                             [reportContent appendString:@"---\n"];
                         } @catch (NSException *exception) {
                             LogMessage(EchoLogError, @"[CRASH-DEBUG] 宫位提取失败: %@", exception);
@@ -475,7 +505,7 @@ if ([gongName containsString:@"中5宫"]) {
         [self hideProgressHUD];
         [self showEchoNotificationWithTitle:@"提取完成" message:@"专家格式报告已生成"];
         [self presentAIActionSheetWithReport:g_lastGeneratedReport];
-        LogMessage(EchoLogTypeSuccess, @"[奇门] v4.5 提取任务完成。");
+        LogMessage(EchoLogTypeSuccess, @"[奇门] v4.7 提取任务完成。");
         g_isExtracting = NO;
     });
 }
@@ -616,12 +646,6 @@ if ([gongName containsString:@"中5宫"]) {
 %ctor {
     @autoreleasepool {
         MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo奇门提取器] v4.5 (终极毕业版) 已加载。");
+        NSLog(@"[Echo奇门提取器] v4.7 (终极毕业版) 已加载。");
     }
 }
-
-
-
-
-
-
