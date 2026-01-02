@@ -839,7 +839,7 @@ static NSString* parseRawData(NSString *rawData, EchoDataType type) {
 // 3. 报告生成
 // =========================================================================
 #pragma mark - Report Generation
-static NSString *getAIPromptHeader() { return          @"# 【大六壬 · 创境推演核心架构】\n"
+static NSString *getAIPromptHeader() { return           @"# 【大六壬 · 创境推演核心架构】\n"
         @"\n"
         @"## **【太极中枢：全息共振与象理监控系统】**\n"
         @"\n"
@@ -3749,7 +3749,7 @@ static NSString *getAIPromptHeader() { return          @"# 【大六壬 · 创�
         @"    **【组合推演】**: 课体为`[课体名]`，暗示该物品具有`[数量/结构特征]`。三传`[初中末]`的结构，描绘了它的`[内外/上下]`构造。\n"
         @"\n"
         @"    **【最终定象】**: 综合以上所有线索，交叉验证后，此物被锁定为：**[具体的、符合所有特征的物品名称或描述]**。”\n"
-\n"; }
+        @"-----------------标准化课盘-----------------\n"; }
 
 static NSString* generateContentSummaryLine(NSString *fullReport) {
     if (!fullReport || fullReport.length == 0) return @"";
@@ -4812,4 +4812,3 @@ currentY += 110 + 20;
         NSLog(@"[Echo推衍课盘] v29.2 (动态坐标版) 已加载。");
     }
 }
-
