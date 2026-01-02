@@ -4003,7 +4003,10 @@ NSString *footerText = [NSString stringWithFormat:@"/```\n"
     }
 }
 
-// 核心修复：将 presentViewController 拦截逻辑移入 %hook 内部
+// =========================================================================
+// 4. 核心拦截器 (Logos 修复版 - 解决编译报错)
+// =========================================================================
+
 - (void)presentViewController:(UIViewController *)vcToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
 
@@ -4012,24 +4015,19 @@ NSString *footerText = [NSString stringWithFormat:@"/```\n"
         if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.中宮信息視圖"]) {
             LogMessage(EchoLogTypeInfo, @"[拦截器:TDP] 成功捕获目标弹窗: %@", vcClassName);
             
-            // 延迟提取以确保视图已加载数据 (虽然这里我们阻止了显示，但视图对象已创建)
-            // 注意：因为不显示，可能需要手动触发生命周期或直接提取
             NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
-            
             if (extractedText) {
                 [g_tianDiPan_resultsArray addObject:extractedText];
             } else {
                 [g_tianDiPan_resultsArray addObject:@"[提取失败]"];
             }
 
-            // 调度下一个任务
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (g_mainViewController) {
                     SUPPRESS_LEAK_WARNING([g_mainViewController performSelector:@selector(processTianDiPanQueue)]);
                 }
             });
             
-            // 阻止弹窗显示，直接执行 completion (如果有)
             if (completion) completion();
             return; 
         }
@@ -4041,14 +4039,21 @@ NSString *footerText = [NSString stringWithFormat:@"/```\n"
             g_isExtractingTimeInfo = NO; 
             vcToPresent.view.alpha = 0.0f; // 隐藏
             
-            // 调用原方法但禁用动画，并在完成后提取数据
-            %orig(vcToPresent, NO, ^{
+            // 【关键修复】将 Block 提取为变量，避免 %orig 宏解析错误
+            void (^timeExtractionBlock)(void) = ^{
                 if (completion) completion();
-                NSMutableArray *textViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UITextView class], contentVC.view, textViews);
+                NSMutableArray *textViews = [NSMutableArray array]; 
+                FindSubviewsOfClassRecursive([UITextView class], contentVC.view, textViews);
                 NSString *timeBlockText = (textViews.count > 0) ? ((UITextView *)textViews.firstObject).text : @"[时间推衍失败]";
-                if (g_extractedData) { g_extractedData[@"时间块"] = timeBlockText; LogMessage(EchoLogTypeSuccess, @"[时间] 成功参详时间信息。"); }
+                if (g_extractedData) { 
+                    g_extractedData[@"时间块"] = timeBlockText; 
+                    LogMessage(EchoLogTypeSuccess, @"[时间] 成功参详时间信息。"); 
+                }
                 [vcToPresent dismissViewControllerAnimated:NO completion:nil];
-            });
+            };
+
+            // 现在传入变量
+            %orig(vcToPresent, NO, timeExtractionBlock);
             return;
         }
     }
@@ -4862,4 +4867,5 @@ currentY += 110 + 20;
 %ctor {
     NSLog(@"[Echo推衍课盘] v29.2 (修复版) 已加载。");
 }
+
 
