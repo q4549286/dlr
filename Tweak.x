@@ -3968,33 +3968,81 @@ NSString *footerText = [NSString stringWithFormat:@"/```\n"
 
 
 // =========================================================================
-// 4. 核心拦截器 (融合版)
+// 4. 核心拦截器 (Logos 标准化版 - 修复闪退)
 // =========================================================================
-#pragma mark - Core Interceptor
-static void (*Original_presentViewController)(id, SEL, UIViewController *, BOOL, void (^)(void));
-static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcToPresent, BOOL animated, void (^completion)(void)) {
+// 移除了 Tweak_presentViewController 和 MSHookMessageEx，全部整合进 %hook
+
+#pragma mark - Core Interceptor & Hooks
+
+%hook UIViewController
+
+- (void)viewDidLoad {
+    %orig;
+    Class targetClass = NSClassFromString(@"六壬大占.ViewController");
+    if (targetClass && [self isKindOfClass:targetClass]) {
+        g_mainViewController = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIWindow *keyWindow = GetFrontmostWindow();
+            if (!keyWindow) return;
+            if ([keyWindow viewWithTag:kEchoControlButtonTag]) { [[keyWindow viewWithTag:kEchoControlButtonTag] removeFromSuperview]; }
+            UIButton *controlButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            controlButton.frame = CGRectMake(keyWindow.bounds.size.width - 150, 45, 140, 36);
+            controlButton.tag = kEchoControlButtonTag;
+            [controlButton setTitle:@"推衍课盘" forState:UIControlStateNormal];
+            controlButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+            controlButton.backgroundColor = ECHO_COLOR_MAIN_BLUE;
+            [controlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            controlButton.layer.cornerRadius = 18;
+            controlButton.layer.shadowColor = [UIColor blackColor].CGColor;
+            controlButton.layer.shadowOffset = CGSizeMake(0, 2);
+            controlButton.layer.shadowOpacity = 0.4;
+            controlButton.layer.shadowRadius = 3;
+            [controlButton addTarget:self action:@selector(createOrShowMainControlPanel) forControlEvents:UIControlEventTouchUpInside];
+            [keyWindow addSubview:controlButton];
+        });
+    }
+}
+
+// 核心修复：将 presentViewController 拦截逻辑移入 %hook 内部
+- (void)presentViewController:(UIViewController *)vcToPresent animated:(BOOL)flag completion:(void (^)(void))completion {
     NSString *vcClassName = NSStringFromClass([vcToPresent class]);
 
-    // 融合脚本1的拦截逻辑
+    // 1. 拦截天地盘详情 (v29.2 新增)
     if (g_isExtractingTianDiPanDetail) {
         if ([vcClassName isEqualToString:@"六壬大占.天將摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.天地盤宮位摘要視圖"] || [vcClassName isEqualToString:@"六壬大占.中宮信息視圖"]) {
             LogMessage(EchoLogTypeInfo, @"[拦截器:TDP] 成功捕获目标弹窗: %@", vcClassName);
+            
+            // 延迟提取以确保视图已加载数据 (虽然这里我们阻止了显示，但视图对象已创建)
+            // 注意：因为不显示，可能需要手动触发生命周期或直接提取
             NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
-            [g_tianDiPan_resultsArray addObject:extractedText];
+            
+            if (extractedText) {
+                [g_tianDiPan_resultsArray addObject:extractedText];
+            } else {
+                [g_tianDiPan_resultsArray addObject:@"[提取失败]"];
+            }
+
+            // 调度下一个任务
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (g_mainViewController) {
                     SUPPRESS_LEAK_WARNING([g_mainViewController performSelector:@selector(processTianDiPanQueue)]);
                 }
             });
-            return; // 阻止弹窗
+            
+            // 阻止弹窗显示，直接执行 completion (如果有)
+            if (completion) completion();
+            return; 
         }
     }
-    // 脚本2原有拦截逻辑
+    // 2. 拦截时间选择 (S2 原有)
     else if (g_isExtractingTimeInfo) {
         UIViewController *contentVC = [vcToPresent isKindOfClass:[UINavigationController class]] ? ((UINavigationController *)vcToPresent).viewControllers.firstObject : vcToPresent;
         if (contentVC && [NSStringFromClass([contentVC class]) containsString:@"時間選擇視圖"]) {
-            g_isExtractingTimeInfo = NO; vcToPresent.view.alpha = 0.0f;
-            Original_presentViewController(self, _cmd, vcToPresent, NO, ^{
+            g_isExtractingTimeInfo = NO; 
+            vcToPresent.view.alpha = 0.0f; // 隐藏
+            
+            // 调用原方法但禁用动画，并在完成后提取数据
+            %orig(vcToPresent, NO, ^{
                 if (completion) completion();
                 NSMutableArray *textViews = [NSMutableArray array]; FindSubviewsOfClassRecursive([UITextView class], contentVC.view, textViews);
                 NSString *timeBlockText = (textViews.count > 0) ? ((UITextView *)textViews.firstObject).text : @"[时间推衍失败]";
@@ -4004,6 +4052,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
             return;
         }
     }
+    // 3. 拦截课体/九宗门 (S1 原有)
     else if (g_s1_isExtracting) {
         if ([vcClassName containsString:@"課體概覽視圖"]) {
             NSString *extractedText = extractDataFromSplitView_S1(vcToPresent.view, g_s1_shouldIncludeXiangJie);
@@ -4015,18 +4064,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 LogMessage(EchoLogTypeSuccess, @"[宗门] 成功解析“九宗门结构”...");
                 if (g_s1_completion_handler) { g_s1_completion_handler(extractedText); }
             }
-            return;
+            return; // 阻止显示
         }
     }
+    // 4. 拦截课传详情 (S2 原有)
     else if (g_s2_isExtractingKeChuanDetail) {
         if ([vcClassName containsString:@"課傳摘要視圖"] || [vcClassName containsString:@"天將摘要視圖"]) {
             NSString *extractedText = extractDataFromStackViewPopup(vcToPresent.view);
             [g_s2_capturedKeChuanDetailArray addObject:extractedText];
             LogMessage(EchoLogTypeSuccess, @"[课传] 成功参详流注内容 (共 %lu 条)", (unsigned long)g_s2_capturedKeChuanDetailArray.count);
             dispatch_async(dispatch_get_main_queue(), ^{ SUPPRESS_LEAK_WARNING([self performSelector:@selector(processKeChuanQueue_Truth_S2)]); });
-            return;
+            return; // 阻止显示
         }
     }
+    // 5. 拦截行年/年命 (S2 原有)
     else if (g_isExtractingNianming) {
         if ([vcToPresent isKindOfClass:[UIAlertController class]]) {
             UIAlertController *alert = (UIAlertController *)vcToPresent;
@@ -4034,7 +4085,7 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 if ([action.title isEqualToString:g_currentItemToExtract]) {
                     id handler = [action valueForKey:@"handler"];
                     if (handler) { ((void (^)(UIAlertAction *))handler)(action); }
-                    return;
+                    return; // 自动点击，阻止显示
                 }
             }
         }
@@ -4046,20 +4097,20 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
                 [g_capturedZhaiYaoArray addObject:[[textParts componentsJoinedByString:@" "] stringByReplacingOccurrencesOfString:@"\n" withString:@" "]];
                 LogMessage(EchoLogTypeSuccess, @"[行年] 成功参详'年命摘要'。");
             });
-            return;
+            return; // 阻止显示
         }
         else if ([vcClassName containsString:@"年命格局視圖"]) {
              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
              NSString* text = extractDataFromStackViewPopup(vcToPresent.view);
-             // 这里的逻辑应该是，把多行文本中的换行符替换为空格
              NSString *processedText = [text stringByReplacingOccurrencesOfString:@"\n" withString:@" | "];
              [g_capturedGeJuArray addObject:processedText];
                 LogMessage(EchoLogTypeSuccess, @"[行年] 成功参详'年命格局'。");
              });
-            return;
+            return; // 阻止显示
         }
     }
 
+    // 6. 拦截其他简单提取任务
     void (^handleSimpleExtraction)(NSString *, void(^)(NSString*)) = ^(NSString *taskName, void(^completionBlock)(NSString*)) {
         LogMessage(EchoLogTypeSuccess, @"[解析] 成功推衍 [%@]", taskName);
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -4074,9 +4125,11 @@ static void Tweak_presentViewController(id self, SEL _cmd, UIViewController *vcT
     if (g_isExtractingQiZheng && [vcClassName containsString:@"七政"]) { g_isExtractingQiZheng = NO; handleSimpleExtraction(@"七政四余", g_qiZheng_completion); g_qiZheng_completion = nil; return; }
     if (g_isExtractingSanGong && [vcClassName containsString:@"三宮時信息視圖"]) { g_isExtractingSanGong = NO; handleSimpleExtraction(@"三宫时信息", g_sanGong_completion); g_sanGong_completion = nil; return; }
 
-    Original_presentViewController(self, _cmd, vcToPresent, animated, completion);
+    // 如果没有被拦截，执行原生逻辑
+    %orig;
 }
 
+// ... 这里的 %new 方法 (createOrShowMainControlPanel 等) 保持不变，紧接在下面 ...
 // =========================================================================
 // 5. 接口声明、UI与核心Hook
 // =========================================================================
@@ -4807,8 +4860,6 @@ currentY += 110 + 20;
 - (NSString *)extractTianDiPanInfo_V18 { @try { Class plateViewClass = NSClassFromString(@"六壬大占.天地盤視圖") ?: NSClassFromString(@"六壬大占.天地盤視圖類"); if (!plateViewClass) return @"天地盘推衍失败: 找不到视图类"; UIWindow *keyWindow = GetFrontmostWindow(); if (!keyWindow) return @"天地盘推衍失败: 找不到keyWindow"; NSMutableArray *plateViews = [NSMutableArray array]; FindSubviewsOfClassRecursive(plateViewClass, keyWindow, plateViews); if (plateViews.count == 0) return @"天地盘推衍失败: 找不到视图实例"; UIView *plateView = plateViews.firstObject; unsigned int ivarCount; Ivar *ivars = class_copyIvarList(plateViewClass, &ivarCount); id diGongDict=nil, tianShenDict=nil, tianJiangDict=nil; for(unsigned int i=0; i<ivarCount; i++) { NSString *ivarName = [NSString stringWithUTF8String:ivar_getName(ivars[i])]; if([ivarName hasSuffix:@"地宮宮名列"]) diGongDict=object_getIvar(plateView, ivars[i]); else if([ivarName hasSuffix:@"天神宮名列"]) tianShenDict=object_getIvar(plateView, ivars[i]); else if([ivarName hasSuffix:@"天將宮名列"]) tianJiangDict=object_getIvar(plateView, ivars[i]); } free(ivars); if (!diGongDict || !tianShenDict || !tianJiangDict) return @"天地盘推衍失败: 未能获取核心数据字典"; NSArray *diGongLayers=[diGongDict allValues], *tianShenLayers=[tianShenDict allValues], *tianJiangLayers=[tianJiangDict allValues]; if (diGongLayers.count!=12||tianShenLayers.count!=12||tianJiangLayers.count!=12) return @"天地盘推衍失败: 数据长度不匹配"; NSMutableArray *allLayerInfos = [NSMutableArray array]; CGPoint center = [plateView convertPoint:CGPointMake(CGRectGetMidX(plateView.bounds), CGRectGetMidY(plateView.bounds)) toView:nil]; void (^processLayers)(NSArray *, NSString *) = ^(NSArray *layers, NSString *type) { for (id layer in layers) { if (![layer isKindOfClass:[CALayer class]]) continue; CALayer *pLayer = [layer presentationLayer] ?: layer; CGPoint pos = [pLayer.superlayer convertPoint:pLayer.position toLayer:nil]; [allLayerInfos addObject:@{ @"type": type, @"text": ([layer respondsToSelector:@selector(string)]) ? ([(id)layer string] ?: @"?") : @"?", @"angle": @(atan2(pos.y - center.y, pos.x - center.x)), @"radius": @(hypotf(pos.x - center.x, pos.y - center.y)) }]; } }; processLayers(diGongLayers, @"diPan"); processLayers(tianShenLayers, @"tianPan"); processLayers(tianJiangLayers, @"tianJiang"); NSMutableDictionary *palaceGroups = [NSMutableDictionary dictionary]; for (NSDictionary *info in allLayerInfos) { BOOL foundGroup = NO; for (NSNumber *angleKey in [palaceGroups allKeys]) { CGFloat diff = fabsf([info[@"angle"] floatValue] - [angleKey floatValue]); if (diff > M_PI) diff = 2*M_PI-diff; if (diff < 0.15) { [palaceGroups[angleKey] addObject:info]; foundGroup=YES; break; } } if (!foundGroup) { palaceGroups[info[@"angle"]] = [NSMutableArray arrayWithObject:info];} } NSMutableArray *palaceData = [NSMutableArray array]; for (NSNumber *groupAngle in palaceGroups) { NSMutableArray *group = palaceGroups[groupAngle]; if (group.count < 3) continue; [group sortUsingComparator:^NSComparisonResult(id o1, id o2) { return [o2[@"radius"] compare:o1[@"radius"]]; }]; NSString *diPan=@"?", *tianPan=@"?", *tianJiang=@"?"; for(NSDictionary* li in group){ if([li[@"type"] isEqualToString:@"diPan"]) diPan=li[@"text"]; else if([li[@"type"] isEqualToString:@"tianPan"]) tianPan=li[@"text"]; else if([li[@"type"] isEqualToString:@"tianJiang"]) tianJiang=li[@"text"]; } [palaceData addObject:@{ @"diPan": diPan, @"tianPan": tianPan, @"tianJiang": tianJiang }]; } if (palaceData.count != 12) return @"天地盘推衍失败: 宫位数据不完整"; NSArray *order = @[@"子", @"丑", @"寅", @"卯", @"辰", @"巳", @"午", @"未", @"申", @"酉", @"戌", @"亥"]; [palaceData sortUsingComparator:^NSComparisonResult(NSDictionary *o1, NSDictionary *o2) { return [@([order indexOfObject:o1[@"diPan"]]) compare:@([order indexOfObject:o2[@"diPan"]])]; }]; NSMutableString *result = [NSMutableString string]; for (NSDictionary *entry in palaceData) { [result appendFormat:@"- %@宫: %@(%@)\n", entry[@"diPan"], entry[@"tianPan"], entry[@"tianJiang"]]; } return [result stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; } @catch (NSException *exception) { return [NSString stringWithFormat:@"天地盘推衍异常: %@", exception.reason]; } }
 %end
 %ctor {
-    @autoreleasepool {
-        MSHookMessageEx(NSClassFromString(@"UIViewController"), @selector(presentViewController:animated:completion:), (IMP)&Tweak_presentViewController, (IMP *)&Original_presentViewController);
-        NSLog(@"[Echo推衍课盘] v29.2 (动态坐标版) 已加载。");
-    }
+    NSLog(@"[Echo推衍课盘] v29.2 (修复版) 已加载。");
 }
+
